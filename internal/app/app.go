@@ -95,6 +95,16 @@ type Model struct {
 
 	// Incognito mode: skip history and session saving
 	incognito bool
+
+	// Session picker snapshot — restored on Esc
+	sessionSnapshot *sessionState
+}
+
+type sessionState struct {
+	messages    []config.DisplayMessage
+	session     config.SessionFile
+	totalTokens int
+	settings    config.Settings
 }
 
 // New creates a new app Model. Pass a non-nil initialSession to pre-load a session,
@@ -435,6 +445,15 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Escape), key.Matches(msg, keys.Cancel):
+		if pickerType == "session" && m.sessionSnapshot != nil {
+			snap := m.sessionSnapshot
+			m.messages = snap.messages
+			m.session = snap.session
+			m.totalTokens = snap.totalTokens
+			m.settings = snap.settings
+			m.sessionSnapshot = nil
+			m.updateViewportContent()
+		}
 		m.mode = ModeChat
 		m.textarea.Focus()
 		(&m).recalcLayout()
@@ -446,6 +465,7 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 			m.modelPicker.MoveUp()
 		case "session":
 			m.sessionPicker.MoveUp()
+			m = m.previewSession(m.sessionPicker.SelectedItem())
 		case "image", "system":
 			m.filePicker.MoveUp()
 		}
@@ -457,6 +477,7 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 			m.modelPicker.MoveDown()
 		case "session":
 			m.sessionPicker.MoveDown()
+			m = m.previewSession(m.sessionPicker.SelectedItem())
 		case "image", "system":
 			m.filePicker.MoveDown()
 		}
@@ -471,6 +492,7 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 			m.modelPicker.MoveDown()
 		case "session":
 			m.sessionPicker.MoveDown()
+			m = m.previewSession(m.sessionPicker.SelectedItem())
 		case "image", "system":
 			m.filePicker.MoveDown()
 		}
@@ -529,26 +551,18 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 		}
 
 	case "session":
+		// Session is already previewed; just persist the selection and clear snapshot
 		selected := m.sessionPicker.SelectedItem()
 		if selected != "" {
-			sf, err := config.LoadSession(m.paths, selected)
-			if err == nil {
-				m.session = sf
-				m.messages = make([]config.DisplayMessage, len(sf.Messages))
-				for i, msg := range sf.Messages {
-					m.messages[i] = config.DisplayMessage{Message: msg}
-				}
-				m.totalTokens = sf.TotalTokens
-				m.settings.Model = sf.Session.Model
-				m.settings.Provider = sf.Session.Provider
-				m.settings.Thinking = sf.Session.Thinking
+			m.settings.Model = m.session.Session.Model
+			m.settings.Provider = m.session.Session.Provider
+			m.settings.Thinking = m.session.Session.Thinking
+			if m.incognito != true {
 				m.settings.LastSessionName = selected
 				_ = config.SaveSettings(m.paths, m.settings)
-				m.updateViewportContent()
-			} else {
-				m.lastError = fmt.Sprintf("load session: %v", err)
 			}
 		}
+		m.sessionSnapshot = nil
 
 	case "image":
 		selected := m.filePicker.SelectedItem()
@@ -708,8 +722,10 @@ func (m Model) handleSavePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) clearSession() (Model, tea.Cmd) {
 	m.messages = nil
 	m.session = config.NewSessionFile(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile)
-	m.settings.LastSessionName = ""
-	_ = config.SaveSettings(m.paths, m.settings)
+	if !m.incognito {
+		m.settings.LastSessionName = ""
+		_ = config.SaveSettings(m.paths, m.settings)
+	}
 	m.totalTokens = 0
 	m.lastError = ""
 	m.updateViewportContent()
@@ -740,10 +756,58 @@ func (m Model) toggleIncognito() (Model, tea.Cmd) {
 
 func (m Model) startLoad() (Model, tea.Cmd) {
 	sessions := config.ListSessions(m.paths)
-	m.sessionPicker = ui.NewPickerList("Load Session", sessions)
+	if len(sessions) == 0 {
+		return m, nil
+	}
+
+	// Snapshot current state so Esc can restore it
+	snap := &sessionState{
+		messages:    m.messages,
+		session:     m.session,
+		totalTokens: m.totalTokens,
+		settings:    m.settings,
+	}
+	m.sessionSnapshot = snap
+
+	picker := ui.NewPickerList("Load Session", sessions)
+
+	// Pre-select LastSessionName if it exists in the list
+	if m.settings.LastSessionName != "" {
+		for i, s := range sessions {
+			if s == m.settings.LastSessionName {
+				picker.Selected = i
+				break
+			}
+		}
+	}
+
+	m.sessionPicker = picker
 	m.mode = ModeSessionPicker
 	(&m).recalcLayout()
+
+	// Preview the initially selected session immediately
+	m = m.previewSession(m.sessionPicker.SelectedItem())
 	return m, nil
+}
+
+// previewSession loads a session's messages into view without persisting anything.
+func (m Model) previewSession(name string) Model {
+	if name == "" {
+		return m
+	}
+	sf, err := config.LoadSession(m.paths, name)
+	if err != nil {
+		return m
+	}
+	msgs := make([]config.DisplayMessage, len(sf.Messages))
+	for i, msg := range sf.Messages {
+		msgs[i] = config.DisplayMessage{Message: msg}
+	}
+	m.messages = msgs
+	m.session = sf
+	m.totalTokens = sf.TotalTokens
+	m.updateViewportContent()
+	return m
 }
 
 func (m Model) scanModelsCmd() tea.Cmd {
@@ -997,7 +1061,8 @@ func (m Model) buildAPIMessages() []chat.ChatMessage {
 	msgs = append(msgs, chat.ChatMessage{Role: "system", Content: sysPrompt})
 
 	for _, msg := range m.messages {
-		if msg.Role == "user" {
+		switch msg.Role {
+		case "user":
 			if msg.ImagePath != "" {
 				parts, err := chat.BuildMultimodalContent(msg.Text, msg.ImagePath)
 				if err == nil {
@@ -1008,7 +1073,7 @@ func (m Model) buildAPIMessages() []chat.ChatMessage {
 			} else {
 				msgs = append(msgs, chat.ChatMessage{Role: "user", Content: msg.Text})
 			}
-		} else if msg.Role == "assistant" {
+		case "assistant":
 			msgs = append(msgs, chat.ChatMessage{Role: msg.Role, Content: msg.Text})
 		}
 	}

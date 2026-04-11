@@ -52,8 +52,8 @@ var keys = keyMap{
 		key.WithHelp("ctrl+n", "new session / clear"),
 	),
 	Incognito: key.NewBinding(
-		key.WithKeys("ctrl+i"),
-		key.WithHelp("ctrl+i", "toggle incognito"),
+		key.WithKeys("ctrl+g"),
+		key.WithHelp("ctrl+g", "toggle incognito"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c"),

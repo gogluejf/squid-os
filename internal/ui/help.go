@@ -16,7 +16,7 @@ func RenderHelp(width, height int) string {
   ` + FooterKeyStyle.Render("ctrl+s") + `         Save session (edit name)
   ` + FooterKeyStyle.Render("ctrl+l") + `         Load session
   ` + FooterKeyStyle.Render("ctrl+n") + `         New session / clear chat
-  ` + FooterKeyStyle.Render("ctrl+i") + `         Toggle incognito mode
+  ` + FooterKeyStyle.Render("ctrl+g") + `         Toggle incognito mode
   ` + FooterKeyStyle.Render("up/down") + `        Browse prompt history
   ` + FooterKeyStyle.Render("shift+↑/↓") + `     Scroll chat (3 lines)
   ` + FooterKeyStyle.Render("pgup/pgdn") + `      Scroll chat (full page)

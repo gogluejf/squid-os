@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -52,17 +53,38 @@ func LoadSession(p Paths, name string) (SessionFile, error) {
 	return sf, nil
 }
 
-// ListSessions returns available session names (without .chat.json)
+// ListSessions returns available session names (without .chat.json), sorted by most recently modified.
 func ListSessions(p Paths) []string {
 	entries, err := os.ReadDir(p.Sessions)
 	if err != nil {
 		return nil
 	}
-	var names []string
+
+	type entry struct {
+		name    string
+		modTime time.Time
+	}
+	var sessions []entry
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".chat.json") {
-			names = append(names, strings.TrimSuffix(e.Name(), ".chat.json"))
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			sessions = append(sessions, entry{
+				name:    strings.TrimSuffix(e.Name(), ".chat.json"),
+				modTime: info.ModTime(),
+			})
 		}
+	}
+
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].modTime.After(sessions[j].modTime)
+	})
+
+	names := make([]string, len(sessions))
+	for i, s := range sessions {
+		names[i] = s.name
 	}
 	return names
 }

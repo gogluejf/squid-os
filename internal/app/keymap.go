@@ -9,6 +9,8 @@ type keyMap struct {
 	ExpandThinking key.Binding
 	Save           key.Binding
 	Load           key.Binding
+	NewSession     key.Binding
+	Incognito      key.Binding
 	Quit           key.Binding
 	Up             key.Binding
 	Down           key.Binding
@@ -44,6 +46,14 @@ var keys = keyMap{
 	Load: key.NewBinding(
 		key.WithKeys("ctrl+l"),
 		key.WithHelp("ctrl+l", "load session"),
+	),
+	NewSession: key.NewBinding(
+		key.WithKeys("ctrl+n"),
+		key.WithHelp("ctrl+n", "new session / clear"),
+	),
+	Incognito: key.NewBinding(
+		key.WithKeys("ctrl+i"),
+		key.WithHelp("ctrl+i", "toggle incognito"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c"),

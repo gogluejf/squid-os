@@ -10,6 +10,7 @@ const (
 	ModeHelp                       // Help overlay
 	ModeFilePicker                 // File path completion for /image, /system
 	ModeSessionPicker              // Session list for /load
+	ModeSavePrompt                 // Save session name input
 )
 
 func (m Mode) String() string {
@@ -26,6 +27,8 @@ func (m Mode) String() string {
 		return "file-picker"
 	case ModeSessionPicker:
 		return "session-picker"
+	case ModeSavePrompt:
+		return "save-prompt"
 	default:
 		return "unknown"
 	}

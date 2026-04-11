@@ -92,10 +92,14 @@ type Model struct {
 
 	// Error display
 	lastError string
+
+	// Incognito mode: skip history and session saving
+	incognito bool
 }
 
-// New creates a new app Model
-func New(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, history config.History) Model {
+// New creates a new app Model. Pass a non-nil initialSession to pre-load a session,
+// and incognito=true to start in incognito mode.
+func New(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, history config.History, initialSession *config.SessionFile, incognito bool) Model {
 	ta := textarea.New()
 	ta.Placeholder = "Type a message..."
 	ta.ShowLineNumbers = false
@@ -111,20 +115,44 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	ta.BlurredStyle.Base = ta.FocusedStyle.Base
 
 	vp := viewport.New(80, 20)
-	session := config.NewSessionFile(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
+
+	var session config.SessionFile
+	var messages []config.DisplayMessage
+
+	var totalTokens int
+	if initialSession != nil {
+		session = *initialSession
+		messages = make([]config.DisplayMessage, len(initialSession.Messages))
+		for i, msg := range initialSession.Messages {
+			messages[i] = config.DisplayMessage{Message: msg}
+		}
+		totalTokens = initialSession.TotalTokens
+		// Restore session settings
+		settings.Model = session.Session.Model
+		settings.Provider = session.Session.Provider
+		settings.Thinking = session.Session.Thinking
+		if session.Session.SystemPromptFile != "" {
+			settings.SystemPromptFile = session.Session.SystemPromptFile
+		}
+	} else {
+		session = config.NewSessionFile(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
+	}
 
 	return Model{
-		textarea:   ta,
-		viewport:   vp,
-		mode:       ModeChat,
-		settings:   settings,
-		endpoints:  endpoints,
-		paths:      paths,
-		history:    history,
-		session:    session,
-		historyIdx: -1,
-		cmdPalette: ui.NewCommandPalette(),
-		modelCache: chat.NewModelCache(5 * time.Minute),
+		textarea:    ta,
+		viewport:    vp,
+		mode:        ModeChat,
+		settings:    settings,
+		endpoints:   endpoints,
+		paths:       paths,
+		history:     history,
+		session:     session,
+		messages:    messages,
+		totalTokens: totalTokens,
+		historyIdx:  -1,
+		cmdPalette:  ui.NewCommandPalette(),
+		modelCache:  chat.NewModelCache(5 * time.Minute),
+		incognito:   incognito,
 	}
 }
 
@@ -209,6 +237,8 @@ func (m *Model) recalcLayout() {
 			overlayHeight = m.sessionPicker.RenderHeight()
 		case ModeFilePicker:
 			overlayHeight = m.filePicker.RenderHeight()
+		case ModeSavePrompt:
+			overlayHeight = 2 // heading + name input line
 		}
 	}
 
@@ -249,6 +279,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case ModeFilePicker:
 		return m.handlePickerKey(msg, m.filePickerFor)
+
+	case ModeSavePrompt:
+		return m.handleSavePromptKey(msg)
 	}
 
 	return m, nil
@@ -277,10 +310,16 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.Save):
-		return m.startSave()
+		return m.startManualSave()
 
 	case key.Matches(msg, keys.Load):
 		return m.startLoad()
+
+	case key.Matches(msg, keys.NewSession):
+		return m.clearSession()
+
+	case key.Matches(msg, keys.Incognito):
+		return m.toggleIncognito()
 
 	case key.Matches(msg, keys.Send):
 		if m.cmdPalette.Visible && m.cmdPalette.SelectedCommand() != "" {
@@ -356,8 +395,8 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.messages) > 0 && m.messages[len(m.messages)-1].Role == "user" {
 			m.messages = m.messages[:len(m.messages)-1]
 		}
-		// Remove from prompt history too
-		if len(m.history.Entries) > 0 {
+		// Remove from prompt history too (only if it was saved)
+		if !m.incognito && len(m.history.Entries) > 0 {
 			m.history.Entries = m.history.Entries[:len(m.history.Entries)-1]
 			_ = config.SaveHistory(m.paths, m.history)
 		}
@@ -499,6 +538,7 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 				for i, msg := range sf.Messages {
 					m.messages[i] = config.DisplayMessage{Message: msg}
 				}
+				m.totalTokens = sf.TotalTokens
 				m.settings.Model = sf.Session.Model
 				m.settings.Provider = sf.Session.Provider
 				m.settings.Thinking = sf.Session.Thinking
@@ -567,10 +607,13 @@ func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "save":
-		return m.startSave()
+		return m.startManualSave()
 
 	case "load":
 		return m.startLoad()
+
+	case "clear":
+		return m.clearSession()
 
 	case "system":
 		prompts := config.ListSystemPrompts(m.paths)
@@ -586,20 +629,112 @@ func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) startSave() (Model, tea.Cmd) {
+// startManualSave opens the save prompt for the user to confirm/edit the session name.
+func (m Model) startManualSave() (Model, tea.Cmd) {
+	if m.incognito {
+		return m, nil // no saving in incognito
+	}
 	name := m.settings.LastSessionName
 	if name == "" {
 		name = time.Now().Format("2006-01-02_15-04")
 	}
+	m.savePrompt = ui.NewSavePrompt(name)
+	m.mode = ModeSavePrompt
+	m.textarea.Blur()
+	(&m).recalcLayout()
+	return m, nil
+}
+
+// saveAs saves the session under the given name and updates LastSessionName.
+func (m Model) saveAs(name string) (Model, tea.Cmd) {
+	if name == "" || m.incognito {
+		return m, nil
+	}
 	m.session.Messages = m.extractSessionMessages()
+	m.session.TotalTokens = m.totalTokens
 	err := config.SaveSession(m.paths, name, m.session)
 	if err != nil {
 		m.lastError = fmt.Sprintf("save: %v", err)
 	} else {
 		m.settings.LastSessionName = name
 		_ = config.SaveSettings(m.paths, m.settings)
-		m.lastError = "" // clear any previous error
+		m.lastError = ""
 	}
+	return m, nil
+}
+
+// autoSave saves silently if AutoSave is enabled and we have a session name.
+func (m Model) autoSave() (Model, tea.Cmd) {
+	if !m.settings.AutoSave || m.incognito {
+		return m, nil
+	}
+	name := m.settings.LastSessionName
+	if name == "" {
+		name = time.Now().Format("2006-01-02_15-04")
+	}
+	return m.saveAs(name)
+}
+
+// handleSavePromptKey handles key input in ModeSavePrompt.
+func (m Model) handleSavePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keys.Escape), key.Matches(msg, keys.Cancel):
+		m.mode = ModeChat
+		m.textarea.Focus()
+		(&m).recalcLayout()
+		return m, nil
+
+	case key.Matches(msg, keys.Send):
+		nm, cmd := m.saveAs(m.savePrompt.Name)
+		nm.mode = ModeChat
+		nm.textarea.Focus()
+		(&nm).recalcLayout()
+		return nm, cmd
+
+	default:
+		s := msg.String()
+		if s == "backspace" {
+			if len(m.savePrompt.Name) > 0 {
+				m.savePrompt.Name = m.savePrompt.Name[:len(m.savePrompt.Name)-1]
+			}
+		} else if len(s) == 1 {
+			m.savePrompt.Name += s
+		}
+		return m, nil
+	}
+}
+
+// clearSession resets all messages and session state to start fresh.
+func (m Model) clearSession() (Model, tea.Cmd) {
+	m.messages = nil
+	m.session = config.NewSessionFile(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile)
+	m.settings.LastSessionName = ""
+	_ = config.SaveSettings(m.paths, m.settings)
+	m.totalTokens = 0
+	m.lastError = ""
+	m.updateViewportContent()
+	m.mode = ModeChat
+	m.textarea.Focus()
+	return m, nil
+}
+
+// toggleIncognito switches incognito mode on/off and clears the chat.
+func (m Model) toggleIncognito() (Model, tea.Cmd) {
+	m.incognito = !m.incognito
+	// Clear messages and session on toggle (fresh start both ways)
+	m.messages = nil
+	m.session = config.NewSessionFile(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile)
+	if !m.incognito {
+		// Leaving incognito: also reset last session name so auto-save doesn't
+		// accidentally write to the previous session.
+		m.settings.LastSessionName = ""
+		_ = config.SaveSettings(m.paths, m.settings)
+	}
+	m.totalTokens = 0
+	m.lastError = ""
+	m.updateViewportContent()
+	m.mode = ModeChat
+	m.textarea.Focus()
 	return m, nil
 }
 
@@ -626,8 +761,10 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	config.AddHistoryEntry(&m.history, text, m.settings.MaxHistory)
-	_ = config.SaveHistory(m.paths, m.history)
+	if !m.incognito {
+		config.AddHistoryEntry(&m.history, text, m.settings.MaxHistory)
+		_ = config.SaveHistory(m.paths, m.history)
+	}
 	m.historyIdx = -1
 	m.draft = ""
 
@@ -713,7 +850,8 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		m.textarea.Focus()
 		m.recalcLayout()
 		m.updateViewportContent()
-		return m, nil
+		nm, cmd := m.autoSave()
+		return nm, cmd
 	}
 
 	if event.Text != "" {
@@ -773,7 +911,7 @@ func (m Model) View() string {
 	}
 
 	var sections []string
-	sections = append(sections, ui.TopHeaderStyle.Width(m.width).Render("rig-chat v0.1"))
+	sections = append(sections, m.renderTopHeader())
 
 	// Viewport (messages)
 	sections = append(sections, m.viewport.View())
@@ -789,6 +927,8 @@ func (m Model) View() string {
 			sections = append(sections, m.sessionPicker.Render(m.width))
 		case ModeFilePicker:
 			sections = append(sections, m.filePicker.Render(m.width))
+		case ModeSavePrompt:
+			sections = append(sections, m.savePrompt.Render(m.width))
 		}
 	}
 
@@ -915,4 +1055,23 @@ func (m *Model) SetInitialPrompt(text string) {
 
 func (m Model) renderHelp() string {
 	return ui.RenderHelp(m.width, m.height)
+}
+
+// renderTopHeader renders the top header bar, with incognito indicator if active.
+func (m Model) renderTopHeader() string {
+	title := ui.TopHeaderStyle.Render("rig-chat v0.1")
+	if !m.incognito {
+		return ui.TopHeaderStyle.Width(m.width).Render("rig-chat v0.1")
+	}
+	incognitoLabel := ui.IncognitoStyle.Render("👻 incognito")
+	// Right-pad title and right-align incognito label
+	titleWidth := lipgloss.Width(title)
+	labelWidth := lipgloss.Width(incognitoLabel)
+	gap := m.width - titleWidth - labelWidth
+	if gap < 1 {
+		gap = 1
+	}
+	return ui.TopHeaderStyle.Width(m.width).Render(
+		"rig-chat v0.1" + strings.Repeat(" ", gap) + ui.IncognitoStyle.Render("👻 incognito"),
+	)
 }

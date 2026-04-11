@@ -4,12 +4,14 @@ import "time"
 
 // Settings persisted to settings.json
 type Settings struct {
-	Provider         string `json:"provider"`
-	Model            string `json:"model"`
-	Thinking         bool   `json:"thinking"`
-	SystemPromptFile string `json:"system_prompt_file"`
-	MaxHistory       int    `json:"max_history"`
-	LastSessionName  string `json:"last_session_name"`
+	Provider            string `json:"provider"`
+	Model               string `json:"model"`
+	Thinking            bool   `json:"thinking"`
+	SystemPromptFile    string `json:"system_prompt_file"`
+	MaxHistory          int    `json:"max_history"`
+	LastSessionName     string `json:"last_session_name"`
+	AutoSave            bool   `json:"auto_save"`
+	AutoLoadLastSession bool   `json:"auto_load_last_session"`
 }
 
 // ProviderConfig from endpoints.json
@@ -31,9 +33,10 @@ type History struct {
 
 // SessionFile is the full *.chat.json
 type SessionFile struct {
-	Version  int       `json:"version"`
-	Session  Session   `json:"session"`
-	Messages []Message `json:"messages"`
+	Version     int       `json:"version"`
+	Session     Session   `json:"session"`
+	Messages    []Message `json:"messages"`
+	TotalTokens int       `json:"total_tokens"`
 }
 
 // Session metadata

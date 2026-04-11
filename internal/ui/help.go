@@ -13,8 +13,10 @@ func RenderHelp(width, height int) string {
   ` + FooterKeyStyle.Render("ctrl+c") + `         Cancel inference / exit
   ` + FooterKeyStyle.Render("ctrl+h") + `         Toggle this help
   ` + FooterKeyStyle.Render("ctrl+e") + `         Expand/collapse thinking
-  ` + FooterKeyStyle.Render("ctrl+s") + `         Save session
+  ` + FooterKeyStyle.Render("ctrl+s") + `         Save session (edit name)
   ` + FooterKeyStyle.Render("ctrl+l") + `         Load session
+  ` + FooterKeyStyle.Render("ctrl+n") + `         New session / clear chat
+  ` + FooterKeyStyle.Render("ctrl+i") + `         Toggle incognito mode
   ` + FooterKeyStyle.Render("up/down") + `        Browse prompt history
   ` + FooterKeyStyle.Render("shift+↑/↓") + `     Scroll chat (3 lines)
   ` + FooterKeyStyle.Render("pgup/pgdn") + `      Scroll chat (full page)
@@ -30,6 +32,7 @@ func RenderHelp(width, height int) string {
   ` + CommandStyle.Render("/image") + `         Attach image to next message
   ` + CommandStyle.Render("/save") + `          Save current session
   ` + CommandStyle.Render("/load") + `          Load a saved session
+  ` + CommandStyle.Render("/clear") + `         Clear chat and start fresh
   ` + CommandStyle.Render("/system") + `        Load system prompt
   ` + CommandStyle.Render("/exit") + `          Exit rig-chat
   ` + CommandStyle.Render("/help") + `          Show this help`

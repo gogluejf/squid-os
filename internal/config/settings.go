@@ -7,10 +7,12 @@ import (
 
 func DefaultSettings() Settings {
 	return Settings{
-		Provider:   "vllm",
-		Model:      "",
-		Thinking:   false,
-		MaxHistory: 500,
+		Provider:            "vllm",
+		Model:               "",
+		Thinking:            false,
+		MaxHistory:          500,
+		AutoSave:            false,
+		AutoLoadLastSession: false,
 	}
 }
 

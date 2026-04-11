@@ -19,6 +19,7 @@ var (
 	flagImage     string
 	flagSystem    string
 	flagHeadless  bool
+	flagIncognito bool
 )
 
 func main() {
@@ -34,6 +35,7 @@ func main() {
 	rootCmd.Flags().StringVar(&flagImage, "image", "", "attach image to first message")
 	rootCmd.Flags().StringVar(&flagSystem, "system", "", "system prompt file")
 	rootCmd.Flags().BoolVar(&flagHeadless, "headless", false, "no TUI, stream to stdout")
+	rootCmd.Flags().BoolVar(&flagIncognito, "incognito", false, "start in incognito mode (no history or session saving)")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -56,23 +58,25 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("create config dirs: %w", err)
 	}
 
-	// Load config
+	// Seed default config files on first run
+	if _, err := os.Stat(paths.EndpointsFile()); os.IsNotExist(err) {
+		_ = config.SaveEndpoints(paths, config.DefaultEndpoints())
+	}
+	if _, err := os.Stat(paths.SettingsFile()); os.IsNotExist(err) {
+		_ = config.SaveSettings(paths, config.DefaultSettings())
+	}
+	_ = config.SeedDefaultSystemPrompt(paths)
+
+	// Load config (always from files after seeding)
 	settings := config.LoadSettings(paths)
 	endpoints := config.LoadEndpoints(paths)
 	history := config.LoadHistory(paths)
 
-	// Write defaults if files don't exist
-	if _, err := os.Stat(paths.EndpointsFile()); os.IsNotExist(err) {
-		_ = config.SaveEndpoints(paths, endpoints)
-	}
-	if _, err := os.Stat(paths.SettingsFile()); os.IsNotExist(err) {
-		_ = config.SaveSettings(paths, settings)
-	}
-
 	// Apply CLI flag overrides
-	if flagThinking == "on" {
+	switch flagThinking {
+	case "on":
 		settings.Thinking = true
-	} else if flagThinking == "off" {
+	case "off":
 		settings.Thinking = false
 	}
 	if flagSystem != "" {
@@ -84,8 +88,16 @@ func run(cmd *cobra.Command, args []string) error {
 		return runHeadless(paths, settings, endpoints)
 	}
 
+	// Auto-load session if configured
+	var initialSession *config.SessionFile
+	if settings.AutoLoadLastSession && settings.LastSessionName != "" && !flagIncognito {
+		if sf, err := config.LoadSession(paths, settings.LastSessionName); err == nil {
+			initialSession = &sf
+		}
+	}
+
 	// TUI mode
-	m := app.New(paths, settings, endpoints, history)
+	m := app.New(paths, settings, endpoints, history, initialSession, flagIncognito)
 
 	// Handle --image flag
 	if flagImage != "" {

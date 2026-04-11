@@ -19,6 +19,7 @@ var AllCommands = []CommandInfo{
 	{Name: "image", Description: "Attach image to next message"},
 	{Name: "save", Description: "Save current session"},
 	{Name: "load", Description: "Load a saved session"},
+	{Name: "clear", Description: "Clear chat and start fresh"},
 	{Name: "system", Description: "Load system prompt"},
 	{Name: "exit", Description: "Exit rig-chat"},
 	{Name: "help", Description: "Show help"},

@@ -31,6 +31,15 @@ func DefaultAssistantPrompt() string {
 - If you cannot complete a task, say so plainly and explain why`)
 }
 
+// SeedDefaultSystemPrompt writes the default prompt to sys-prompts/default.md if it doesn't exist.
+func SeedDefaultSystemPrompt(p Paths) error {
+	path := filepath.Join(p.Prompts, "default.md")
+	if _, err := os.Stat(path); err == nil {
+		return nil // already exists
+	}
+	return os.WriteFile(path, []byte(DefaultAssistantPrompt()+"\n"), 0644)
+}
+
 // LoadSystemPrompt reads a system prompt file from the prompts directory.
 // If name is empty or file not found, returns the default prompt.
 func LoadSystemPrompt(p Paths, name string) string {

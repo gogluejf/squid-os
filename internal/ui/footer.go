@@ -50,6 +50,8 @@ func RenderFooter(data FooterData, width int) string {
 	} else {
 		left = " " + FooterKeyStyle.Render("/") + FooterDimStyle.Render("cmd") +
 			FooterDimStyle.Render("  ") +
+			FooterKeyStyle.Render("ctrl+l") + FooterDimStyle.Render(" load") +
+			FooterDimStyle.Render("  ") +
 			FooterKeyStyle.Render("ctrl+h") + FooterDimStyle.Render(" help")
 		right1 = FooterDimStyle.Render(data.Model)
 	}

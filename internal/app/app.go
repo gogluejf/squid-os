@@ -327,6 +327,10 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Incognito):
 		return m.toggleIncognito()
 
+	case msg.Alt && msg.Type == tea.KeyEnter:
+		m.textarea.InsertRune('\n')
+		return m, nil
+
 	case key.Matches(msg, keys.Send):
 		if m.cmdPalette.Visible && m.cmdPalette.SelectedCommand() != "" {
 			return m.executeCommand(m.cmdPalette.SelectedCommand())

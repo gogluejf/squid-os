@@ -112,9 +112,15 @@ var (
 
 	// Incognito indicator
 	IncognitoStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("235")).
-			Foreground(lipgloss.Color("135")). // purple
+			Background(lipgloss.Color("54")).
+			Foreground(lipgloss.Color("255")).
 			Bold(true)
+
+	IncognitoHeaderStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("54")). // dark purple
+				Foreground(lipgloss.Color("255")). // white
+				Bold(true).
+				Padding(0, 1)
 
 	// Command palette
 	CommandStyle = lipgloss.NewStyle().

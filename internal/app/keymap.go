@@ -9,6 +9,7 @@ type keyMap struct {
 	ExpandThinking key.Binding
 	Save           key.Binding
 	Load           key.Binding
+	Model          key.Binding
 	NewSession     key.Binding
 	Incognito      key.Binding
 	Quit           key.Binding
@@ -47,13 +48,17 @@ var keys = keyMap{
 		key.WithKeys("ctrl+l"),
 		key.WithHelp("ctrl+l", "load session"),
 	),
+	Model: key.NewBinding(
+		key.WithKeys("alt+m"),
+		key.WithHelp("alt+m", "select model"),
+	),
 	NewSession: key.NewBinding(
 		key.WithKeys("ctrl+n"),
 		key.WithHelp("ctrl+n", "new session / clear"),
 	),
 	Incognito: key.NewBinding(
-		key.WithKeys("ctrl+g"),
-		key.WithHelp("ctrl+g", "toggle incognito"),
+		key.WithKeys("alt+i"),
+		key.WithHelp("alt+i", "toggle incognito"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c"),

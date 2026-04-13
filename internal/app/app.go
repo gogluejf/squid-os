@@ -321,6 +321,9 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Load):
 		return m.startLoad()
 
+	case key.Matches(msg, keys.Model):
+		return m, m.scanModelsCmd()
+
 	case key.Matches(msg, keys.NewSession):
 		return m.clearSession()
 
@@ -1015,6 +1018,7 @@ func (m Model) View() string {
 	// Footer
 	footerData := ui.FooterData{
 		Model:       m.settings.Model,
+		Provider:    m.settings.Provider,
 		TotalTokens: m.totalTokens + m.tokenCount,
 		Streaming:   m.streaming,
 		InThinking:  m.inThinking,
@@ -1132,19 +1136,17 @@ func (m Model) renderHelp() string {
 
 // renderTopHeader renders the top header bar, with incognito indicator if active.
 func (m Model) renderTopHeader() string {
-	title := ui.TopHeaderStyle.Render("rig-chat v0.1")
 	if !m.incognito {
 		return ui.TopHeaderStyle.Width(m.width).Render("rig-chat v0.1")
 	}
-	incognitoLabel := ui.IncognitoStyle.Render("👻 incognito")
-	// Right-pad title and right-align incognito label
-	titleWidth := lipgloss.Width(title)
-	labelWidth := lipgloss.Width(incognitoLabel)
+	headerStyle := ui.IncognitoHeaderStyle.Width(m.width)
+	title := "rig-chat v0.1"
+	label := "👻 incognito"
+	titleWidth := lipgloss.Width(ui.IncognitoHeaderStyle.Render(title))
+	labelWidth := lipgloss.Width(ui.IncognitoHeaderStyle.Render(label))
 	gap := m.width - titleWidth - labelWidth
 	if gap < 1 {
 		gap = 1
 	}
-	return ui.TopHeaderStyle.Width(m.width).Render(
-		"rig-chat v0.1" + strings.Repeat(" ", gap) + ui.IncognitoStyle.Render("👻 incognito"),
-	)
+	return headerStyle.Render(title + strings.Repeat(" ", gap) + label)
 }

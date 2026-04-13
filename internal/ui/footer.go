@@ -10,6 +10,7 @@ import (
 // FooterData holds dynamic footer information
 type FooterData struct {
 	Model       string
+	Provider    string
 	TotalTokens int
 	TokPerSec   float64
 	Streaming   bool
@@ -43,12 +44,12 @@ func RenderFooter(data FooterData, width int) string {
 		FooterDimStyle.Render("  ") +
 		FooterKeyStyle.Render("ctrl+h") + FooterDimStyle.Render(" help")
 	var right1 string
+	modelLabel := fmt.Sprintf("%s - %s", data.Provider, data.Model)
 	if data.Streaming && data.TokPerSec > 0 {
-		right1 = FooterValueStyle.Render(fmt.Sprintf("%.1f tok/s", data.TokPerSec)) + FooterDimStyle.Render("  "+data.Model)
+		right1 = FooterValueStyle.Render(fmt.Sprintf("%.1f tok/s", data.TokPerSec)) + FooterDimStyle.Render("  "+modelLabel)
 	} else {
-		right1 = FooterDimStyle.Render(data.Model)
+		right1 = FooterDimStyle.Render(modelLabel)
 	}
-	
 
 	gap1 := width - lipgloss.Width(left) - lipgloss.Width(right1)
 	if gap1 < 1 {

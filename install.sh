@@ -83,60 +83,7 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. Config directories + default files
-# ─────────────────────────────────────────────────────────────────────────────
-
-mkdir -p "${CONFIG_DIR}/sessions" "${CONFIG_DIR}/prompts"
-
-if [[ ! -f "${CONFIG_DIR}/endpoints.json" ]]; then
-    cat > "${CONFIG_DIR}/endpoints.json" <<'ENDPOINTS'
-{
-  "providers": [
-    {
-      "name": "vllm",
-      "chat_completions_url": "http://localhost/v1/chat/completions",
-      "models_url": "http://localhost/v1/models"
-    },
-    {
-      "name": "ollama",
-      "chat_completions_url": "http://localhost/ollama/v1/chat/completions",
-      "models_url": "http://localhost/ollama/v1/models"
-    }
-  ]
-}
-ENDPOINTS
-    echo -e "  ${GREEN}✓${RESET}  endpoints.json ${DIM}(created default)${RESET}"
-else
-    echo -e "  ${GREEN}✓${RESET}  endpoints.json ${DIM}(exists)${RESET}"
-fi
-
-if [[ ! -f "${CONFIG_DIR}/settings.json" ]]; then
-    cat > "${CONFIG_DIR}/settings.json" <<'SETTINGS'
-{
-  "provider": "vllm",
-  "model": "",
-  "thinking": false,
-  "system_prompt_file": "default.md",
-  "max_history": 500,
-  "last_session_name": ""
-}
-SETTINGS
-    echo -e "  ${GREEN}✓${RESET}  settings.json ${DIM}(created default — set model via /model)${RESET}"
-else
-    echo -e "  ${GREEN}✓${RESET}  settings.json ${DIM}(exists)${RESET}"
-fi
-
-if [[ ! -f "${CONFIG_DIR}/prompts/default.md" ]]; then
-    cat > "${CONFIG_DIR}/prompts/default.md" <<'PROMPT'
-You are a helpful assistant. You provide clear, concise answers. When showing code, use fenced code blocks with the appropriate language tag.
-PROMPT
-    echo -e "  ${GREEN}✓${RESET}  prompts/default.md ${DIM}(created)${RESET}"
-else
-    echo -e "  ${GREEN}✓${RESET}  prompts/default.md ${DIM}(exists)${RESET}"
-fi
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 4. Go modules (dependencies)
+# 3. Go modules (dependencies)
 # ─────────────────────────────────────────────────────────────────────────────
 
 cd "${REPO_ROOT}"
@@ -150,7 +97,7 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. Build
+# 4. Build
 # ─────────────────────────────────────────────────────────────────────────────
 
 if [[ -f "${BINARY_PATH}" ]] && ! $CLEAN; then

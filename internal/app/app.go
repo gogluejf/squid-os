@@ -200,16 +200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
-	case tea.MouseMsg:
-		switch msg.Button {
-		case tea.MouseButtonWheelUp:
-			m.viewport.LineUp(3)
-		case tea.MouseButtonWheelDown:
-			m.viewport.LineDown(3)
-		}
-		return m, nil
-
-	case streamTickMsg:
+case streamTickMsg:
 		if m.streaming {
 			m.updateViewportContent()
 			return m, streamTickCmd()

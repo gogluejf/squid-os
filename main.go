@@ -109,7 +109,7 @@ func run(cmd *cobra.Command, args []string) error {
 		m.SetInitialPrompt(flagPrompt)
 	}
 
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)
 	}

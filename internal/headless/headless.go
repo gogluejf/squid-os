@@ -13,13 +13,7 @@ import (
 // Run executes a single prompt and streams the response to stdout
 func Run(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, prompt, imagePath string) error {
 	// Find the active provider
-	chatURL := "http://localhost/v1/chat/completions"
-	for _, p := range endpoints.Providers {
-		if p.Name == settings.Provider {
-			chatURL = p.ChatURL
-			break
-		}
-	}
+	chatURL := config.ResolveChatURL(endpoints, settings.Provider)
 
 	if settings.Model == "" {
 		return fmt.Errorf("no model configured. Run rig-chat and use /model to select one, or set it in settings.json")

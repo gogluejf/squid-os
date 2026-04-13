@@ -852,13 +852,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.firstTokenTime = time.Time{}
 	m.lastError = ""
 
-	chatURL := "http://localhost/v1/chat/completions"
-	for _, p := range m.endpoints.Providers {
-		if p.Name == m.settings.Provider {
-			chatURL = p.ChatURL
-			break
-		}
-	}
+	chatURL := config.ResolveChatURL(m.endpoints, m.settings.Provider)
 
 	engine := chat.NewEngine(chatURL, m.settings.Model, m.settings.Thinking)
 

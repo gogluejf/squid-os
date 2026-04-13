@@ -146,6 +146,11 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		}
 	} else {
 		session = config.NewSessionFile(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
+		// Fresh session — clear LastSessionName so auto-save doesn't overwrite the previous session
+		if settings.LastSessionName != "" {
+			settings.LastSessionName = ""
+			_ = config.SaveSettings(paths, settings)
+		}
 	}
 
 	return Model{

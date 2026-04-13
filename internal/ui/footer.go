@@ -37,22 +37,15 @@ func RenderFooter(data FooterData, width int) string {
 	}
 
 	// ── Line 1: command hints (left) + model info (right) ────────────────
-	var left, right1 string
-	if data.Streaming {
-		parts := []string{
-			FooterKeyStyle.Render("ctrl+c") + FooterDimStyle.Render(" cancel"),
-		}
-		if data.InThinking {
-			parts = append(parts, FooterKeyStyle.Render("ctrl+e")+FooterDimStyle.Render(" thinking"))
-		}
-		left = " " + strings.Join(parts, FooterDimStyle.Render("  "))
+	left := " " + FooterKeyStyle.Render("/") + FooterDimStyle.Render("cmd") +
+		FooterDimStyle.Render("  ") +
+		FooterKeyStyle.Render("ctrl+l") + FooterDimStyle.Render(" load") +
+		FooterDimStyle.Render("  ") +
+		FooterKeyStyle.Render("ctrl+h") + FooterDimStyle.Render(" help")
+	var right1 string
+	if data.Streaming && data.TokPerSec > 0 {
 		right1 = FooterValueStyle.Render(fmt.Sprintf("%.1f tok/s", data.TokPerSec)) + FooterDimStyle.Render("  "+data.Model)
 	} else {
-		left = " " + FooterKeyStyle.Render("/") + FooterDimStyle.Render("cmd") +
-			FooterDimStyle.Render("  ") +
-			FooterKeyStyle.Render("ctrl+l") + FooterDimStyle.Render(" load") +
-			FooterDimStyle.Render("  ") +
-			FooterKeyStyle.Render("ctrl+h") + FooterDimStyle.Render(" help")
 		right1 = FooterDimStyle.Render(data.Model)
 	}
 	

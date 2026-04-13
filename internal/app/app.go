@@ -111,7 +111,7 @@ type sessionState struct {
 // and incognito=true to start in incognito mode.
 func New(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, history config.History, initialSession *config.SessionFile, incognito bool) Model {
 	ta := textarea.New()
-	ta.Placeholder = "Type a message..."
+
 	ta.ShowLineNumbers = false
 	ta.SetHeight(4)
 	ta.Focus()
@@ -852,6 +852,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 
 	m.streaming = true
 	m.mode = ModeStreaming
+	m.textarea.Placeholder = "ctrl+c to cancel..."
 	m.streamText = ""
 	m.streamThinking = ""
 	m.inThinking = false
@@ -885,6 +886,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		m.lastError = event.Error.Error()
 		m.streaming = false
 		m.mode = ModeChat
+		m.textarea.Placeholder = "Type a message..."
 		m.textarea.Focus()
 		m.recalcLayout()
 		m.updateViewportContent()
@@ -911,6 +913,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		m.tokenCount = 0 // flush so footer (totalTokens + tokenCount) doesn't double-count
 		m.streaming = false
 		m.mode = ModeChat
+		m.textarea.Placeholder = "Type a message..."
 		m.textarea.Focus()
 		m.recalcLayout()
 		m.updateViewportContent()

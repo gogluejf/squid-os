@@ -338,19 +338,19 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.sendMessage()
 
 	case key.Matches(msg, keys.ScrollUp):
-		m.viewport.LineUp(3)
+		m.viewport.ScrollUp(3)
 		return m, nil
 
 	case key.Matches(msg, keys.ScrollDown):
-		m.viewport.LineDown(3)
+		m.viewport.ScrollDown(3)
 		return m, nil
 
 	case key.Matches(msg, keys.PageUp):
-		m.viewport.ViewUp()
+		m.viewport.PageUp()
 		return m, nil
 
 	case key.Matches(msg, keys.PageDown):
-		m.viewport.ViewDown()
+		m.viewport.PageDown()
 		return m, nil
 
 	case key.Matches(msg, keys.Up):
@@ -419,19 +419,19 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.ScrollUp):
-		m.viewport.LineUp(3)
+		m.viewport.ScrollUp(3)
 		return m, nil
 
 	case key.Matches(msg, keys.ScrollDown):
-		m.viewport.LineDown(3)
+		m.viewport.ScrollDown(3)
 		return m, nil
 
 	case key.Matches(msg, keys.PageUp):
-		m.viewport.ViewUp()
+		m.viewport.PageUp()
 		return m, nil
 
 	case key.Matches(msg, keys.PageDown):
-		m.viewport.ViewDown()
+		m.viewport.PageDown()
 		return m, nil
 	}
 	return m, nil
@@ -452,6 +452,22 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 		m.mode = ModeChat
 		m.textarea.Focus()
 		(&m).recalcLayout()
+		return m, nil
+
+	case key.Matches(msg, keys.ScrollUp):
+		m.viewport.ScrollUp(3)
+		return m, nil
+
+	case key.Matches(msg, keys.ScrollDown):
+		m.viewport.ScrollDown(3)
+		return m, nil
+
+	case key.Matches(msg, keys.PageUp):
+		m.viewport.PageUp()
+		return m, nil
+
+	case key.Matches(msg, keys.PageDown):
+		m.viewport.PageDown()
 		return m, nil
 
 	case key.Matches(msg, keys.Up):

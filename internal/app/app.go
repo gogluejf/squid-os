@@ -410,11 +410,6 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.messages) > 0 && m.messages[len(m.messages)-1].Role == "user" {
 			m.messages = m.messages[:len(m.messages)-1]
 		}
-		// Remove from prompt history too (only if it was saved)
-		if !m.incognito && len(m.history.Entries) > 0 {
-			m.history.Entries = m.history.Entries[:len(m.history.Entries)-1]
-			_ = config.SaveHistory(m.paths, m.history)
-		}
 		m.streaming = false
 		m.tokenCount = 0 // discard partial stream; don't pollute footer total
 		m.mode = ModeChat

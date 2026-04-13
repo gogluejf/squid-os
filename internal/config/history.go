@@ -25,19 +25,14 @@ func SaveHistory(p Paths, h History) error {
 	return os.WriteFile(p.HistoryFile(), data, 0644)
 }
 
-// AddHistoryEntry adds an entry to the LRU history, deduplicating
+// AddHistoryEntry adds an entry to the LRU history.
+// Skips if identical to the most recent entry; does not deduplicate the full list.
 func AddHistoryEntry(h *History, entry string, max int) {
-	// Remove duplicate if exists
-	entries := make([]string, 0, len(h.Entries))
-	for _, e := range h.Entries {
-		if e != entry {
-			entries = append(entries, e)
-		}
+	if len(h.Entries) > 0 && h.Entries[len(h.Entries)-1] == entry {
+		return
 	}
-	entries = append(entries, entry)
-	// Trim from front if over max
-	if len(entries) > max {
-		entries = entries[len(entries)-max:]
+	h.Entries = append(h.Entries, entry)
+	if len(h.Entries) > max {
+		h.Entries = h.Entries[len(h.Entries)-max:]
 	}
-	h.Entries = entries
 }

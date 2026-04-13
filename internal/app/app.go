@@ -200,7 +200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
-case streamTickMsg:
+	case streamTickMsg:
 		if m.streaming {
 			m.updateViewportContent()
 			return m, streamTickCmd()

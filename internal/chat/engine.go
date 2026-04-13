@@ -13,12 +13,12 @@ import (
 
 // StreamEvent is sent for each SSE chunk during inference
 type StreamEvent struct {
-	Text       string  // visible delta text
-	Thinking   string  // thinking delta text
-	InThinking bool    // currently inside think block
-	Done       bool    // stream finished
-	StopReason string  // from the final chunk
-	Error      error   // non-nil on error
+	Text       string // visible delta text
+	Thinking   string // thinking delta text
+	InThinking bool   // currently inside think block
+	Done       bool   // stream finished
+	StopReason string // from the final chunk
+	Error      error  // non-nil on error
 }
 
 // ChatMessage is an OpenAI-compatible message for the API request
@@ -41,9 +41,9 @@ type ImageURL struct {
 
 // chatRequest is the OpenAI-compatible request body
 type chatRequest struct {
-	Model              string            `json:"model"`
-	Stream             bool              `json:"stream"`
-	Messages           []ChatMessage     `json:"messages"`
+	Model              string                 `json:"model"`
+	Stream             bool                   `json:"stream"`
+	Messages           []ChatMessage          `json:"messages"`
 	ChatTemplateKwargs map[string]interface{} `json:"chat_template_kwargs,omitempty"`
 }
 

@@ -118,19 +118,22 @@ func (cp *CommandPalette) Render(width int) string {
 		items = items[:maxCmdItems]
 	}
 
+	// Fixed name column width: longest command "/thinking" = 11 chars + 2 gap = 13.
+	const nameColWidth = 13
+
 	// Inline styles that carry the background so ANSI resets don't punch holes.
-	normalNameStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color("110")).Bold(true)
+	normalNameStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color("110")).Bold(true).Width(nameColWidth)
 	normalDescStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color("243"))
 	normalRowStyle := lipgloss.NewStyle().Background(paletteBg).Width(width)
 
-	selNameStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color("252")).Bold(true)
+	selNameStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color("252")).Bold(true).Width(nameColWidth)
 	selDescStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color("243"))
 	selRowStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Width(width)
 
 	var rows []string
 	for i, item := range items {
 		name := "  /" + item.Name
-		desc := "  " + item.Description
+		desc := item.Description
 		if i == cp.Selected {
 			rows = append(rows, selRowStyle.Render(selNameStyle.Render(name)+selDescStyle.Render(desc)))
 		} else {

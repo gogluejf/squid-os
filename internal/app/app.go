@@ -47,6 +47,7 @@ type Model struct {
 	cmdPalette ui.CommandPalette
 
 	// Pickers
+	modelEntries   []chat.ModelEntry
 	modelPicker    ui.PickerList
 	sessionPicker  ui.PickerList
 	filePicker     ui.PickerList
@@ -211,8 +212,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleStreamEvent(chat.StreamEvent(msg))
 
 	case modelsLoadedMsg:
-		ids := chat.ModelIDs(msg.models)
-		m.modelPicker = ui.NewPickerList("Select Model", ids)
+		m.modelEntries = msg.models
+		labels := make([]string, len(msg.models))
+		for i, e := range msg.models {
+			labels[i] = fmt.Sprintf("%-12s  %s", e.Provider, e.ID)
+		}
+		m.modelPicker = ui.NewPickerList("Select Model", labels)
 		m.mode = ModeModelPicker
 		m.recalcLayout()
 		return m, nil
@@ -551,14 +556,11 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 	case "model":
 		selected := m.modelPicker.SelectedItem()
 		if selected != "" {
-			m.settings.Model = selected
-			// Find the provider for this model
-			if models, ok := m.modelCache.Get(); ok {
-				for _, me := range models {
-					if me.ID == selected {
-						m.settings.Provider = me.Provider
-						break
-					}
+			for _, e := range m.modelEntries {
+				if fmt.Sprintf("%-12s  %s", e.Provider, e.ID) == selected {
+					m.settings.Model = e.ID
+					m.settings.Provider = e.Provider
+					break
 				}
 			}
 			_ = config.SaveSettings(m.paths, m.settings)

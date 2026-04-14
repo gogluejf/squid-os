@@ -19,6 +19,7 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 		if pickerType == "session" && m.sessionSnapshot != nil {
 			snap := m.sessionSnapshot
 			m.messages = snap.messages
+			m.renderedMessages = nil
 			m.session = snap.session
 			m.totalTokens = snap.totalTokens
 			m.settings = snap.settings

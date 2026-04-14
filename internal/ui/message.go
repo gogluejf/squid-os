@@ -118,7 +118,9 @@ func renderHeader(msg config.DisplayMessage, width int) string {
 // tokenCount and tokPerSec are live values; tokPerSec should be 0 until the
 // first token arrives so the latency (pre-token wait) is excluded from the
 // speed calculation.
-func RenderStreamingMessage(text, thinkingText string, inThinking bool, width int, createdAt time.Time, tokenCount int, tokPerSec float64) string {
+// renderedMarkdown is the pre-cached glamour output for completed lines;
+// partial is the current line still being typed (plain text).
+func RenderStreamingMessage(renderedMarkdown, partial, thinkingText string, inThinking bool, width int, createdAt time.Time, tokenCount int, tokPerSec float64) string {
 	var b strings.Builder
 
 	bubbleWidth := width
@@ -131,14 +133,21 @@ func RenderStreamingMessage(text, thinkingText string, inThinking bool, width in
 	b.WriteString(streamHeader)
 	b.WriteString("\n")
 
-	if inThinking && text == "" {
+	if inThinking && renderedMarkdown == "" && partial == "" {
 		b.WriteString(ThinkingLabelStyle.Render("  thinking..."))
 		b.WriteString("\n")
 	}
 
-	if text != "" {
+	if renderedMarkdown != "" || partial != "" {
 		style := AssistantMsgStyle.Width(bodyWidth)
-		b.WriteString(style.Render(text + "\n"))
+		body := renderedMarkdown
+		if partial != "" {
+			if body != "" {
+				body += "\n"
+			}
+			body += partial
+		}
+		b.WriteString(style.Render("\n" + body + "\n"))
 		b.WriteString("\n")
 	}
 	return b.String()

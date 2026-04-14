@@ -68,13 +68,40 @@ func (m Model) View() string {
 func (m *Model) updateViewportContent() {
 	var b strings.Builder
 
-	for _, msg := range m.messages {
-		b.WriteString(ui.RenderMessage(msg, m.width, msg.ThinkingExpanded))
+	// Invalidate cache on width change
+	if m.renderedWidth != m.width {
+		m.renderedMessages = m.renderedMessages[:0]
+		m.renderedWidth = m.width
+	}
+	// Render only new messages, reuse cache for existing ones
+	for i := len(m.renderedMessages); i < len(m.messages); i++ {
+		msg := m.messages[i]
+		m.renderedMessages = append(m.renderedMessages, ui.RenderMessage(msg, m.width, msg.ThinkingExpanded))
+	}
+	for _, r := range m.renderedMessages {
+		b.WriteString(r)
 	}
 
 	if m.streaming {
+		// Only re-run glamour when a new line has completed (lastNL changed).
+		lastNL := strings.LastIndex(m.streamText, "\n")
+		if lastNL > m.streamMarkdownEnd || (lastNL < 0 && m.streamMarkdown != "") {
+			if lastNL >= 0 {
+				m.streamMarkdown = strings.TrimRight(
+					ui.RenderMarkdownOnBg(m.streamText[:lastNL], "233"), "\n")
+				m.streamMarkdownEnd = lastNL
+			} else {
+				m.streamMarkdown = ""
+				m.streamMarkdownEnd = -1
+			}
+		}
+		partial := m.streamText
+		if lastNL >= 0 {
+			partial = m.streamText[lastNL+1:]
+		}
 		b.WriteString(ui.RenderStreamingMessage(
-			m.streamText,
+			m.streamMarkdown,
+			partial,
 			m.streamThinking,
 			m.inThinking,
 			m.width,

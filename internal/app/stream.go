@@ -62,6 +62,8 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.streamThinking = ""
 	m.inThinking = false
 	m.tokenCount = 0
+	m.streamMarkdown = ""
+	m.streamMarkdownEnd = -1
 	m.streamStart = time.Now()
 	m.firstTokenTime = time.Time{}
 	m.lastError = ""

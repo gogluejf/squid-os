@@ -35,11 +35,15 @@ type Model struct {
 	filePickerFor  string // "image" or "system"
 
 	// Chat state
-	messages       []config.DisplayMessage
-	streamText     string
-	streamThinking string
-	inThinking     bool
-	streaming      bool
+	messages              []config.DisplayMessage
+	renderedMessages      []string // cached glamour renders, 1:1 with messages
+	renderedWidth         int      // width at which renderedMessages was built
+	streamText            string
+	streamThinking        string
+	inThinking            bool
+	streaming             bool
+	streamMarkdown        string // cached glamour render of completed lines
+	streamMarkdownEnd     int    // lastNL position when streamMarkdown was last rendered
 	cancelFn       context.CancelFunc
 	streamCh       <-chan chat.StreamEvent
 	streamStart    time.Time

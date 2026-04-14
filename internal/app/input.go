@@ -137,6 +137,7 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if len(m.messages) > 0 && m.messages[len(m.messages)-1].Role == "user" {
 			m.messages = m.messages[:len(m.messages)-1]
+			m.renderedMessages = m.renderedMessages[:len(m.messages)]
 		}
 		m.streaming = false
 		m.tokenCount = 0 // discard partial stream; don't pollute footer total

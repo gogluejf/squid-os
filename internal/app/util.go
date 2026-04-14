@@ -14,6 +14,10 @@ func (m *Model) toggleLastThinking() {
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		if m.messages[i].Role == "assistant" && m.messages[i].ThinkingText != "" {
 			m.messages[i].ThinkingExpanded = !m.messages[i].ThinkingExpanded
+			// Invalidate cached render for this message so it redraws with new state
+			if i < len(m.renderedMessages) {
+				m.renderedMessages = m.renderedMessages[:i]
+			}
 			break
 		}
 	}

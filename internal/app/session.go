@@ -59,6 +59,7 @@ func (m Model) autoSave() (Model, tea.Cmd) {
 // clearSession resets all messages and session state to start fresh.
 func (m Model) clearSession() (Model, tea.Cmd) {
 	m.messages = nil
+	m.renderedMessages = nil
 	m.session = config.NewSessionFile(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile)
 	if !m.incognito {
 		m.settings.LastSessionName = ""
@@ -77,6 +78,7 @@ func (m Model) toggleIncognito() (Model, tea.Cmd) {
 	m.incognito = !m.incognito
 	// Clear messages and session on toggle (fresh start both ways)
 	m.messages = nil
+	m.renderedMessages = nil
 	m.session = config.NewSessionFile(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile)
 	if !m.incognito {
 		// Leaving incognito: also reset last session name so auto-save doesn't
@@ -144,6 +146,7 @@ func (m Model) previewSession(name string) Model {
 		msgs[i] = config.DisplayMessage{Message: msg}
 	}
 	m.messages = msgs
+	m.renderedMessages = nil
 	m.session = sf
 	m.totalTokens = sf.TotalTokens
 	m.updateViewportContent()

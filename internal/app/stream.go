@@ -25,6 +25,7 @@ type streamState struct {
 	firstTokenTime time.Time
 	cancelFn       context.CancelFunc
 	ch             <-chan chat.StreamEvent
+	userCancelled  bool // true if user pressed cancel
 }
 
 // reset clears all stream state before a new request.
@@ -40,6 +41,7 @@ func (ss *streamState) reset() {
 	ss.firstTokenTime = time.Time{}
 	ss.cancelFn = nil
 	ss.ch = nil
+	ss.userCancelled = false
 }
 
 // scanModelsCmd launches an async model scan and returns the result as a modelsLoadedMsg.
@@ -117,22 +119,25 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	}
 
 	if event.Done {
-		assistantMsg := config.DisplayMessage{
-			Message: config.Message{
-				ID:              fmt.Sprintf("msg_%d", len(m.session.messages)+1),
-				Role:            "assistant",
-				CreatedAt:       m.stream.start,
-				Text:            m.stream.text,
-				ThinkingText:    m.stream.thinking,
-				OutputTokens:    m.stream.tokenCount,
-				TokensPerSecond: m.calcTokPerSec(),
-				ResponseTimeMs:  time.Since(m.stream.start).Milliseconds(),
-				StopReason:      event.StopReason,
-			},
+		// Don't save assistant message if user cancelled
+		if !m.stream.userCancelled {
+			assistantMsg := config.DisplayMessage{
+				Message: config.Message{
+					ID:              fmt.Sprintf("msg_%d", len(m.session.messages)+1),
+					Role:            "assistant",
+					CreatedAt:       m.stream.start,
+					Text:            m.stream.text,
+					ThinkingText:    m.stream.thinking,
+					OutputTokens:    m.stream.tokenCount,
+					TokensPerSecond: m.calcTokPerSec(),
+					ResponseTimeMs:  time.Since(m.stream.start).Milliseconds(),
+					StopReason:      event.StopReason,
+				},
+			}
+			m.session.appendMsg(assistantMsg)
+			m.session.file.Messages = m.session.extractMessages()
+			m.session.totalTokens += m.stream.tokenCount
 		}
-		m.session.appendMsg(assistantMsg)
-		m.session.file.Messages = m.session.extractMessages()
-		m.session.totalTokens += m.stream.tokenCount
 		m.stream.tokenCount = 0
 		m.stream.active = false
 		(&m).returnToChat()

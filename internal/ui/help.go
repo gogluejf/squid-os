@@ -22,7 +22,8 @@ func RenderHelp(width, height int) string {
   ` + FooterKeyStyle.Render("up/down") + `          Browse prompt history
   ` + FooterKeyStyle.Render("shift+↑/↓") + `        Scroll chat (3 lines)
   ` + FooterKeyStyle.Render("pgup/pgdn") + `        Scroll chat (full page)
-  ` + FooterKeyStyle.Render("shift+scroll") + `     Mouse wheel scrolls chat / select text
+  ` + FooterKeyStyle.Render("scroll") + `           Mouse wheel scrolls chat
+  ` + FooterKeyStyle.Render("shift+drag") + `       Select and copy text
   ` + FooterKeyStyle.Render("/") + `                Open command palette
   ` + FooterKeyStyle.Render("esc") + `              Close overlay / dismiss palette`
 

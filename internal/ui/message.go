@@ -5,8 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"rig-chat/internal/config"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // RenderMessage renders a single chat message for the viewport

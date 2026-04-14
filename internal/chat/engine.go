@@ -92,10 +92,9 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 			Stream:   true,
 			Messages: messages,
 		}
-		if e.Thinking {
-			reqBody.ChatTemplateKwargs = map[string]interface{}{
-				"enable_thinking": true,
-			}
+
+		reqBody.ChatTemplateKwargs = map[string]interface{}{
+			"enable_thinking": e.Thinking,
 		}
 
 		body, err := json.Marshal(reqBody)

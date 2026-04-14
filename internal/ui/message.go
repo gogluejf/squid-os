@@ -40,9 +40,13 @@ func RenderMessage(msg config.DisplayMessage, width int, thinkingExpanded bool) 
 		body = "(cancelled by user)"
 	}
 
-	// Keep plain text rendering in chat bubbles to preserve consistent
-	// full-width backgrounds. ANSI sequences from markdown rendering can
-	// reset terminal background mid-line and create visual striping.
+	// For assistant messages, render markdown and restore the background colour
+	// after every glamour reset sequence — same technique used for the header
+	// inline styles — so the lipgloss block background stays solid throughout.
+	if msg.Role == "assistant" {
+		body = RenderMarkdownOnBg(body, "233")
+	}
+
 	b.WriteString(style.Render("\n" + body + "\n"))
 
 	// Thinking block (collapsed/expanded)

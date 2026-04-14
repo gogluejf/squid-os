@@ -34,3 +34,17 @@ func RenderMarkdown(text string, width int) string {
 	// glamour adds trailing newlines, trim them
 	return strings.TrimRight(rendered, "\n")
 }
+
+// RenderMarkdownOnBg renders markdown and, after every ANSI reset sequence,
+// immediately restores the given 256-colour background.  This prevents glamour's
+// reset codes from "punching holes" in the lipgloss block that wraps the output.
+// bg256 is the xterm-256 colour number as a string (e.g. "233").
+// Falls back to plain text if the renderer is unavailable.
+func RenderMarkdownOnBg(text, bg256 string) string {
+	rendered := RenderMarkdown(text, 0)
+	if rendered == text {
+		return text // renderer unavailable or empty — no post-processing needed
+	}
+	restoreSeq := "\x1b[48;5;" + bg256 + "m"
+	return strings.ReplaceAll(rendered, "\x1b[0m", "\x1b[0m"+restoreSeq)
+}

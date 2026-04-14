@@ -36,7 +36,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case streamTickMsg:
-		if m.streaming {
+		if m.stream.active {
 			m.updateViewportContent()
 			return m, streamTickCmd()
 		}

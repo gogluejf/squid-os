@@ -12,6 +12,36 @@ import (
 	"rig-chat/internal/config"
 )
 
+// streamState bundles all transient fields for an active inference stream.
+type streamState struct {
+	text           string
+	thinking       string
+	inThinking     bool
+	active         bool
+	markdown       string // glamour cache for completed lines
+	markdownEnd    int
+	tokenCount     int
+	start          time.Time
+	firstTokenTime time.Time
+	cancelFn       context.CancelFunc
+	ch             <-chan chat.StreamEvent
+}
+
+// reset clears all stream state before a new request.
+func (ss *streamState) reset() {
+	ss.text = ""
+	ss.thinking = ""
+	ss.inThinking = false
+	ss.active = false
+	ss.markdown = ""
+	ss.markdownEnd = -1
+	ss.tokenCount = 0
+	ss.start = time.Time{}
+	ss.firstTokenTime = time.Time{}
+	ss.cancelFn = nil
+	ss.ch = nil
+}
+
 // scanModelsCmd launches an async model scan and returns the result as a modelsLoadedMsg.
 func (m Model) scanModelsCmd() tea.Cmd {
 	return func() tea.Msg {
@@ -39,7 +69,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 
 	userMsg := config.DisplayMessage{
 		Message: config.Message{
-			ID:          fmt.Sprintf("msg_%d", len(m.messages)+1),
+			ID:          fmt.Sprintf("msg_%d", len(m.session.messages)+1),
 			Role:        "user",
 			CreatedAt:   time.Now(),
 			Text:        text,
@@ -47,7 +77,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 			InputTokens: countTokensApprox(text),
 		},
 	}
-	m.messages = append(m.messages, userMsg)
+	m.session.appendMsg(userMsg)
 
 	m.textarea.SetValue("")
 	m.textarea.Blur()
@@ -55,28 +85,21 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	apiMsgs := m.buildAPIMessages()
 	m.attachedImage = ""
 
-	m.streaming = true
+	m.stream.reset()
+	m.stream.active = true
+	m.stream.start = time.Now()
 	m.mode = ModeStreaming
 	m.textarea.Placeholder = "ctrl+c to cancel..."
-	m.streamText = ""
-	m.streamThinking = ""
-	m.inThinking = false
-	m.tokenCount = 0
-	m.streamMarkdown = ""
-	m.streamMarkdownEnd = -1
-	m.streamStart = time.Now()
-	m.firstTokenTime = time.Time{}
 	m.lastError = ""
 
 	chatURL := config.ResolveChatURL(m.endpoints, m.settings.Provider)
-
 	engine := chat.NewEngine(chatURL, m.settings.Model, m.settings.Thinking)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	m.cancelFn = cancel
+	m.stream.cancelFn = cancel
 
 	ch := engine.Stream(ctx, apiMsgs)
-	m.streamCh = ch
+	m.stream.ch = ch
 
 	m.updateViewportContent()
 	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd())
@@ -87,11 +110,8 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	if event.Error != nil {
 		m.lastError = event.Error.Error()
-		m.streaming = false
-		m.mode = ModeChat
-		m.textarea.Placeholder = "Type a message..."
-		m.textarea.Focus()
-		m.recalcLayout()
+		m.stream.active = false
+		(&m).returnToChat()
 		m.updateViewportContent()
 		return m, nil
 	}
@@ -99,46 +119,43 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	if event.Done {
 		assistantMsg := config.DisplayMessage{
 			Message: config.Message{
-				ID:              fmt.Sprintf("msg_%d", len(m.messages)+1),
+				ID:              fmt.Sprintf("msg_%d", len(m.session.messages)+1),
 				Role:            "assistant",
-				CreatedAt:       m.streamStart,
-				Text:            m.streamText,
-				ThinkingText:    m.streamThinking,
-				OutputTokens:    m.tokenCount,
+				CreatedAt:       m.stream.start,
+				Text:            m.stream.text,
+				ThinkingText:    m.stream.thinking,
+				OutputTokens:    m.stream.tokenCount,
 				TokensPerSecond: m.calcTokPerSec(),
-				ResponseTimeMs:  time.Since(m.streamStart).Milliseconds(),
+				ResponseTimeMs:  time.Since(m.stream.start).Milliseconds(),
 				StopReason:      event.StopReason,
 			},
 		}
-		m.messages = append(m.messages, assistantMsg)
-		m.session.Messages = m.extractSessionMessages()
-		m.totalTokens += m.tokenCount
-		m.tokenCount = 0 // flush so footer (totalTokens + tokenCount) doesn't double-count
-		m.streaming = false
-		m.mode = ModeChat
-		m.textarea.Placeholder = "Type a message..."
-		m.textarea.Focus()
-		m.recalcLayout()
+		m.session.appendMsg(assistantMsg)
+		m.session.file.Messages = m.session.extractMessages()
+		m.session.totalTokens += m.stream.tokenCount
+		m.stream.tokenCount = 0
+		m.stream.active = false
+		(&m).returnToChat()
 		m.updateViewportContent()
 		nm, cmd := m.autoSave()
 		return nm, cmd
 	}
 
 	if event.Text != "" {
-		m.streamText += event.Text
-		m.tokenCount += countTokensApprox(event.Text)
-		if m.firstTokenTime.IsZero() {
-			m.firstTokenTime = time.Now()
+		m.stream.text += event.Text
+		m.stream.tokenCount += countTokensApprox(event.Text)
+		if m.stream.firstTokenTime.IsZero() {
+			m.stream.firstTokenTime = time.Now()
 		}
 	}
 	if event.Thinking != "" {
-		m.streamThinking += event.Thinking
-		m.tokenCount += countTokensApprox(event.Thinking)
-		if m.firstTokenTime.IsZero() {
-			m.firstTokenTime = time.Now()
+		m.stream.thinking += event.Thinking
+		m.stream.tokenCount += countTokensApprox(event.Thinking)
+		if m.stream.firstTokenTime.IsZero() {
+			m.stream.firstTokenTime = time.Now()
 		}
 	}
-	m.inThinking = event.InThinking
+	m.stream.inThinking = event.InThinking
 	m.updateViewportContent()
-	return m, waitForStreamEvent(m.streamCh)
+	return m, waitForStreamEvent(m.stream.ch)
 }

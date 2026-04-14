@@ -132,19 +132,22 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Cancel):
-		if m.cancelFn != nil {
-			m.cancelFn()
+		if m.stream.cancelFn != nil {
+			m.stream.cancelFn()
 		}
-		if len(m.messages) > 0 && m.messages[len(m.messages)-1].Role == "user" {
-			m.messages = m.messages[:len(m.messages)-1]
-			m.renderedMessages = m.renderedMessages[:len(m.messages)]
+		n := len(m.session.messages)
+		if n > 0 && m.session.messages[n-1].Role == "user" {
+			m.session.truncateTo(n - 1)
 		}
-		m.streaming = false
-		m.tokenCount = 0 // discard partial stream; don't pollute footer total
+
+		m.stream.active = false
+		m.stream.tokenCount = 0
+		m.stream.text = ""
+		m.stream.thinking = ""
+
 		m.mode = ModeChat
 		m.textarea.Focus()
-		m.streamText = ""
-		m.streamThinking = ""
+
 		m.updateViewportContent()
 		return m, nil
 

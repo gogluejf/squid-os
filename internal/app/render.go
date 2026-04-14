@@ -53,9 +53,9 @@ func (m Model) View() string {
 	footerData := ui.FooterData{
 		Model:       m.settings.Model,
 		Provider:    m.settings.Provider,
-		TotalTokens: m.totalTokens + m.tokenCount,
-		Streaming:   m.streaming,
-		InThinking:  m.inThinking,
+		TotalTokens: m.session.totalTokens + m.stream.tokenCount,
+		Streaming:   m.stream.active,
+		InThinking:  m.stream.inThinking,
 		TokPerSec:   m.calcTokPerSec(),
 	}
 	sections = append(sections, ui.RenderFooter(footerData, m.width))
@@ -69,44 +69,44 @@ func (m *Model) updateViewportContent() {
 	var b strings.Builder
 
 	// Invalidate cache on width change
-	if m.renderedWidth != m.width {
-		m.renderedMessages = m.renderedMessages[:0]
-		m.renderedWidth = m.width
+	if m.session.renderedWidth != m.width {
+		m.session.invalidateRenderAll()
+		m.session.renderedWidth = m.width
 	}
 	// Render only new messages, reuse cache for existing ones
-	for i := len(m.renderedMessages); i < len(m.messages); i++ {
-		msg := m.messages[i]
-		m.renderedMessages = append(m.renderedMessages, ui.RenderMessage(msg, m.width, msg.ThinkingExpanded))
+	for i := len(m.session.renderedMessages); i < len(m.session.messages); i++ {
+		msg := m.session.messages[i]
+		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, msg.ThinkingExpanded))
 	}
-	for _, r := range m.renderedMessages {
+	for _, r := range m.session.renderedMessages {
 		b.WriteString(r)
 	}
 
-	if m.streaming {
+	if m.stream.active {
 		// Only re-run glamour when a new line has completed (lastNL changed).
-		lastNL := strings.LastIndex(m.streamText, "\n")
-		if lastNL > m.streamMarkdownEnd || (lastNL < 0 && m.streamMarkdown != "") {
+		lastNL := strings.LastIndex(m.stream.text, "\n")
+		if lastNL > m.stream.markdownEnd || (lastNL < 0 && m.stream.markdown != "") {
 			if lastNL >= 0 {
-				m.streamMarkdown = strings.TrimRight(
-					ui.RenderMarkdownOnBg(m.streamText[:lastNL], "233"), "\n")
-				m.streamMarkdownEnd = lastNL
+				m.stream.markdown = strings.TrimRight(
+					ui.RenderMarkdownOnBg(m.stream.text[:lastNL], "233"), "\n")
+				m.stream.markdownEnd = lastNL
 			} else {
-				m.streamMarkdown = ""
-				m.streamMarkdownEnd = -1
+				m.stream.markdown = ""
+				m.stream.markdownEnd = -1
 			}
 		}
-		partial := m.streamText
+		partial := m.stream.text
 		if lastNL >= 0 {
-			partial = m.streamText[lastNL+1:]
+			partial = m.stream.text[lastNL+1:]
 		}
 		b.WriteString(ui.RenderStreamingMessage(
-			m.streamMarkdown,
+			m.stream.markdown,
 			partial,
-			m.streamThinking,
-			m.inThinking,
+			m.stream.thinking,
+			m.stream.inThinking,
 			m.width,
-			m.streamStart,
-			m.tokenCount,
+			m.stream.start,
+			m.stream.tokenCount,
 			m.calcTokPerSec(),
 		))
 	}

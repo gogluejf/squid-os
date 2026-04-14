@@ -9,15 +9,20 @@ import (
 	"rig-chat/internal/config"
 )
 
+// returnToChat sets mode to ModeChat, resets the textarea placeholder, and recomputes layout.
+func (m *Model) returnToChat() {
+	m.mode = ModeChat
+	m.textarea.Placeholder = "Type a message..."
+	m.textarea.Focus()
+	m.recalcLayout()
+}
+
 // toggleLastThinking expands or collapses the thinking block on the most recent assistant message.
 func (m *Model) toggleLastThinking() {
-	for i := len(m.messages) - 1; i >= 0; i-- {
-		if m.messages[i].Role == "assistant" && m.messages[i].ThinkingText != "" {
-			m.messages[i].ThinkingExpanded = !m.messages[i].ThinkingExpanded
-			// Invalidate cached render for this message so it redraws with new state
-			if i < len(m.renderedMessages) {
-				m.renderedMessages = m.renderedMessages[:i]
-			}
+	for i := len(m.session.messages) - 1; i >= 0; i-- {
+		if m.session.messages[i].Role == "assistant" && m.session.messages[i].ThinkingText != "" {
+			m.session.messages[i].ThinkingExpanded = !m.session.messages[i].ThinkingExpanded
+			m.session.invalidateRenderFrom(i)
 			break
 		}
 	}
@@ -61,7 +66,7 @@ func (m Model) buildAPIMessages() []chat.ChatMessage {
 	sysPrompt := config.LoadSystemPrompt(m.paths, m.settings.SystemPromptFile)
 	msgs = append(msgs, chat.ChatMessage{Role: "system", Content: sysPrompt})
 
-	for _, msg := range m.messages {
+	for _, msg := range m.session.messages {
 		switch msg.Role {
 		case "user":
 			if msg.ImagePath != "" {
@@ -82,25 +87,16 @@ func (m Model) buildAPIMessages() []chat.ChatMessage {
 	return msgs
 }
 
-// extractSessionMessages strips display-only fields to produce a clean slice for persistence.
-func (m Model) extractSessionMessages() []config.Message {
-	msgs := make([]config.Message, len(m.messages))
-	for i, dm := range m.messages {
-		msgs[i] = dm.Message
-	}
-	return msgs
-}
-
 // calcTokPerSec returns the current tokens-per-second rate since the first token arrived.
 func (m Model) calcTokPerSec() float64 {
-	if m.firstTokenTime.IsZero() || m.tokenCount == 0 {
+	if m.stream.firstTokenTime.IsZero() || m.stream.tokenCount == 0 {
 		return 0
 	}
-	elapsed := time.Since(m.firstTokenTime).Seconds()
+	elapsed := time.Since(m.stream.firstTokenTime).Seconds()
 	if elapsed <= 0 {
 		return 0
 	}
-	return float64(m.tokenCount) / elapsed
+	return float64(m.stream.tokenCount) / elapsed
 }
 
 // countTokensApprox estimates token count as roughly one token per four characters.

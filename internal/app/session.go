@@ -31,9 +31,9 @@ func (m Model) saveAs(name string) (Model, tea.Cmd) {
 	if name == "" || m.incognito {
 		return m, nil
 	}
-	m.session.Messages = m.extractSessionMessages()
-	m.session.TotalTokens = m.totalTokens
-	err := config.SaveSession(m.paths, name, m.session)
+	m.session.file.Messages = m.session.extractMessages()
+	m.session.file.TotalTokens = m.session.totalTokens
+	err := config.SaveSession(m.paths, name, m.session.file)
 	if err != nil {
 		m.lastError = fmt.Sprintf("save: %v", err)
 	} else {
@@ -58,14 +58,11 @@ func (m Model) autoSave() (Model, tea.Cmd) {
 
 // clearSession resets all messages and session state to start fresh.
 func (m Model) clearSession() (Model, tea.Cmd) {
-	m.messages = nil
-	m.renderedMessages = nil
-	m.session = config.NewSessionFile(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile)
+	m.session.clear(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile)
 	if !m.incognito {
 		m.settings.LastSessionName = ""
 		_ = config.SaveSettings(m.paths, m.settings)
 	}
-	m.totalTokens = 0
 	m.lastError = ""
 	m.updateViewportContent()
 	m.mode = ModeChat
@@ -76,17 +73,13 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 // toggleIncognito switches incognito mode on/off and resets the chat either way.
 func (m Model) toggleIncognito() (Model, tea.Cmd) {
 	m.incognito = !m.incognito
-	// Clear messages and session on toggle (fresh start both ways)
-	m.messages = nil
-	m.renderedMessages = nil
-	m.session = config.NewSessionFile(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile)
+	m.session.clear(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile)
 	if !m.incognito {
 		// Leaving incognito: also reset last session name so auto-save doesn't
 		// accidentally write to the previous session.
 		m.settings.LastSessionName = ""
 		_ = config.SaveSettings(m.paths, m.settings)
 	}
-	m.totalTokens = 0
 	m.lastError = ""
 	m.updateViewportContent()
 	m.mode = ModeChat
@@ -103,13 +96,10 @@ func (m Model) startLoad() (Model, tea.Cmd) {
 	}
 
 	// Snapshot current state so Esc can restore it
-	snap := &sessionState{
-		messages:    m.messages,
-		session:     m.session,
-		totalTokens: m.totalTokens,
-		settings:    m.settings,
+	m.sessionSnapshot = &sessionSnapshot{
+		session:  m.session,
+		settings: m.settings,
 	}
-	m.sessionSnapshot = snap
 
 	picker := ui.NewPickerList("Load Session", sessions)
 
@@ -141,14 +131,7 @@ func (m Model) previewSession(name string) Model {
 	if err != nil {
 		return m
 	}
-	msgs := make([]config.DisplayMessage, len(sf.Messages))
-	for i, msg := range sf.Messages {
-		msgs[i] = config.DisplayMessage{Message: msg}
-	}
-	m.messages = msgs
-	m.renderedMessages = nil
-	m.session = sf
-	m.totalTokens = sf.TotalTokens
+	m.session.setFrom(sf)
 	m.updateViewportContent()
 	return m
 }

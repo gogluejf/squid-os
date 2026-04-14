@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -21,6 +20,8 @@ type Model struct {
 	viewport viewport.Model
 	mode     Mode
 	ready    bool
+	width    int
+	height   int
 
 	// Command palette
 	cmdPalette ui.CommandPalette
@@ -34,28 +35,17 @@ type Model struct {
 	savePrompt     ui.SavePrompt
 	filePickerFor  string // "image" or "system"
 
-	// Chat state
-	messages              []config.DisplayMessage
-	renderedMessages      []string // cached glamour renders, 1:1 with messages
-	renderedWidth         int      // width at which renderedMessages was built
-	streamText            string
-	streamThinking        string
-	inThinking            bool
-	streaming             bool
-	streamMarkdown        string // cached glamour render of completed lines
-	streamMarkdownEnd     int    // lastNL position when streamMarkdown was last rendered
-	cancelFn       context.CancelFunc
-	streamCh       <-chan chat.StreamEvent
-	streamStart    time.Time
-	firstTokenTime time.Time
-	tokenCount     int
+	// Session + messages (bundled)
+	session chatSession
+
+	// Stream state (bundled)
+	stream streamState
 
 	// Config
 	settings  config.Settings
 	endpoints config.EndpointsConfig
 	paths     config.Paths
 	history   config.History
-	session   config.SessionFile
 
 	// Model cache
 	modelCache *chat.ModelCache
@@ -64,31 +54,17 @@ type Model struct {
 	historyIdx int // -1 = draft, 0..n = browsing history
 	draft      string
 
-	// Dimensions
-	width  int
-	height int
-
-	// Image attachment
-	attachedImage string
-
-	// Total tokens across session
-	totalTokens int
-
-	// Error display
-	lastError string
-
-	// Incognito mode: skip history and session saving
-	incognito bool
-
-	// Session picker snapshot — restored on Esc
-	sessionSnapshot *sessionState
+	// Misc
+	attachedImage   string
+	lastError       string
+	incognito       bool
+	sessionSnapshot *sessionSnapshot
 }
 
-type sessionState struct {
-	messages    []config.DisplayMessage
-	session     config.SessionFile
-	totalTokens int
-	settings    config.Settings
+// sessionSnapshot captures live state so session-picker Esc can restore it.
+type sessionSnapshot struct {
+	session  chatSession
+	settings config.Settings
 }
 
 // New creates a new app Model. Pass a non-nil initialSession to pre-load a session,
@@ -110,26 +86,18 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 
 	vp := viewport.New(80, 20)
 
-	var session config.SessionFile
-	var messages []config.DisplayMessage
-
-	var totalTokens int
+	var sess chatSession
 	if initialSession != nil {
-		session = *initialSession
-		messages = make([]config.DisplayMessage, len(initialSession.Messages))
-		for i, msg := range initialSession.Messages {
-			messages[i] = config.DisplayMessage{Message: msg}
-		}
-		totalTokens = initialSession.TotalTokens
+		sess.setFrom(*initialSession)
 		// Restore session settings
-		settings.Model = session.Session.Model
-		settings.Provider = session.Session.Provider
-		settings.Thinking = session.Session.Thinking
-		if session.Session.SystemPromptFile != "" {
-			settings.SystemPromptFile = session.Session.SystemPromptFile
+		settings.Model = initialSession.Session.Model
+		settings.Provider = initialSession.Session.Provider
+		settings.Thinking = initialSession.Session.Thinking
+		if initialSession.Session.SystemPromptFile != "" {
+			settings.SystemPromptFile = initialSession.Session.SystemPromptFile
 		}
 	} else {
-		session = config.NewSessionFile(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
+		sess.clear(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
 		// Fresh session — clear LastSessionName so auto-save doesn't overwrite the previous session
 		if settings.LastSessionName != "" {
 			settings.LastSessionName = ""
@@ -138,20 +106,18 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	}
 
 	return Model{
-		textarea:    ta,
-		viewport:    vp,
-		mode:        ModeChat,
-		settings:    settings,
-		endpoints:   endpoints,
-		paths:       paths,
-		history:     history,
-		session:     session,
-		messages:    messages,
-		totalTokens: totalTokens,
-		historyIdx:  -1,
-		cmdPalette:  ui.NewCommandPalette(),
-		modelCache:  chat.NewModelCache(5 * time.Minute),
-		incognito:   incognito,
+		textarea:   ta,
+		viewport:   vp,
+		mode:       ModeChat,
+		settings:   settings,
+		endpoints:  endpoints,
+		paths:      paths,
+		history:    history,
+		session:    sess,
+		historyIdx: -1,
+		cmdPalette: ui.NewCommandPalette(),
+		modelCache: chat.NewModelCache(5 * time.Minute),
+		incognito:  incognito,
 	}
 }
 

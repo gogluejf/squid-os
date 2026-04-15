@@ -38,7 +38,7 @@ func RenderMessage(msg config.DisplayMessage, width int, thinkingExpanded bool) 
 
 	body := msg.Text
 	if body == "" && msg.Role == "assistant" {
-		body = "(cancelled by user)"
+		body = "..."
 	}
 
 	// For assistant messages, render markdown and restore the background colour
@@ -134,8 +134,7 @@ func RenderStreamingMessage(renderedMarkdown, partial, thinkingText string, inTh
 	b.WriteString("\n")
 
 	if inThinking && renderedMarkdown == "" && partial == "" {
-		b.WriteString(ThinkingLabelStyle.Render("  thinking..."))
-		b.WriteString("\n")
+		b.WriteString(ThinkingLabelStyle.Render("\n  thinking...\n"))
 	}
 
 	if renderedMarkdown != "" || partial != "" {

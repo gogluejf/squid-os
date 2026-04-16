@@ -25,7 +25,9 @@ type streamState struct {
 	firstTokenTime time.Time
 	cancelFn       context.CancelFunc
 	ch             <-chan chat.StreamEvent
-	userCancelled  bool // true if user pressed cancel
+	userCancelled  bool   // true if user pressed cancel
+	originalText   string // Store original textarea value for restore on cancel
+	originalImage  string // Store original attached image for restore on cancel
 }
 
 // reset clears all stream state before a new request.
@@ -42,6 +44,8 @@ func (ss *streamState) reset() {
 	ss.cancelFn = nil
 	ss.ch = nil
 	ss.userCancelled = false
+	ss.originalText = ""
+	ss.originalImage = ""
 }
 
 // scanModelsCmd launches an async model scan and returns the result as a modelsLoadedMsg.
@@ -61,6 +65,10 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
+
+	// Store original values in temp variables for restore on cancel
+	originalText := text
+	originalImage := m.attachedImage
 
 	if !m.incognito {
 		config.AddHistoryEntry(&m.history, text, m.settings.MaxHistory)
@@ -88,6 +96,9 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.attachedImage = ""
 
 	m.stream.reset()
+	// Restore original values after reset
+	m.stream.originalText = originalText
+	m.stream.originalImage = originalImage
 	m.stream.active = true
 	m.stream.start = time.Now()
 	m.mode = ModeStreaming

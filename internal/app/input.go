@@ -143,6 +143,22 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.session.truncateTo(n - 1)
 		}
 
+		// Restore original text to textarea
+		if m.stream.originalText != "" {
+			m.textarea.SetValue(m.stream.originalText)
+		}
+
+		// Reattach the original image
+		if m.stream.originalImage != "" {
+			m.attachedImage = m.stream.originalImage
+		}
+
+		// Remove last history entry (if not in incognito mode)
+		if !m.incognito && len(m.history.Entries) > 0 {
+			m.history.Entries = m.history.Entries[:len(m.history.Entries)-1]
+			_ = config.SaveHistory(m.paths, m.history)
+		}
+
 		m.stream.active = false
 		m.stream.tokenCount = 0
 		m.stream.text = ""

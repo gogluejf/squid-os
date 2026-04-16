@@ -84,7 +84,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.textarea.SetValue("")
 	m.textarea.Blur()
 
-	apiMsgs := m.buildAPIMessages()
+	apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, m.session.messages)
 	m.attachedImage = ""
 
 	m.stream.reset()

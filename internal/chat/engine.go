@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"rig-chat/internal/config"
 	"strings"
 	"time"
 )
@@ -270,4 +271,35 @@ func FetchModels(ctx context.Context, modelsURL string) ([]string, error) {
 		models = append(models, m.ID)
 	}
 	return models, nil
+}
+
+// BuildAPIMessages converts DisplayMessages to ChatMessages for the API.
+// This function centralizes message building logic used by both headless and TUI modes.
+func BuildAPIMessages(paths config.Paths, settings config.Settings, displayMsgs []config.DisplayMessage) []ChatMessage {
+	var msgs []ChatMessage
+
+	// Add system prompt
+	sysPrompt := config.LoadSystemPrompt(paths, settings.SystemPromptFile)
+	msgs = append(msgs, ChatMessage{Role: "system", Content: sysPrompt})
+
+	// Convert display messages to API messages
+	for _, msg := range displayMsgs {
+		switch msg.Role {
+		case "user":
+			if msg.ImagePath != "" {
+				parts, err := BuildMultimodalContent(msg.Text, msg.ImagePath)
+				if err == nil {
+					msgs = append(msgs, ChatMessage{Role: "user", Content: parts})
+				} else {
+					msgs = append(msgs, ChatMessage{Role: "user", Content: msg.Text})
+				}
+			} else {
+				msgs = append(msgs, ChatMessage{Role: "user", Content: msg.Text})
+			}
+		case "assistant":
+			msgs = append(msgs, ChatMessage{Role: msg.Role, Content: msg.Text})
+		}
+	}
+
+	return msgs
 }

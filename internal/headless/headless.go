@@ -21,21 +21,17 @@ func Run(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 
 	engine := chat.NewEngine(chatURL, settings.Model, settings.Thinking)
 
-	// Build messages
-	var msgs []chat.ChatMessage
-
-	sysPrompt := config.LoadSystemPrompt(paths, settings.SystemPromptFile)
-	msgs = append(msgs, chat.ChatMessage{Role: "system", Content: sysPrompt})
-
-	if imagePath != "" {
-		parts, err := chat.BuildMultimodalContent(prompt, imagePath)
-		if err != nil {
-			return fmt.Errorf("image: %w", err)
-		}
-		msgs = append(msgs, chat.ChatMessage{Role: "user", Content: parts})
-	} else {
-		msgs = append(msgs, chat.ChatMessage{Role: "user", Content: prompt})
+	// Build messages using the centralized function
+	displayMsgs := []config.DisplayMessage{
+		{
+			Message: config.Message{
+				Role:      "user",
+				Text:      prompt,
+				ImagePath: imagePath,
+			},
+		},
 	}
+	msgs := chat.BuildAPIMessages(paths, settings, displayMsgs)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

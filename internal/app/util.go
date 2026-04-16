@@ -4,9 +4,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"rig-chat/internal/chat"
-	"rig-chat/internal/config"
 )
 
 // returnToChat sets mode to ModeChat, resets the textarea placeholder, and recomputes layout.
@@ -56,35 +53,6 @@ func (m Model) historyDown() (Model, tea.Cmd) {
 		m.textarea.SetValue(m.draft)
 	}
 	return m, nil
-}
-
-// buildAPIMessages converts the current message list and system prompt into
-// the wire format expected by the chat engine.
-func (m Model) buildAPIMessages() []chat.ChatMessage {
-	var msgs []chat.ChatMessage
-
-	sysPrompt := config.LoadSystemPrompt(m.paths, m.settings.SystemPromptFile)
-	msgs = append(msgs, chat.ChatMessage{Role: "system", Content: sysPrompt})
-
-	for _, msg := range m.session.messages {
-		switch msg.Role {
-		case "user":
-			if msg.ImagePath != "" {
-				parts, err := chat.BuildMultimodalContent(msg.Text, msg.ImagePath)
-				if err == nil {
-					msgs = append(msgs, chat.ChatMessage{Role: "user", Content: parts})
-				} else {
-					msgs = append(msgs, chat.ChatMessage{Role: "user", Content: msg.Text})
-				}
-			} else {
-				msgs = append(msgs, chat.ChatMessage{Role: "user", Content: msg.Text})
-			}
-		case "assistant":
-			msgs = append(msgs, chat.ChatMessage{Role: msg.Role, Content: msg.Text})
-		}
-	}
-
-	return msgs
 }
 
 // calcTokPerSec returns the current tokens-per-second rate since the first token arrived.

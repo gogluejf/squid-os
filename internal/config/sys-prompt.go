@@ -33,7 +33,7 @@ func DefaultAssistantPrompt() string {
 
 // SeedDefaultSystemPrompt writes the default prompt to sys-prompts/default.md if it doesn't exist.
 func SeedDefaultSystemPrompt(p Paths) error {
-	path := filepath.Join(p.Prompts, "default.md")
+	path := filepath.Join(p.SysPrompts, "default.md")
 	if _, err := os.Stat(path); err == nil {
 		return nil // already exists
 	}
@@ -54,7 +54,7 @@ func LoadSystemPrompt(p Paths, name string) string {
 	}
 
 	for _, c := range candidates {
-		path := filepath.Join(p.Prompts, c)
+		path := filepath.Join(p.SysPrompts, c)
 		data, err := os.ReadFile(path)
 		if err == nil {
 			return strings.TrimSpace(string(data))
@@ -66,7 +66,7 @@ func LoadSystemPrompt(p Paths, name string) string {
 
 // ListSystemPrompts returns available system prompt files
 func ListSystemPrompts(p Paths) []string {
-	entries, err := os.ReadDir(p.Prompts)
+	entries, err := os.ReadDir(p.SysPrompts)
 	if err != nil {
 		return nil
 	}

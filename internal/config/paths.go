@@ -7,22 +7,22 @@ import (
 
 // Paths holds all resolved config directory paths
 type Paths struct {
-	Root     string // config/rig-chat
-	Sessions string // config/rig-chat/sessions
-	Prompts  string // config/rig-chat/prompts
+	Root       string // config/rig-chat
+	Sessions   string // config/rig-chat/sessions
+	SysPrompts string // config/rig-chat/sys-prompts
 }
 
 func NewPaths(configDir string) Paths {
 	return Paths{
-		Root:     configDir,
-		Sessions: filepath.Join(configDir, "sessions"),
-		Prompts:  filepath.Join(configDir, "sys-prompts"),
+		Root:       configDir,
+		Sessions:   filepath.Join(configDir, "sessions"),
+		SysPrompts: filepath.Join(configDir, "sys-prompts"),
 	}
 }
 
 // EnsureDirs creates all config directories if they don't exist
 func (p Paths) EnsureDirs() error {
-	dirs := []string{p.Root, p.Sessions, p.Prompts}
+	dirs := []string{p.Root, p.Sessions, p.SysPrompts}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0755); err != nil {
 			return err

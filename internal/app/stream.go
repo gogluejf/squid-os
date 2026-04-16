@@ -144,12 +144,6 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			m.session.truncateTo(n - 1)
 		}
 
-		// Pop history entry if not in incognito mode
-		if !m.incognito {
-			config.RemoveHistoryEntry(&m.history)
-			_ = config.SaveHistory(m.paths, m.history)
-		}
-
 		// Restore textarea and image
 		if m.stream.originalText != "" {
 			m.textarea.SetValue(m.stream.originalText)
@@ -171,12 +165,6 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			n := len(m.session.messages)
 			if n > 0 && m.session.messages[n-1].Role == "user" {
 				m.session.truncateTo(n - 1)
-			}
-
-			// Pop history entry if not in incognito mode
-			if !m.incognito {
-				config.RemoveHistoryEntry(&m.history)
-				_ = config.SaveHistory(m.paths, m.history)
 			}
 
 			// Restore textarea and image

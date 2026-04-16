@@ -15,20 +15,21 @@ import (
 
 // streamState bundles all transient fields for an active inference stream.
 type streamState struct {
-	text           string
-	thinking       string
-	inThinking     bool
-	active         bool
-	markdown       string // glamour cache for completed lines
-	markdownEnd    int
-	tokenCount     int
-	start          time.Time
-	firstTokenTime time.Time
-	cancelFn       context.CancelFunc
-	ch             <-chan chat.StreamEvent
-	userCancelled  bool   // true if user pressed cancel
-	originalText   string // Store original textarea value for restore on cancel
-	originalImage  string // Store original attached image for restore on cancel
+	text               string
+	thinking           string
+	inThinking         bool
+	active             bool
+	markdown           string // glamour cache for completed lines
+	markdownEnd        int
+	outputTokenCount   int
+	thinkingTokenCount int // Track thinking tokens separately
+	start              time.Time
+	firstTokenTime     time.Time
+	cancelFn           context.CancelFunc
+	ch                 <-chan chat.StreamEvent
+	userCancelled      bool   // true if user pressed cancel
+	originalText       string // Store original textarea value for restore on cancel
+	originalImage      string // Store original attached image for restore on cancel
 }
 
 // reset clears all stream state before a new request.
@@ -39,7 +40,8 @@ func (ss *streamState) reset() {
 	ss.active = false
 	ss.markdown = ""
 	ss.markdownEnd = -1
-	ss.tokenCount = 0
+	ss.outputTokenCount = 0
+	ss.thinkingTokenCount = 0
 	ss.start = time.Time{}
 	ss.firstTokenTime = time.Time{}
 	ss.cancelFn = nil
@@ -98,16 +100,15 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.historyIdx = -1
 	m.draft = ""
 
-	userMsg := config.DisplayMessage{
-		Message: config.Message{
-			ID:          fmt.Sprintf("msg_%d", len(m.session.messages)+1),
-			Role:        "user",
-			CreatedAt:   time.Now(),
-			Text:        text,
-			ImagePath:   m.attachedImage,
-			InputTokens: countTokensApprox(text),
-		},
+	userMsg := config.Message{
+		ID:          fmt.Sprintf("msg_%d", len(m.session.messages)+1),
+		Role:        "user",
+		CreatedAt:   time.Now(),
+		Text:        text,
+		ImagePath:   m.attachedImage,
+		InputTokens: countTokensApprox(text),
 	}
+
 	m.session.appendMsg(userMsg)
 
 	m.textarea.SetValue("")
@@ -176,22 +177,21 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			// Save assistant message if not cancelled
-			assistantMsg := config.DisplayMessage{
-				Message: config.Message{
-					ID:              fmt.Sprintf("msg_%d", len(m.session.messages)+1),
-					Role:            "assistant",
-					CreatedAt:       m.stream.start,
-					Text:            m.stream.text,
-					ThinkingText:    m.stream.thinking,
-					OutputTokens:    m.stream.tokenCount,
-					TokensPerSecond: m.calcTokPerSec(),
-					ResponseTimeMs:  time.Since(m.stream.start).Milliseconds(),
-					StopReason:      event.StopReason,
-				},
+			assistantMsg := config.Message{
+				ID:              fmt.Sprintf("msg_%d", len(m.session.messages)+1),
+				Role:            "assistant",
+				CreatedAt:       m.stream.start,
+				Text:            m.stream.text,
+				ThinkingText:    m.stream.thinking,
+				ThinkingTokens:  m.stream.thinkingTokenCount,
+				OutputTokens:    m.stream.outputTokenCount,
+				TokensPerSecond: m.calcTokPerSec(),
+				ResponseTimeMs:  time.Since(m.stream.start).Milliseconds(),
+				StopReason:      event.StopReason,
 			}
 			m.session.appendMsg(assistantMsg)
 			m.session.file.Messages = m.session.extractMessages()
-			m.session.totalTokens += m.stream.tokenCount
+			m.session.totalTokens += m.stream.outputTokenCount
 		}
 
 		m.stream.reset()
@@ -203,14 +203,14 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 
 	if event.Text != "" {
 		m.stream.text += event.Text
-		m.stream.tokenCount += countTokensApprox(event.Text)
+		m.stream.outputTokenCount = countTokensApprox(m.stream.text)
 		if m.stream.firstTokenTime.IsZero() {
 			m.stream.firstTokenTime = time.Now()
 		}
 	}
 	if event.Thinking != "" {
 		m.stream.thinking += event.Thinking
-		m.stream.tokenCount += countTokensApprox(event.Thinking)
+		m.stream.thinkingTokenCount = countTokensApprox(m.stream.thinking)
 		if m.stream.firstTokenTime.IsZero() {
 			m.stream.firstTokenTime = time.Now()
 		}

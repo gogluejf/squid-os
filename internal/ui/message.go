@@ -11,7 +11,7 @@ import (
 )
 
 // RenderMessage renders a single chat message for the viewport
-func RenderMessage(msg config.DisplayMessage, width int, thinkingExpanded bool) string {
+func RenderMessage(msg config.Message, width int, thinkingExpanded bool) string {
 	var b strings.Builder
 
 	// Left-margin concept removed (requested): use full available width.
@@ -55,13 +55,15 @@ func RenderMessage(msg config.DisplayMessage, width int, thinkingExpanded bool) 
 		b.WriteString("\n")
 		if thinkingExpanded {
 			thinkStyle := ThinkingStyle.Width(bodyWidth)
-			b.WriteString(ThinkingLabelStyle.Render("  thinking"))
+			b.WriteString(ThinkingLabelStyle.Render("\n" + fmt.Sprintf(" thinking (%d tokens)", msg.ThinkingTokens) + "\n"))
 			b.WriteString("\n")
 			b.WriteString(thinkStyle.Render(msg.ThinkingText))
+
 		} else {
-			lines := strings.Count(msg.ThinkingText, "\n") + 1
-			label := fmt.Sprintf("  thinking (%d lines, ctrl+e to expand)", lines)
-			b.WriteString(ThinkingLabelStyle.Render(label))
+			// Show token count instead of line count
+			tokens := msg.ThinkingTokens
+			label := fmt.Sprintf(" thinking (%d tokens, ctrl+e to expand)", tokens)
+			b.WriteString(ThinkingLabelStyle.Render("\n" + label + "\n"))
 		}
 	}
 
@@ -70,7 +72,7 @@ func RenderMessage(msg config.DisplayMessage, width int, thinkingExpanded bool) 
 	return b.String()
 }
 
-func renderHeader(msg config.DisplayMessage, width int) string {
+func renderHeader(msg config.Message, width int) string {
 	dim := AssistantHeaderDimStyle
 	att := AssistantHeaderAttStyle
 	lineStyle := AssistantHeaderStyle
@@ -120,7 +122,7 @@ func renderHeader(msg config.DisplayMessage, width int) string {
 // speed calculation.
 // renderedMarkdown is the pre-cached glamour output for completed lines;
 // partial is the current line still being typed (plain text).
-func RenderStreamingMessage(renderedMarkdown, partial, thinkingText string, inThinking bool, width int, createdAt time.Time, tokenCount int, tokPerSec float64) string {
+func RenderStreamingMessage(renderedMarkdown, partial, thinkingText string, inThinking bool, width int, createdAt time.Time, tokenCount int, tokPerSec float64, thinkingExpanded bool, thinkingTokenCount int) string {
 	var b strings.Builder
 
 	bubbleWidth := width
@@ -133,8 +135,24 @@ func RenderStreamingMessage(renderedMarkdown, partial, thinkingText string, inTh
 	b.WriteString(streamHeader)
 	b.WriteString("\n")
 
-	if inThinking && renderedMarkdown == "" && partial == "" {
-		b.WriteString(ThinkingLabelStyle.Render("\n  thinking...\n"))
+	// Thinking block — mirrors RenderMessage logic
+	if thinkingText != "" || inThinking {
+		if thinkingExpanded {
+			thinkStyle := ThinkingStyle.Width(bodyWidth)
+			b.WriteString(ThinkingLabelStyle.Render(fmt.Sprintf("\n"+" thinking (%d tokens)", thinkingTokenCount) + "\n"))
+			if thinkingText != "" {
+				b.WriteString("\n")
+				b.WriteString(thinkStyle.Render(thinkingText))
+			} else {
+				b.WriteString(ThinkingLabelStyle.Render("\n thinking...\n"))
+			}
+		} else {
+			if thinkingTokenCount > 0 {
+				b.WriteString(ThinkingLabelStyle.Render("\n" + fmt.Sprintf(" thinking (%d tokens, ctrl+e to expand)", thinkingTokenCount) + "\n"))
+			} else {
+				b.WriteString(ThinkingLabelStyle.Render("\n thinking...\n"))
+			}
+		}
 	}
 
 	if renderedMarkdown != "" || partial != "" {

@@ -59,6 +59,9 @@ type Model struct {
 	lastError       string
 	incognito       bool
 	sessionSnapshot *sessionSnapshot
+
+	// Global thinking visibility state (NOT persisted)
+	thinkingExpanded bool
 }
 
 // sessionSnapshot captures live state so session-picker Esc can restore it.

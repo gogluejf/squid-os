@@ -5,7 +5,7 @@ import "rig-chat/internal/config"
 // chatSession bundles the active chat: its session file, messages, and render cache.
 type chatSession struct {
 	file             config.SessionFile
-	messages         []config.DisplayMessage
+	messages         []config.Message
 	renderedMessages []string // glamour cache, 1:1 with messages
 	renderedWidth    int
 	totalTokens      int
@@ -23,9 +23,9 @@ func (cs *chatSession) clear(provider, model string, thinking bool, systemPrompt
 // setFrom loads a saved session, replacing all state and clearing the render cache.
 func (cs *chatSession) setFrom(sf config.SessionFile) {
 	cs.file = sf
-	cs.messages = make([]config.DisplayMessage, len(sf.Messages))
+	cs.messages = make([]config.Message, len(sf.Messages))
 	for i, msg := range sf.Messages {
-		cs.messages[i] = config.DisplayMessage{Message: msg}
+		cs.messages[i] = msg
 	}
 	cs.renderedMessages = nil
 	cs.renderedWidth = 0
@@ -33,7 +33,7 @@ func (cs *chatSession) setFrom(sf config.SessionFile) {
 }
 
 // appendMsg appends a message; the render cache grows lazily in updateViewportContent.
-func (cs *chatSession) appendMsg(msg config.DisplayMessage) {
+func (cs *chatSession) appendMsg(msg config.Message) {
 	cs.messages = append(cs.messages, msg)
 }
 
@@ -66,8 +66,8 @@ func (cs *chatSession) invalidateRenderAll() {
 // extractMessages strips display-only fields for persistence.
 func (cs *chatSession) extractMessages() []config.Message {
 	msgs := make([]config.Message, len(cs.messages))
-	for i, dm := range cs.messages {
-		msgs[i] = dm.Message
+	for i, msg := range cs.messages {
+		msgs[i] = msg
 	}
 	return msgs
 }

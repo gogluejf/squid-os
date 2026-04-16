@@ -59,7 +59,8 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.ExpandThinking):
-		m.toggleLastThinking()
+		m.thinkingExpanded = !m.thinkingExpanded
+		m.session.invalidateRenderAll()
 		m.updateViewportContent()
 		return m, nil
 
@@ -137,7 +138,9 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.ExpandThinking):
-		// Could toggle live thinking visibility in the future
+		m.thinkingExpanded = !m.thinkingExpanded
+		m.session.invalidateRenderAll()
+		m.updateViewportContent()
 		return m, nil
 
 	case key.Matches(msg, keys.ScrollUp):

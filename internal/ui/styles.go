@@ -14,7 +14,7 @@ var (
 				Foreground(lipgloss.Color("252")).
 				Padding(0, 1)
 
-	// Thinking block
+	// Thinking block (default style, color rotation handled dynamically)
 	ThinkingStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("243")). // mid-gray dim
 			Italic(true).
@@ -50,12 +50,12 @@ var (
 
 	// Inline styles for assistant header content.
 	AssistantHeaderDimStyle = lipgloss.NewStyle().
-					Background(lipgloss.Color("233")).
-					Foreground(lipgloss.Color("245"))
+				Background(lipgloss.Color("233")).
+				Foreground(lipgloss.Color("245"))
 
 	AssistantHeaderAttStyle = lipgloss.NewStyle().
-					Background(lipgloss.Color("233")).
-					Foreground(lipgloss.Color("214"))
+				Background(lipgloss.Color("233")).
+				Foreground(lipgloss.Color("214"))
 
 	TopHeaderStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color("235")).
@@ -79,8 +79,8 @@ var (
 			Foreground(lipgloss.Color("240"))
 
 	FooterValueStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("235")).
-			Foreground(lipgloss.Color("252"))
+				Background(lipgloss.Color("235")).
+				Foreground(lipgloss.Color("252"))
 
 	// Code blocks
 	CodeBlockStyle = lipgloss.NewStyle().
@@ -117,7 +117,7 @@ var (
 			Bold(true)
 
 	IncognitoHeaderStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("54")). // dark purple
+				Background(lipgloss.Color("54")).  // dark purple
 				Foreground(lipgloss.Color("255")). // white
 				Bold(true).
 				Padding(0, 1)
@@ -135,3 +135,4 @@ var (
 				Foreground(lipgloss.Color("117")).
 				Bold(true)
 )
+

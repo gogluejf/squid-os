@@ -58,16 +58,11 @@ type Message struct {
 	CreatedAt       time.Time `json:"created_at"`
 	Text            string    `json:"text"`
 	ThinkingText    string    `json:"thinking_text,omitempty"`
+	ThinkingTokens  int       `json:"thinking_tokens,omitempty"`
 	ImagePath       string    `json:"image_path,omitempty"`
 	InputTokens     int       `json:"input_tokens"`
 	OutputTokens    int       `json:"output_tokens"`
 	TokensPerSecond float64   `json:"tokens_per_second,omitempty"`
 	ResponseTimeMs  int64     `json:"response_time_ms,omitempty"`
 	StopReason      string    `json:"stop_reason,omitempty"`
-}
-
-// DisplayMessage is a message ready for rendering in the TUI
-type DisplayMessage struct {
-	Message
-	ThinkingExpanded bool
 }

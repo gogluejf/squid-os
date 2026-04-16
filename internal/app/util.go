@@ -6,17 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// toggleLastThinking expands or collapses the thinking block on the most recent assistant message.
-func (m *Model) toggleLastThinking() {
-	for i := len(m.session.messages) - 1; i >= 0; i-- {
-		if m.session.messages[i].Role == "assistant" && m.session.messages[i].ThinkingText != "" {
-			m.session.messages[i].ThinkingExpanded = !m.session.messages[i].ThinkingExpanded
-			m.session.invalidateRenderFrom(i)
-			break
-		}
-	}
-}
-
 // historyUp moves the prompt history cursor back one entry, saving the current draft first.
 func (m Model) historyUp() (Model, tea.Cmd) {
 	if len(m.history.Entries) == 0 {
@@ -49,14 +38,14 @@ func (m Model) historyDown() (Model, tea.Cmd) {
 
 // calcTokPerSec returns the current tokens-per-second rate since the first token arrived.
 func (m Model) calcTokPerSec() float64 {
-	if m.stream.firstTokenTime.IsZero() || m.stream.tokenCount == 0 {
+	if m.stream.firstTokenTime.IsZero() || (m.stream.outputTokenCount == 0 && m.stream.thinkingTokenCount == 0) {
 		return 0
 	}
 	elapsed := time.Since(m.stream.firstTokenTime).Seconds()
 	if elapsed <= 0 {
 		return 0
 	}
-	return float64(m.stream.tokenCount) / elapsed
+	return float64(m.stream.outputTokenCount+m.stream.thinkingTokenCount) / elapsed
 }
 
 // countTokensApprox estimates token count as roughly one token per four characters.

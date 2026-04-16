@@ -53,7 +53,7 @@ func (m Model) View() string {
 	footerData := ui.FooterData{
 		Model:       m.settings.Model,
 		Provider:    m.settings.Provider,
-		TotalTokens: m.session.totalTokens + m.stream.tokenCount,
+		TotalTokens: m.session.totalTokens + m.stream.outputTokenCount,
 		Streaming:   m.stream.active,
 		InThinking:  m.stream.inThinking,
 		TokPerSec:   m.calcTokPerSec(),
@@ -76,7 +76,7 @@ func (m *Model) updateViewportContent() {
 	// Render only new messages, reuse cache for existing ones
 	for i := len(m.session.renderedMessages); i < len(m.session.messages); i++ {
 		msg := m.session.messages[i]
-		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, msg.ThinkingExpanded))
+		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, m.thinkingExpanded))
 	}
 	for _, r := range m.session.renderedMessages {
 		b.WriteString(r)
@@ -106,8 +106,10 @@ func (m *Model) updateViewportContent() {
 			m.stream.inThinking,
 			m.width,
 			m.stream.start,
-			m.stream.tokenCount,
+			m.stream.outputTokenCount,
 			m.calcTokPerSec(),
+			m.thinkingExpanded,
+			m.stream.thinkingTokenCount,
 		))
 	}
 

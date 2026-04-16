@@ -22,16 +22,15 @@ func Run(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	engine := chat.NewEngine(chatURL, settings.Model, settings.Thinking)
 
 	// Build messages using the centralized function
-	displayMsgs := []config.DisplayMessage{
+	messages := []config.Message{
 		{
-			Message: config.Message{
-				Role:      "user",
-				Text:      prompt,
-				ImagePath: imagePath,
-			},
+
+			Role:      "user",
+			Text:      prompt,
+			ImagePath: imagePath,
 		},
 	}
-	msgs := chat.BuildAPIMessages(paths, settings, displayMsgs)
+	msgs := chat.BuildAPIMessages(paths, settings, messages)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

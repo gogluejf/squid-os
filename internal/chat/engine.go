@@ -273,9 +273,9 @@ func FetchModels(ctx context.Context, modelsURL string) ([]string, error) {
 	return models, nil
 }
 
-// BuildAPIMessages converts DisplayMessages to ChatMessages for the API.
+// BuildAPIMessages converts Message to ChatMessages for the API.
 // This function centralizes message building logic used by both headless and TUI modes.
-func BuildAPIMessages(paths config.Paths, settings config.Settings, displayMsgs []config.DisplayMessage) []ChatMessage {
+func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []config.Message) []ChatMessage {
 	var msgs []ChatMessage
 
 	// Add system prompt
@@ -283,7 +283,7 @@ func BuildAPIMessages(paths config.Paths, settings config.Settings, displayMsgs 
 	msgs = append(msgs, ChatMessage{Role: "system", Content: sysPrompt})
 
 	// Convert display messages to API messages
-	for _, msg := range displayMsgs {
+	for _, msg := range messages {
 		switch msg.Role {
 		case "user":
 			if msg.ImagePath != "" {

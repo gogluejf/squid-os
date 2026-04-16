@@ -10,13 +10,13 @@ func DefaultEndpoints() EndpointsConfig {
 		Providers: []ProviderConfig{
 			{
 				Name:      "vllm",
-				ChatURL:   "http://localhost/v1/chat/completions",
-				ModelsURL: "http://localhost/v1/models",
+				ChatURL:   "https://localhost/v1/chat/completions",
+				ModelsURL: "https://localhost/v1/models",
 			},
 			{
 				Name:      "ollama",
-				ChatURL:   "http://localhost/ollama/v1/chat/completions",
-				ModelsURL: "http://localhost/ollama/v1/models",
+				ChatURL:   "https://localhost/ollama/v1/chat/completions",
+				ModelsURL: "https://localhost/ollama/v1/models",
 			},
 		},
 	}
@@ -44,7 +44,7 @@ func ResolveChatURL(endpoints EndpointsConfig, provider string) string {
 	if len(endpoints.Providers) > 0 {
 		return endpoints.Providers[0].ChatURL
 	}
-	return "http://localhost/v1/chat/completions"
+	return "https://localhost/v1/chat/completions"
 }
 
 // SaveEndpoints writes endpoints.json

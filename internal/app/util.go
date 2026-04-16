@@ -6,14 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// returnToChat sets mode to ModeChat, resets the textarea placeholder, and recomputes layout.
-func (m *Model) returnToChat() {
-	m.mode = ModeChat
-	m.textarea.Placeholder = "Type a message..."
-	m.textarea.Focus()
-	m.recalcLayout()
-}
-
 // toggleLastThinking expands or collapses the thinking block on the most recent assistant message.
 func (m *Model) toggleLastThinking() {
 	for i := len(m.session.messages) - 1; i >= 0; i-- {

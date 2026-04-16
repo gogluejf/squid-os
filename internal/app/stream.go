@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"rig-chat/internal/chat"
@@ -46,6 +47,26 @@ func (ss *streamState) reset() {
 	ss.userCancelled = false
 	ss.originalText = ""
 	ss.originalImage = ""
+}
+
+// setStreamMode initializes the stream state for a new request.
+func (m *Model) setStreamMode(originalText, originalImage string) {
+	m.stream.reset()
+	m.stream.originalText = originalText
+	m.stream.originalImage = originalImage
+	m.stream.active = true
+	m.stream.start = time.Now()
+	m.mode = ModeStreaming
+	m.textarea.Placeholder = "ctrl+c to cancel..."
+}
+
+// setChatMode sets mode to ModeChat, resets the textarea placeholder, and recomputes layout.
+func (m *Model) setChatMode() tea.Cmd {
+	m.textarea.Placeholder = "Type a message..."
+	m.mode = ModeChat
+	m.textarea.Focus()
+	m.recalcLayout()
+	return textarea.Blink
 }
 
 // scanModelsCmd launches an async model scan and returns the result as a modelsLoadedMsg.
@@ -95,14 +116,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, m.session.messages)
 	m.attachedImage = ""
 
-	m.stream.reset()
-	// Restore original values after reset
-	m.stream.originalText = originalText
-	m.stream.originalImage = originalImage
-	m.stream.active = true
-	m.stream.start = time.Now()
-	m.mode = ModeStreaming
-	m.textarea.Placeholder = "ctrl+c to cancel..."
+	(&m).setStreamMode(originalText, originalImage)
 	m.lastError = ""
 
 	chatURL := config.ResolveChatURL(m.endpoints, m.settings.Provider)
@@ -145,9 +159,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		}
 
 		m.stream.reset()
-		(&m).returnToChat()
+		cmd := (&m).setChatMode()
 		m.updateViewportContent()
-		return m, nil
+		return m, cmd
 	}
 
 	if event.Done {
@@ -193,10 +207,10 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		}
 
 		m.stream.reset()
-		(&m).returnToChat()
+		blinkCmd := (&m).setChatMode()
 		m.updateViewportContent()
-		nm, cmd := m.autoSave()
-		return nm, cmd
+		nm, autoSaveCmd := m.autoSave()
+		return nm, tea.Batch(blinkCmd, autoSaveCmd)
 	}
 
 	if event.Text != "" {

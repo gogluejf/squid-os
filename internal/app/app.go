@@ -74,6 +74,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 
 	ta.ShowLineNumbers = false
 	ta.SetHeight(4)
+	ta.Placeholder = "Type a message..."
 	ta.Focus()
 	ta.CharLimit = 0
 
@@ -123,5 +124,6 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 
 // Init starts the cursor blink command.
 func (m Model) Init() tea.Cmd {
-	return textarea.Blink
+	// Call setChatMode to ensure placeholder and focus are properly initialized
+	return (&m).setChatMode()
 }

@@ -20,7 +20,7 @@ func (m Model) View() string {
 	}
 
 	var sections []string
-	sections = append(sections, m.renderTopHeader())
+	sections = append(sections, ui.RenderHeader(ui.HeaderData{Incognito: m.incognito}, m.width))
 
 	// Viewport (messages)
 	sections = append(sections, m.viewport.View())
@@ -123,21 +123,4 @@ func (m *Model) updateViewportContent() {
 // renderHelp delegates to the ui package to produce the full help screen.
 func (m Model) renderHelp() string {
 	return ui.RenderHelp(m.width, m.height)
-}
-
-// renderTopHeader renders the top bar, including the incognito indicator when active.
-func (m Model) renderTopHeader() string {
-	if !m.incognito {
-		return ui.TopHeaderStyle.Width(m.width).Render("rig-chat v0.1")
-	}
-	headerStyle := ui.IncognitoHeaderStyle.Width(m.width)
-	title := "rig-chat v0.1"
-	label := "👻 incognito"
-	titleWidth := lipgloss.Width(ui.IncognitoHeaderStyle.Render(title))
-	labelWidth := lipgloss.Width(ui.IncognitoHeaderStyle.Render(label))
-	gap := m.width - titleWidth - labelWidth
-	if gap < 1 {
-		gap = 1
-	}
-	return headerStyle.Render(title + strings.Repeat(" ", gap) + label)
 }

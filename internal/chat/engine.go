@@ -99,12 +99,14 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 
 		body, err := json.Marshal(reqBody)
 		if err != nil {
+			// Return: Failed to marshal request body to JSON
 			ch <- StreamEvent{Error: fmt.Errorf("marshal request: %w", err)}
 			return
 		}
 
 		req, err := http.NewRequestWithContext(ctx, "POST", e.ChatURL, bytes.NewReader(body))
 		if err != nil {
+			// Return: Failed to create HTTP request
 			ch <- StreamEvent{Error: fmt.Errorf("create request: %w", err)}
 			return
 		}
@@ -113,15 +115,18 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 		resp, err := e.client.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
+				// Return: Context cancelled (user pressed cancel)
 				ch <- StreamEvent{Done: true}
 				return
 			}
+			// Return: Network/API error (connection failed, timeout, etc.)
 			ch <- StreamEvent{Error: fmt.Errorf("request failed: %w", err)}
 			return
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			// Return: API returned non-200 status code (e.g., 404, 500)
 			ch <- StreamEvent{Error: fmt.Errorf("API returned %d", resp.StatusCode)}
 			return
 		}
@@ -139,6 +144,7 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 
 		for scanner.Scan() {
 			if ctx.Err() != nil {
+				// Return: Context cancelled during stream (user pressed cancel)
 				ch <- StreamEvent{Done: true}
 				return
 			}
@@ -153,6 +159,7 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 			payload = strings.TrimSpace(payload)
 
 			if payload == "[DONE]" {
+				// Return: Server sent explicit [DONE] marker
 				// Flush any remaining buffered content
 				result := parser.Flush()
 				if result.Text != "" || result.Thinking != "" {
@@ -180,6 +187,7 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 			if content == "" {
 				// Check for finish reason even without content
 				if choice.FinishReason != nil {
+					// Return: Empty content but has finish_reason (stream complete)
 					result := parser.Flush()
 					if result.Text != "" || result.Thinking != "" {
 						ch <- StreamEvent{
@@ -206,14 +214,16 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 
 		if err := scanner.Err(); err != nil {
 			if ctx.Err() != nil {
+				// Return: Context cancelled during scanner error check
 				ch <- StreamEvent{Done: true}
 				return
 			}
+			// Return: Scanner error (malformed SSE, read error)
 			ch <- StreamEvent{Error: fmt.Errorf("read stream: %w", err)}
 			return
 		}
 
-		// Stream ended without [DONE]
+		// Return: Stream ended naturally without [DONE] marker
 		result := parser.Flush()
 		if result.Text != "" || result.Thinking != "" {
 			ch <- StreamEvent{

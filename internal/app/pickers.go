@@ -23,10 +23,7 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 			m.sessionSnapshot = nil
 			m.updateViewportContent()
 		}
-		m.mode = ModeChat
-		m.textarea.Focus()
-		(&m).recalcLayout()
-		return m, nil
+		return m, m.setChatMode()
 
 	case key.Matches(msg, keys.ScrollUp):
 		m.viewport.ScrollUp(3)
@@ -162,27 +159,18 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	m.mode = ModeChat
-	m.textarea.Focus()
-	(&m).recalcLayout()
-	return m, nil
+	return m, m.setChatMode()
 }
 
 // handleSavePromptKey handles key input while the save-name prompt overlay is active.
 func (m Model) handleSavePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Escape), key.Matches(msg, keys.Cancel):
-		m.mode = ModeChat
-		m.textarea.Focus()
-		(&m).recalcLayout()
-		return m, nil
+		return m, m.setChatMode()
 
 	case key.Matches(msg, keys.Send):
-		nm, cmd := m.saveAs(m.savePrompt.Name)
-		nm.mode = ModeChat
-		nm.textarea.Focus()
-		(&nm).recalcLayout()
-		return nm, cmd
+		nm, _ := m.saveAs(m.savePrompt.Name)
+		return nm, nm.setChatMode()
 
 	default:
 		s := msg.String()
@@ -213,17 +201,14 @@ func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
 
 	case "model":
 		// Scan models asynchronously
-		m.mode = ModeChat // temporarily back to chat while loading
 		return m, m.scanModelsCmd()
 
 	case "thinking":
 		m.thinkingToggle = ui.NewThinkingToggle(m.settings.Thinking)
-		m.mode = ModeChat
 		// Simple toggle for now
 		m.settings.Thinking = !m.settings.Thinking
 		_ = config.SaveSettings(m.paths, m.settings)
-		m.textarea.Focus()
-		return m, nil
+		return m, m.setChatMode()
 
 	case "image":
 		// List image files — for now just let user type a path
@@ -251,9 +236,7 @@ func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.mode = ModeChat
-	m.textarea.Focus()
-	return m, nil
+	return m, m.setChatMode()
 }
 
 // keep time import used in executeCommand implicitly via startManualSave

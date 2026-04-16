@@ -21,9 +21,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case ModeHelp:
 		if key.Matches(msg, keys.Help) || key.Matches(msg, keys.Cancel) || key.Matches(msg, keys.Escape) {
-			m.mode = ModeChat
-			m.textarea.Focus()
-			return m, nil
+			return m, m.setChatMode()
 		}
 
 	case ModeModelPicker:

@@ -65,9 +65,7 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 	}
 	m.lastError = ""
 	m.updateViewportContent()
-	m.mode = ModeChat
-	m.textarea.Focus()
-	return m, nil
+	return m, m.setChatMode()
 }
 
 // toggleIncognito switches incognito mode on/off and resets the chat either way.
@@ -82,9 +80,7 @@ func (m Model) toggleIncognito() (Model, tea.Cmd) {
 	}
 	m.lastError = ""
 	m.updateViewportContent()
-	m.mode = ModeChat
-	m.textarea.Focus()
-	return m, nil
+	return m, m.setChatMode()
 }
 
 // startLoad opens the session picker, snapshots current state so Esc can restore it,

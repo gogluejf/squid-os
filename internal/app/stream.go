@@ -112,7 +112,15 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	if event.Error != nil {
 		m.lastError = event.Error.Error()
+
+		// Remove the user message that was added before streaming started
+		n := len(m.session.messages)
+		if n > 0 && m.session.messages[n-1].Role == "user" {
+			m.session.truncateTo(n - 1)
+		}
+
 		m.stream.active = false
+
 		(&m).returnToChat()
 		m.updateViewportContent()
 		return m, nil

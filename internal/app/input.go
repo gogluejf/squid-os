@@ -136,40 +136,6 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.stream.userCancelled = true
 			m.stream.cancelFn()
 		}
-
-		// Remove the user message that was added before streaming started
-		n := len(m.session.messages)
-		if n > 0 && m.session.messages[n-1].Role == "user" {
-			m.session.truncateTo(n - 1)
-		}
-
-		// Restore original text to textarea
-		if m.stream.originalText != "" {
-			m.textarea.SetValue(m.stream.originalText)
-		}
-
-		// Reattach the original image
-		if m.stream.originalImage != "" {
-			m.attachedImage = m.stream.originalImage
-		}
-
-		// Remove last history entry (if not in incognito mode)
-		if !m.incognito && len(m.history.Entries) > 0 {
-			m.history.Entries = m.history.Entries[:len(m.history.Entries)-1]
-			_ = config.SaveHistory(m.paths, m.history)
-		}
-
-		m.stream.active = false
-		m.stream.tokenCount = 0
-		m.stream.text = ""
-		m.stream.thinking = ""
-		m.stream.markdown = ""
-		m.stream.markdownEnd = -1
-
-		m.mode = ModeChat
-		m.textarea.Focus()
-
-		m.updateViewportContent()
 		return m, nil
 
 	case key.Matches(msg, keys.ExpandThinking):

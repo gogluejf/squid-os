@@ -26,13 +26,20 @@ func SaveHistory(p Paths, h History) error {
 }
 
 // AddHistoryEntry adds an entry to the LRU history.
-// Skips if identical to the most recent entry; does not deduplicate the full list.
 func AddHistoryEntry(h *History, entry string, max int) {
+	// Skips if identical to the most recent entry; does not deduplicate the full list.
 	if len(h.Entries) > 0 && h.Entries[len(h.Entries)-1] == entry {
 		return
 	}
 	h.Entries = append(h.Entries, entry)
 	if len(h.Entries) > max {
 		h.Entries = h.Entries[len(h.Entries)-max:]
+	}
+}
+
+// RemoveHistoryEntry removes the last entry from history.
+func RemoveHistoryEntry(h *History) {
+	if len(h.Entries) > 0 {
+		h.Entries = h.Entries[:len(h.Entries)-1]
 	}
 }

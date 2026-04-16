@@ -130,16 +130,50 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			m.session.truncateTo(n - 1)
 		}
 
-		m.stream.active = false
+		// Pop history entry if not in incognito mode
+		if !m.incognito {
+			config.RemoveHistoryEntry(&m.history)
+			_ = config.SaveHistory(m.paths, m.history)
+		}
 
+		// Restore textarea and image
+		if m.stream.originalText != "" {
+			m.textarea.SetValue(m.stream.originalText)
+		}
+		if m.stream.originalImage != "" {
+			m.attachedImage = m.stream.originalImage
+		}
+
+		m.stream.reset()
 		(&m).returnToChat()
 		m.updateViewportContent()
 		return m, nil
 	}
 
 	if event.Done {
-		// Don't save assistant message if user cancelled
-		if !m.stream.userCancelled {
+		// If user cancelled, perform cleanup
+		if m.stream.userCancelled {
+			// Remove the user message
+			n := len(m.session.messages)
+			if n > 0 && m.session.messages[n-1].Role == "user" {
+				m.session.truncateTo(n - 1)
+			}
+
+			// Pop history entry if not in incognito mode
+			if !m.incognito {
+				config.RemoveHistoryEntry(&m.history)
+				_ = config.SaveHistory(m.paths, m.history)
+			}
+
+			// Restore textarea and image
+			if m.stream.originalText != "" {
+				m.textarea.SetValue(m.stream.originalText)
+			}
+			if m.stream.originalImage != "" {
+				m.attachedImage = m.stream.originalImage
+			}
+		} else {
+			// Save assistant message if not cancelled
 			assistantMsg := config.DisplayMessage{
 				Message: config.Message{
 					ID:              fmt.Sprintf("msg_%d", len(m.session.messages)+1),
@@ -157,8 +191,8 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			m.session.file.Messages = m.session.extractMessages()
 			m.session.totalTokens += m.stream.tokenCount
 		}
-		m.stream.tokenCount = 0
-		m.stream.active = false
+
+		m.stream.reset()
 		(&m).returnToChat()
 		m.updateViewportContent()
 		nm, cmd := m.autoSave()

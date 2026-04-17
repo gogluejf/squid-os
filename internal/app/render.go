@@ -53,7 +53,7 @@ func (m Model) View() string {
 	footerData := ui.FooterData{
 		Model:       m.settings.Model,
 		Provider:    m.settings.Provider,
-		TotalTokens: m.session.totalTokens + m.stream.outputTokenCount,
+		TotalTokens: m.session.totalTokens + m.stream.outputTokenCount + m.stream.thinkingTokenCount,
 		Streaming:   m.stream.active,
 		InThinking:  m.stream.inThinking,
 		TokPerSec:   m.calcTokPerSec(),

@@ -10,6 +10,7 @@ func RenderHelp(width, height int) string {
 	 Keyboard Shortcuts
 	 ` + lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("────────────────────────────────") + `
 	 ` + FooterKeyStyle.Render("ctrl+d") + `           Destroy last message pair
+	 ` + FooterKeyStyle.Render("ctrl+u") + `           Undo last destroy
 	 ` + FooterKeyStyle.Render("enter") + `            Send message
 	 ` + FooterKeyStyle.Render("left alt+enter") + `   New line
 	 ` + FooterKeyStyle.Render("ctrl+c") + `           Cancel inference / exit

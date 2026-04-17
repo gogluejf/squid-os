@@ -134,6 +134,7 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 			m.settings.LastSessionName = selected
 			_ = config.SaveSettings(m.paths, m.settings)
 		}
+		m.session.setFrom(m.session.file)
 		m.sessionSnapshot = nil
 
 	case "image":

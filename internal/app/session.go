@@ -124,7 +124,7 @@ func (m Model) previewSession(name string) Model {
 	if err != nil {
 		return m
 	}
-	m.session.setFrom(sf)
+	m.session.setFrom(sf, false)
 	m.updateViewportContent()
 	return m
 }

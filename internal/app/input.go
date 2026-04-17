@@ -44,9 +44,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Destroy):
-		m.session.destroyLastPair()
+		userText, userImage := m.session.destroyLastPair()
+		m.textarea.SetValue(userText)
+		m.attachedImage = userImage
 		m.autoSave()
 		m.updateViewportContent()
+		return m, nil
+
+	case key.Matches(msg, keys.UndoDestroy):
+		if textarea, image, ok := m.session.undoDestroy(); ok {
+			m.textarea.SetValue(textarea)
+			m.attachedImage = image
+			m.autoSave()
+			m.updateViewportContent()
+		}
 		return m, nil
 
 	case key.Matches(msg, keys.Cancel):

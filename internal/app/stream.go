@@ -110,6 +110,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	}
 
 	m.session.appendMsg(userMsg)
+	m.session.undoStack = nil
 
 	m.textarea.SetValue("")
 	m.textarea.Blur()

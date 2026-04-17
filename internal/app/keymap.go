@@ -3,6 +3,7 @@ package app
 import "github.com/charmbracelet/bubbles/key"
 
 type keyMap struct {
+	Destroy        key.Binding
 	Send           key.Binding
 	Cancel         key.Binding
 	Help           key.Binding
@@ -24,6 +25,10 @@ type keyMap struct {
 }
 
 var keys = keyMap{
+	Destroy: key.NewBinding(
+		key.WithKeys("ctrl+d"),
+		key.WithHelp("ctrl+d", "destroy last pair"),
+	),
 	Send: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "send message"),

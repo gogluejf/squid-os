@@ -46,9 +46,23 @@ func (cs *chatSession) truncateTo(n int) {
 		return
 	}
 	cs.messages = cs.messages[:n]
-	if n < len(cs.renderedMessages) {
-		cs.renderedMessages = cs.renderedMessages[:n]
+	cs.invalidateRenderFrom(n)
+}
+
+// destroyLastPair removes the last user-assistant message pair.
+// If there's an odd number of messages, it removes just the last message.
+func (cs *chatSession) destroyLastPair() {
+	n := len(cs.messages)
+	if n == 0 {
+		return
 	}
+	// Remove 2 messages if even count, otherwise remove 1
+	removeCount := 2
+	if n%2 == 1 {
+		removeCount = 1
+	}
+	newLen := n - removeCount
+	cs.truncateTo(newLen)
 }
 
 // invalidateRenderFrom truncates the render cache starting from index i.

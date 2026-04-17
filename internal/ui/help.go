@@ -7,25 +7,26 @@ func RenderHelp(width, height int) string {
 	title := HeadingStyle.Render("  rig-chat")
 
 	shortcuts := `
-  Keyboard Shortcuts
-  ` + lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("────────────────────────────────") + `
-  ` + FooterKeyStyle.Render("enter") + `            Send message
-  ` + FooterKeyStyle.Render("left alt+enter") + `   New line
-  ` + FooterKeyStyle.Render("ctrl+c") + `           Cancel inference / exit
-  ` + FooterKeyStyle.Render("ctrl+h") + `           Toggle this help
-  ` + FooterKeyStyle.Render("ctrl+e") + `           Expand/collapse thinking
-  ` + FooterKeyStyle.Render("ctrl+s") + `           Save session (edit name)
-  ` + FooterKeyStyle.Render("ctrl+l") + `           Load session
-  ` + FooterKeyStyle.Render("left alt+m") + `       Select model
-  ` + FooterKeyStyle.Render("ctrl+n") + `           New session / clear chat
-  ` + FooterKeyStyle.Render("left alt+i") + `       Toggle incognito mode
-  ` + FooterKeyStyle.Render("up/down") + `          Browse prompt history
-  ` + FooterKeyStyle.Render("shift+↑/↓") + `        Scroll chat (3 lines)
-  ` + FooterKeyStyle.Render("pgup/pgdn") + `        Scroll chat (full page)
-  ` + FooterKeyStyle.Render("scroll") + `           Mouse wheel scrolls chat
-  ` + FooterKeyStyle.Render("shift+drag") + `       Select and copy text
-  ` + FooterKeyStyle.Render("/") + `                Open command palette
-  ` + FooterKeyStyle.Render("esc") + `              Close overlay / dismiss palette`
+	 Keyboard Shortcuts
+	 ` + lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("────────────────────────────────") + `
+	 ` + FooterKeyStyle.Render("ctrl+d") + `           Destroy last message pair
+	 ` + FooterKeyStyle.Render("enter") + `            Send message
+	 ` + FooterKeyStyle.Render("left alt+enter") + `   New line
+	 ` + FooterKeyStyle.Render("ctrl+c") + `           Cancel inference / exit
+	 ` + FooterKeyStyle.Render("ctrl+h") + `           Toggle this help
+	 ` + FooterKeyStyle.Render("ctrl+e") + `           Expand/collapse thinking
+	 ` + FooterKeyStyle.Render("ctrl+s") + `           Save session (edit name)
+	 ` + FooterKeyStyle.Render("ctrl+l") + `           Load session
+	 ` + FooterKeyStyle.Render("left alt+m") + `       Select model
+	 ` + FooterKeyStyle.Render("ctrl+n") + `           New session / clear chat
+	 ` + FooterKeyStyle.Render("left alt+i") + `       Toggle incognito mode
+	 ` + FooterKeyStyle.Render("up/down") + `          Browse prompt history
+	 ` + FooterKeyStyle.Render("shift+↑/↓") + `        Scroll chat (3 lines)
+	 ` + FooterKeyStyle.Render("pgup/pgdn") + `        Scroll chat (full page)
+	 ` + FooterKeyStyle.Render("scroll") + `           Mouse wheel scrolls chat
+	 ` + FooterKeyStyle.Render("shift+drag") + `       Select and copy text
+	 ` + FooterKeyStyle.Render("/") + `                Open command palette
+	 ` + FooterKeyStyle.Render("esc") + `              Close overlay / dismiss palette`
 
 	commands := `
   Slash Commands

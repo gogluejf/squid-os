@@ -43,6 +43,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleChatKey handles all key input while in the default chat mode.
 func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
+	case key.Matches(msg, keys.Destroy):
+		m.session.destroyLastPair()
+		m.autoSave()
+		m.updateViewportContent()
+		return m, nil
+
 	case key.Matches(msg, keys.Cancel):
 		_ = config.SaveHistory(m.paths, m.history)
 		return m, tea.Quit

@@ -58,16 +58,10 @@ type Model struct {
 	attachedImage   string
 	lastError       string
 	incognito       bool
-	sessionSnapshot *sessionSnapshot
+	sessionSnapshot *chatSession
 
 	// Global thinking visibility state (NOT persisted)
 	thinkingExpanded bool
-}
-
-// sessionSnapshot captures live state so session-picker Esc can restore it.
-type sessionSnapshot struct {
-	session  chatSession
-	settings config.Settings
 }
 
 // New creates a new app Model. Pass a non-nil initialSession to pre-load a session,
@@ -93,13 +87,6 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	var sess chatSession
 	if initialSession != nil {
 		sess.setFrom(*initialSession)
-		// Restore session settings
-		settings.Model = initialSession.Session.Model
-		settings.Provider = initialSession.Session.Provider
-		settings.Thinking = initialSession.Session.Thinking
-		if initialSession.Session.SystemPromptFile != "" {
-			settings.SystemPromptFile = initialSession.Session.SystemPromptFile
-		}
 	} else {
 		sess.clear(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
 		// Fresh session — clear LastSessionName so auto-save doesn't overwrite the previous session

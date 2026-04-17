@@ -31,8 +31,7 @@ func (m Model) saveAs(name string) (Model, tea.Cmd) {
 	if name == "" || m.incognito {
 		return m, nil
 	}
-	m.session.file.Messages = m.session.extractMessages()
-	m.session.file.TotalTokens = m.session.totalTokens
+	m.session.file.TotalTokens = m.session.totalTokens()
 	err := config.SaveSession(m.paths, name, m.session.file)
 	if err != nil {
 		m.lastError = fmt.Sprintf("save: %v", err)
@@ -92,10 +91,8 @@ func (m Model) startLoad() (Model, tea.Cmd) {
 	}
 
 	// Snapshot current state so Esc can restore it
-	m.sessionSnapshot = &sessionSnapshot{
-		session:  m.session,
-		settings: m.settings,
-	}
+	snap := m.session
+	m.sessionSnapshot = &snap
 
 	picker := ui.NewPickerList("Load Session", sessions)
 

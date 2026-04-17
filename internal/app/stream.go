@@ -101,7 +101,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.draft = ""
 
 	userMsg := config.Message{
-		ID:          fmt.Sprintf("msg_%d", len(m.session.messages)+1),
+		ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 		Role:        "user",
 		CreatedAt:   time.Now(),
 		Text:        text,
@@ -114,7 +114,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.textarea.SetValue("")
 	m.textarea.Blur()
 
-	apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, m.session.messages)
+	apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, m.session.file.Messages)
 	m.attachedImage = ""
 
 	(&m).setStreamMode(originalText, originalImage)
@@ -140,8 +140,8 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		m.lastError = event.Error.Error()
 
 		// Remove the user message that was added before streaming started
-		n := len(m.session.messages)
-		if n > 0 && m.session.messages[n-1].Role == "user" {
+		n := len(m.session.file.Messages)
+		if n > 0 && m.session.file.Messages[n-1].Role == "user" {
 			m.session.truncateTo(n - 1)
 		}
 
@@ -163,8 +163,8 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		// If user cancelled, perform cleanup
 		if m.stream.userCancelled {
 			// Remove the user message
-			n := len(m.session.messages)
-			if n > 0 && m.session.messages[n-1].Role == "user" {
+			n := len(m.session.file.Messages)
+			if n > 0 && m.session.file.Messages[n-1].Role == "user" {
 				m.session.truncateTo(n - 1)
 			}
 
@@ -178,7 +178,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		} else {
 			// Save assistant message if not cancelled
 			assistantMsg := config.Message{
-				ID:              fmt.Sprintf("msg_%d", len(m.session.messages)+1),
+				ID:              fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 				Role:            "assistant",
 				CreatedAt:       m.stream.start,
 				Text:            m.stream.text,
@@ -190,8 +190,6 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				StopReason:      event.StopReason,
 			}
 			m.session.appendMsg(assistantMsg)
-			m.session.file.Messages = m.session.extractMessages()
-			m.session.totalTokens += m.stream.outputTokenCount
 		}
 
 		m.stream.reset()

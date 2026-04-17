@@ -17,9 +17,7 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 	switch {
 	case key.Matches(msg, keys.Escape), key.Matches(msg, keys.Cancel):
 		if pickerType == "session" && m.sessionSnapshot != nil {
-			snap := m.sessionSnapshot
-			m.session = snap.session
-			m.settings = snap.settings
+			m.session = *m.sessionSnapshot
 			m.sessionSnapshot = nil
 			m.updateViewportContent()
 		}
@@ -131,16 +129,10 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 		}
 
 	case "session":
-		// Session is already previewed; just persist the selection and clear snapshot
 		selected := m.sessionPicker.SelectedItem()
-		if selected != "" {
-			m.settings.Model = m.session.file.Session.Model
-			m.settings.Provider = m.session.file.Session.Provider
-			m.settings.Thinking = m.session.file.Session.Thinking
-			if !m.incognito {
-				m.settings.LastSessionName = selected
-				_ = config.SaveSettings(m.paths, m.settings)
-			}
+		if selected != "" && !m.incognito {
+			m.settings.LastSessionName = selected
+			_ = config.SaveSettings(m.paths, m.settings)
 		}
 		m.sessionSnapshot = nil
 

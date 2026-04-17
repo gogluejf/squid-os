@@ -2,39 +2,31 @@ package app
 
 import "rig-chat/internal/config"
 
-// chatSession bundles the active chat: its session file, messages, and render cache.
+// chatSession bundles the active chat: its session file and render cache.
+// Messages live in file.Messages — there is no separate copy.
 type chatSession struct {
 	file             config.SessionFile
-	messages         []config.Message
-	renderedMessages []string // glamour cache, 1:1 with messages
+	renderedMessages []string // glamour cache, 1:1 with file.Messages
 	renderedWidth    int
-	totalTokens      int
 }
 
 // clear resets to a fresh session.
 func (cs *chatSession) clear(provider, model string, thinking bool, systemPromptFile string) {
 	cs.file = config.NewSessionFile(provider, model, thinking, systemPromptFile)
-	cs.messages = nil
 	cs.renderedMessages = nil
 	cs.renderedWidth = 0
-	cs.totalTokens = 0
 }
 
 // setFrom loads a saved session, replacing all state and clearing the render cache.
 func (cs *chatSession) setFrom(sf config.SessionFile) {
 	cs.file = sf
-	cs.messages = make([]config.Message, len(sf.Messages))
-	for i, msg := range sf.Messages {
-		cs.messages[i] = msg
-	}
 	cs.renderedMessages = nil
 	cs.renderedWidth = 0
-	cs.totalTokens = sf.TotalTokens
 }
 
 // appendMsg appends a message; the render cache grows lazily in updateViewportContent.
 func (cs *chatSession) appendMsg(msg config.Message) {
-	cs.messages = append(cs.messages, msg)
+	cs.file.Messages = append(cs.file.Messages, msg)
 }
 
 // truncateTo shrinks messages and cache atomically.
@@ -42,17 +34,17 @@ func (cs *chatSession) truncateTo(n int) {
 	if n < 0 {
 		n = 0
 	}
-	if n >= len(cs.messages) {
+	if n >= len(cs.file.Messages) {
 		return
 	}
-	cs.messages = cs.messages[:n]
+	cs.file.Messages = cs.file.Messages[:n]
 	cs.invalidateRenderFrom(n)
 }
 
 // destroyLastPair removes the last user-assistant message pair.
 // If there's an odd number of messages, it removes just the last message.
 func (cs *chatSession) destroyLastPair() {
-	n := len(cs.messages)
+	n := len(cs.file.Messages)
 	if n == 0 {
 		return
 	}
@@ -61,8 +53,7 @@ func (cs *chatSession) destroyLastPair() {
 	if n%2 == 1 {
 		removeCount = 1
 	}
-	newLen := n - removeCount
-	cs.truncateTo(newLen)
+	cs.truncateTo(n - removeCount)
 }
 
 // invalidateRenderFrom truncates the render cache starting from index i.
@@ -77,11 +68,12 @@ func (cs *chatSession) invalidateRenderAll() {
 	cs.renderedMessages = nil
 }
 
-// extractMessages strips display-only fields for persistence.
-func (cs *chatSession) extractMessages() []config.Message {
-	msgs := make([]config.Message, len(cs.messages))
-	for i, msg := range cs.messages {
-		msgs[i] = msg
+// totalTokens returns the sum of all token counts across every message.
+// Computed from messages so it stays correct after destroy or load.
+func (cs *chatSession) totalTokens() int {
+	total := 0
+	for _, msg := range cs.file.Messages {
+		total += msg.InputTokens + msg.OutputTokens
 	}
-	return msgs
+	return total
 }

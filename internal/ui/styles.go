@@ -105,6 +105,15 @@ var (
 			Foreground(lipgloss.Color("196")). // red
 			Bold(true)
 
+	// Warning notification (yellow, reserved for future use)
+	WarningStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("214")).
+			Bold(true)
+
+	// Info/notice notification (muted)
+	InfoStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("243"))
+
 	// Image attachment chip
 	AttachmentStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("214")). // orange

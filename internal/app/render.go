@@ -41,10 +41,12 @@ func (m Model) View() string {
 		}
 	}
 
-	// Attachment chip
+	// Status line: notification (left) + attachment chip (right)
+	attachChip := ""
 	if m.attachedImage != "" {
-		sections = append(sections, ui.AttachmentStyle.Render("  attached: "+m.attachedImage))
+		attachChip = ui.AttachmentStyle.Render("attached: " + m.attachedImage)
 	}
+	sections = append(sections, ui.RenderStatusLine(m.notification, attachChip, m.width))
 
 	// Textarea
 	sections = append(sections, m.textarea.View())
@@ -111,11 +113,6 @@ func (m *Model) updateViewportContent() {
 			m.thinkingExpanded,
 			m.stream.thinkingTokenCount,
 		))
-	}
-
-	if m.lastError != "" {
-		b.WriteString(ui.ErrorStyle.Render("Error: " + m.lastError))
-		b.WriteString("\n")
 	}
 
 	m.viewport.SetContent(b.String())

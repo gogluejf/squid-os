@@ -1,12 +1,14 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"rig-chat/internal/config"
+	"rig-chat/internal/ui"
 )
 
 // handleKey dispatches key events to the handler for the current mode.
@@ -47,6 +49,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		userText, userImage := m.session.destroyLastPair()
 		m.textarea.SetValue(userText)
 		m.attachedImage = userImage
+		(&m).setNotification(ui.NotificationInfo, "last message removed  ·  ctrl+u to restore")
 		m.autoSave()
 		m.updateViewportContent()
 		return m, nil
@@ -55,6 +58,12 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if textarea, image, ok := m.session.undoDestroy(); ok {
 			m.textarea.SetValue(textarea)
 			m.attachedImage = image
+			remaining := len(m.session.undoStack)
+			if remaining > 0 {
+				(&m).setNotification(ui.NotificationInfo, fmt.Sprintf("message restored  ·  %d more in buffer", remaining))
+			} else {
+				(&m).setNotification(ui.NotificationInfo, "message restored")
+			}
 			m.autoSave()
 			m.updateViewportContent()
 		}

@@ -11,6 +11,7 @@ import (
 
 	"rig-chat/internal/chat"
 	"rig-chat/internal/config"
+	"rig-chat/internal/ui"
 )
 
 // streamState bundles all transient fields for an active inference stream.
@@ -119,7 +120,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.attachedImage = ""
 
 	(&m).setStreamMode(originalText, originalImage)
-	m.lastError = ""
+	(&m).clearNotification()
 
 	chatURL := config.ResolveChatURL(m.endpoints, m.settings.Provider)
 	engine := chat.NewEngine(chatURL, m.settings.Model, m.settings.Thinking)
@@ -138,7 +139,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 // from the active inference stream.
 func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	if event.Error != nil {
-		m.lastError = event.Error.Error()
+		(&m).setNotification(ui.NotificationError, event.Error.Error())
 
 		// Remove the user message that was added before streaming started
 		n := len(m.session.file.Messages)
@@ -176,6 +177,8 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			if m.stream.originalImage != "" {
 				m.attachedImage = m.stream.originalImage
 			}
+
+			(&m).setNotification(ui.NotificationInfo, "stream cancelled")
 		} else {
 			// Save assistant message if not cancelled
 			assistantMsg := config.Message{

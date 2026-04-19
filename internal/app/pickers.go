@@ -126,6 +126,7 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 				}
 			}
 			_ = config.SaveSettings(m.paths, m.settings)
+			(&m).setNotification(ui.NotificationInfo, "switched to model: "+m.settings.Model)
 		}
 
 	case "session":
@@ -136,6 +137,9 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 		}
 		m.session.setFrom(m.session.file)
 		m.sessionSnapshot = nil
+		if selected != "" {
+			(&m).setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
+		}
 
 	case "image":
 		selected := m.filePicker.SelectedItem()
@@ -162,7 +166,7 @@ func (m Model) handleSavePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.setChatMode()
 
 	case key.Matches(msg, keys.Send):
-		nm, _ := m.saveAs(m.savePrompt.Name)
+		nm, _ := m.saveAs(m.savePrompt.Name, false)
 		return nm, nm.setChatMode()
 
 	default:
@@ -198,9 +202,13 @@ func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
 
 	case "thinking":
 		m.thinkingToggle = ui.NewThinkingToggle(m.settings.Thinking)
-		// Simple toggle for now
 		m.settings.Thinking = !m.settings.Thinking
 		_ = config.SaveSettings(m.paths, m.settings)
+		if m.settings.Thinking {
+			(&m).setNotification(ui.NotificationInfo, "thinking is now on")
+		} else {
+			(&m).setNotification(ui.NotificationInfo, "thinking is now off")
+		}
 		return m, m.setChatMode()
 
 	case "image":

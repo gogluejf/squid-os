@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,18 +26,23 @@ func (m Model) startManualSave() (Model, tea.Cmd) {
 }
 
 // saveAs persists the current session under the given name and updates LastSessionName.
-func (m Model) saveAs(name string) (Model, tea.Cmd) {
+// Pass silent=true to skip setting a notification (e.g. for background auto-saves).
+func (m Model) saveAs(name string, silent bool) (Model, tea.Cmd) {
 	if name == "" || m.incognito {
 		return m, nil
 	}
 	m.session.file.TotalTokens = m.session.totalTokens()
 	err := config.SaveSession(m.paths, name, m.session.file)
 	if err != nil {
-		m.lastError = fmt.Sprintf("save: %v", err)
+		if !silent {
+			(&m).setNotification(ui.NotificationError, "couldn't save session")
+		}
 	} else {
 		m.settings.LastSessionName = name
 		_ = config.SaveSettings(m.paths, m.settings)
-		m.lastError = ""
+		if !silent {
+			(&m).setNotification(ui.NotificationInfo, "session saved to "+config.SessionPath(m.paths, name))
+		}
 	}
 	return m, nil
 }
@@ -52,7 +56,7 @@ func (m Model) autoSave() (Model, tea.Cmd) {
 	if name == "" {
 		name = time.Now().Format("2006-01-02_15-04")
 	}
-	return m.saveAs(name)
+	return m.saveAs(name, true)
 }
 
 // clearSession resets all messages and session state to start fresh.
@@ -62,7 +66,11 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 		m.settings.LastSessionName = ""
 		_ = config.SaveSettings(m.paths, m.settings)
 	}
-	m.lastError = ""
+	if m.settings.AutoSave {
+		(&m).setNotification(ui.NotificationInfo, "new session started, will auto-save")
+	} else {
+		(&m).setNotification(ui.NotificationInfo, "new session started  ·  ctrl+s to save")
+	}
 	m.updateViewportContent()
 	return m, m.setChatMode()
 }
@@ -77,7 +85,11 @@ func (m Model) toggleIncognito() (Model, tea.Cmd) {
 		m.settings.LastSessionName = ""
 		_ = config.SaveSettings(m.paths, m.settings)
 	}
-	m.lastError = ""
+	if m.incognito {
+		(&m).setNotification(ui.NotificationInfo, "incognito is on")
+	} else {
+		(&m).setNotification(ui.NotificationInfo, "incognito is off")
+	}
 	m.updateViewportContent()
 	return m, m.setChatMode()
 }

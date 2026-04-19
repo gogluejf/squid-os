@@ -88,11 +88,8 @@ func (m *Model) recalcLayout() {
 		}
 	}
 
-	attachHeight := 0
-	if m.attachedImage != "" {
-		attachHeight = 1
-	}
-	vpHeight := m.height - inputHeight - headerHeight - footerHeight - attachHeight - overlayHeight
+	const statusLineHeight = 1
+	vpHeight := m.height - inputHeight - headerHeight - footerHeight - statusLineHeight - overlayHeight
 	if vpHeight < 3 {
 		vpHeight = 3
 	}

@@ -28,6 +28,11 @@ func NewSessionFile(provider, model string, thinking bool, systemPrompt string) 
 	}
 }
 
+// SessionPath returns the file path for a session by name.
+func SessionPath(p Paths, name string) string {
+	return filepath.Join(p.Sessions, name+".chat.json")
+}
+
 // SaveSession writes a session to sessions/<name>.chat.json
 func SaveSession(p Paths, name string, sf SessionFile) error {
 	sf.Session.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -35,13 +40,12 @@ func SaveSession(p Paths, name string, sf SessionFile) error {
 	if err != nil {
 		return err
 	}
-	file := filepath.Join(p.Sessions, name+".chat.json")
-	return os.WriteFile(file, data, 0644)
+	return os.WriteFile(SessionPath(p, name), data, 0644)
 }
 
 // LoadSession reads a session from sessions/<name>.chat.json
 func LoadSession(p Paths, name string) (SessionFile, error) {
-	file := filepath.Join(p.Sessions, name+".chat.json")
+	file := SessionPath(p, name)
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return SessionFile{}, err

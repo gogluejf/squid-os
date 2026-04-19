@@ -55,9 +55,9 @@ type Model struct {
 	draft      string
 
 	// Misc
-	attachedImage   string
-	lastError       string
-	incognito       bool
+	attachedImage string
+	notification  ui.Notification
+	incognito     bool
 	sessionSnapshot *chatSession
 
 	// Global thinking visibility state (NOT persisted)
@@ -111,6 +111,12 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		incognito:  incognito,
 	}
 }
+
+func (m *Model) setNotification(level ui.NotificationLevel, msg string) {
+	m.notification = ui.Notification{Level: level, Message: msg}
+}
+
+func (m *Model) clearNotification() { m.notification = ui.Notification{} }
 
 // Init starts the cursor blink command.
 func (m Model) Init() tea.Cmd {

@@ -127,8 +127,23 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			// Return: API returned non-200 status code (e.g., 404, 500)
-			ch <- StreamEvent{Error: fmt.Errorf("API returned %d", resp.StatusCode)}
+			// Parse error response body to extract error message
+			var errorResp struct {
+				Error struct {
+					Message string      `json:"message"`
+					Type    string      `json:"type"`
+					Code    interface{} `json:"code"` // Can be string or number
+				} `json:"error"`
+			}
+
+			// Try to parse the error response
+			if err := json.NewDecoder(resp.Body).Decode(&errorResp); err == nil && errorResp.Error.Message != "" {
+				// Return: API error with message from server
+				ch <- StreamEvent{Error: fmt.Errorf("API error [%d]: %s", resp.StatusCode, errorResp.Error.Message)}
+			} else {
+				// Fallback: generic error with status code
+				ch <- StreamEvent{Error: fmt.Errorf("API returned %d", resp.StatusCode)}
+			}
 			return
 		}
 

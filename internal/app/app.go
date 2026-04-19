@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -55,9 +56,9 @@ type Model struct {
 	draft      string
 
 	// Misc
-	attachedImage string
-	notification  ui.Notification
-	incognito     bool
+	attachedImage   string
+	notification    ui.Notification
+	incognito       bool
 	sessionSnapshot *chatSession
 
 	// Global thinking visibility state (NOT persisted)
@@ -85,8 +86,14 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	vp := viewport.New(80, 20)
 
 	var sess chatSession
+	var notification ui.Notification
 	if initialSession != nil {
 		sess.setFrom(*initialSession)
+		// Show friendly notification for auto-load
+		notification = ui.Notification{
+			Level:   ui.NotificationInfo,
+			Message: fmt.Sprintf("Auto-load on, last session loaded: %s", config.SessionPath(paths, settings.LastSessionName)),
+		}
 	} else {
 		sess.clear(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
 		// Fresh session — clear LastSessionName so auto-save doesn't overwrite the previous session
@@ -97,18 +104,19 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	}
 
 	return Model{
-		textarea:   ta,
-		viewport:   vp,
-		mode:       ModeChat,
-		settings:   settings,
-		endpoints:  endpoints,
-		paths:      paths,
-		history:    history,
-		session:    sess,
-		historyIdx: -1,
-		cmdPalette: ui.NewCommandPalette(),
-		modelCache: chat.NewModelCache(5 * time.Minute),
-		incognito:  incognito,
+		textarea:     ta,
+		viewport:     vp,
+		mode:         ModeChat,
+		settings:     settings,
+		endpoints:    endpoints,
+		paths:        paths,
+		history:      history,
+		session:      sess,
+		historyIdx:   -1,
+		cmdPalette:   ui.NewCommandPalette(),
+		modelCache:   chat.NewModelCache(5 * time.Minute),
+		incognito:    incognito,
+		notification: notification,
 	}
 }
 

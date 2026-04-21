@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 	"sync"
-	"time"
 
 	"rig-chat/internal/config"
 )
@@ -14,46 +13,12 @@ type ModelEntry struct {
 	Provider string
 }
 
-// ModelCache caches discovered models with a TTL
-type ModelCache struct {
-	mu       sync.RWMutex
-	models   []ModelEntry
-	cachedAt time.Time
-	ttl      time.Duration
-}
-
-func NewModelCache(ttl time.Duration) *ModelCache {
-	return &ModelCache{ttl: ttl}
-}
-
-// Get returns cached models if still valid
-func (mc *ModelCache) Get() ([]ModelEntry, bool) {
-	mc.mu.RLock()
-	defer mc.mu.RUnlock()
-	if mc.models == nil || time.Since(mc.cachedAt) > mc.ttl {
-		return nil, false
-	}
-	return mc.models, true
-}
-
-// Set updates the cache
-func (mc *ModelCache) Set(models []ModelEntry) {
-	mc.mu.Lock()
-	defer mc.mu.Unlock()
-	mc.models = models
-	mc.cachedAt = time.Now()
-}
-
-// ScanModels fetches models from all providers, using cache if valid
-func ScanModels(ctx context.Context, endpoints config.EndpointsConfig, cache *ModelCache) []ModelEntry {
-	if cached, ok := cache.Get(); ok {
-		return cached
-	}
-
+// ScanModels fetches models from all providers (always fresh, no cache)
+func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEntry {
 	var (
-		mu      sync.Mutex
-		models  []ModelEntry
-		wg      sync.WaitGroup
+		mu     sync.Mutex
+		models []ModelEntry
+		wg     sync.WaitGroup
 	)
 
 	for _, provider := range endpoints.Providers {
@@ -73,7 +38,6 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig, cache *Mo
 	}
 
 	wg.Wait()
-	cache.Set(models)
 	return models
 }
 

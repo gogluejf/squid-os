@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -47,9 +46,6 @@ type Model struct {
 	endpoints config.EndpointsConfig
 	paths     config.Paths
 	history   config.History
-
-	// Model cache
-	modelCache *chat.ModelCache
 
 	// Prompt history navigation
 	historyIdx int // -1 = draft, 0..n = browsing history
@@ -114,7 +110,6 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		session:      sess,
 		historyIdx:   -1,
 		cmdPalette:   ui.NewCommandPalette(),
-		modelCache:   chat.NewModelCache(5 * time.Minute),
 		incognito:    incognito,
 		notification: notification,
 	}

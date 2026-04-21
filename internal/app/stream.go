@@ -77,7 +77,7 @@ func (m Model) scanModelsCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		models := chat.ScanModels(ctx, m.endpoints, m.modelCache)
+		models := chat.ScanModels(ctx, m.endpoints)
 		return modelsLoadedMsg{models: models}
 	}
 }

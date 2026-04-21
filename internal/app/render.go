@@ -51,7 +51,7 @@ func (m Model) View() string {
 	// Textarea
 	sections = append(sections, m.textarea.View())
 
-	// Footer
+	// Footer: context window = all saved messages (no thinking) + current inference (includes thinking)
 	footerData := ui.FooterData{
 		Model:       m.settings.Model,
 		Provider:    m.settings.Provider,

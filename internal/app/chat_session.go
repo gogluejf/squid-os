@@ -117,6 +117,10 @@ func (cs *chatSession) invalidateRenderAll() {
 // Computed from messages so it stays correct after destroy or load.
 func (cs *chatSession) totalTokens() int {
 	total := 0
+
+	// Sum tokens from all saved messages. Thinking tokens are excluded because
+	// they are never sent back to the API on subsequent calls — they only exist
+	// in the current active inference.
 	for _, msg := range cs.file.Messages {
 		total += msg.InputTokens + msg.OutputTokens
 	}

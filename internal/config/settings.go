@@ -5,6 +5,17 @@ import (
 	"os"
 )
 
+type Settings struct {
+	Provider            string `json:"provider"`
+	Model               string `json:"model"`
+	Thinking            bool   `json:"thinking"`
+	SystemPromptFile    string `json:"system_prompt_file"`
+	MaxHistory          int    `json:"max_history"`
+	LastSessionName     string `json:"last_session_name"`
+	AutoSave            bool   `json:"auto_save"`
+	AutoLoadLastSession bool   `json:"auto_load_last_session"`
+}
+
 func DefaultSettings() Settings {
 	return Settings{
 		Provider:            "vllm",

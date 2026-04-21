@@ -5,6 +5,10 @@ import (
 	"os"
 )
 
+type History struct {
+	Entries []string `json:"entries"`
+}
+
 // LoadHistory loads history.json or returns empty
 func LoadHistory(p Paths) History {
 	h := History{}

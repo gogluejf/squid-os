@@ -5,6 +5,16 @@ import (
 	"os"
 )
 
+type ProviderConfig struct {
+	Name      string `json:"name"`
+	ChatURL   string `json:"chat_completions_url"`
+	ModelsURL string `json:"models_url"`
+}
+
+type EndpointsConfig struct {
+	Providers []ProviderConfig `json:"providers"`
+}
+
 func DefaultEndpoints() EndpointsConfig {
 	return EndpointsConfig{
 		Providers: []ProviderConfig{

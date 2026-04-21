@@ -51,16 +51,8 @@ func (m Model) View() string {
 	// Textarea
 	sections = append(sections, m.textarea.View())
 
-	// Footer: context window = all saved messages (no thinking) + current inference (includes thinking)
-	footerData := ui.FooterData{
-		Model:       m.settings.Model,
-		Provider:    m.settings.Provider,
-		TotalTokens: m.session.totalTokens() + m.stream.outputTokenCount + m.stream.thinkingTokenCount,
-		Streaming:   m.stream.active,
-		InThinking:  m.stream.inThinking,
-		TokPerSec:   m.calcTokPerSec(),
-	}
-	sections = append(sections, ui.RenderFooter(footerData, m.width))
+	// Footer: context window = all saved messages + current inference
+	sections = append(sections, ui.RenderFooter(m.buildFooterData(), m.width))
 
 	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
@@ -101,22 +93,36 @@ func (m *Model) updateViewportContent() {
 		if lastNL >= 0 {
 			partial = m.stream.text[lastNL+1:]
 		}
-		b.WriteString(ui.RenderStreamingMessage(
-			m.stream.markdown,
-			partial,
-			m.stream.thinking,
-			m.stream.inThinking,
-			m.width,
-			m.stream.start,
-			m.stream.outputTokenCount,
-			m.calcTokPerSec(),
-			m.thinkingExpanded,
-			m.stream.thinkingTokenCount,
-		))
+		b.WriteString(ui.RenderStreamingMessage(ui.StreamingViewData{
+			RenderedMarkdown: m.stream.markdown,
+			Partial:          partial,
+			ThinkingText:     m.stream.thinking,
+			InThinking:       m.stream.inThinking,
+			Width:            m.width,
+			ThinkingExpanded: m.thinkingExpanded,
+			RequestStart:     m.stream.metrics.Start,
+			ThinkingTokens:   m.stream.metrics.ThinkingTokens(),
+			ThinkingDur:      m.stream.metrics.ThinkingDuration(),
+			TextTokens:       m.stream.metrics.TextTokens(),
+			TextDur:          m.stream.metrics.TextDuration(),
+			TokPerSec:        m.stream.metrics.AvgTokenPerSec(),
+			Waiting:          !m.stream.metrics.HasFirstToken(),
+		}))
 	}
 
 	m.viewport.SetContent(b.String())
 	m.viewport.GotoBottom()
+}
+
+// buildFooterData assembles the dynamic footer data.
+func (m Model) buildFooterData() ui.FooterData {
+	return ui.FooterData{
+		Model:       m.settings.Model,
+		Provider:    m.settings.Provider,
+		TotalTokens: m.session.totalTokens() + m.stream.metrics.TotalTokens(),
+		Streaming:   m.stream.active,
+		TokPerSec:   m.stream.metrics.AvgTokenPerSec(),
+	}
 }
 
 // renderHelp delegates to the ui package to produce the full help screen.

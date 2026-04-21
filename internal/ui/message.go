@@ -48,24 +48,25 @@ func RenderMessage(msg config.Message, width int, thinkingExpanded bool) string 
 		body = RenderMarkdownOnBg(body, "233")
 	}
 
-	b.WriteString(style.Render("\n" + body + "\n"))
-
-	// Thinking block (collapsed/expanded)
+	// Thinking block (collapsed/expanded) — must come BEFORE text
 	if msg.ThinkingText != "" {
+		thinkStyle := ThinkingStyle.Width(bodyWidth)
 		b.WriteString("\n")
-		if thinkingExpanded {
-			thinkStyle := ThinkingStyle.Width(bodyWidth)
-			b.WriteString(ThinkingLabelStyle.Render("\n" + fmt.Sprintf(" thinking (%d tokens)", msg.ThinkingTokens) + "\n"))
-			b.WriteString("\n")
-			b.WriteString(thinkStyle.Render(msg.ThinkingText))
-
+		var thinkLabel string
+		if msg.ThinkingDurationMs > 0 {
+			thinkLabel = fmt.Sprintf(" thinking (%d tokens, %s)", msg.ThinkingTokens, formatDuration(msg.ThinkingDurationMs))
 		} else {
-			// Show token count instead of line count
-			tokens := msg.ThinkingTokens
-			label := fmt.Sprintf(" thinking (%d tokens, ctrl+e to expand)", tokens)
-			b.WriteString(ThinkingLabelStyle.Render("\n" + label + "\n"))
+			thinkLabel = fmt.Sprintf(" thinking (%d tokens)", msg.ThinkingTokens)
+		}
+		if thinkingExpanded {
+			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
+			b.WriteString(thinkStyle.Render(msg.ThinkingText + "\n"))
+		} else {
+			b.WriteString(thinkStyle.Render("\n" + thinkLabel + ", ctrl+e to expand" + "\n"))
 		}
 	}
+
+	b.WriteString(style.Render("\n" + body + "\n"))
 
 	// One trailing spacer line after each message block.
 	b.WriteString("\n")
@@ -90,18 +91,18 @@ func renderHeader(msg config.Message, width int) string {
 		right = append(right, att.Render(msg.ImagePath))
 	}
 	if msg.Role == "user" {
-		if msg.InputTokens > 0 {
-			right = append(right, dim.Render(fmt.Sprintf("%d tokens", msg.InputTokens)))
+		if msg.UserTokens > 0 {
+			right = append(right, dim.Render(fmt.Sprintf("%d tokens", msg.UserTokens)))
 		}
 	} else {
 		if msg.TokensPerSecond > 0 {
 			right = append(right, dim.Render(fmt.Sprintf("%.1f tok/s", msg.TokensPerSecond)))
 		}
-		if msg.ResponseTimeMs > 0 {
-			right = append(right, dim.Render(formatDuration(msg.ResponseTimeMs)))
+		if msg.TextDurationMs > 0 {
+			right = append(right, dim.Render(formatDuration(msg.TextDurationMs)))
 		}
-		if msg.OutputTokens > 0 {
-			right = append(right, dim.Render(fmt.Sprintf("%d tokens", msg.OutputTokens)))
+		if msg.TextTokens > 0 {
+			right = append(right, dim.Render(fmt.Sprintf("%d tokens", msg.TextTokens)))
 		}
 	}
 
@@ -116,53 +117,76 @@ func renderHeader(msg config.Message, width int) string {
 	)
 }
 
+// StreamingViewData holds all data needed to render a streaming message.
+type StreamingViewData struct {
+	RenderedMarkdown string
+	Partial          string
+	ThinkingText     string
+	InThinking       bool
+	Width            int
+	ThinkingExpanded bool
+
+	// Timing
+	RequestStart   time.Time
+	ThinkingTokens int
+	ThinkingDur    time.Duration
+	TextTokens     int
+	TextDur        time.Duration
+	TokPerSec      float64
+	Waiting        bool // true when no first token has arrived yet
+}
+
 // RenderStreamingMessage renders the in-progress streaming message.
-// tokenCount and tokPerSec are live values; tokPerSec should be 0 until the
-// first token arrives so the latency (pre-token wait) is excluded from the
-// speed calculation.
-// renderedMarkdown is the pre-cached glamour output for completed lines;
-// partial is the current line still being typed (plain text).
-func RenderStreamingMessage(renderedMarkdown, partial, thinkingText string, inThinking bool, width int, createdAt time.Time, tokenCount int, tokPerSec float64, thinkingExpanded bool, thinkingTokenCount int) string {
+func RenderStreamingMessage(data StreamingViewData) string {
 	var b strings.Builder
 
-	bubbleWidth := width
+	bubbleWidth := data.Width
 	if bubbleWidth < 20 {
 		bubbleWidth = 20
 	}
 	bodyWidth := bubbleWidth
 
-	streamHeader := renderStreamingHeader(createdAt, tokenCount, tokPerSec, bubbleWidth)
+	streamHeader := renderStreamingHeader(data)
 	b.WriteString(streamHeader)
 	b.WriteString("\n")
 
-	// Thinking block — mirrors RenderMessage logic
-	if thinkingText != "" || inThinking {
-		if thinkingExpanded {
-			thinkStyle := ThinkingStyle.Width(bodyWidth)
-			b.WriteString(ThinkingLabelStyle.Render(fmt.Sprintf("\n"+" thinking (%d tokens)", thinkingTokenCount) + "\n"))
-			if thinkingText != "" {
-				b.WriteString("\n")
-				b.WriteString(thinkStyle.Render(thinkingText))
+	// Waiting state: show "waiting..." with live elapsed before first token
+	if data.Waiting {
+		elapsed := time.Since(data.RequestStart)
+		b.WriteString(ThinkingStyle.Render("\n waiting...  " + formatDuration(elapsed.Milliseconds()) + "\n"))
+	}
+
+	// Thinking block — shown when thinking text exists or we're in thinking mode
+	if data.ThinkingText != "" || data.InThinking {
+		thinkStyle := ThinkingStyle.Width(bodyWidth)
+		var thinkLabel string
+		if data.ThinkingDur > 0 {
+			thinkLabel = fmt.Sprintf(" thinking (%d tokens, %s)", data.ThinkingTokens, formatDuration(data.ThinkingDur.Milliseconds()))
+		} else {
+			thinkLabel = fmt.Sprintf(" thinking (%d tokens)", data.ThinkingTokens)
+		}
+		if data.ThinkingExpanded {
+			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
+			if data.ThinkingText != "" {
+				b.WriteString(thinkStyle.Render(data.ThinkingText))
 			} else {
-				b.WriteString(ThinkingLabelStyle.Render("\n thinking...\n"))
+				b.WriteString(thinkStyle.Render("\n thinking...\n"))
 			}
 		} else {
-			if thinkingTokenCount > 0 {
-				b.WriteString(ThinkingLabelStyle.Render("\n" + fmt.Sprintf(" thinking (%d tokens, ctrl+e to expand)", thinkingTokenCount) + "\n"))
-			} else {
-				b.WriteString(ThinkingLabelStyle.Render("\n thinking...\n"))
-			}
+			// Collapsed: only show the label, NOT the thinking text
+			b.WriteString(thinkStyle.Render("\n" + thinkLabel + ", ctrl+e to expand" + "\n"))
 		}
 	}
 
-	if renderedMarkdown != "" || partial != "" {
+	// Text content
+	if data.RenderedMarkdown != "" || data.Partial != "" {
 		style := AssistantMsgStyle.Width(bodyWidth)
-		body := renderedMarkdown
-		if partial != "" {
+		body := data.RenderedMarkdown
+		if data.Partial != "" {
 			if body != "" {
 				body += "\n"
 			}
-			body += partial
+			body += data.Partial
 		}
 		b.WriteString(style.Render("\n" + body + "\n"))
 		b.WriteString("\n")
@@ -171,33 +195,29 @@ func RenderStreamingMessage(renderedMarkdown, partial, thinkingText string, inTh
 }
 
 // renderStreamingHeader mirrors renderHeader visually:
-// timestamp on the left, [elapsed  tok/s  N tokens] on the right.
-// The elapsed timer starts from createdAt (before the first token) so the
-// pre-token latency is visible. tok/s is only shown once > 0 (caller ensures
-// it stays 0 until the first token arrives).
-func renderStreamingHeader(createdAt time.Time, tokenCount int, tokPerSec float64, width int) string {
-	leftStr := createdAt.Format("15:04:05")
+// timestamp on the left, [tok/s  elapsed  N tokens] on the right.
+func renderStreamingHeader(data StreamingViewData) string {
+	leftStr := data.RequestStart.Format("15:04:05")
 
-	// Order matches the completed-message header: tok/s → elapsed → tokens.
-	// tok/s is suppressed until > 0 so the latency phase shows only the timer.
 	var right []string
-	if tokPerSec > 0 {
-		right = append(right, fmt.Sprintf("%.1f tok/s", tokPerSec))
+	if data.TokPerSec > 0 {
+		right = append(right, fmt.Sprintf("%.1f tok/s", data.TokPerSec))
 	}
-	elapsed := time.Since(createdAt)
-	right = append(right, formatDuration(elapsed.Milliseconds()))
-	if tokenCount > 0 {
-		right = append(right, fmt.Sprintf("%d tokens", tokenCount))
+	if data.TextDur > 0 {
+		right = append(right, formatDuration(data.TextDur.Milliseconds()))
+	}
+	if data.TextTokens > 0 {
+		right = append(right, fmt.Sprintf("%d tokens", data.TextTokens))
 	}
 
 	rightStr := strings.Join(right, "  ")
-	gap := width - lipgloss.Width(leftStr) - lipgloss.Width(rightStr) - 2
+	gap := data.Width - lipgloss.Width(leftStr) - lipgloss.Width(rightStr) - 2
 	if gap < 1 {
 		gap = 1
 	}
 
 	header := leftStr + strings.Repeat(" ", gap) + rightStr
-	return AssistantHeaderStyle.Width(width).Render("\n" + header + "\n")
+	return AssistantHeaderStyle.Width(data.Width).Render("\n" + header + "\n")
 }
 
 func formatDuration(ms int64) string {

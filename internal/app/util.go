@@ -1,8 +1,6 @@
 package app
 
 import (
-	"time"
-
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -34,18 +32,6 @@ func (m Model) historyDown() (Model, tea.Cmd) {
 		m.textarea.SetValue(m.draft)
 	}
 	return m, nil
-}
-
-// calcTokPerSec returns the current tokens-per-second rate since the first token arrived.
-func (m Model) calcTokPerSec() float64 {
-	if m.stream.firstTokenTime.IsZero() || (m.stream.outputTokenCount == 0 && m.stream.thinkingTokenCount == 0) {
-		return 0
-	}
-	elapsed := time.Since(m.stream.firstTokenTime).Seconds()
-	if elapsed <= 0 {
-		return 0
-	}
-	return float64(m.stream.outputTokenCount+m.stream.thinkingTokenCount) / elapsed
 }
 
 // countTokensApprox estimates token count as roughly one token per four characters.

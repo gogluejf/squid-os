@@ -14,7 +14,6 @@ type FooterData struct {
 	TotalTokens int
 	TokPerSec   float64
 	Streaming   bool
-	InThinking  bool
 }
 
 // RenderFooter renders the fixed 2-line footer bar, always exactly `width` chars wide.

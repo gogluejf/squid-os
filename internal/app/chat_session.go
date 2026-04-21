@@ -114,7 +114,7 @@ func (cs *chatSession) invalidateRenderAll() {
 }
 
 // totalTokens returns the sum of all token counts across every message.
-// Computed from messages so it stays correct after destroy or load.
+// Computed from messages so it stays correct after destroy or load
 func (cs *chatSession) totalTokens() int {
 	total := 0
 
@@ -122,7 +122,7 @@ func (cs *chatSession) totalTokens() int {
 	// they are never sent back to the API on subsequent calls — they only exist
 	// in the current active inference.
 	for _, msg := range cs.file.Messages {
-		total += msg.InputTokens + msg.OutputTokens
+		total += msg.UserTokens + msg.TextTokens
 	}
 	return total
 }

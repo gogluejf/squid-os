@@ -16,21 +16,30 @@ import (
 
 // streamState bundles all transient fields for an active inference stream.
 type streamState struct {
-	text               string
-	thinking           string
-	inThinking         bool
-	active             bool
-	markdown           string // glamour cache for completed lines
-	markdownEnd        int
-	outputTokenCount   int
-	thinkingTokenCount int // Track thinking tokens separately
-	start              time.Time
-	firstTokenTime     time.Time
-	cancelFn           context.CancelFunc
-	ch                 <-chan chat.StreamEvent
-	userCancelled      bool   // true if user pressed cancel
-	originalText       string // Store original textarea value for restore on cancel
-	originalImage      string // Store original attached image for restore on cancel
+	text          string
+	thinking      string
+	inThinking    bool
+	active        bool
+	markdown      string // glamour cache for completed lines
+	markdownEnd   int
+	metrics       StreamMetrics
+	cancelFn      context.CancelFunc
+	ch            <-chan chat.StreamEvent
+	userCancelled bool   // true if user pressed cancel
+	originalText  string // Store original textarea value for restore on cancel
+	originalImage string // Store original attached image for restore on cancel
+}
+
+// AddTextChunk appends text and updates metrics.
+func (ss *streamState) AddTextChunk(text string) {
+	ss.text += text
+	ss.metrics.addTextChars(len(text))
+}
+
+// AddThinkChunk appends thinking text and updates metrics.
+func (ss *streamState) AddThinkChunk(think string) {
+	ss.thinking += think
+	ss.metrics.addThinkChars(len(think))
 }
 
 // reset clears all stream state before a new request.
@@ -41,10 +50,7 @@ func (ss *streamState) reset() {
 	ss.active = false
 	ss.markdown = ""
 	ss.markdownEnd = -1
-	ss.outputTokenCount = 0
-	ss.thinkingTokenCount = 0
-	ss.start = time.Time{}
-	ss.firstTokenTime = time.Time{}
+	ss.metrics = StreamMetrics{}
 	ss.cancelFn = nil
 	ss.ch = nil
 	ss.userCancelled = false
@@ -58,7 +64,7 @@ func (m *Model) setStreamMode(originalText, originalImage string) {
 	m.stream.originalText = originalText
 	m.stream.originalImage = originalImage
 	m.stream.active = true
-	m.stream.start = time.Now()
+	m.stream.metrics.Start = time.Now()
 	m.mode = ModeStreaming
 	m.textarea.Placeholder = "ctrl+c to cancel..."
 }
@@ -102,12 +108,12 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.draft = ""
 
 	userMsg := config.Message{
-		ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-		Role:        "user",
-		CreatedAt:   time.Now(),
-		Text:        text,
-		ImagePath:   m.attachedImage,
-		InputTokens: countTokensApprox(text),
+		ID:         fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+		Role:       "user",
+		CreatedAt:  time.Now(),
+		Text:       text,
+		ImagePath:  m.attachedImage,
+		UserTokens: countTokensApprox(text),
 	}
 
 	m.session.appendMsg(userMsg)
@@ -182,16 +188,22 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		} else {
 			// Save assistant message if not cancelled
 			assistantMsg := config.Message{
-				ID:              fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-				Role:            "assistant",
-				CreatedAt:       m.stream.start,
-				Text:            m.stream.text,
-				ThinkingText:    m.stream.thinking,
-				ThinkingTokens:  m.stream.thinkingTokenCount,
-				OutputTokens:    m.stream.outputTokenCount,
-				TokensPerSecond: m.calcTokPerSec(),
-				ResponseTimeMs:  time.Since(m.stream.start).Milliseconds(),
-				StopReason:      event.StopReason,
+				ID:                         fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+				Role:                       "assistant",
+				CreatedAt:                  m.stream.metrics.Start,
+				Text:                       m.stream.text,
+				ThinkingText:               m.stream.thinking,
+				ThinkingTokens:             m.stream.metrics.ThinkingTokens(),
+				ThinkingDurationMs:         m.stream.metrics.ThinkingDuration().Milliseconds(),
+				ThinkingTimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds(),
+				TextTokens:                 m.stream.metrics.TextTokens(),
+				TextDurationMs:             m.stream.metrics.TextDuration().Milliseconds(),
+				TextTimeToFirstTokenMs:     m.stream.metrics.TimeToFirstTextToken().Milliseconds(),
+				TokensPerSecond:            m.stream.metrics.AvgTokenPerSec(),
+				Tokens:                     m.stream.metrics.TotalTokens(),
+				DurationTimeMs:             m.stream.metrics.Duration().Milliseconds(),
+				TimeToFirstTokenMs:         m.stream.metrics.TimeToFirstToken().Milliseconds(),
+				StopReason:                 event.StopReason,
 			}
 			m.session.appendMsg(assistantMsg)
 		}
@@ -204,18 +216,13 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	}
 
 	if event.Text != "" {
-		m.stream.text += event.Text
-		m.stream.outputTokenCount = countTokensApprox(m.stream.text)
-		if m.stream.firstTokenTime.IsZero() {
-			m.stream.firstTokenTime = time.Now()
-		}
+		m.stream.AddTextChunk(event.Text)
 	}
 	if event.Thinking != "" {
-		m.stream.thinking += event.Thinking
-		m.stream.thinkingTokenCount = countTokensApprox(m.stream.thinking)
-		if m.stream.firstTokenTime.IsZero() {
-			m.stream.firstTokenTime = time.Now()
-		}
+		m.stream.AddThinkChunk(event.Thinking)
+	}
+	if m.stream.inThinking && !event.InThinking {
+		m.stream.metrics.MarkThinkingDone()
 	}
 	m.stream.inThinking = event.InThinking
 	m.updateViewportContent()

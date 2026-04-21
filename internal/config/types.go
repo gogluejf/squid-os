@@ -53,16 +53,26 @@ type Session struct {
 
 // Message in a chat session
 type Message struct {
-	ID              string    `json:"id"`
-	Role            string    `json:"role"`
-	CreatedAt       time.Time `json:"created_at"`
-	Text            string    `json:"text"`
-	ThinkingText    string    `json:"thinking_text,omitempty"`
-	ThinkingTokens  int       `json:"thinking_tokens,omitempty"`
-	ImagePath       string    `json:"image_path,omitempty"`
-	InputTokens     int       `json:"input_tokens"`
-	OutputTokens    int       `json:"output_tokens"`
-	TokensPerSecond float64   `json:"tokens_per_second,omitempty"`
-	ResponseTimeMs  int64     `json:"response_time_ms,omitempty"`
-	StopReason      string    `json:"stop_reason,omitempty"`
+	ID         string    `json:"id"`
+	Role       string    `json:"role"`
+	CreatedAt  time.Time `json:"created_at"`
+	ImagePath  string    `json:"image_path,omitempty"`
+	UserTokens int       `json:"user_tokens"`
+
+	TokensPerSecond    float64 `json:"tokens_per_second,omitempty"`
+	Tokens             int     `json:"tokens_ms,omitempty"`
+	DurationTimeMs     int64   `json:"duration_time_ms,omitempty"`
+	TimeToFirstTokenMs int64   `json:"time_to_first_token_ms,omitempty"`
+
+	Text                   string `json:"text"`
+	TextTokens             int    `json:"text_tokens"`
+	TextDurationMs         int64  `json:"text_duration_ms,omitempty"`
+	TextTimeToFirstTokenMs int64  `json:"text_time_to_first_token_ms,omitempty"`
+
+	ThinkingText               string `json:"thinking_text,omitempty"`
+	ThinkingTokens             int    `json:"thinking_tokens,omitempty"`
+	ThinkingDurationMs         int64  `json:"thinking_duration_ms,omitempty"`
+	ThinkingTimeToFirstTokenMs int64  `json:"thinking_time_to_first_token_ms,omitempty"`
+
+	StopReason string `json:"stop_reason,omitempty"`
 }

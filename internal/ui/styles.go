@@ -16,14 +16,10 @@ var (
 
 	// Thinking block (default style, color rotation handled dynamically)
 	ThinkingStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("233")). // same as AssistantMsgStyle
 			Foreground(lipgloss.Color("243")). // mid-gray dim
 			Italic(true).
 			Padding(0, 1)
-
-	ThinkingLabelStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("243")).
-				Bold(true)
-
 	// Message header (dim line with date, tokens, etc.)
 	MsgHeaderStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240"))
@@ -144,4 +140,3 @@ var (
 				Foreground(lipgloss.Color("117")).
 				Bold(true)
 )
-

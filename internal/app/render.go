@@ -44,11 +44,14 @@ func (m Model) View() string {
 	}
 
 	// Status line: notification (left) + attachment chip (right)
-	attachChip := ""
-	if m.attachedImage != "" {
-		attachChip = ui.AttachmentStyle.Render("attached: " + m.attachedImage)
+	// Skip notification when in history search mode (the search overlay replaces it)
+	if m.mode != ModeHistorySearch {
+		attachChip := ""
+		if m.attachedImage != "" {
+			attachChip = ui.AttachmentStyle.Render("attached: " + m.attachedImage)
+		}
+		sections = append(sections, ui.RenderStatusLine(m.notification, attachChip, m.width))
 	}
-	sections = append(sections, ui.RenderStatusLine(m.notification, attachChip, m.width))
 
 	// Textarea
 	sections = append(sections, m.textarea.View())

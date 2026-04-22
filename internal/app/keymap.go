@@ -17,6 +17,8 @@ type keyMap struct {
 	Quit           key.Binding
 	Up             key.Binding
 	Down           key.Binding
+	Left           key.Binding
+	Right          key.Binding
 	Escape         key.Binding
 	Tab            key.Binding
 	ScrollUp       key.Binding
@@ -82,6 +84,14 @@ var keys = keyMap{
 	Down: key.NewBinding(
 		key.WithKeys("down"),
 		key.WithHelp("down", "next"),
+	),
+	Left: key.NewBinding(
+		key.WithKeys("left"),
+		key.WithHelp("left", "confirm"),
+	),
+	Right: key.NewBinding(
+		key.WithKeys("right"),
+		key.WithHelp("right", "confirm"),
 	),
 	Escape: key.NewBinding(
 		key.WithKeys("esc"),

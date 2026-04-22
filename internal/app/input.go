@@ -219,7 +219,7 @@ func (m *Model) updateCommandPalette() {
 func (m Model) startHistorySearch() (tea.Model, tea.Cmd) {
 	// Save current textarea content to restore on escape
 	m.draft = m.textarea.Value()
-	m.textarea.SetValue("") // Clear textarea for preview
+	m.textarea.SetValue(m.draft) // Show draft when no filter typed
 
 	m.mode = ModeHistorySearch
 	m.historySearch = ui.NewHistorySearchOverlay()
@@ -238,28 +238,31 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textarea.SetValue(m.draft)
 		m.mode = ModeChat
 		m.historySearch.Reset()
-		return m, nil
+		return m, m.setChatMode()
 
-	case key.Matches(msg, keys.HistorySearch):
-		// Ctrl+R → cycle to next match
-		m.historySearch.NextMatch()
+	case key.Matches(msg, keys.HistorySearch), key.Matches(msg, keys.Up), key.Matches(msg, keys.Down):
+		// Ctrl+R, Up, or Down → cycle through matches (Up=prev, Down/ctrl+r=next)
+		if key.Matches(msg, keys.Up) {
+			m.historySearch.PrevMatch()
+		} else {
+			m.historySearch.NextMatch()
+		}
 		matches := m.historySearch.FilteredItems()
 		if len(matches) > 0 {
-			// Preview the selected text in textarea
 			m.textarea.SetValue(matches[m.historySearch.MatchIdx])
 		} else {
 			m.textarea.SetValue("")
 		}
 		return m, nil
 
-	case key.Matches(msg, keys.Send):
-		// Enter → confirm selection and keep text in textarea
+	case key.Matches(msg, keys.Send), key.Matches(msg, keys.Left), key.Matches(msg, keys.Right):
+		// Enter, Left, or Right → confirm selection and keep text in textarea
 		if item := m.historySearch.SelectedText(); item != "" {
 			m.textarea.SetValue(item)
 		}
 		m.mode = ModeChat
 		m.historySearch.Reset()
-		return m, nil
+		return m, m.setChatMode()
 
 	case msg.Type == tea.KeyBackspace:
 		// Backspace → delete character from filter
@@ -270,7 +273,7 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.historySearch.MatchIdx = 0
 			// If filter is now empty, clear textarea
 			if m.historySearch.Filter == "" {
-				m.textarea.SetValue("")
+				m.textarea.SetValue(m.draft)
 			} else {
 				matches := m.historySearch.FilteredItems()
 				if len(matches) > 0 {

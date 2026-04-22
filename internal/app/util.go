@@ -10,7 +10,6 @@ func (m Model) historyUp() (Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.historyIdx == -1 {
-		m.draft = m.textarea.Value()
 		m.historyIdx = len(m.history.Entries) - 1
 	} else if m.historyIdx > 0 {
 		m.historyIdx--

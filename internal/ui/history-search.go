@@ -55,6 +55,15 @@ func (hs *HistorySearchOverlay) NextMatch() {
 	hs.MatchIdx = (hs.MatchIdx + 1) % len(items)
 }
 
+// PrevMatch cycles to the previous match (backward through filtered results)
+func (hs *HistorySearchOverlay) PrevMatch() {
+	items := hs.FilteredItems()
+	if len(items) == 0 {
+		return
+	}
+	hs.MatchIdx = (hs.MatchIdx - 1 + len(items)) % len(items)
+}
+
 // Reset clears the history search state
 func (hs *HistorySearchOverlay) Reset() {
 	hs.Filter = ""
@@ -73,12 +82,16 @@ const historySearchBg = lipgloss.Color("235")
 
 // Render renders the history search overlay line (notification-style: white text on dark background)
 func (hs *HistorySearchOverlay) Render(width int) string {
+
+	prefix := lipgloss.NewStyle().Foreground(lipgloss.Color(252)).Render(" search prompt history: ")
+	const dimColor = "240"
+
 	// Only show match info after at least one character is typed
 	if hs.Filter == "" {
-		// No filter typed yet - just show prompt
-		status := "search prompt history: (esc to exit)"
-		message := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(status)
-		return lipgloss.NewStyle().Background(historySearchBg).Width(width).Render(message)
+		// No filter typed yet - just show prompt, no background bar
+		dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Render("(esc to exit)")
+		return prefix + dimSuffix
+
 	}
 
 	items := hs.FilteredItems()
@@ -88,19 +101,24 @@ func (hs *HistorySearchOverlay) Render(width int) string {
 		idx = 0
 	}
 
-	// Build the message in notification style
-	var status string
+	// Build the suffix based on match count
+	var suffix string
 	switch total {
 	case 0:
-		status = fmt.Sprintf("search prompt history: %s (no matches) (esc to exit)", hs.Filter)
+		suffix = " (no matches) (esc to exit)"
 	case 1:
-		status = fmt.Sprintf("search prompt history: %s (esc to exit)", hs.Filter)
+		suffix = " (esc to exit)"
 	default:
-		status = fmt.Sprintf("search prompt history: %s (%d/%d) (ctrl+r for next, esc to exit)", hs.Filter, idx+1, total)
+		suffix = fmt.Sprintf(" (%d/%d) (ctrl+r for next, esc to exit)", idx+1, total)
 	}
 
-	// Render with white text on dark background (same as notification style)
-	message := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(status)
+	// Style only the filter text portion with bold white on dark background
+	filterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("231")).Bold(true).Background(lipgloss.Color("238"))
+	filterStyled := filterStyle.Render(hs.Filter)
 
-	return lipgloss.NewStyle().Background(historySearchBg).Width(width).Render(message)
+	// Style the suffix as dim
+	dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Render(suffix)
+
+	// Construct: prefix + styled_filter + dim_suffix
+	return prefix + filterStyled + dimSuffix
 }

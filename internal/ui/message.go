@@ -153,7 +153,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	// Waiting state: show "waiting..." with live elapsed before first token
 	if data.Waiting {
 		elapsed := time.Since(data.RequestStart)
-		b.WriteString(ThinkingStyle.Render("\n waiting...  " + formatDuration(elapsed.Milliseconds()) + "\n"))
+		b.WriteString(ThinkingStyle.Width(bodyWidth).Render("\n  waiting...  " + formatDuration(elapsed.Milliseconds()) + "\n"))
 	}
 
 	// Thinking block — shown when thinking text exists or we're in thinking mode

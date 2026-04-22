@@ -85,6 +85,8 @@ func (m *Model) recalcLayout() {
 			overlayHeight = m.filePicker.RenderHeight()
 		case ModeSavePrompt:
 			overlayHeight = 2 // heading + name input line
+		case ModeHistorySearch:
+			overlayHeight = m.historySearch.RenderHeight()
 		}
 	}
 

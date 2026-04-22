@@ -27,6 +27,7 @@ func RenderHelp(width, height int) string {
 	 ` + FooterKeyStyle.Render("scroll") + `           Mouse wheel scrolls chat
 	 ` + FooterKeyStyle.Render("shift+drag") + `       Select and copy text
 	 ` + FooterKeyStyle.Render("/") + `                Open command palette
+	 ` + FooterKeyStyle.Render("ctrl+r") + `            Reverse search prompt history
 	 ` + FooterKeyStyle.Render("esc") + `              Close overlay / dismiss palette`
 
 	commands := `

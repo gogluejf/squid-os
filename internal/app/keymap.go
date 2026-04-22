@@ -23,6 +23,7 @@ type keyMap struct {
 	ScrollDown     key.Binding
 	PageUp         key.Binding
 	PageDown       key.Binding
+	HistorySearch  key.Binding
 }
 
 var keys = keyMap{
@@ -105,5 +106,9 @@ var keys = keyMap{
 	PageDown: key.NewBinding(
 		key.WithKeys("pgdown"),
 		key.WithHelp("pgdown", "page down"),
+	),
+	HistorySearch: key.NewBinding(
+		key.WithKeys("ctrl+r"),
+		key.WithHelp("ctrl+r", "reverse search history"),
 	),
 }

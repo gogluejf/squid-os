@@ -38,6 +38,8 @@ func (m Model) View() string {
 			sections = append(sections, m.filePicker.Render(m.width))
 		case ModeSavePrompt:
 			sections = append(sections, m.savePrompt.Render(m.width))
+		case ModeHistorySearch:
+			sections = append(sections, m.historySearch.Render(m.width))
 		}
 	}
 

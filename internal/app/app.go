@@ -26,6 +26,9 @@ type Model struct {
 	// Command palette
 	cmdPalette ui.CommandPalette
 
+	// History search overlay
+	historySearch ui.HistorySearchOverlay
+
 	// Pickers
 	modelEntries   []chat.ModelEntry
 	modelPicker    ui.PickerList
@@ -100,18 +103,19 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	}
 
 	return Model{
-		textarea:     ta,
-		viewport:     vp,
-		mode:         ModeChat,
-		settings:     settings,
-		endpoints:    endpoints,
-		paths:        paths,
-		history:      history,
-		session:      sess,
-		historyIdx:   -1,
-		cmdPalette:   ui.NewCommandPalette(),
-		incognito:    incognito,
-		notification: notification,
+		textarea:      ta,
+		viewport:      vp,
+		mode:          ModeChat,
+		settings:      settings,
+		endpoints:     endpoints,
+		paths:         paths,
+		history:       history,
+		session:       sess,
+		historyIdx:    -1,
+		cmdPalette:    ui.NewCommandPalette(),
+		historySearch: ui.NewHistorySearchOverlay(),
+		incognito:     incognito,
+		notification:  notification,
 	}
 }
 

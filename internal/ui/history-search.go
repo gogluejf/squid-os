@@ -71,8 +71,16 @@ func (hs *HistorySearchOverlay) RenderHeight() int {
 // historySearchBg is the background colour for the history search overlay
 const historySearchBg = lipgloss.Color("235")
 
-// Render renders the history search overlay line
+// Render renders the history search overlay line (notification-style: white text on dark background)
 func (hs *HistorySearchOverlay) Render(width int) string {
+	// Only show match info after at least one character is typed
+	if hs.Filter == "" {
+		// No filter typed yet - just show prompt
+		status := "search prompt history: (esc to exit)"
+		message := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(status)
+		return lipgloss.NewStyle().Background(historySearchBg).Width(width).Render(message)
+	}
+
 	items := hs.FilteredItems()
 	total := len(items)
 	idx := hs.MatchIdx
@@ -80,17 +88,19 @@ func (hs *HistorySearchOverlay) Render(width int) string {
 		idx = 0
 	}
 
+	// Build the message in notification style
 	var status string
-	if total == 0 {
-		status = lipgloss.NewStyle().Background(historySearchBg).Foreground(lipgloss.Color("244")).Render(" no matches")
-	} else {
-		status = lipgloss.NewStyle().Background(historySearchBg).Foreground(lipgloss.Color("110")).Bold(true).Render(fmt.Sprintf(" [%d/%d]", idx+1, total))
+	switch total {
+	case 0:
+		status = fmt.Sprintf("search prompt history: %s (no matches) (esc to exit)", hs.Filter)
+	case 1:
+		status = fmt.Sprintf("search prompt history: %s (esc to exit)", hs.Filter)
+	default:
+		status = fmt.Sprintf("search prompt history: %s (%d/%d) (ctrl+r for next, esc to exit)", hs.Filter, idx+1, total)
 	}
 
-	searchLabel := lipgloss.NewStyle().Background(historySearchBg).Foreground(lipgloss.Color("110")).Bold(true).Render("R-search")
-	filterText := lipgloss.NewStyle().Background(historySearchBg).Foreground(lipgloss.Color("252")).Render(hs.Filter)
+	// Render with white text on dark background (same as notification style)
+	message := lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(status)
 
-	row := searchLabel + ": " + filterText + status
-
-	return lipgloss.NewStyle().Background(historySearchBg).Width(width).Render(row)
+	return lipgloss.NewStyle().Background(historySearchBg).Width(width).Render(message)
 }

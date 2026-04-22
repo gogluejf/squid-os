@@ -217,48 +217,69 @@ func (m *Model) updateCommandPalette() {
 
 // startHistorySearch enters history search mode and populates the overlay with prompt history.
 func (m Model) startHistorySearch() (tea.Model, tea.Cmd) {
+	// Save current textarea content to restore on escape
+	m.draft = m.textarea.Value()
+	m.textarea.SetValue("") // Clear textarea for preview
+
 	m.mode = ModeHistorySearch
 	m.historySearch = ui.NewHistorySearchOverlay()
 	m.historySearch.Items = m.history.Entries
-	m.historySearch.Visible = true
-	m.recalcLayout()
-	matches := len(m.historySearch.FilteredItems())
-	if matches > 0 {
-		(&m).setNotification(ui.NotificationInfo, fmt.Sprintf("search prompt history, esc to exit [%d/%d]", 1, matches))
-	} else {
-		(&m).setNotification(ui.NotificationInfo, "search prompt history, esc to exit [0/0]")
-	}
+	m.historySearch.MatchIdx = 0
+
+	// Don't preview anything until user types at least one character
 	return m, nil
 }
 
 // handleHistorySearchKey handles all key input while in history search mode.
 func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, keys.Escape):
+	case key.Matches(msg, keys.Escape), key.Matches(msg, keys.Cancel):
+		// Escape or Ctrl+C → restore original textarea content and exit search mode
+		m.textarea.SetValue(m.draft)
 		m.mode = ModeChat
 		m.historySearch.Reset()
-		m.recalcLayout()
 		return m, nil
 
 	case key.Matches(msg, keys.HistorySearch):
 		// Ctrl+R → cycle to next match
 		m.historySearch.NextMatch()
-		matches := len(m.historySearch.FilteredItems())
-		if matches > 0 {
-			(&m).setNotification(ui.NotificationInfo, fmt.Sprintf("search prompt history, esc to exit [%d/%d]", m.historySearch.MatchIdx+1, matches))
+		matches := m.historySearch.FilteredItems()
+		if len(matches) > 0 {
+			// Preview the selected text in textarea
+			m.textarea.SetValue(matches[m.historySearch.MatchIdx])
 		} else {
-			(&m).setNotification(ui.NotificationInfo, "search prompt history, esc to exit [0/0]")
+			m.textarea.SetValue("")
 		}
 		return m, nil
 
 	case key.Matches(msg, keys.Send):
-		// Enter → confirm selection and insert text into textarea
+		// Enter → confirm selection and keep text in textarea
 		if item := m.historySearch.SelectedText(); item != "" {
 			m.textarea.SetValue(item)
 		}
 		m.mode = ModeChat
 		m.historySearch.Reset()
-		m.recalcLayout()
+		return m, nil
+
+	case msg.Type == tea.KeyBackspace:
+		// Backspace → delete character from filter
+		filter := m.historySearch.Filter
+		if len(filter) > 0 {
+			runes := []rune(filter)
+			m.historySearch.Filter = string(runes[:len(runes)-1])
+			m.historySearch.MatchIdx = 0
+			// If filter is now empty, clear textarea
+			if m.historySearch.Filter == "" {
+				m.textarea.SetValue("")
+			} else {
+				matches := m.historySearch.FilteredItems()
+				if len(matches) > 0 {
+					m.textarea.SetValue(matches[0])
+				} else {
+					m.textarea.SetValue("")
+				}
+			}
+		}
 		return m, nil
 
 	default:
@@ -266,11 +287,11 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if msg.Type == tea.KeyRunes {
 			m.historySearch.Filter += string(msg.Runes[0])
 			m.historySearch.MatchIdx = 0
-			matches := len(m.historySearch.FilteredItems())
-			if matches > 0 {
-				(&m).setNotification(ui.NotificationInfo, fmt.Sprintf("search prompt history, esc to exit [%d/%d]", 1, matches))
+			matches := m.historySearch.FilteredItems()
+			if len(matches) > 0 {
+				m.textarea.SetValue(matches[0])
 			} else {
-				(&m).setNotification(ui.NotificationInfo, "search prompt history, esc to exit [0/0]")
+				m.textarea.SetValue("")
 			}
 		}
 		return m, nil

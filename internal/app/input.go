@@ -154,6 +154,11 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		var cmd tea.Cmd
 		m.textarea, cmd = m.textarea.Update(msg)
+		// Reset history navigation when user starts typing
+		if m.historyIdx != -1 {
+			m.draft = ""
+			m.historyIdx = -1
+		}
 		m.updateCommandPalette()
 		return m, cmd
 	}
@@ -219,7 +224,6 @@ func (m *Model) updateCommandPalette() {
 func (m Model) startHistorySearch() (tea.Model, tea.Cmd) {
 	// Save current textarea content to restore on escape
 	m.draft = m.textarea.Value()
-	m.textarea.SetValue(m.draft) // Show draft when no filter typed
 
 	m.mode = ModeHistorySearch
 	m.historySearch = ui.NewHistorySearchOverlay()
@@ -275,6 +279,7 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.historySearch.Filter == "" {
 				m.textarea.SetValue(m.draft)
 			} else {
+
 				matches := m.historySearch.FilteredItems()
 				if len(matches) > 0 {
 					m.textarea.SetValue(matches[0])

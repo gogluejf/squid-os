@@ -4,32 +4,66 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// historyUp moves the prompt history cursor back one entry, saving the current draft first.
+// historyUp moves the prompt history cursor back one entry.
+// New behavior:
+//   - If not in history mode:
+//   - If textarea is empty and draft exists → load draft, clear draft
+//   - If textarea has text → save draft, start browsing history (go to last entry)
+//   - If in history mode → go to previous entry
 func (m Model) historyUp() (Model, tea.Cmd) {
+	// If in history mode, navigate through history entries
+	if m.historyIdx != -1 {
+		if m.historyIdx > 0 {
+			m.historyIdx--
+			m.textarea.SetValue(m.history.Entries[m.historyIdx])
+		}
+		return m, nil
+	}
+
+	// Not in history mode yet
 	if len(m.history.Entries) == 0 {
 		return m, nil
 	}
-	if m.historyIdx == -1 {
-		m.historyIdx = len(m.history.Entries) - 1
-	} else if m.historyIdx > 0 {
-		m.historyIdx--
+
+	// If textarea is empty and draft exists, load draft
+	if m.textarea.Value() == "" && m.draft != "" {
+		m.textarea.SetValue(m.draft)
+		m.draft = ""
+		return m, nil
 	}
-	m.textarea.SetValue(m.history.Entries[m.historyIdx])
+
+	// Otherwise, save draft and start browsing history
+	m.draft = m.textarea.Value()
+	m.historyIdx = len(m.history.Entries) - 1
+	if m.historyIdx >= 0 {
+		m.textarea.SetValue(m.history.Entries[m.historyIdx])
+	}
 	return m, nil
 }
 
-// historyDown moves the prompt history cursor forward, restoring the draft when reaching the end.
+// historyDown moves the prompt history cursor forward.
+// New behavior:
+//   - If not in history mode:
+//   - Save draft, clear textarea
+//   - If in history mode → go to next entry, restore draft at end
 func (m Model) historyDown() (Model, tea.Cmd) {
-	if m.historyIdx == -1 {
+	// If in history mode, navigate through history entries
+	if m.historyIdx != -1 {
+		if m.historyIdx < len(m.history.Entries)-1 {
+			m.historyIdx++
+			m.textarea.SetValue(m.history.Entries[m.historyIdx])
+		} else {
+			// At end of history, restore draft
+			m.textarea.SetValue(m.draft)
+			m.draft = ""
+			m.historyIdx = -1
+		}
 		return m, nil
 	}
-	if m.historyIdx < len(m.history.Entries)-1 {
-		m.historyIdx++
-		m.textarea.SetValue(m.history.Entries[m.historyIdx])
-	} else {
-		m.historyIdx = -1
-		m.textarea.SetValue(m.draft)
-	}
+
+	// Not in history mode yet: save draft and clear textarea
+	m.draft = m.textarea.Value()
+	m.textarea.SetValue("")
 	return m, nil
 }
 

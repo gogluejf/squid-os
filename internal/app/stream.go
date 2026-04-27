@@ -25,9 +25,7 @@ type streamState struct {
 	metrics       StreamMetrics
 	cancelFn      context.CancelFunc
 	ch            <-chan chat.StreamEvent
-	userCancelled bool   // true if user pressed cancel
-	originalText  string // Store original textarea value for restore on cancel
-	originalImage string // Store original attached image for restore on cancel
+	userCancelled bool // true if user pressed cancel
 }
 
 // AddTextChunk appends text and updates metrics.
@@ -54,15 +52,11 @@ func (ss *streamState) reset() {
 	ss.cancelFn = nil
 	ss.ch = nil
 	ss.userCancelled = false
-	ss.originalText = ""
-	ss.originalImage = ""
 }
 
 // setStreamMode initializes the stream state for a new request.
-func (m *Model) setStreamMode(originalText, originalImage string) {
+func (m *Model) setStreamMode() {
 	m.stream.reset()
-	m.stream.originalText = originalText
-	m.stream.originalImage = originalImage
 	m.stream.active = true
 	m.stream.metrics.Start = time.Now()
 	m.mode = ModeStreaming
@@ -96,10 +90,6 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Store original values in temp variables for restore on cancel
-	originalText := text
-	originalImage := m.attachedImage
-
 	if !m.incognito {
 		config.AddHistoryEntry(&m.history, text, m.settings.MaxHistory)
 		_ = config.SaveHistory(m.paths, m.history)
@@ -125,7 +115,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, m.session.file.Messages)
 	m.attachedImage = ""
 
-	(&m).setStreamMode(originalText, originalImage)
+	(&m).setStreamMode()
 	(&m).clearNotification()
 
 	chatURL := config.ResolveChatURL(m.endpoints, m.settings.Provider)
@@ -147,19 +137,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	if event.Error != nil {
 		(&m).setNotification(ui.NotificationError, event.Error.Error())
 
-		// Remove the user message that was added before streaming started
-		n := len(m.session.file.Messages)
-		if n > 0 && m.session.file.Messages[n-1].Role == "user" {
-			m.session.truncateTo(n - 1)
-		}
-
-		// Restore textarea and image
-		if m.stream.originalText != "" {
-			m.textarea.SetValue(m.stream.originalText)
-		}
-		if m.stream.originalImage != "" {
-			m.attachedImage = m.stream.originalImage
-		}
+		text, image := m.session.truncateToUser()
+		m.textarea.SetValue(text)
+		m.attachedImage = image
 
 		m.stream.reset()
 		cmd := (&m).setChatMode()
@@ -170,19 +150,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	if event.Done {
 		// If user cancelled, perform cleanup
 		if m.stream.userCancelled {
-			// Remove the user message
-			n := len(m.session.file.Messages)
-			if n > 0 && m.session.file.Messages[n-1].Role == "user" {
-				m.session.truncateTo(n - 1)
-			}
-
-			// Restore textarea and image
-			if m.stream.originalText != "" {
-				m.textarea.SetValue(m.stream.originalText)
-			}
-			if m.stream.originalImage != "" {
-				m.attachedImage = m.stream.originalImage
-			}
+			text, image := m.session.truncateToUser()
+			m.textarea.SetValue(text)
+			m.attachedImage = image
 
 			(&m).setNotification(ui.NotificationInfo, "stream cancelled")
 		} else {

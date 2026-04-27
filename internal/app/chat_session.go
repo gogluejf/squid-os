@@ -47,28 +47,46 @@ func (cs *chatSession) truncateTo(n int) {
 	cs.invalidateRenderFrom(n)
 }
 
-// destroyLastPair removes the last user message and everything after it,
+// truncateToUser scans messages backwards, removes everything from the last
+// user message to the end, and returns the user message's text and image so
+// the caller can restore them. Everything removed is discarded (no undo stack).
+func (cs *chatSession) truncateToUser() (userText, userImage string) {
+	n := len(cs.file.Messages)
+	for i := n - 1; i >= 0; i-- {
+		if cs.file.Messages[i].Role == "user" {
+			cs.truncateTo(i)
+			return cs.userTextImage(i + 1, n)
+		}
+	}
+	return "", ""
+}
+
+// destroyLastSequence removes the last user message and everything after it,
 // pushes the removed messages onto the undo stack, and returns the destroyed
 // user message's text and image so the caller can restore them to the textarea.
-func (cs *chatSession) destroyLastPair() (userText, userImage string) {
+// Handles multi-round tool sequences (user + any number of assistant/tool msgs).
+func (cs *chatSession) destroyLastSequence() (userText, userImage string) {
 	n := len(cs.file.Messages)
 	if n == 0 {
 		return "", ""
 	}
-	// Find start of last exchange: last user message index
-	removeCount := 2
-	if n%2 == 1 {
-		removeCount = 1
+	for i := n - 1; i >= 0; i-- {
+		if cs.file.Messages[i].Role == "user" {
+			seq := make([]config.Message, n-i)
+			copy(seq, cs.file.Messages[i:])
+			cs.undoStack = append(cs.undoStack, seq)
+			cs.truncateTo(i)
+			return cs.userTextImage(i, n)
+		}
 	}
-	start := n - removeCount
-	pair := make([]config.Message, removeCount)
-	copy(pair, cs.file.Messages[start:])
-	cs.undoStack = append(cs.undoStack, pair)
-	cs.truncateTo(start)
-	// Return the user message's text/image for immediate textarea restore
-	for _, msg := range pair {
-		if msg.Role == "user" {
-			return msg.Text, msg.ImagePath
+	return "", ""
+}
+
+// userTextImage extracts the text and image from the user message within a range.
+func (cs *chatSession) userTextImage(start, end int) (string, string) {
+	for i := start; i < end; i++ {
+		if cs.file.Messages[i].Role == "user" {
+			return cs.file.Messages[i].Text, cs.file.Messages[i].ImagePath
 		}
 	}
 	return "", ""

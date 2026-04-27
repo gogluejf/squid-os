@@ -49,7 +49,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Destroy):
-		userText, userImage := m.session.destroyLastPair()
+		userText, userImage := m.session.destroyLastSequence()
 		m.textarea.SetValue(userText)
 		m.attachedImage = userImage
 		(&m).setNotification(ui.NotificationInfo, "last message removed  ·  ctrl+u to restore")

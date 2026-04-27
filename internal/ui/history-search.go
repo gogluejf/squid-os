@@ -36,10 +36,14 @@ func (hs *HistorySearchOverlay) Filter(filter string) {
 		hs.filtered = hs.Items
 	} else {
 		f := strings.ToLower(filter)
+		seen := make(map[string]struct{}, len(hs.filtered))
 		hs.filtered = hs.filtered[:0]
 		for _, item := range hs.Items {
 			if strings.Contains(strings.ToLower(item), f) {
-				hs.filtered = append(hs.filtered, item)
+				if _, ok := seen[item]; !ok {
+					seen[item] = struct{}{}
+					hs.filtered = append(hs.filtered, item)
+				}
 			}
 		}
 	}

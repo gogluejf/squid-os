@@ -43,7 +43,11 @@ func (hs *HistorySearchOverlay) Filter(filter string) {
 			}
 		}
 	}
-	hs.MatchIdx = 0
+	if len(hs.filtered) > 0 {
+		hs.MatchIdx = len(hs.filtered) - 1
+	} else {
+		hs.MatchIdx = 0
+	}
 }
 
 // FilteredItems returns the cached filtered results.

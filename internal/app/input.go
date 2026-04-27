@@ -273,10 +273,13 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	default:
+default:
 		// Handle character input for filter text
 		if msg.Type == tea.KeyRunes {
 			m.historySearch.Filter(m.historySearch.FilterText() + string(msg.Runes[0]))
+			m.textarea.SetValue(m.historySearch.SelectedText())
+		} else if msg.Type == tea.KeySpace {
+			m.historySearch.Filter(m.historySearch.FilterText() + " ")
 			m.textarea.SetValue(m.historySearch.SelectedText())
 		}
 		return m, nil

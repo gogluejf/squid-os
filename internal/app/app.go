@@ -113,7 +113,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		session:       sess,
 		historyIdx:    -1,
 		cmdPalette:    ui.NewCommandPalette(),
-		historySearch: ui.NewHistorySearchOverlay(),
+		historySearch: ui.NewHistorySearchOverlay(nil),
 		incognito:     incognito,
 		notification:  notification,
 	}

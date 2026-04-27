@@ -9,67 +9,82 @@ import (
 
 // HistorySearchOverlay handles the reverse-search overlay state and rendering
 type HistorySearchOverlay struct {
-	Filter   string
-	MatchIdx int // Index within filtered results
-	Visible  bool
-	Items    []string // The items to search through (history entries)
+	filterStr string
+	MatchIdx  int
+	Visible   bool
+	Items     []string
+	filtered  []string
 }
 
-func NewHistorySearchOverlay() HistorySearchOverlay {
-	return HistorySearchOverlay{}
-}
-
-// FilteredItems returns history entries matching the current filter (case-insensitive substring match)
-func (hs *HistorySearchOverlay) FilteredItems() []string {
-	if hs.Filter == "" {
-		return hs.Items
+func NewHistorySearchOverlay(items []string) HistorySearchOverlay {
+	return HistorySearchOverlay{
+		Items:    items,
+		filtered: items,
 	}
-	f := strings.ToLower(hs.Filter)
-	var result []string
-	for _, item := range hs.Items {
-		if strings.Contains(strings.ToLower(item), f) {
-			result = append(result, item)
+}
+
+// FilterText returns the current filter string.
+func (hs *HistorySearchOverlay) FilterText() string {
+	return hs.filterStr
+}
+
+// Filter applies the given filter text to Items and caches the results in filtered.
+// Resets MatchIdx to 0.
+func (hs *HistorySearchOverlay) Filter(filter string) {
+	hs.filterStr = filter
+	if filter == "" {
+		hs.filtered = hs.Items
+	} else {
+		f := strings.ToLower(filter)
+		hs.filtered = hs.filtered[:0]
+		for _, item := range hs.Items {
+			if strings.Contains(strings.ToLower(item), f) {
+				hs.filtered = append(hs.filtered, item)
+			}
 		}
 	}
-	return result
+	hs.MatchIdx = 0
+}
+
+// FilteredItems returns the cached filtered results.
+func (hs *HistorySearchOverlay) FilteredItems() []string {
+	return hs.filtered
 }
 
 // SelectedText returns the currently selected item text, or empty string if no matches
 func (hs *HistorySearchOverlay) SelectedText() string {
-	items := hs.FilteredItems()
-	if len(items) == 0 {
+	if len(hs.filtered) == 0 {
 		return ""
 	}
-	if hs.MatchIdx >= len(items) {
-		hs.MatchIdx = len(items) - 1
+	if hs.MatchIdx >= len(hs.filtered) {
+		hs.MatchIdx = len(hs.filtered) - 1
 	}
-	return items[hs.MatchIdx]
+	return hs.filtered[hs.MatchIdx]
 }
 
 // NextMatch cycles to the next match (forward through filtered results)
 func (hs *HistorySearchOverlay) NextMatch() {
-	items := hs.FilteredItems()
-	if len(items) == 0 {
+	if len(hs.filtered) == 0 {
 		return
 	}
-	hs.MatchIdx = (hs.MatchIdx + 1) % len(items)
+	hs.MatchIdx = (hs.MatchIdx + 1) % len(hs.filtered)
 }
 
 // PrevMatch cycles to the previous match (backward through filtered results)
 func (hs *HistorySearchOverlay) PrevMatch() {
-	items := hs.FilteredItems()
-	if len(items) == 0 {
+	if len(hs.filtered) == 0 {
 		return
 	}
-	hs.MatchIdx = (hs.MatchIdx - 1 + len(items)) % len(items)
+	hs.MatchIdx = (hs.MatchIdx - 1 + len(hs.filtered)) % len(hs.filtered)
 }
 
 // Reset clears the history search state
 func (hs *HistorySearchOverlay) Reset() {
-	hs.Filter = ""
+	hs.filterStr = ""
 	hs.MatchIdx = 0
 	hs.Visible = false
 	hs.Items = nil
+	hs.filtered = nil
 }
 
 // RenderHeight returns the exact number of terminal lines that Render() will output.
@@ -87,15 +102,14 @@ func (hs *HistorySearchOverlay) Render(width int) string {
 	const dimColor = "240"
 
 	// Only show match info after at least one character is typed
-	if hs.Filter == "" {
+	if hs.filterStr == "" {
 		// No filter typed yet - just show prompt, no background bar
 		dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Render("(esc to exit)")
 		return prefix + dimSuffix
 
 	}
 
-	items := hs.FilteredItems()
-	total := len(items)
+	total := len(hs.filtered)
 	idx := hs.MatchIdx
 	if total > 0 && idx >= total {
 		idx = 0
@@ -114,7 +128,7 @@ func (hs *HistorySearchOverlay) Render(width int) string {
 
 	// Style only the filter text portion with bold white on dark background
 	filterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("231")).Bold(true).Background(lipgloss.Color("238"))
-	filterStyled := filterStyle.Render(hs.Filter)
+	filterStyled := filterStyle.Render(hs.filterStr)
 
 	// Style the suffix as dim
 	dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Render(suffix)

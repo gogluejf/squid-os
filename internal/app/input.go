@@ -226,9 +226,7 @@ func (m Model) startHistorySearch() (tea.Model, tea.Cmd) {
 	m.draft = m.textarea.Value()
 
 	m.mode = ModeHistorySearch
-	m.historySearch = ui.NewHistorySearchOverlay()
-	m.historySearch.Items = m.history.Entries
-	m.historySearch.MatchIdx = 0
+	m.historySearch = ui.NewHistorySearchOverlay(m.history.Entries)
 
 	// Don't preview anything until user types at least one character
 	return m, nil
@@ -251,41 +249,26 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.historySearch.NextMatch()
 		}
-		matches := m.historySearch.FilteredItems()
-		if len(matches) > 0 {
-			m.textarea.SetValue(matches[m.historySearch.MatchIdx])
-		} else {
-			m.textarea.SetValue("")
-		}
+		m.textarea.SetValue(m.historySearch.SelectedText())
 		return m, nil
 
 	case key.Matches(msg, keys.Send), key.Matches(msg, keys.Left), key.Matches(msg, keys.Right):
 		// Enter, Left, or Right → confirm selection and keep text in textarea
-		if item := m.historySearch.SelectedText(); item != "" {
-			m.textarea.SetValue(item)
-		}
+		m.textarea.SetValue(m.historySearch.SelectedText())
 		m.mode = ModeChat
 		m.historySearch.Reset()
 		return m, m.setChatMode()
 
 	case msg.Type == tea.KeyBackspace:
 		// Backspace → delete character from filter
-		filter := m.historySearch.Filter
+		filter := m.historySearch.FilterText()
 		if len(filter) > 0 {
 			runes := []rune(filter)
-			m.historySearch.Filter = string(runes[:len(runes)-1])
-			m.historySearch.MatchIdx = 0
-			// If filter is now empty, clear textarea
-			if m.historySearch.Filter == "" {
+			m.historySearch.Filter(string(runes[:len(runes)-1]))
+			if m.historySearch.FilterText() == "" {
 				m.textarea.SetValue(m.draft)
 			} else {
-
-				matches := m.historySearch.FilteredItems()
-				if len(matches) > 0 {
-					m.textarea.SetValue(matches[0])
-				} else {
-					m.textarea.SetValue("")
-				}
+				m.textarea.SetValue(m.historySearch.SelectedText())
 			}
 		}
 		return m, nil
@@ -293,14 +276,8 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		// Handle character input for filter text
 		if msg.Type == tea.KeyRunes {
-			m.historySearch.Filter += string(msg.Runes[0])
-			m.historySearch.MatchIdx = 0
-			matches := m.historySearch.FilteredItems()
-			if len(matches) > 0 {
-				m.textarea.SetValue(matches[0])
-			} else {
-				m.textarea.SetValue("")
-			}
+			m.historySearch.Filter(m.historySearch.FilterText() + string(msg.Runes[0]))
+			m.textarea.SetValue(m.historySearch.SelectedText())
 		}
 		return m, nil
 	}

@@ -97,15 +97,13 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int) string {
 			line += " ✗ " + err
 			b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + line + "\n"))
 		} else if tc.Result != "" {
-			result := tc.Result
-			if len(result) > 60 {
-				result = result[:60] + "..."
-			}
-			line += " ✓ " + result
-			b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
-			// Show full output below if it exceeds the short preview
 			if len(tc.Result) > 60 {
+				line += " ✓"
+				b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Result + "\n"))
+			} else {
+				line += " ✓ " + tc.Result
+				b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
 			}
 		} else {
 			// No result yet (streaming, before tool execution)

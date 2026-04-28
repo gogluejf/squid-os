@@ -297,8 +297,13 @@ func (m *Model) executeTools(toolCalls []chat.ToolCall) {
 			if msg.Role == "assistant" && msg.ToolCalls != nil {
 				for j, tce := range msg.ToolCalls {
 					if tce.ID == tc.ID {
-						msg.ToolCalls[j].Result = result
-						msg.ToolCalls[j].Error = ""
+						if err != nil {
+							msg.ToolCalls[j].Result = ""
+							msg.ToolCalls[j].Error = err.Error()
+						} else {
+							msg.ToolCalls[j].Result = result
+							msg.ToolCalls[j].Error = ""
+						}
 						break
 					}
 				}

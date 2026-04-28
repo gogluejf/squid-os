@@ -14,10 +14,19 @@ import (
 func RenderMessage(msg config.Message, width int, thinkingExpanded bool) string {
 	var b strings.Builder
 
-	// Left-margin concept removed (requested): use full available width.
 	bubbleWidth := width
 	if bubbleWidth < 20 {
 		bubbleWidth = 20
+	}
+
+	bodyWidth := bubbleWidth
+	if bodyWidth < 20 {
+		bodyWidth = 20
+	}
+
+	// Skip tool result messages — they are rendered inline with the assistant's tool calls
+	if msg.Role == "tool" {
+		return ""
 	}
 
 	// Header line: date left, metadata right
@@ -29,11 +38,6 @@ func RenderMessage(msg config.Message, width int, thinkingExpanded bool) string 
 	if msg.Role == "user" {
 		style = UserMsgStyle
 	}
-
-	bodyWidth := bubbleWidth
-	if bodyWidth < 20 {
-		bodyWidth = 20
-	}
 	style = style.Width(bodyWidth)
 
 	body := msg.Text
@@ -41,9 +45,6 @@ func RenderMessage(msg config.Message, width int, thinkingExpanded bool) string 
 		body = "..."
 	}
 
-	// For assistant messages, render markdown and restore the background colour
-	// after every glamour reset sequence — same technique used for the header
-	// inline styles — so the lipgloss block background stays solid throughout.
 	if msg.Role == "assistant" {
 		body = RenderMarkdownOnBg(body, "233")
 	}
@@ -68,8 +69,69 @@ func RenderMessage(msg config.Message, width int, thinkingExpanded bool) string 
 
 	b.WriteString(style.Render("\n" + body + "\n"))
 
+	// Tool calls: render as inline lines with results
+	if msg.ToolCalls != nil && len(msg.ToolCalls) > 0 {
+		b.WriteString(renderToolCallsInline(msg.ToolCalls, bubbleWidth))
+	}
+
 	// One trailing spacer line after each message block.
 	b.WriteString("\n")
+	return b.String()
+}
+
+// renderToolCallsInline renders tool call lines, showing result on the same line if available.
+func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int) string {
+	var b strings.Builder
+	for _, tc := range toolCalls {
+		args := tc.Arguments
+		if len(args) > 50 {
+			args = args[:50] + "..."
+		}
+		line := fmt.Sprintf(" ↳ %s(%s)", tc.Name, args)
+
+		if tc.Error != "" {
+			err := tc.Error
+			if len(err) > 60 {
+				err = err[:60] + "..."
+			}
+			line += " ✗ " + err
+			b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + line + "\n"))
+		} else if tc.Result != "" {
+			result := tc.Result
+			if len(result) > 60 {
+				result = result[:60] + "..."
+			}
+			line += " ✓ " + result
+			b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
+			// Show full output below if it exceeds the short preview
+			if len(tc.Result) > 60 {
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Result + "\n"))
+			}
+		} else {
+			// No result yet (streaming, before tool execution)
+			b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
+		}
+	}
+	return b.String()
+}
+
+// not used in the moment, but could be used to render tool results that come in as separate messages (e.g. from streaming updates or if the provider doesn't support inline tool call results)
+func renderToolResults(results []config.ToolResultEntry, width int) string {
+	var b strings.Builder
+	for _, r := range results {
+		line := fmt.Sprintf("[%s: %s]", r.Name, r.ToolCallID)
+		if r.Error != "" {
+			line += " ✗ " + r.Error
+			b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + line + "\n"))
+		} else {
+			result := r.Result
+			if len(result) > 80 {
+				result = result[:80] + "..."
+			}
+			line += " ✓ " + result
+			b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
+		}
+	}
 	return b.String()
 }
 

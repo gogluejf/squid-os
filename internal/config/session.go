@@ -29,6 +29,22 @@ type Session struct {
 	SystemPromptFile string `json:"system_prompt_file"`
 }
 
+type ToolCallEntry struct {
+	ID        string `json:"id"`
+	Type      string `json:"type"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+	Result    string `json:"result,omitempty"` // to display inline with assistant message if available, otherwise will be in a separate tool result message
+	Error     string `json:"error,omitempty"` // to display inline with assistant message if available, otherwise will be in a separate tool result message
+}
+
+type ToolResultEntry struct {
+	ToolCallID string `json:"tool_call_id"`
+	Name       string `json:"name"`
+	Result     string `json:"result"`
+	Error      string `json:"error,omitempty"`
+}
+
 type Message struct {
 	ID        string    `json:"id"`
 	Role      string    `json:"role"`
@@ -57,10 +73,10 @@ type Message struct {
 	//stop reason
 
 	//tool request
-	//todo tools[] with their args
+	ToolCalls []ToolCallEntry `json:"tool_calls,omitempty"`
 
 	//tool Choice message fields ( role tool)
-	//todo tools and answers
+	ToolResults []ToolResultEntry `json:"tool_results,omitempty"`
 
 	StopReason string `json:"stop_reason,omitempty"`
 }

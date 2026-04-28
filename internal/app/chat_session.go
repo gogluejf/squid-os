@@ -54,8 +54,9 @@ func (cs *chatSession) truncateToUser() (userText, userImage string) {
 	n := len(cs.file.Messages)
 	for i := n - 1; i >= 0; i-- {
 		if cs.file.Messages[i].Role == "user" {
+			userText, userImage = cs.file.Messages[i].Text, cs.file.Messages[i].ImagePath
 			cs.truncateTo(i)
-			return cs.userTextImage(i + 1, n)
+			return userText, userImage
 		}
 	}
 	return "", ""
@@ -75,8 +76,9 @@ func (cs *chatSession) destroyLastSequence() (userText, userImage string) {
 			seq := make([]config.Message, n-i)
 			copy(seq, cs.file.Messages[i:])
 			cs.undoStack = append(cs.undoStack, seq)
+			userText, userImage = cs.file.Messages[i].Text, cs.file.Messages[i].ImagePath
 			cs.truncateTo(i)
-			return cs.userTextImage(i, n)
+			return userText, userImage
 		}
 	}
 	return "", ""

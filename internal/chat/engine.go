@@ -7,25 +7,41 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"rig-chat/internal/config"
+	"rig-chat/internal/tools"
 	"strings"
 	"time"
 )
 
 // StreamEvent is sent for each SSE chunk during inference
 type StreamEvent struct {
-	Text       string // visible delta text
-	Thinking   string // thinking delta text
-	InThinking bool   // currently inside think block
-	Done       bool   // stream finished
-	StopReason string // from the final chunk
-	Error      error  // non-nil on error
+	Text       string     // visible delta text
+	Thinking   string     // thinking delta text
+	InThinking bool       // currently inside think block
+	Done       bool       // stream finished
+	StopReason string     // from the final chunk
+	Error      error      // non-nil on error
+	ToolCalls  []ToolCall // non-nil when model requests tool calls
+}
+
+// ToolCall represents a single tool call from the model.
+type ToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name string `json:"name"`
+		Args string `json:"arguments"`
+	} `json:"function"`
 }
 
 // ChatMessage is an OpenAI-compatible message for the API request
 type ChatMessage struct {
-	Role    string      `json:"role"`
-	Content interface{} `json:"content"` // string or []ContentPart
+	Role       string      `json:"role"`
+	Content    interface{} `json:"content,omitempty"`
+	Name       string      `json:"name,omitempty"`
+	ToolCallID string      `json:"tool_call_id,omitempty"`
+	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
 }
 
 // ContentPart for multimodal messages
@@ -40,20 +56,37 @@ type ImageURL struct {
 	URL string `json:"url"`
 }
 
+// toolDefinition is the OpenAI-compatible tool definition sent in the request
+type toolDefinition struct {
+	Type     string                 `json:"type"`
+	Function map[string]interface{} `json:"function"`
+}
+
 // chatRequest is the OpenAI-compatible request body
 type chatRequest struct {
 	Model              string                 `json:"model"`
 	Stream             bool                   `json:"stream"`
 	Messages           []ChatMessage          `json:"messages"`
+	Tools              []toolDefinition       `json:"tools,omitempty"`       // available tools
+	ToolChoice         interface{}            `json:"tool_choice,omitempty"` // "auto" | "none" | "required" | {"type":"function","function":{"name":"..."}}
 	ChatTemplateKwargs map[string]interface{} `json:"chat_template_kwargs,omitempty"`
 }
 
 // sseChoice is the delta within a streaming response chunk
 type sseChoice struct {
 	Delta struct {
-		Content string `json:"content"`
+		Content   string          `json:"content"`
+		ToolCalls []toolCallDelta `json:"tool_calls,omitempty"`
 	} `json:"delta"`
 	FinishReason *string `json:"finish_reason"`
+}
+
+// toolCallDelta represents a single tool call in a delta chunk
+type toolCallDelta struct {
+	ID       string                 `json:"id,omitempty"`
+	Type     string                 `json:"type,omitempty"`
+	Index    int                    `json:"index"`
+	Function map[string]interface{} `json:"function,omitempty"`
 }
 
 // sseResponse is a single SSE data payload
@@ -80,9 +113,26 @@ func NewEngine(chatURL, model string, thinking bool) *Engine {
 	}
 }
 
+// toolsToDefinitions converts our Tool structs to API tool definitions.
+func toolsToDefinitions(ts []tools.Tool) []toolDefinition {
+	defs := make([]toolDefinition, len(ts))
+	for i, t := range ts {
+		defs[i] = toolDefinition{
+			Type: "function",
+			Function: map[string]interface{}{
+				"name":        t.Name,
+				"description": t.Description,
+				"parameters":  t.Schema,
+			},
+		}
+	}
+	return defs
+}
+
 // Stream sends the chat request and returns a channel of StreamEvents.
 // Cancel via the context. The channel is closed when done.
-func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan StreamEvent {
+// Pass nil for toolDefs if no tools are available.
+func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []tools.Tool) <-chan StreamEvent {
 	ch := make(chan StreamEvent, 64)
 
 	go func() {
@@ -92,6 +142,11 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 			Model:    e.Model,
 			Stream:   true,
 			Messages: messages,
+		}
+
+		if len(toolDefs) > 0 {
+			reqBody.Tools = toolsToDefinitions(toolDefs)
+			reqBody.ToolChoice = "auto"
 		}
 
 		reqBody.ChatTemplateKwargs = map[string]interface{}{
@@ -104,6 +159,12 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 			ch <- StreamEvent{Error: fmt.Errorf("marshal request: %w", err)}
 			return
 		}
+
+		var prettyBody bytes.Buffer
+		json.Indent(&prettyBody, body, "", "  ")
+		f, _ := os.Create("/tmp/rig-chat-debug.json")
+		defer f.Close()
+		f.Write(prettyBody.Bytes())
 
 		req, err := http.NewRequestWithContext(ctx, "POST", e.ChatURL, bytes.NewReader(body))
 		if err != nil {
@@ -154,6 +215,9 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 			parser.InThink = true
 		}
 
+		// Buffer for accumulating tool call deltas by index
+		toolBuffers := make(map[int]*toolCallBuffer)
+
 		scanner := bufio.NewScanner(resp.Body)
 		// Increase buffer for large chunks
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -185,6 +249,11 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 						InThinking: parser.InThink,
 					}
 				}
+				// Flush any remaining tool calls
+				if len(toolBuffers) > 0 {
+					tc := flushToolCalls(toolBuffers)
+					ch <- StreamEvent{ToolCalls: tc}
+				}
 				ch <- StreamEvent{Done: true}
 				return
 			}
@@ -199,6 +268,30 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 			}
 
 			choice := sse.Choices[0]
+
+			// Process tool call deltas
+			for _, tc := range choice.Delta.ToolCalls {
+				buf, ok := toolBuffers[tc.Index]
+				if !ok {
+					buf = &toolCallBuffer{}
+					toolBuffers[tc.Index] = buf
+				}
+				if tc.ID != "" {
+					buf.ID = tc.ID
+				}
+				if tc.Type != "" {
+					buf.Type = tc.Type
+				}
+				if tc.Function != nil {
+					if name, ok := tc.Function["name"].(string); ok {
+						buf.NameBuf.WriteString(name)
+					}
+					if args, ok := tc.Function["arguments"].(string); ok {
+						buf.ArgsBuf.WriteString(args)
+					}
+				}
+			}
+
 			content := choice.Delta.Content
 			if content == "" {
 				// Check for finish reason even without content
@@ -211,6 +304,11 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 							Thinking:   result.Thinking,
 							InThinking: parser.InThink,
 						}
+					}
+					// Flush tool calls if finish_reason is tool_calls
+					if *choice.FinishReason == "tool_calls" && len(toolBuffers) > 0 {
+						tc := flushToolCalls(toolBuffers)
+						ch <- StreamEvent{ToolCalls: tc}
 					}
 					ch <- StreamEvent{Done: true, StopReason: *choice.FinishReason}
 					return
@@ -248,10 +346,44 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage) <-chan Stre
 				InThinking: parser.InThink,
 			}
 		}
+		if len(toolBuffers) > 0 {
+			tc := flushToolCalls(toolBuffers)
+			ch <- StreamEvent{ToolCalls: tc}
+		}
 		ch <- StreamEvent{Done: true}
 	}()
 
 	return ch
+}
+
+// toolCallBuffer accumulates tool call deltas by index during streaming.
+type toolCallBuffer struct {
+	ID      string
+	Type    string
+	NameBuf strings.Builder
+	ArgsBuf strings.Builder
+}
+
+// flushToolCalls converts buffered tool call deltas into ToolCall structs.
+func flushToolCalls(buffers map[int]*toolCallBuffer) []ToolCall {
+	result := make([]ToolCall, 0, len(buffers))
+	for i := 0; i < len(buffers); i++ {
+		buf := buffers[i]
+		if buf == nil {
+			continue
+		}
+		name := buf.NameBuf.String()
+		args := buf.ArgsBuf.String()
+		result = append(result, ToolCall{
+			ID:   buf.ID,
+			Type: buf.Type,
+			Function: struct {
+				Name string `json:"name"`
+				Args string `json:"arguments"`
+			}{Name: name, Args: args},
+		})
+	}
+	return result
 }
 
 // FetchModels queries /v1/models endpoint and returns model IDs
@@ -312,7 +444,33 @@ func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []c
 				msgs = append(msgs, ChatMessage{Role: "user", Content: msg.Text})
 			}
 		case "assistant":
-			msgs = append(msgs, ChatMessage{Role: msg.Role, Content: msg.Text})
+			cm := ChatMessage{Role: "assistant", Content: msg.Text}
+			if len(msg.ToolCalls) > 0 {
+				cm.ToolCalls = make([]ToolCall, len(msg.ToolCalls))
+				for i, tc := range msg.ToolCalls {
+					cm.ToolCalls[i] = ToolCall{
+						ID:   tc.ID,
+						Type: tc.Type,
+						Function: struct {
+							Name string `json:"name"`
+							Args string `json:"arguments"`
+						}{Name: tc.Name, Args: tc.Arguments},
+					}
+				}
+				if msg.Text == "" {
+					cm.Content = "" // still needed for models that expect it
+				}
+			}
+			msgs = append(msgs, cm)
+		case "tool":
+			for _, tr := range msg.ToolResults {
+				msgs = append(msgs, ChatMessage{
+					Role:       "tool",
+					ToolCallID: tr.ToolCallID,
+					Content:    tr.Result,
+					Name:       tr.Name,
+				})
+			}
 		}
 	}
 

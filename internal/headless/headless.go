@@ -48,7 +48,7 @@ func Run(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		parser.InThink = true
 	}
 
-	ch := engine.Stream(ctx, msgs)
+	ch := engine.Stream(ctx, msgs, nil)
 
 	for event := range ch {
 		if event.Error != nil {

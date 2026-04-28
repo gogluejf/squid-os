@@ -139,4 +139,22 @@ var (
 				Background(lipgloss.Color("237")).
 				Foreground(lipgloss.Color("117")).
 				Bold(true)
+
+	// Tool call line ( ↳ tool_name(args) ✓ result )
+	ToolCallStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("233")).
+			Foreground(lipgloss.Color("110")).
+			Padding(0, 1)
+
+	// Tool call overflow output
+	ToolCallResultStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("233")).
+			Foreground(lipgloss.Color("242")).
+			Padding(0, 2)
+
+	// Tool call error line
+	ToolCallErrorStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("233")).
+			Foreground(lipgloss.Color("196")).
+			Padding(0, 1)
 )

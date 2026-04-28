@@ -10,6 +10,7 @@ import (
 
 	"rig-chat/internal/chat"
 	"rig-chat/internal/config"
+	"rig-chat/internal/tools"
 	"rig-chat/internal/ui"
 )
 
@@ -43,6 +44,9 @@ type Model struct {
 
 	// Stream state (bundled)
 	stream streamState
+
+	// Tools (survives across stream resets)
+	availTools []tools.Tool
 
 	// Config
 	settings  config.Settings

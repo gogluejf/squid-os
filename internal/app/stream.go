@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	"rig-chat/internal/chat"
 	"rig-chat/internal/config"
+	"rig-chat/internal/tools"
 	"rig-chat/internal/ui"
 )
 
@@ -25,7 +27,8 @@ type streamState struct {
 	metrics       StreamMetrics
 	cancelFn      context.CancelFunc
 	ch            <-chan chat.StreamEvent
-	userCancelled bool // true if user pressed cancel
+	userCancelled bool        // true if user pressed cancel
+	pendingTools  []chat.ToolCall // accumulated tool calls across stream events
 }
 
 // AddTextChunk appends text and updates metrics.
@@ -116,6 +119,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.attachedImage = ""
 
 	(&m).setStreamMode()
+	(&m).availTools = tools.GetTools()
 	(&m).clearNotification()
 
 	chatURL := config.ResolveChatURL(m.endpoints, m.settings.Provider)
@@ -124,7 +128,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.stream.cancelFn = cancel
 
-	ch := engine.Stream(ctx, apiMsgs)
+	ch := engine.Stream(ctx, apiMsgs, m.availTools)
 	m.stream.ch = ch
 
 	m.updateViewportContent()
@@ -148,15 +152,23 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	}
 
 	if event.Done {
-		// If user cancelled, perform cleanup
 		if m.stream.userCancelled {
 			text, image := m.session.truncateToUser()
 			m.textarea.SetValue(text)
 			m.attachedImage = image
 
 			(&m).setNotification(ui.NotificationInfo, "stream cancelled")
-		} else {
-			// Save assistant message if not cancelled
+
+			m.stream.reset()
+			blinkCmd := (&m).setChatMode()
+			m.updateViewportContent()
+			nm, autoSaveCmd := m.autoSave()
+			return nm, tea.Batch(blinkCmd, autoSaveCmd)
+		}
+
+		// Tool calls: save assistant msg, execute tools synchronously, resume streaming
+		if event.StopReason == "tool_calls" && len(m.stream.pendingTools) > 0 {
+			pendingTools:= m.stream.pendingTools // capture before reset
 			assistantMsg := config.Message{
 				ID:                         fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 				Role:                       "assistant",
@@ -174,9 +186,48 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				DurationTimeMs:             m.stream.metrics.Duration().Milliseconds(),
 				TimeToFirstTokenMs:         m.stream.metrics.TimeToFirstToken().Milliseconds(),
 				StopReason:                 event.StopReason,
+				ToolCalls:                  make([]config.ToolCallEntry, len(pendingTools)),
+			}
+			for i, tc := range pendingTools {
+				assistantMsg.ToolCalls[i] = config.ToolCallEntry{
+					ID:        tc.ID,
+					Type:      tc.Type,
+					Name:      tc.Function.Name,
+					Arguments: tc.Function.Args,
+				}
 			}
 			m.session.appendMsg(assistantMsg)
+
+			// Execute tools inline - they're fast I/O ops
+			(&m).executeTools(pendingTools)
+
+			m.stream.reset()
+			m.updateViewportContent()
+
+			// Resume streaming with tool results in history
+			return (&m).startStream()
 		}
+
+		// Normal completion: save assistant message
+		assistantMsg := config.Message{
+			ID:                         fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+			Role:                       "assistant",
+			CreatedAt:                  m.stream.metrics.Start,
+			Text:                       m.stream.text,
+			ThinkingText:               m.stream.thinking,
+			ThinkingTokens:             m.stream.metrics.ThinkingTokens(),
+			ThinkingDurationMs:         m.stream.metrics.ThinkingDuration().Milliseconds(),
+			ThinkingTimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds(),
+			TextTokens:                 m.stream.metrics.TextTokens(),
+			TextDurationMs:             m.stream.metrics.TextDuration().Milliseconds(),
+			TextTimeToFirstTokenMs:     m.stream.metrics.TimeToFirstTextToken().Milliseconds(),
+			TokensPerSecond:            m.stream.metrics.AvgTokenPerSec(),
+			Tokens:                     m.stream.metrics.TotalTokens(),
+			DurationTimeMs:             m.stream.metrics.Duration().Milliseconds(),
+			TimeToFirstTokenMs:         m.stream.metrics.TimeToFirstToken().Milliseconds(),
+			StopReason:                 event.StopReason,
+		}
+		m.session.appendMsg(assistantMsg)
 
 		m.stream.reset()
 		blinkCmd := (&m).setChatMode()
@@ -185,6 +236,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		return nm, tea.Batch(blinkCmd, autoSaveCmd)
 	}
 
+	if len(event.ToolCalls) > 0 {
+		m.stream.pendingTools = append(m.stream.pendingTools, event.ToolCalls...)
+	}
 	if event.Text != "" {
 		m.stream.AddTextChunk(event.Text)
 	}
@@ -197,4 +251,95 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	m.stream.inThinking = event.InThinking
 	m.updateViewportContent()
 	return m, waitForStreamEvent(m.stream.ch)
+}
+
+// executeTools runs all pending tool calls, appends results to session,
+// and updates the assistant message with results.
+func (m *Model) executeTools(toolCalls []chat.ToolCall) {
+	var toolResults []config.ToolResultEntry
+
+	for _, tc := range toolCalls {
+		tool := findTool(tc.Function.Name, m.availTools)
+		if tool == nil {
+			toolResults = append(toolResults, config.ToolResultEntry{
+				ToolCallID: tc.ID,
+				Name:       tc.Function.Name,
+				Result:     "",
+				Error:      fmt.Sprintf("unknown tool: %s", tc.Function.Name),
+			})
+			continue
+		}
+
+		var args map[string]interface{}
+		if tc.Function.Args != "" {
+			_ = json.Unmarshal([]byte(tc.Function.Args), &args)
+		}
+
+		result, err := tool.Execute(args)
+		if err != nil {
+			toolResults = append(toolResults, config.ToolResultEntry{
+				ToolCallID: tc.ID,
+				Name:       tc.Function.Name,
+				Result:     result,
+				Error:      err.Error(),
+			})
+		} else {
+			toolResults = append(toolResults, config.ToolResultEntry{
+				ToolCallID: tc.ID,
+				Name:       tc.Function.Name,
+				Result:     result,
+			})
+		}
+
+		// Update assistant message tool call with result
+		for i := len(m.session.file.Messages) - 1; i >= 0; i-- {
+			msg := &m.session.file.Messages[i]
+			if msg.Role == "assistant" && msg.ToolCalls != nil {
+				for j, tce := range msg.ToolCalls {
+					if tce.ID == tc.ID {
+						msg.ToolCalls[j].Result = result
+						msg.ToolCalls[j].Error = ""
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// Append tool result message
+	toolMsg := config.Message{
+		ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+		Role:        "tool",
+		CreatedAt:   time.Now(),
+		ToolResults: toolResults,
+	}
+	m.session.appendMsg(toolMsg)
+}
+
+// startStream builds API messages from current session state and starts a new stream.
+func (m *Model) startStream() (tea.Model, tea.Cmd) {
+	apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, m.session.file.Messages)
+
+	m.setStreamMode()
+
+	chatURL := config.ResolveChatURL(m.endpoints, m.settings.Provider)
+	engine := chat.NewEngine(chatURL, m.settings.Model, m.settings.Thinking)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	m.stream.cancelFn = cancel
+
+	ch := engine.Stream(ctx, apiMsgs, m.availTools)
+	m.stream.ch = ch
+
+	m.updateViewportContent()
+	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd())
+}
+
+func findTool(name string, toolList []tools.Tool) *tools.Tool {
+	for _, t := range toolList {
+		if t.Name == name {
+			return &t
+		}
+	}
+	return nil
 }

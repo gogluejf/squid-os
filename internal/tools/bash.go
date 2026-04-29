@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // Bash executes a shell command and returns stdout/stderr.
@@ -47,6 +49,17 @@ var Bash = Tool{
 		defer cancel()
 
 		cmd := exec.CommandContext(ctx, "bash", "-c", cmdStr)
+
+		// xdg-open blocks the terminal; run it detached
+		if strings.Contains(cmdStr, "xdg-open") {
+			cmd.SysProcAttr = &unix.SysProcAttr{Setpgid: true}
+			err := cmd.Start()
+			if err != nil {
+				return "", fmt.Errorf("failed to run %s: %w", cmdStr, err)
+			}
+			return fmt.Sprintf("launched: %s", cmdStr), nil
+		}
+
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr

@@ -13,17 +13,17 @@ var Open = Tool{
 	Schema: map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"path_or_url": map[string]interface{}{
+			"path": map[string]interface{}{
 				"type":        "string",
 				"description": "The file path, URL, or directory to open",
 			},
 		},
-		"required": []string{"path_or_url"},
+		"required": []string{"path"},
 	},
 	Execute: func(args map[string]interface{}) (string, error) {
-		target, ok := args["path_or_url"].(string)
+		target, ok := args["path"].(string)
 		if !ok || target == "" {
-			return "", fmt.Errorf("path_or_url is required and must be a string")
+			return "", fmt.Errorf("path is required and must be a string")
 		}
 
 		var cmd *exec.Cmd

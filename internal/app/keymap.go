@@ -8,7 +8,7 @@ type keyMap struct {
 	Send           key.Binding
 	Cancel         key.Binding
 	Help           key.Binding
-	ExpandThinking key.Binding
+	Expand key.Binding
 	Save           key.Binding
 	Load           key.Binding
 	Model          key.Binding
@@ -49,9 +49,9 @@ var keys = keyMap{
 		key.WithKeys("ctrl+h"),
 		key.WithHelp("ctrl+h", "toggle help"),
 	),
-	ExpandThinking: key.NewBinding(
+	Expand: key.NewBinding(
 		key.WithKeys("ctrl+e"),
-		key.WithHelp("ctrl+e", "expand/collapse thinking"),
+		key.WithHelp("ctrl+e", "expand/collapse"),
 	),
 	Save: key.NewBinding(
 		key.WithKeys("ctrl+s"),

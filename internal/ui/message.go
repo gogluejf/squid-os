@@ -11,7 +11,7 @@ import (
 )
 
 // RenderMessage renders a single chat message for the viewport
-func RenderMessage(msg config.Message, width int, thinkingExpanded bool) string {
+func RenderMessage(msg config.Message, width int, expanded bool) string {
 	var b strings.Builder
 
 	bubbleWidth := width
@@ -59,7 +59,7 @@ func RenderMessage(msg config.Message, width int, thinkingExpanded bool) string 
 		} else {
 			thinkLabel = fmt.Sprintf(" thinking (%d tokens)", msg.ThinkingTokens)
 		}
-		if thinkingExpanded {
+		if expanded {
 			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 			b.WriteString(thinkStyle.Render(msg.ThinkingText + "\n"))
 		} else {
@@ -71,7 +71,7 @@ func RenderMessage(msg config.Message, width int, thinkingExpanded bool) string 
 
 	// Tool calls: render as inline lines with results
 	if msg.ToolCalls != nil && len(msg.ToolCalls) > 0 {
-		b.WriteString(renderToolCallsInline(msg.ToolCalls, bubbleWidth))
+		b.WriteString(renderToolCallsInline(msg.ToolCalls, bubbleWidth, expanded))
 	}
 
 	// One trailing spacer line after each message block.
@@ -79,28 +79,44 @@ func RenderMessage(msg config.Message, width int, thinkingExpanded bool) string 
 	return b.String()
 }
 
-// renderToolCallsInline renders tool call lines, showing result on the same line if available.
-func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int) string {
+func truncate(s string, max int) string {
+	if len(s) > max {
+		return s[:max] + "..."
+	}
+	return s
+}
+
+// renderToolCallsInline renders tool call lines.
+func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded bool) string {
 	var b strings.Builder
 	for _, tc := range toolCalls {
-		args := tc.Arguments
-		if len(args) > 50 {
-			args = args[:50] + "..."
-		}
+		args := truncate(tc.Arguments, 50)
 		line := fmt.Sprintf(" ↳ %s(%s)", tc.Name, args)
 
 		if tc.Error != "" {
-			err := tc.Error
-			if len(err) > 60 {
-				err = err[:60] + "..."
+			if len(tc.Error) > 30 {
+				if expanded {
+					line += " ✗"
+					b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + line + "\n"))
+					b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Error + "\n"))
+				} else {
+					line += " ✗ " + truncate(tc.Error, 30) + ", ctrl+e to expand"
+					b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + line + "\n"))
+				}
+			} else {
+				line += " ✗ " + tc.Error
+				b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + line + "\n"))
 			}
-			line += " ✗ " + err
-			b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + line + "\n"))
 		} else if tc.Result != "" {
-			if len(tc.Result) > 60 {
-				line += " ✓"
-				b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
-				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Result + "\n"))
+			if len(tc.Result) > 30 {
+				if expanded {
+					line += " ✓"
+					b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
+					b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Result + "\n"))
+				} else {
+					line += " ✓ " + truncate(tc.Result, 30) + ", ctrl+e to expand"
+					b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
+				}
 			} else {
 				line += " ✓ " + tc.Result
 				b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
@@ -184,7 +200,7 @@ type StreamingViewData struct {
 	ThinkingText     string
 	InThinking       bool
 	Width            int
-	ThinkingExpanded bool
+	Expanded         bool
 
 	// Timing
 	RequestStart   time.Time
@@ -225,7 +241,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 		} else {
 			thinkLabel = fmt.Sprintf(" thinking (%d tokens)", data.ThinkingTokens)
 		}
-		if data.ThinkingExpanded {
+		if data.Expanded {
 			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 			if data.ThinkingText != "" {
 				b.WriteString(thinkStyle.Render(data.ThinkingText))

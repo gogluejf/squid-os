@@ -75,7 +75,7 @@ func (m *Model) updateViewportContent() {
 	// Render only new messages, reuse cache for existing ones
 	for i := len(m.session.renderedMessages); i < len(m.session.file.Messages); i++ {
 		msg := m.session.file.Messages[i]
-		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, m.thinkingExpanded))
+		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, m.expanded))
 	}
 	for _, r := range m.session.renderedMessages {
 		b.WriteString(r)
@@ -104,7 +104,7 @@ func (m *Model) updateViewportContent() {
 			ThinkingText:     m.stream.thinking,
 			InThinking:       m.stream.inThinking,
 			Width:            m.width,
-			ThinkingExpanded: m.thinkingExpanded,
+			Expanded:         m.expanded,
 			RequestStart:     m.stream.metrics.Start,
 			ThinkingTokens:   m.stream.metrics.ThinkingTokens(),
 			ThinkingDur:      m.stream.metrics.ThinkingDuration(),

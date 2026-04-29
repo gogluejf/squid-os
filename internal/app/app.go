@@ -64,8 +64,8 @@ type Model struct {
 	incognito       bool
 	sessionSnapshot *chatSession
 
-	// Global thinking visibility state (NOT persisted)
-	thinkingExpanded bool
+	// Global expand/collapse state for thinking and tool results (NOT persisted)
+	expanded bool
 }
 
 // New creates a new app Model. Pass a non-nil initialSession to pre-load a session,

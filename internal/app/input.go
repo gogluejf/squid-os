@@ -87,8 +87,8 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = ModeHelp
 		return m, nil
 
-	case key.Matches(msg, keys.ExpandThinking):
-		m.thinkingExpanded = !m.thinkingExpanded
+	case key.Matches(msg, keys.Expand):
+		m.expanded = !m.expanded
 		m.session.invalidateRenderAll()
 		m.updateViewportContent()
 		return m, nil
@@ -174,8 +174,8 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case key.Matches(msg, keys.ExpandThinking):
-		m.thinkingExpanded = !m.thinkingExpanded
+	case key.Matches(msg, keys.Expand):
+		m.expanded = !m.expanded
 		m.session.invalidateRenderAll()
 		m.updateViewportContent()
 		return m, nil

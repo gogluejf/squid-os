@@ -32,7 +32,9 @@ type ToolCall struct {
 	Function struct {
 		Name string `json:"name"`
 		Args string `json:"arguments"`
-	} `json:"function"`
+	} `json:"function,omitempty"`
+	Name     string // for internal use, not serialized to JSON
+	ArgsJSON string // raw JSON string of arguments, for internal use
 }
 
 // ChatMessage is an OpenAI-compatible message for the API request
@@ -381,6 +383,8 @@ func flushToolCalls(buffers map[int]*toolCallBuffer) []ToolCall {
 				Name string `json:"name"`
 				Args string `json:"arguments"`
 			}{Name: name, Args: args},
+			Name:     name,
+			ArgsJSON: args,
 		})
 	}
 	return result
@@ -455,6 +459,8 @@ func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []c
 							Name string `json:"name"`
 							Args string `json:"arguments"`
 						}{Name: tc.Name, Args: tc.Arguments},
+						Name:     tc.Name,
+						ArgsJSON: tc.Arguments,
 					}
 				}
 				if msg.Text == "" {

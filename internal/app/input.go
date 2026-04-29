@@ -73,8 +73,13 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.Cancel):
-		_ = config.SaveHistory(m.paths, m.history)
-		return m, tea.Quit
+		if m.textarea.Value() != "" {
+			m.textarea.SetValue("")
+		} else {
+			_ = config.SaveHistory(m.paths, m.history)
+			return m, tea.Quit
+		}
+		return m, nil
 
 	case key.Matches(msg, keys.Escape):
 		if m.cmdPalette.Visible {

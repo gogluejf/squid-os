@@ -43,7 +43,7 @@ var keys = keyMap{
 	),
 	Cancel: key.NewBinding(
 		key.WithKeys("ctrl+c"),
-		key.WithHelp("ctrl+c", "cancel / exit"),
+		key.WithHelp("ctrl+c", "clear input / quit"),
 	),
 	Help: key.NewBinding(
 		key.WithKeys("ctrl+h"),

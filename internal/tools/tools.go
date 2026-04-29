@@ -16,5 +16,6 @@ func GetTools() []Tool {
 		WriteFile,
 		EditFile,
 		Bash,
+		Open,
 	}
 }

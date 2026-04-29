@@ -55,6 +55,7 @@ func (ss *streamState) reset() {
 	ss.cancelFn = nil
 	ss.ch = nil
 	ss.userCancelled = false
+	ss.pendingTools = nil
 }
 
 // setStreamMode initializes the stream state for a new request.

@@ -173,4 +173,10 @@ var (
 				Background(lipgloss.Color("233")).
 				Foreground(lipgloss.Color("242")).
 				Padding(0, 2)
+
+	// Tool call overflow output
+	ToolCallErrorStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("233")).
+				Foreground(lipgloss.Color("196")).
+				Padding(0, 2)
 )

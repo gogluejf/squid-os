@@ -16,13 +16,16 @@ import (
 
 // StreamEvent is sent for each SSE chunk during inference
 type StreamEvent struct {
-	Text       string     // visible delta text
-	Thinking   string     // thinking delta text
-	InThinking bool       // currently inside think block
-	Done       bool       // stream finished
-	StopReason string     // from the final chunk
-	Error      error      // non-nil on error
-	ToolCalls  []ToolCall // non-nil when model requests tool calls
+	Text          string     // visible delta text
+	Thinking      string     // thinking delta text
+	InThinking    bool       // currently inside think block
+	Done          bool       // stream finished
+	StopReason    string     // from the final chunk
+	Error         error      // non-nil on error
+	ToolCalls     []ToolCall // non-nil when model requests tool calls (flush at end)
+	ToolCallDelta string     // incremental arg fragment for timing/token tracking
+	ToolCallIdx   int        // tool call index this delta belongs to
+	ToolCallName  string     // accumulated name so far for this tool call
 }
 
 // ToolCall represents a single tool call from the model.
@@ -288,8 +291,13 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 					if name, ok := tc.Function["name"].(string); ok {
 						buf.NameBuf.WriteString(name)
 					}
-					if args, ok := tc.Function["arguments"].(string); ok {
+					if args, ok := tc.Function["arguments"].(string); ok && args != "" {
 						buf.ArgsBuf.WriteString(args)
+						ch <- StreamEvent{
+							ToolCallDelta: args,
+							ToolCallIdx:   tc.Index,
+							ToolCallName:  buf.NameBuf.String(),
+						}
 					}
 				}
 			}

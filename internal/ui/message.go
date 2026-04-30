@@ -101,17 +101,8 @@ func stripNewlines(s string) string {
 }
 
 // formatToolStats returns the inline stats string for a completed tool call.
-// tok/s only shown when duration >= 1s (sub-second tools would produce absurd numbers).
 func formatToolStats(tc config.ToolCallEntry) string {
-	var callPart string
-	if tc.DurationMs >= 1000 && tc.TokensPerSec > 0 {
-		callPart = fmt.Sprintf("call: %.1f tok/s %s %d tokens", tc.TokensPerSec, formatDuration(tc.DurationMs), tc.CallTokens)
-	} else if tc.DurationMs > 0 {
-		callPart = fmt.Sprintf("call: %s %d tokens", formatDuration(tc.DurationMs), tc.CallTokens)
-	} else {
-		callPart = fmt.Sprintf("call: %d tokens", tc.CallTokens)
-	}
-	return callPart + ", result: " + fmt.Sprintf("%d tokens", tc.ResultTokens)
+	return fmt.Sprintf("call: %d tokens, result: %d tokens", tc.CallTokens, tc.ResultTokens)
 }
 
 // toolLineBg is a plain background style used as a width wrapper for composed tool lines.
@@ -132,6 +123,10 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 			if expanded {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Arguments) + "\n"))
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Error + "\n"))
+				if tc.Result != "" && tc.Result != tc.Error {
+					b.WriteString(ToolCallResultStyle.Width(width).Render("\nResult:\n" + tc.Result + "\n"))
+				}
+
 			}
 		} else if tc.Result != "" {
 			checkAndResult := ToolCheckInline.Render(" ✓ " + stripNewlines(truncate(tc.Result, 30)))
@@ -219,6 +214,8 @@ type StreamingViewData struct {
 type StreamingToolCall struct {
 	Name      string
 	Arguments string
+	Tokens    int           // aggregate from metrics.ToolCallTokens()
+	Duration  time.Duration // aggregate from metrics.ToolCallDuration()
 }
 
 // RenderStreamingMessage renders the in-progress streaming message.
@@ -281,8 +278,17 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	if len(data.PendingTools) > 0 {
 		for _, tc := range data.PendingTools {
 			argsDisplay := stripNewlines(truncate(tc.Arguments, 50))
-			line := fmt.Sprintf(" ↳ %s(%s)", tc.Name, argsDisplay)
-			b.WriteString(ToolCallStyle.Width(bodyWidth).Render("\n" + line + "\n"))
+			namePart := ToolCallInline.Render(" ↳ " + tc.Name + "(" + argsDisplay + ")")
+			var statPart string
+			if tc.Duration > 0 {
+				statPart = ToolStatInline.Render(fmt.Sprintf("  %d tokens  %s", tc.Tokens, formatDuration(tc.Duration.Milliseconds())))
+			} else if tc.Tokens > 0 {
+				statPart = ToolStatInline.Render(fmt.Sprintf("  %d tokens", tc.Tokens))
+			}
+			b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + namePart + statPart + "\n"))
+			if data.Expanded && tc.Arguments != "" {
+				b.WriteString(ToolCallResultStyle.Width(bodyWidth).Render("\n" + tc.Arguments + "\n"))
+			}
 		}
 	}
 	return b.String()

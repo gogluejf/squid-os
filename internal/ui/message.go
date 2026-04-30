@@ -61,7 +61,7 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 		if msg.ThinkingText != "" {
 			thinkStyle := ThinkingStyle.Width(bodyWidth)
 			b.WriteString("\n")
-			thinkLabel := " thinking " + tokenChipDown(msg.ThinkingTokens, msg.ThinkingDurationMs)
+			thinkLabel := " thinking " + tokenChipDown(msg.ThinkingTokens, &msg.ThinkingDurationMs)
 			if expanded {
 				b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 				b.WriteString(thinkStyle.Render(msg.ThinkingText + "\n"))
@@ -97,7 +97,7 @@ func stripNewlines(s string) string {
 
 // formatToolStats returns the inline stats chips for a completed tool call.
 func formatToolStats(tc config.ToolCallEntry) string {
-	return tokenChipBoth(tc.CallTokens, tc.ResultTokens, tc.CallDurationMs, 0)
+	return tokenChipBoth(tc.CallTokens, tc.ResultTokens, &tc.CallDurationMs, &tc.ResultDurationMs)
 }
 
 // toolLineBg is a plain background style used as a width wrapper for composed tool lines.
@@ -158,7 +158,7 @@ func renderHeader(msg config.Message, width int) string {
 	}
 	if msg.Role == "user" {
 		if msg.UserTokens > 0 {
-			right = append(right, dim.Render(tokenChipUp(msg.UserTokens, 0)))
+			right = append(right, dim.Render(tokenChipUp(msg.UserTokens, nil)))
 		}
 	} else {
 		if msg.TokensPerSecond > 0 {
@@ -236,7 +236,8 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	// Thinking block — shown when thinking text exists or we're in thinking mode
 	if data.ThinkingText != "" || data.InThinking {
 		thinkStyle := ThinkingStyle.Width(bodyWidth)
-		thinkLabel := " thinking " + tokenChipDown(data.ThinkingTokens, data.ThinkingDur.Milliseconds())
+		dur := data.ThinkingDur.Milliseconds()
+		thinkLabel := " thinking " + tokenChipDown(data.ThinkingTokens, &dur)
 		if data.Expanded {
 			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 			if data.ThinkingText != "" {
@@ -271,7 +272,8 @@ func RenderStreamingMessage(data StreamingViewData) string {
 			namePart := ToolCallInline.Render(" ↳ " + tc.Name + "(" + argsDisplay + ")")
 			var statPart string
 			if tc.Tokens > 0 || tc.Duration > 0 {
-				statPart = ToolStatInline.Render("  " + tokenChipDown(tc.Tokens, tc.Duration.Milliseconds()))
+				dur := tc.Duration.Milliseconds()
+				statPart = ToolStatInline.Render("  " + tokenChipDown(tc.Tokens, &dur))
 			}
 			b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + namePart + statPart + "\n"))
 			if data.Expanded && tc.Arguments != "" {
@@ -308,24 +310,25 @@ func renderStreamingHeader(data StreamingViewData) string {
 	return AssistantHeaderStyle.Width(data.Width).Render("\n" + header + "\n")
 }
 
-func tokenChipDown(n int, durMs int64) string {
+func tokenChipDown(n int, durMs *int64) string {
 	s := "·↓" + formatTokens(n)
-	if durMs > 0 {
-		s += " " + formatDuration(durMs)
+	if durMs != nil {
+		s += " " + formatDuration(*durMs)
 	}
 	return s + "·"
 }
 
-func tokenChipUp(n int, durMs int64) string {
+func tokenChipUp(n int, durMs *int64) string {
 	s := "·↑" + formatTokens(n)
-	if durMs > 0 {
-		s += " " + formatDuration(durMs)
+	if durMs != nil {
+		s += " " + formatDuration(*durMs)
 	}
 	return s + "·"
 }
 
 // tokenChipBoth builds ·↓downN[/↑upN][ downDur[/upDur]]·
-func tokenChipBoth(downN, upN int, downDurMs, upDurMs int64) string {
+// dur pointers: nil means "don't show", &val means "show val" (including 0).
+func tokenChipBoth(downN, upN int, downDurMs *int64, upDurMs *int64) string {
 	s := "·"
 	if downN > 0 {
 		s += "↓" + formatTokens(downN)
@@ -336,16 +339,17 @@ func tokenChipBoth(downN, upN int, downDurMs, upDurMs int64) string {
 		}
 		s += "↑" + formatTokens(upN)
 	}
-	if downDurMs > 0 || upDurMs > 0 {
+	showDur := downDurMs != nil || upDurMs != nil
+	if showDur {
 		s += " "
-		if downDurMs > 0 {
-			s += formatDuration(downDurMs)
+		if downDurMs != nil {
+			s += formatDuration(*downDurMs)
 		}
-		if upDurMs > 0 {
-			if downDurMs > 0 {
+		if upDurMs != nil {
+			if downDurMs != nil {
 				s += "/"
 			}
-			s += formatDuration(upDurMs)
+			s += formatDuration(*upDurMs)
 		}
 	}
 	return s + "·"
@@ -363,6 +367,9 @@ func formatTokens(n int) string {
 }
 
 func formatDuration(ms int64) string {
+	if ms == 0 {
+		return "<1ms"
+	}
 	if ms < 1000 {
 		return fmt.Sprintf("%dms", ms)
 	}

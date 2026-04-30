@@ -358,8 +358,10 @@ func (m *Model) executeTools(toolCalls []chat.ToolCall) {
 			_ = json.Unmarshal([]byte(tc.Function.Args), &args)
 		}
 
+		resultStart := time.Now()
 		result, err := tool.Execute(args)
 		resultTokens := countTokensApprox(result)
+		resultDurMs := time.Since(resultStart).Milliseconds()
 
 		if err != nil {
 			toolResults = append(toolResults, config.ToolResultEntry{
@@ -386,6 +388,7 @@ func (m *Model) executeTools(toolCalls []chat.ToolCall) {
 						}
 						msg.ToolCalls[j].Result = result
 						msg.ToolCalls[j].ResultTokens = resultTokens
+						msg.ToolCalls[j].ResultDurationMs = resultDurMs
 						break
 					}
 				}

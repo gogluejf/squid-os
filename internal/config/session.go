@@ -39,6 +39,7 @@ type ToolCallEntry struct {
 	CallTokens     int   `json:"call_tokens,omitempty"`
 	CallDurationMs int64 `json:"call_duration_ms,omitempty"`
 	ResultTokens   int   `json:"result_tokens,omitempty"`
+	ResultDurationMs int64 `json:"result_duration_ms"`
 }
 
 type ToolResultEntry struct {

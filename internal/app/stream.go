@@ -17,25 +17,31 @@ import (
 )
 
 // partialTool holds the streaming-in-progress state for a single tool call.
+// It is the single source of truth — populated incrementally from ToolCallDelta
+// events and enriched with ID/Type from the ToolCalls flush event.
 type partialTool struct {
-	name string
-	args string // accumulated arg chars so far
+	id      string
+	typeStr string
+	name    string
+	args    string
+	chars   int
+	firstAt time.Time
+	doneAt  time.Time
 }
 
 // streamState bundles all transient fields for an active inference stream.
 type streamState struct {
-	text          string
-	thinking      string
-	inThinking    bool
-	active        bool
-	markdown      string // glamour cache for completed lines
-	markdownEnd   int
-	metrics       StreamMetrics
-	cancelFn      context.CancelFunc
-	ch            <-chan chat.StreamEvent
-	userCancelled bool            // true if user pressed cancel
-	pendingTools  []chat.ToolCall // accumulated tool calls across stream events (flush at end)
-	partialTools  []partialTool   // live partial state during arg streaming, indexed by tool call index
+	text         string
+	thinking     string
+	inThinking   bool
+	active       bool
+	markdown     string // glamour cache for completed lines
+	markdownEnd  int
+	metrics      StreamMetrics
+	cancelFn     context.CancelFunc
+	ch           <-chan chat.StreamEvent
+	userCancelled bool
+	partialTools  []partialTool // live state during arg streaming, indexed by tool call index
 }
 
 // AddTextChunk appends text and updates metrics.
@@ -67,7 +73,6 @@ func (ss *streamState) reset() {
 	ss.cancelFn = nil
 	ss.ch = nil
 	ss.userCancelled = false
-	ss.pendingTools = nil
 	ss.partialTools = nil
 }
 
@@ -181,8 +186,20 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		}
 
 		// Tool calls: save assistant msg, execute tools synchronously, resume streaming
-		if event.StopReason == "tool_calls" && len(m.stream.pendingTools) > 0 {
-			pendingTools := m.stream.pendingTools // capture before reset
+		if event.StopReason == "tool_calls" && len(m.stream.partialTools) > 0 {
+			// Build ToolCall slice from partialTools (single source of truth)
+			toolCalls := make([]chat.ToolCall, len(m.stream.partialTools))
+			for i, p := range m.stream.partialTools {
+				toolCalls[i] = chat.ToolCall{
+					ID:   p.id,
+					Type: p.typeStr,
+					Function: struct {
+						Name string `json:"name"`
+						Args string `json:"arguments"`
+					}{Name: p.name, Args: p.args},
+				}
+			}
+
 			assistantMsg := config.Message{
 				ID:                         fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 				Role:                       "assistant",
@@ -200,24 +217,25 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				DurationTimeMs:             m.stream.metrics.Duration().Milliseconds(),
 				TimeToFirstTokenMs:         m.stream.metrics.TimeToFirstToken().Milliseconds(),
 				StopReason:                 event.StopReason,
-				ToolCalls:                  make([]config.ToolCallEntry, len(pendingTools)),
+				ToolCalls:                  make([]config.ToolCallEntry, len(m.stream.partialTools)),
 			}
-			for i, tc := range pendingTools {
+			for i, p := range m.stream.partialTools {
 				assistantMsg.ToolCalls[i] = config.ToolCallEntry{
-					ID:         tc.ID,
-					Type:       tc.Type,
-					Name:       tc.Function.Name,
-					Arguments:  tc.Function.Args,
-					CallTokens: countTokensApprox(tc.Function.Args),
+					ID:             p.id,
+					Type:           p.typeStr,
+					Name:           p.name,
+					Arguments:      p.args,
+					CallTokens:     countTokensApprox(p.args),
+					CallDurationMs: p.doneAt.Sub(p.firstAt).Milliseconds(),
 				}
 			}
 			assistantMsg.ToolCallTokens = m.stream.metrics.ToolCallTokens()
-			assistantMsg.ToolCallStreamDurationMs = m.stream.metrics.ToolCallDuration().Milliseconds()
-			assistantMsg.ToolCallTimeToFirstMs = m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()
+			assistantMsg.ToolCallDurationMs = m.stream.metrics.ToolCallDuration().Milliseconds()
+			assistantMsg.ToolCallTimeToFirstTokenMs = m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()
 			m.session.appendMsg(assistantMsg)
 
 			// Execute tools inline - they're fast I/O ops
-			(&m).executeTools(pendingTools)
+			(&m).executeTools(toolCalls)
 
 			m.stream.reset()
 			m.updateViewportContent()
@@ -254,12 +272,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		return nm, tea.Batch(blinkCmd, autoSaveCmd)
 	}
 
-	// ToolCallDelta: update metrics and partial display state, but skip
-	// viewport update (streamTickCmd handles periodic display; delta-only
-	// events don't change any visible content except the partial tool line).
+	// ToolCallDelta: accumulate per-tool state and update display.
 	if event.ToolCallDelta != "" {
 		m.stream.AddToolCallChunk(event.ToolCallDelta)
-		// Extend slice to fit this tool call index
 		for len(m.stream.partialTools) <= event.ToolCallIdx {
 			m.stream.partialTools = append(m.stream.partialTools, partialTool{})
 		}
@@ -268,6 +283,10 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			p.name = event.ToolCallName
 		}
 		p.args += event.ToolCallDelta
+		p.chars += len(event.ToolCallDelta)
+		if p.firstAt.IsZero() {
+			p.firstAt = time.Now()
+		}
 		// End thinking phase if still active (model moved on to tool calls)
 		if m.stream.inThinking {
 			m.stream.metrics.MarkThinkingDone()
@@ -276,8 +295,17 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		m.updateViewportContent()
 		return m, waitForStreamEvent(m.stream.ch)
 	}
+
+	// ToolCalls flush: enrich partialTools with ID/Type and mark done.
 	if len(event.ToolCalls) > 0 {
-		m.stream.pendingTools = append(m.stream.pendingTools, event.ToolCalls...)
+		now := time.Now()
+		for i, tc := range event.ToolCalls {
+			if i < len(m.stream.partialTools) {
+				m.stream.partialTools[i].id = tc.ID
+				m.stream.partialTools[i].typeStr = tc.Type
+				m.stream.partialTools[i].doneAt = now
+			}
+		}
 		m.stream.metrics.MarkToolCallDone()
 	}
 	if event.Text != "" {
@@ -354,7 +382,6 @@ func (m *Model) executeTools(toolCalls []chat.ToolCall) {
 				for j, tce := range msg.ToolCalls {
 					if tce.ID == tc.ID {
 						if err != nil {
-
 							msg.ToolCalls[j].Error = err.Error()
 						}
 						msg.ToolCalls[j].Result = result

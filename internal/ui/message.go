@@ -102,6 +102,10 @@ func stripNewlines(s string) string {
 
 // formatToolStats returns the inline stats string for a completed tool call.
 func formatToolStats(tc config.ToolCallEntry) string {
+	if tc.CallDurationMs > 0 {
+		return fmt.Sprintf("call: %d tokens %s, result: %d tokens",
+			tc.CallTokens, formatDuration(tc.CallDurationMs), tc.ResultTokens)
+	}
 	return fmt.Sprintf("call: %d tokens, result: %d tokens", tc.CallTokens, tc.ResultTokens)
 }
 

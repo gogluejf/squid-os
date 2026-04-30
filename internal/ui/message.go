@@ -66,7 +66,7 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 				b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 				b.WriteString(thinkStyle.Render(msg.ThinkingText + "\n"))
 			} else {
-				b.WriteString(thinkStyle.Render("\n" + thinkLabel + ", ctrl+e to expand" + "\n"))
+				b.WriteString(thinkStyle.Render("\n" + thinkLabel))
 			}
 		}
 
@@ -117,7 +117,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndErr + stats + "\n"))
 			if expanded {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Arguments) + "\n"))
-				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Error + "\n"))
+				b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + tc.Error + "\n"))
 				if tc.Result != "" && tc.Result != tc.Error {
 					b.WriteString(ToolCallResultStyle.Width(width).Render("\nResult:\n" + tc.Result + "\n"))
 				}
@@ -247,7 +247,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 			}
 		} else {
 			// Collapsed: only show the label, NOT the thinking text
-			b.WriteString(thinkStyle.Render("\n" + thinkLabel + ", ctrl+e to expand" + "\n"))
+			b.WriteString(thinkStyle.Render("\n" + thinkLabel))
 		}
 	}
 

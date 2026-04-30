@@ -30,18 +30,14 @@ type Session struct {
 }
 
 type ToolCallEntry struct {
-	ID                 string  `json:"id"`
-	Type               string  `json:"type"`
-	Name               string  `json:"name"`
-	Arguments          string  `json:"arguments"`
-	Result             string  `json:"result,omitempty"`
-	Error              string  `json:"error,omitempty"`
-	CallTokens         int     `json:"call_tokens,omitempty"`
-	TokensPerSec       float64 `json:"tokens_per_sec,omitempty"`
-	DurationMs         int64   `json:"duration_ms,omitempty"`
-	TimeToFirsTokentMs int64   `json:"time_to_first_ms,omitempty"`
-
-	ResultTokens int `json:"result_tokens,omitempty"`
+	ID           string `json:"id"`
+	Type         string `json:"type"`
+	Name         string `json:"name"`
+	Arguments    string `json:"arguments"`
+	Result       string `json:"result,omitempty"`
+	Error        string `json:"error,omitempty"`
+	CallTokens   int    `json:"call_tokens,omitempty"`   // tokens for args (len/4)
+	ResultTokens int    `json:"result_tokens,omitempty"` // tokens in result
 }
 
 type ToolResultEntry struct {
@@ -80,6 +76,11 @@ type Message struct {
 
 	//tool request
 	ToolCalls []ToolCallEntry `json:"tool_calls,omitempty"`
+
+	// Aggregate streaming metrics for this message's tool call generation
+	ToolCallTokens             int   `json:"tool_call_tokens,omitempty"`
+	ToolCallDurationMs         int64 `json:"tool_call_stream_duration_ms,omitempty"`
+	ToolCallTimeToFirstTokenMs int64 `json:"tool_call_time_to_first_ms,omitempty"`
 
 	//tool Choice message fields ( role tool)
 	ToolResults []ToolResultEntry `json:"tool_results,omitempty"`

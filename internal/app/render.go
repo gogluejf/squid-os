@@ -98,11 +98,32 @@ func (m *Model) updateViewportContent() {
 		if lastNL >= 0 {
 			partial = m.stream.text[lastNL+1:]
 		}
-		pendingTools := make([]ui.StreamingToolCall, len(m.stream.pendingTools))
-		for i, tc := range m.stream.pendingTools {
-			pendingTools[i] = ui.StreamingToolCall{
-				Name:      tc.Function.Name,
-				Arguments: tc.Function.Args,
+
+		toolTokens := m.stream.metrics.ToolCallTokens()
+		toolDur := m.stream.metrics.ToolCallDuration()
+		var pendingTools []ui.StreamingToolCall
+		if len(m.stream.pendingTools) > 0 {
+			// Final flushed tool calls (just before Done)
+			pendingTools = make([]ui.StreamingToolCall, len(m.stream.pendingTools))
+			for i, tc := range m.stream.pendingTools {
+				pendingTools[i] = ui.StreamingToolCall{
+					Name:      tc.Function.Name,
+					Arguments: tc.Function.Args,
+					Tokens:    toolTokens,
+					Duration:  toolDur,
+				}
+			}
+		} else {
+			// Partial state during live arg streaming
+			for _, p := range m.stream.partialTools {
+				if p.name != "" {
+					pendingTools = append(pendingTools, ui.StreamingToolCall{
+						Name:      p.name,
+						Arguments: p.args,
+						Tokens:    toolTokens,
+						Duration:  toolDur,
+					})
+				}
 			}
 		}
 		b.WriteString(ui.RenderStreamingMessage(ui.StreamingViewData{

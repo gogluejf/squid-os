@@ -13,6 +13,9 @@ type StreamMetrics struct {
 	firstTextTokenAt     time.Time
 	thinkingChars        int // private — updated by streamState
 	textChars            int
+	firstToolCallTokenAt time.Time
+	toolCallDoneAt       time.Time
+	toolCallChars        int
 }
 
 // MarkThinkingDone records the time when thinking mode ends.
@@ -22,7 +25,7 @@ func (m *StreamMetrics) MarkThinkingDone() {
 
 // HasFirstToken returns true if at least one token (text or thinking) has arrived.
 func (m StreamMetrics) HasFirstToken() bool {
-	return !m.firstThinkingTokenAt.IsZero() || !m.firstTextTokenAt.IsZero()
+	return !m.firstThinkingTokenAt.IsZero() || !m.firstTextTokenAt.IsZero() || !m.firstToolCallTokenAt.IsZero()
 }
 
 // TextTokens returns the approximate token count for text characters.
@@ -37,7 +40,37 @@ func (m StreamMetrics) ThinkingTokens() int {
 
 // TotalTokens returns the combined approximate token count.
 func (m StreamMetrics) TotalTokens() int {
-	return countTokensApproxInt(m.thinkingChars + m.textChars)
+	return countTokensApproxInt(m.thinkingChars + m.textChars + m.toolCallChars)
+}
+
+// ToolCallTokens returns the approximate token count for tool call argument characters.
+func (m StreamMetrics) ToolCallTokens() int {
+	return countTokensApproxInt(m.toolCallChars)
+}
+
+// MarkToolCallDone records when the model finished streaming tool call arguments.
+func (m *StreamMetrics) MarkToolCallDone() {
+	m.toolCallDoneAt = time.Now()
+}
+
+// ToolCallDuration returns the duration from the first tool call delta to when it was done.
+func (m StreamMetrics) ToolCallDuration() time.Duration {
+	if m.firstToolCallTokenAt.IsZero() {
+		return 0
+	}
+	end := m.toolCallDoneAt
+	if end.IsZero() {
+		end = time.Now()
+	}
+	return end.Sub(m.firstToolCallTokenAt)
+}
+
+// TimeToFirstToolCallToken returns the time from stream start to the first tool call delta.
+func (m StreamMetrics) TimeToFirstToolCallToken() time.Duration {
+	if m.firstToolCallTokenAt.IsZero() {
+		return 0
+	}
+	return m.firstToolCallTokenAt.Sub(m.Start)
 }
 
 // Duration returns the total elapsed time since the stream started.
@@ -132,6 +165,14 @@ func (m *StreamMetrics) addThinkChars(n int) {
 		m.firstThinkingTokenAt = time.Now()
 	}
 	m.thinkingChars += n
+}
+
+// addToolCallChars adds character count to toolCallChars and records firstToolCallTokenAt on first call.
+func (m *StreamMetrics) addToolCallChars(n int) {
+	if m.toolCallChars == 0 && n > 0 {
+		m.firstToolCallTokenAt = time.Now()
+	}
+	m.toolCallChars += n
 }
 
 // countTokensApproxInt estimates token count from a character count.

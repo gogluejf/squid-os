@@ -98,6 +98,13 @@ func (m *Model) updateViewportContent() {
 		if lastNL >= 0 {
 			partial = m.stream.text[lastNL+1:]
 		}
+		pendingTools := make([]ui.StreamingToolCall, len(m.stream.pendingTools))
+		for i, tc := range m.stream.pendingTools {
+			pendingTools[i] = ui.StreamingToolCall{
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Args,
+			}
+		}
 		b.WriteString(ui.RenderStreamingMessage(ui.StreamingViewData{
 			RenderedMarkdown: m.stream.markdown,
 			Partial:          partial,
@@ -112,6 +119,7 @@ func (m *Model) updateViewportContent() {
 			TextDur:          m.stream.metrics.TextDuration(),
 			TokPerSec:        m.stream.metrics.AvgTokenPerSec(),
 			Waiting:          !m.stream.metrics.HasFirstToken(),
+			PendingTools:     pendingTools,
 		}))
 	}
 

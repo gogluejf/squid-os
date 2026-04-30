@@ -30,12 +30,18 @@ type Session struct {
 }
 
 type ToolCallEntry struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
-	Result    string `json:"result,omitempty"` // to display inline with assistant message if available, otherwise will be in a separate tool result message
-	Error     string `json:"error,omitempty"` // to display inline with assistant message if available, otherwise will be in a separate tool result message
+	ID                 string  `json:"id"`
+	Type               string  `json:"type"`
+	Name               string  `json:"name"`
+	Arguments          string  `json:"arguments"`
+	Result             string  `json:"result,omitempty"`
+	Error              string  `json:"error,omitempty"`
+	CallTokens         int     `json:"call_tokens,omitempty"`
+	TokensPerSec       float64 `json:"tokens_per_sec,omitempty"`
+	DurationMs         int64   `json:"duration_ms,omitempty"`
+	TimeToFirsTokentMs int64   `json:"time_to_first_ms,omitempty"`
+
+	ResultTokens int `json:"result_tokens,omitempty"`
 }
 
 type ToolResultEntry struct {

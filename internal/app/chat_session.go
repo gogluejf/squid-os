@@ -143,6 +143,9 @@ func (cs *chatSession) totalTokens() int {
 	// in the current active inference.
 	for _, msg := range cs.file.Messages {
 		total += msg.UserTokens + msg.TextTokens
+		for _, tc := range msg.ToolCalls {
+			total += tc.CallTokens + tc.ResultTokens
+		}
 	}
 	return total
 }

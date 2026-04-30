@@ -146,15 +146,31 @@ var (
 			Foreground(lipgloss.Color("110")).
 			Padding(0, 1)
 
+	// Inline styles for composing segments inside a tool line wrapper.
+	// Must carry the same background (233) so embedded ANSI resets don't
+	// punch holes in the background row — same pattern as AssistantHeaderDimStyle.
+	ToolCallInline = lipgloss.NewStyle().
+			Background(lipgloss.Color("233")).
+			Foreground(lipgloss.Color("110"))
+
+	// Tool checkmark + result text — dark green
+	ToolCheckInline = lipgloss.NewStyle().
+			Background(lipgloss.Color("233")).
+			Foreground(lipgloss.Color("22"))
+
+	// Tool error checkmark + error text — red
+	ToolErrInline = lipgloss.NewStyle().
+			Background(lipgloss.Color("233")).
+			Foreground(lipgloss.Color("196"))
+
+	// Tool stats suffix — dim gray
+	ToolStatInline = lipgloss.NewStyle().
+			Background(lipgloss.Color("233")).
+			Foreground(lipgloss.Color("242"))
+
 	// Tool call overflow output
 	ToolCallResultStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("233")).
-			Foreground(lipgloss.Color("242")).
-			Padding(0, 2)
-
-	// Tool call error line
-	ToolCallErrorStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("233")).
-			Foreground(lipgloss.Color("196")).
-			Padding(0, 1)
+				Background(lipgloss.Color("233")).
+				Foreground(lipgloss.Color("242")).
+				Padding(0, 2)
 )

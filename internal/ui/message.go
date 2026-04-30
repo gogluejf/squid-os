@@ -29,48 +29,57 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 		return ""
 	}
 
+	hasTools := len(msg.ToolCalls) > 0
+
+	// Determine if we should skip header/body: no text AND no thinking but has tools.
+	skipBody := msg.Role == "assistant" && msg.Text == "" && msg.ThinkingText == "" && hasTools
+
 	// Header line: date left, metadata right
-	header := renderHeader(msg, bubbleWidth)
-	b.WriteString(header)
-
-	// Message body
-	style := AssistantMsgStyle
-	if msg.Role == "user" {
-		style = UserMsgStyle
-	}
-	style = style.Width(bodyWidth)
-
-	body := msg.Text
-	if body == "" && msg.Role == "assistant" {
-		body = "..."
+	if !skipBody {
+		header := renderHeader(msg, bubbleWidth)
+		b.WriteString(header)
 	}
 
-	if msg.Role == "assistant" {
-		body = RenderMarkdownOnBg(body, "233")
-	}
-
-	// Thinking block (collapsed/expanded) — must come BEFORE text
-	if msg.ThinkingText != "" {
-		thinkStyle := ThinkingStyle.Width(bodyWidth)
-		b.WriteString("\n")
-		var thinkLabel string
-		if msg.ThinkingDurationMs > 0 {
-			thinkLabel = fmt.Sprintf(" thinking (%d tokens, %s)", msg.ThinkingTokens, formatDuration(msg.ThinkingDurationMs))
-		} else {
-			thinkLabel = fmt.Sprintf(" thinking (%d tokens)", msg.ThinkingTokens)
+	// Message body & thinking
+	if !skipBody {
+		style := AssistantMsgStyle
+		if msg.Role == "user" {
+			style = UserMsgStyle
 		}
-		if expanded {
-			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
-			b.WriteString(thinkStyle.Render(msg.ThinkingText + "\n"))
-		} else {
-			b.WriteString(thinkStyle.Render("\n" + thinkLabel + ", ctrl+e to expand" + "\n"))
-		}
-	}
+		style = style.Width(bodyWidth)
 
-	b.WriteString(style.Render("\n" + body + "\n"))
+		body := msg.Text
+		if body == "" && msg.Role == "assistant" {
+			body = "..."
+		}
+
+		if msg.Role == "assistant" {
+			body = RenderMarkdownOnBg(body, "233")
+		}
+
+		// Thinking block (collapsed/expanded) — must come BEFORE text
+		if msg.ThinkingText != "" {
+			thinkStyle := ThinkingStyle.Width(bodyWidth)
+			b.WriteString("\n")
+			var thinkLabel string
+			if msg.ThinkingDurationMs > 0 {
+				thinkLabel = fmt.Sprintf(" thinking (%d tokens, %s)", msg.ThinkingTokens, formatDuration(msg.ThinkingDurationMs))
+			} else {
+				thinkLabel = fmt.Sprintf(" thinking (%d tokens)", msg.ThinkingTokens)
+			}
+			if expanded {
+				b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
+				b.WriteString(thinkStyle.Render(msg.ThinkingText + "\n"))
+			} else {
+				b.WriteString(thinkStyle.Render("\n" + thinkLabel + ", ctrl+e to expand" + "\n"))
+			}
+		}
+
+		b.WriteString(style.Render("\n" + body + "\n"))
+	}
 
 	// Tool calls: render as inline lines with results
-	if msg.ToolCalls != nil && len(msg.ToolCalls) > 0 {
+	if hasTools {
 		b.WriteString(renderToolCallsInline(msg.ToolCalls, bubbleWidth, expanded))
 	}
 
@@ -86,64 +95,55 @@ func truncate(s string, max int) string {
 	return s
 }
 
-// renderToolCallsInline renders tool call lines.
+// stripNewlines replaces newlines with spaces for clean single-line display.
+func stripNewlines(s string) string {
+	return strings.ReplaceAll(s, "\n", " ")
+}
+
+// formatToolStats returns the inline stats string for a completed tool call.
+// tok/s only shown when duration >= 1s (sub-second tools would produce absurd numbers).
+func formatToolStats(tc config.ToolCallEntry) string {
+	var callPart string
+	if tc.DurationMs >= 1000 && tc.TokensPerSec > 0 {
+		callPart = fmt.Sprintf("call: %.1f tok/s %s %d tokens", tc.TokensPerSec, formatDuration(tc.DurationMs), tc.CallTokens)
+	} else if tc.DurationMs > 0 {
+		callPart = fmt.Sprintf("call: %s %d tokens", formatDuration(tc.DurationMs), tc.CallTokens)
+	} else {
+		callPart = fmt.Sprintf("call: %d tokens", tc.CallTokens)
+	}
+	return callPart + ", result: " + fmt.Sprintf("%d tokens", tc.ResultTokens)
+}
+
+// toolLineBg is a plain background style used as a width wrapper for composed tool lines.
+// Inline segments only set foreground — the wrapper provides background and padding.
+var toolLineBg = lipgloss.NewStyle().Background(lipgloss.Color("233")).Padding(0, 1)
+
+// renderToolCallsInline renders tool call lines with timing/token stats.
 func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded bool) string {
 	var b strings.Builder
 	for _, tc := range toolCalls {
-		args := truncate(tc.Arguments, 50)
-		line := fmt.Sprintf(" ↳ %s(%s)", tc.Name, args)
+		argsDisplay := stripNewlines(truncate(tc.Arguments, 50))
+		namePart := ToolCallInline.Render(" ↳ " + tc.Name + "(" + argsDisplay + ")")
 
 		if tc.Error != "" {
-			if len(tc.Error) > 30 {
-				if expanded {
-					line += " ✗"
-					b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + line + "\n"))
-					b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Error + "\n"))
-				} else {
-					line += " ✗ " + truncate(tc.Error, 30) + ", ctrl+e to expand"
-					b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + line + "\n"))
-				}
-			} else {
-				line += " ✗ " + tc.Error
-				b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + line + "\n"))
+			checkAndErr := ToolErrInline.Render(" ✗ " + stripNewlines(truncate(tc.Error, 30)))
+			stats := ToolStatInline.Render(" (" + formatToolStats(tc) + ")")
+			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndErr + stats + "\n"))
+			if expanded {
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Arguments) + "\n"))
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Error + "\n"))
 			}
 		} else if tc.Result != "" {
-			if len(tc.Result) > 30 {
-				if expanded {
-					line += " ✓"
-					b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
-					b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Result + "\n"))
-				} else {
-					line += " ✓ " + truncate(tc.Result, 30) + ", ctrl+e to expand"
-					b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
-				}
-			} else {
-				line += " ✓ " + tc.Result
-				b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
+			checkAndResult := ToolCheckInline.Render(" ✓ " + stripNewlines(truncate(tc.Result, 30)))
+			stats := ToolStatInline.Render(" (" + formatToolStats(tc) + ")")
+			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndResult + stats + "\n"))
+			if expanded {
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Arguments) + "\n"))
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Result + "\n"))
 			}
 		} else {
 			// No result yet (streaming, before tool execution)
-			b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
-		}
-	}
-	return b.String()
-}
-
-// not used in the moment, but could be used to render tool results that come in as separate messages (e.g. from streaming updates or if the provider doesn't support inline tool call results)
-func renderToolResults(results []config.ToolResultEntry, width int) string {
-	var b strings.Builder
-	for _, r := range results {
-		line := fmt.Sprintf("[%s: %s]", r.Name, r.ToolCallID)
-		if r.Error != "" {
-			line += " ✗ " + r.Error
-			b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + line + "\n"))
-		} else {
-			result := r.Result
-			if len(result) > 80 {
-				result = result[:80] + "..."
-			}
-			line += " ✓ " + result
-			b.WriteString(ToolCallStyle.Width(width).Render("\n" + line + "\n"))
+			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + "\n"))
 		}
 	}
 	return b.String()
@@ -210,6 +210,15 @@ type StreamingViewData struct {
 	TextDur        time.Duration
 	TokPerSec      float64
 	Waiting        bool // true when no first token has arrived yet
+
+	// Pending tool calls (streaming, before execution)
+	PendingTools []StreamingToolCall
+}
+
+// StreamingToolCall holds the display-relevant fields of a pending tool call.
+type StreamingToolCall struct {
+	Name      string
+	Arguments string
 }
 
 // RenderStreamingMessage renders the in-progress streaming message.
@@ -266,6 +275,15 @@ func RenderStreamingMessage(data StreamingViewData) string {
 		}
 		b.WriteString(style.Render("\n" + body + "\n"))
 		b.WriteString("\n")
+	}
+
+	// Pending tool calls — shown during streaming before execution
+	if len(data.PendingTools) > 0 {
+		for _, tc := range data.PendingTools {
+			argsDisplay := stripNewlines(truncate(tc.Arguments, 50))
+			line := fmt.Sprintf(" ↳ %s(%s)", tc.Name, argsDisplay)
+			b.WriteString(ToolCallStyle.Width(bodyWidth).Render("\n" + line + "\n"))
+		}
 	}
 	return b.String()
 }

@@ -15,7 +15,7 @@ func RenderHelp(width, height int) string {
 	 ` + FooterKeyStyle.Render("left alt+enter") + `   New line
 	 ` + FooterKeyStyle.Render("ctrl+c") + `           Cancel inference / exit
 	 ` + FooterKeyStyle.Render("ctrl+h") + `           Toggle this help
-	 ` + FooterKeyStyle.Render("ctrl+e") + `           Expand/collapse thinking
+	 ` + FooterKeyStyle.Render("ctrl+e") + `           Expand/collapse thinking & tool results
 	 ` + FooterKeyStyle.Render("ctrl+s") + `           Save session (edit name)
 	 ` + FooterKeyStyle.Render("ctrl+l") + `           Load session
 	 ` + FooterKeyStyle.Render("left alt+m") + `       Select model

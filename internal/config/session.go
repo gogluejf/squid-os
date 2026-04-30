@@ -36,8 +36,9 @@ type ToolCallEntry struct {
 	Arguments    string `json:"arguments"`
 	Result       string `json:"result,omitempty"`
 	Error        string `json:"error,omitempty"`
-	CallTokens   int    `json:"call_tokens,omitempty"`   // tokens for args (len/4)
-	ResultTokens int    `json:"result_tokens,omitempty"` // tokens in result
+	CallTokens     int   `json:"call_tokens,omitempty"`
+	CallDurationMs int64 `json:"call_duration_ms,omitempty"`
+	ResultTokens   int   `json:"result_tokens,omitempty"`
 }
 
 type ToolResultEntry struct {

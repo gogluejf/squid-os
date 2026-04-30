@@ -2,6 +2,7 @@ package app
 
 import (
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -99,32 +100,25 @@ func (m *Model) updateViewportContent() {
 			partial = m.stream.text[lastNL+1:]
 		}
 
-		toolTokens := m.stream.metrics.ToolCallTokens()
-		toolDur := m.stream.metrics.ToolCallDuration()
 		var pendingTools []ui.StreamingToolCall
-		if len(m.stream.pendingTools) > 0 {
-			// Final flushed tool calls (just before Done)
-			pendingTools = make([]ui.StreamingToolCall, len(m.stream.pendingTools))
-			for i, tc := range m.stream.pendingTools {
-				pendingTools[i] = ui.StreamingToolCall{
-					Name:      tc.Function.Name,
-					Arguments: tc.Function.Args,
-					Tokens:    toolTokens,
-					Duration:  toolDur,
-				}
+		for _, p := range m.stream.partialTools {
+			if p.name == "" {
+				continue
 			}
-		} else {
-			// Partial state during live arg streaming
-			for _, p := range m.stream.partialTools {
-				if p.name != "" {
-					pendingTools = append(pendingTools, ui.StreamingToolCall{
-						Name:      p.name,
-						Arguments: p.args,
-						Tokens:    toolTokens,
-						Duration:  toolDur,
-					})
+			dur := time.Duration(0)
+			if !p.firstAt.IsZero() {
+				end := p.doneAt
+				if end.IsZero() {
+					end = time.Now()
 				}
+				dur = end.Sub(p.firstAt)
 			}
+			pendingTools = append(pendingTools, ui.StreamingToolCall{
+				Name:      p.name,
+				Arguments: p.args,
+				Tokens:    countTokensApproxInt(p.chars),
+				Duration:  dur,
+			})
 		}
 		b.WriteString(ui.RenderStreamingMessage(ui.StreamingViewData{
 			RenderedMarkdown: m.stream.markdown,

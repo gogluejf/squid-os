@@ -61,12 +61,7 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 		if msg.ThinkingText != "" {
 			thinkStyle := ThinkingStyle.Width(bodyWidth)
 			b.WriteString("\n")
-			var thinkLabel string
-			if msg.ThinkingDurationMs > 0 {
-				thinkLabel = fmt.Sprintf(" thinking (%d tokens, %s)", msg.ThinkingTokens, formatDuration(msg.ThinkingDurationMs))
-			} else {
-				thinkLabel = fmt.Sprintf(" thinking (%d tokens)", msg.ThinkingTokens)
-			}
+			thinkLabel := " thinking " + tokenChipDown(msg.ThinkingTokens, msg.ThinkingDurationMs)
 			if expanded {
 				b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 				b.WriteString(thinkStyle.Render(msg.ThinkingText + "\n"))
@@ -100,13 +95,9 @@ func stripNewlines(s string) string {
 	return strings.ReplaceAll(s, "\n", " ")
 }
 
-// formatToolStats returns the inline stats string for a completed tool call.
+// formatToolStats returns the inline stats chips for a completed tool call.
 func formatToolStats(tc config.ToolCallEntry) string {
-	if tc.CallDurationMs > 0 {
-		return fmt.Sprintf("call: %d tokens %s, result: %d tokens",
-			tc.CallTokens, formatDuration(tc.CallDurationMs), tc.ResultTokens)
-	}
-	return fmt.Sprintf("call: %d tokens, result: %d tokens", tc.CallTokens, tc.ResultTokens)
+	return tokenChipBoth(tc.CallTokens, tc.ResultTokens, tc.CallDurationMs, 0)
 }
 
 // toolLineBg is a plain background style used as a width wrapper for composed tool lines.
@@ -122,7 +113,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 
 		if tc.Error != "" {
 			checkAndErr := ToolErrInline.Render(" ✗ " + stripNewlines(truncate(tc.Error, 30)))
-			stats := ToolStatInline.Render(" (" + formatToolStats(tc) + ")")
+			stats := ToolStatInline.Render(" " + formatToolStats(tc))
 			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndErr + stats + "\n"))
 			if expanded {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Arguments) + "\n"))
@@ -134,7 +125,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 			}
 		} else if tc.Result != "" {
 			checkAndResult := ToolCheckInline.Render(" ✓ " + stripNewlines(truncate(tc.Result, 30)))
-			stats := ToolStatInline.Render(" (" + formatToolStats(tc) + ")")
+			stats := ToolStatInline.Render(" " + formatToolStats(tc))
 			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndResult + stats + "\n"))
 			if expanded {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Arguments) + "\n"))
@@ -167,7 +158,7 @@ func renderHeader(msg config.Message, width int) string {
 	}
 	if msg.Role == "user" {
 		if msg.UserTokens > 0 {
-			right = append(right, dim.Render(fmt.Sprintf("%d tokens", msg.UserTokens)))
+			right = append(right, dim.Render(tokenChipUp(msg.UserTokens, 0)))
 		}
 	} else {
 		if msg.TokensPerSecond > 0 {
@@ -245,12 +236,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	// Thinking block — shown when thinking text exists or we're in thinking mode
 	if data.ThinkingText != "" || data.InThinking {
 		thinkStyle := ThinkingStyle.Width(bodyWidth)
-		var thinkLabel string
-		if data.ThinkingDur > 0 {
-			thinkLabel = fmt.Sprintf(" thinking (%d tokens, %s)", data.ThinkingTokens, formatDuration(data.ThinkingDur.Milliseconds()))
-		} else {
-			thinkLabel = fmt.Sprintf(" thinking (%d tokens)", data.ThinkingTokens)
-		}
+		thinkLabel := " thinking " + tokenChipDown(data.ThinkingTokens, data.ThinkingDur.Milliseconds())
 		if data.Expanded {
 			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 			if data.ThinkingText != "" {
@@ -284,10 +270,8 @@ func RenderStreamingMessage(data StreamingViewData) string {
 			argsDisplay := stripNewlines(truncate(tc.Arguments, 50))
 			namePart := ToolCallInline.Render(" ↳ " + tc.Name + "(" + argsDisplay + ")")
 			var statPart string
-			if tc.Duration > 0 {
-				statPart = ToolStatInline.Render(fmt.Sprintf("  %d tokens  %s", tc.Tokens, formatDuration(tc.Duration.Milliseconds())))
-			} else if tc.Tokens > 0 {
-				statPart = ToolStatInline.Render(fmt.Sprintf("  %d tokens", tc.Tokens))
+			if tc.Tokens > 0 || tc.Duration > 0 {
+				statPart = ToolStatInline.Render("  " + tokenChipDown(tc.Tokens, tc.Duration.Milliseconds()))
 			}
 			b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + namePart + statPart + "\n"))
 			if data.Expanded && tc.Arguments != "" {
@@ -322,6 +306,60 @@ func renderStreamingHeader(data StreamingViewData) string {
 
 	header := leftStr + strings.Repeat(" ", gap) + rightStr
 	return AssistantHeaderStyle.Width(data.Width).Render("\n" + header + "\n")
+}
+
+func tokenChipDown(n int, durMs int64) string {
+	s := "·↓" + formatTokens(n)
+	if durMs > 0 {
+		s += " " + formatDuration(durMs)
+	}
+	return s + "·"
+}
+
+func tokenChipUp(n int, durMs int64) string {
+	s := "·↑" + formatTokens(n)
+	if durMs > 0 {
+		s += " " + formatDuration(durMs)
+	}
+	return s + "·"
+}
+
+// tokenChipBoth builds ·↓downN[/↑upN][ downDur[/upDur]]·
+func tokenChipBoth(downN, upN int, downDurMs, upDurMs int64) string {
+	s := "·"
+	if downN > 0 {
+		s += "↓" + formatTokens(downN)
+	}
+	if upN > 0 {
+		if downN > 0 {
+			s += "/"
+		}
+		s += "↑" + formatTokens(upN)
+	}
+	if downDurMs > 0 || upDurMs > 0 {
+		s += " "
+		if downDurMs > 0 {
+			s += formatDuration(downDurMs)
+		}
+		if upDurMs > 0 {
+			if downDurMs > 0 {
+				s += "/"
+			}
+			s += formatDuration(upDurMs)
+		}
+	}
+	return s + "·"
+}
+
+// formatTokens formats a token count with k/M suffix above 1000.
+func formatTokens(n int) string {
+	if n >= 1_000_000 {
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	}
+	if n >= 1000 {
+		return fmt.Sprintf("%.1fk", float64(n)/1000)
+	}
+	return fmt.Sprintf("%d", n)
 }
 
 func formatDuration(ms int64) string {

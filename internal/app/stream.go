@@ -227,7 +227,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				TextTimeToFirstTokenMs:     m.stream.metrics.TimeToFirstTextToken().Milliseconds(),
 				TokensPerSecond:            m.stream.metrics.AvgTokenPerSec(),
 				Tokens:                     m.stream.metrics.TotalTokens(),
-				DurationTimeMs:             m.stream.metrics.Duration().Milliseconds(),
+				DurationMs:                 m.stream.metrics.Duration().Milliseconds(),
 				TimeToFirstTokenMs:         m.stream.metrics.TimeToFirstToken().Milliseconds(),
 				StopReason:                 event.StopReason,
 				ToolCallTokens:             m.stream.metrics.ToolCallTokens(),
@@ -258,7 +258,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			TextTimeToFirstTokenMs:     m.stream.metrics.TimeToFirstTextToken().Milliseconds(),
 			TokensPerSecond:            m.stream.metrics.AvgTokenPerSec(),
 			Tokens:                     m.stream.metrics.TotalTokens(),
-			DurationTimeMs:             m.stream.metrics.Duration().Milliseconds(),
+			DurationMs:                 m.stream.metrics.Duration().Milliseconds(),
 			TimeToFirstTokenMs:         m.stream.metrics.TimeToFirstToken().Milliseconds(),
 			StopReason:                 event.StopReason,
 		})

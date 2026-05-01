@@ -142,7 +142,7 @@ func (cs *chatSession) totalTokens() int {
 	// they are never sent back to the API on subsequent calls — they only exist
 	// in the current active inference.
 	for _, msg := range cs.file.Messages {
-		total += msg.UserTokens + msg.TextTokens
+		total += msg.UserTokens + msg.TextMetrics.Tokens
 		for _, tc := range msg.ToolCalls {
 			total += tc.Instruction.Tokens + tc.Execution.Tokens
 		}

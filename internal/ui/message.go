@@ -42,7 +42,7 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 	if msg.ThinkingText != "" {
 		thinkStyle := ThinkingStyle.Width(bodyWidth)
 		b.WriteString("\n")
-		thinkLabel := " thinking " + tokenChipDown(msg.ThinkingTokens, &msg.ThinkingDurationMs)
+		thinkLabel := " thinking " + tokenChipDown(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.DurationMs)
 		if expanded {
 			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 			b.WriteString(thinkStyle.Render("\n" + msg.ThinkingText))
@@ -100,11 +100,11 @@ func RenderAssistantHeader(msg config.Message, width int) string {
 	if msg.TokensPerSecond > 0 {
 		right = append(right, AssistantHeaderDimStyle.Render(fmt.Sprintf("%.1f tok/s", msg.TokensPerSecond)))
 	}
-	if msg.TextDurationMs > 0 {
-		right = append(right, AssistantHeaderDimStyle.Render(formatDuration(msg.TextDurationMs)))
+	if msg.TextMetrics.DurationMs > 0 {
+		right = append(right, AssistantHeaderDimStyle.Render(formatDuration(msg.TextMetrics.DurationMs)))
 	}
-	if msg.TextTokens > 0 {
-		right = append(right, AssistantHeaderDimStyle.Render(fmt.Sprintf("%d tokens", msg.TextTokens)))
+	if msg.TextMetrics.Tokens > 0 {
+		right = append(right, AssistantHeaderDimStyle.Render(fmt.Sprintf("%d tokens", msg.TextMetrics.Tokens)))
 	}
 
 	rightStr := strings.Join(right, AssistantHeaderDimStyle.Render("  "))

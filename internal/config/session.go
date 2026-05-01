@@ -29,6 +29,12 @@ type Session struct {
 	SystemPromptFile string `json:"system_prompt_file"`
 }
 
+type ContentMetrics struct {
+	Tokens             int   `json:"tokens,omitempty"`
+	DurationMs         int64 `json:"duration_ms,omitempty"`
+	TimeToFirstTokenMs int64 `json:"time_to_first_token_ms,omitempty"`
+}
+
 type ToolCallEntry struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
@@ -56,35 +62,21 @@ type Message struct {
 	Role      string    `json:"role"`
 	CreatedAt time.Time `json:"created_at"`
 
-	TokensPerSecond    float64 `json:"tokens_per_second,omitempty"`
-	Tokens             int     `json:"tokens_ms,omitempty"`
-	DurationMs         int64   `json:"duration_time_ms,omitempty"`
+	Tokens             int     `json:"tokens,omitempty"`
+	DurationTimeMs     int64   `json:"duration_ms,omitempty"`
 	TimeToFirstTokenMs int64   `json:"time_to_first_token_ms,omitempty"`
+	TokensPerSecond    float64 `json:"tok_per_sec,omitempty"`
 
-	//user message fields	 ( role user )
 	ImagePath  string `json:"image_path,omitempty"`
 	UserTokens int    `json:"user_tokens"`
 
-	//Assistant message fields	( role assitant )
-	Text                   string `json:"text"`
-	TextTokens             int    `json:"text_tokens"`
-	TextDurationMs         int64  `json:"text_duration_ms,omitempty"`
-	TextTimeToFirstTokenMs int64  `json:"text_time_to_first_token_ms,omitempty"`
+	Text            string          `json:"text"`
+	TextMetrics     ContentMetrics  `json:"text_metrics,omitempty"`
+	ThinkingText    string          `json:"thinking_text,omitempty"`
+	ThinkingMetrics ContentMetrics  `json:"thinking_metrics,omitempty"`
 
-	ThinkingText               string `json:"thinking_text,omitempty"`
-	ThinkingTokens             int    `json:"thinking_tokens,omitempty"`
-	ThinkingDurationMs         int64  `json:"thinking_duration_ms,omitempty"`
-	ThinkingTimeToFirstTokenMs int64  `json:"thinking_time_to_first_token_ms,omitempty"`
-
-	//stop reason
-
-	//tool request
-	ToolCalls []ToolCallEntry `json:"tool_calls,omitempty"`
-
-	// Aggregate streaming metrics for this message's tool call generation
-	ToolCallTokens             int   `json:"tool_call_tokens,omitempty"`
-	ToolCallDurationMs         int64 `json:"tool_call_stream_duration_ms,omitempty"`
-	ToolCallTimeToFirstTokenMs int64 `json:"tool_call_time_to_first_ms,omitempty"`
+	ToolCalls       []ToolCallEntry `json:"tool_calls,omitempty"`
+	ToolCallMetrics ContentMetrics  `json:"tool_call_metrics,omitempty"`
 
 	StopReason string `json:"stop_reason,omitempty"`
 }

@@ -213,20 +213,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 
 		// Tool calls: save assistant msg, execute tools synchronously, resume streaming
 		if event.StopReason == "tool_calls" && len(m.stream.partialTools) > 0 {
-			// Build ToolCall slice from partialTools (single source of truth)
-			toolCalls := make([]chat.ToolCall, len(m.stream.partialTools))
-			for i, p := range m.stream.partialTools {
-				toolCalls[i] = chat.ToolCall{
-					ID:   p.id,
-					Type: p.typeStr,
-					Function: struct {
-						Name string `json:"name"`
-						Args string `json:"arguments"`
-					}{Name: p.name, Args: p.args},
-				}
-			}
-
-			assistantMsg := config.Message{
+			m.session.appendMsg(config.Message{
 				ID:                         fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 				Role:                       "assistant",
 				CreatedAt:                  m.stream.metrics.Start,
@@ -243,28 +230,11 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				DurationTimeMs:             m.stream.metrics.Duration().Milliseconds(),
 				TimeToFirstTokenMs:         m.stream.metrics.TimeToFirstToken().Milliseconds(),
 				StopReason:                 event.StopReason,
-				ToolCalls:                  make([]config.ToolCallEntry, len(m.stream.partialTools)),
-			}
-			for i, p := range m.stream.partialTools {
-				dur := p.doneAt.Sub(p.firstAt).Milliseconds()
-				assistantMsg.ToolCalls[i] = config.ToolCallEntry{
-					ID:   p.id,
-					Type: p.typeStr,
-					Instruction: struct {
-						Name       string `json:"name"`
-						Arguments  string `json:"arguments"`
-						Tokens     int    `json:"tokens,omitempty"`
-						DurationMs int64  `json:"duration_ms,omitempty"`
-					}{Name: p.name, Arguments: p.args, Tokens: countTokensApprox(p.args), DurationMs: dur},
-				}
-			}
-			assistantMsg.ToolCallTokens = m.stream.metrics.ToolCallTokens()
-			assistantMsg.ToolCallDurationMs = m.stream.metrics.ToolCallDuration().Milliseconds()
-			assistantMsg.ToolCallTimeToFirstTokenMs = m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()
-			m.session.appendMsg(assistantMsg)
-
-			// Execute tools inline - they're fast I/O ops
-			(&m).executeTools(toolCalls)
+				ToolCallTokens:             m.stream.metrics.ToolCallTokens(),
+				ToolCallDurationMs:         m.stream.metrics.ToolCallDuration().Milliseconds(),
+				ToolCallTimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds(),
+				ToolCalls:                  (&m).executeTools(m.stream.partialTools),
+			})
 
 			m.stream.reset()
 			m.updateViewportContent()
@@ -274,7 +244,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		}
 
 		// Normal completion: save assistant message
-		assistantMsg := config.Message{
+		m.session.appendMsg(config.Message{
 			ID:                         fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 			Role:                       "assistant",
 			CreatedAt:                  m.stream.metrics.Start,
@@ -291,8 +261,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			DurationTimeMs:             m.stream.metrics.Duration().Milliseconds(),
 			TimeToFirstTokenMs:         m.stream.metrics.TimeToFirstToken().Milliseconds(),
 			StopReason:                 event.StopReason,
-		}
-		m.session.appendMsg(assistantMsg)
+		})
 
 		m.stream.reset()
 		blinkCmd := (&m).setChatMode()
@@ -351,55 +320,44 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	return m, waitForStreamEvent(m.stream.ch)
 }
 
-// executeTools runs all pending tool calls, appends results to session,
-// and updates the assistant message with results.
-func (m *Model) executeTools(toolCalls []chat.ToolCall) {
-	for _, tc := range toolCalls {
-		tool := findTool(tc.Function.Name, m.availTools)
+// executeTools runs all pending tool calls and returns ToolCallEntry slice
+// with both Instruction and Execution populated.
+func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
+	entries := make([]config.ToolCallEntry, len(partials))
+	for i, p := range partials {
+		dur := p.doneAt.Sub(p.firstAt).Milliseconds()
+		entries[i] = config.ToolCallEntry{
+			ID: p.id,
+			Type: p.typeStr,
+			Instruction: struct {
+				Name       string `json:"name"`
+				Arguments  string `json:"arguments"`
+				Tokens     int    `json:"tokens,omitempty"`
+				DurationMs int64  `json:"duration_ms,omitempty"`
+			}{Name: p.name, Arguments: p.args, Tokens: countTokensApprox(p.args), DurationMs: dur},
+		}
 
+		tool := findTool(p.name, m.availTools)
 		if tool == nil {
-			errMsg := fmt.Sprintf("unknown tool: %s", tc.Function.Name)
-			for i := len(m.session.file.Messages) - 1; i >= 0; i-- {
-				msg := &m.session.file.Messages[i]
-				if msg.Role == "assistant" && msg.ToolCalls != nil {
-					for j, tce := range msg.ToolCalls {
-						if tce.ID == tc.ID {
-							msg.ToolCalls[j].Execution.Status = tools.ResultStatusError
-							msg.ToolCalls[j].Execution.Error = errMsg
-							break
-						}
-					}
-				}
-			}
+			entries[i].Execution.Status = tools.ResultStatusError
+			entries[i].Execution.Error = fmt.Sprintf("unknown tool: %s", p.name)
 			continue
 		}
 
 		var args map[string]interface{}
-		if tc.Function.Args != "" {
-			_ = json.Unmarshal([]byte(tc.Function.Args), &args)
+		if p.args != "" {
+			_ = json.Unmarshal([]byte(p.args), &args)
 		}
 
 		resultStart := time.Now()
 		result := tool.Execute(args)
-		resultTokens := countTokensApprox(result.Result)
-		resultDurMs := time.Since(resultStart).Milliseconds()
-
-		for i := len(m.session.file.Messages) - 1; i >= 0; i-- {
-			msg := &m.session.file.Messages[i]
-			if msg.Role == "assistant" && msg.ToolCalls != nil {
-				for j, tce := range msg.ToolCalls {
-					if tce.ID == tc.ID {
-						msg.ToolCalls[j].Execution.Status = result.Status
-						msg.ToolCalls[j].Execution.Result = result.Result
-						msg.ToolCalls[j].Execution.Error = result.Error
-						msg.ToolCalls[j].Execution.Tokens = resultTokens
-						msg.ToolCalls[j].Execution.DurationMs = resultDurMs
-						break
-					}
-				}
-			}
-		}
+		entries[i].Execution.Status = result.Status
+		entries[i].Execution.Result = result.Result
+		entries[i].Execution.Error = result.Error
+		entries[i].Execution.Tokens = countTokensApprox(result.Result)
+		entries[i].Execution.DurationMs = time.Since(resultStart).Milliseconds()
 	}
+	return entries
 }
 
 // startStream builds API messages from current session state and starts a new stream.

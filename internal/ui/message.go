@@ -301,7 +301,7 @@ func tokenChipUp(n int, durMs *int64) string {
 
 // tokenChipBoth builds ·↓downN[/↑upN][ downDur[/upDur]]·
 // dur pointers: nil means "don't show", &val means "show val" (including 0).
-func tokenChipBoth(downN, upN int, downDurMs *int64, upDurMs *int64) string {
+func tokenChipBoth(downN, upN int, downDurMs *int64, execDurMs *int64) string {
 	s := ""
 	if downN > 0 {
 		s += "↓" + formatTokens(downN)
@@ -312,17 +312,17 @@ func tokenChipBoth(downN, upN int, downDurMs *int64, upDurMs *int64) string {
 		}
 		s += "↑" + formatTokens(upN)
 	}
-	showDur := downDurMs != nil || upDurMs != nil
+	showDur := downDurMs != nil || execDurMs != nil
 	if showDur {
 		s += " ↓"
 		if downDurMs != nil {
 			s += formatDuration(*downDurMs)
 		}
-		if upDurMs != nil {
+		if execDurMs != nil {
 			if downDurMs != nil {
-				s += "↑"
+				s += " ►"
 			}
-			s += formatDuration(*upDurMs)
+			s += formatDuration(*execDurMs)
 		}
 	}
 	return s

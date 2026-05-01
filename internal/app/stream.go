@@ -327,7 +327,7 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 	for i, p := range partials {
 		dur := p.doneAt.Sub(p.firstAt).Milliseconds()
 		entries[i] = config.ToolCallEntry{
-			ID: p.id,
+			ID:   p.id,
 			Type: p.typeStr,
 			Instruction: struct {
 				Name       string `json:"name"`

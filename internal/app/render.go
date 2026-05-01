@@ -78,20 +78,40 @@ func (m *Model) updateViewportContent() {
 		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, m.expanded))
 	}
 
+	showAssistantHeader := true
 	for i, rendered := range m.session.renderedMessages {
 		msg := m.session.file.Messages[i]
 		if msg.Role == "tool" {
+			b.WriteString(rendered)
 			continue
 		}
-		if msg.Role == "user" {
-			b.WriteString(ui.RenderUserHeader(msg, m.width))
-		} else {
-			b.WriteString(ui.RenderAssistantHeader(msg, m.width))
+
+		if msg.Role == "user" || showAssistantHeader {
+			if msg.Role == "user" {
+				b.WriteString(ui.RenderUserHeader(msg, m.width))
+			} else {
+				b.WriteString(ui.RenderAssistantHeader(msg, m.width))
+			}
 		}
+
+		showAssistantHeader = msg.Role == "user"
+
 		b.WriteString(rendered)
 	}
 
 	if m.stream.active {
+		// Streaming header: only if no assistant header was shown yet in this sequence
+		if showAssistantHeader {
+			b.WriteString(ui.RenderStreamingHeader(ui.StreamingViewData{
+				RequestStart: m.stream.metrics.Start,
+				TextTokens:   m.stream.metrics.TextTokens(),
+				TextDur:      m.stream.metrics.TextDuration(),
+				TokPerSec:    m.stream.metrics.AvgTokenPerSec(),
+				Width:        m.width,
+			}))
+			b.WriteString("\n")
+			showAssistantHeader = true
+		}
 		// Only re-run glamour when a new line has completed (lastNL changed).
 		lastNL := strings.LastIndex(m.stream.text, "\n")
 		if lastNL > m.stream.markdownEnd || (lastNL < 0 && m.stream.markdown != "") {

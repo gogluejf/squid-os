@@ -246,13 +246,16 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				ToolCalls:                  make([]config.ToolCallEntry, len(m.stream.partialTools)),
 			}
 			for i, p := range m.stream.partialTools {
+				dur := p.doneAt.Sub(p.firstAt).Milliseconds()
 				assistantMsg.ToolCalls[i] = config.ToolCallEntry{
-					ID:             p.id,
-					Type:           p.typeStr,
-					Name:           p.name,
-					Arguments:      p.args,
-					CallTokens:     countTokensApprox(p.args),
-					CallDurationMs: p.doneAt.Sub(p.firstAt).Milliseconds(),
+					ID:   p.id,
+					Type: p.typeStr,
+					Instruction: struct {
+						Name       string `json:"name"`
+						Arguments  string `json:"arguments"`
+						Tokens     int    `json:"tokens,omitempty"`
+						DurationMs int64  `json:"duration_ms,omitempty"`
+					}{Name: p.name, Arguments: p.args, Tokens: countTokensApprox(p.args), DurationMs: dur},
 				}
 			}
 			assistantMsg.ToolCallTokens = m.stream.metrics.ToolCallTokens()
@@ -351,26 +354,18 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 // executeTools runs all pending tool calls, appends results to session,
 // and updates the assistant message with results.
 func (m *Model) executeTools(toolCalls []chat.ToolCall) {
-	var toolResults []config.ToolResultEntry
-
 	for _, tc := range toolCalls {
 		tool := findTool(tc.Function.Name, m.availTools)
 
 		if tool == nil {
 			errMsg := fmt.Sprintf("unknown tool: %s", tc.Function.Name)
-			toolResults = append(toolResults, config.ToolResultEntry{
-				ToolCallID: tc.ID,
-				Name:       tc.Function.Name,
-				Result:     "",
-				Error:      errMsg,
-			})
 			for i := len(m.session.file.Messages) - 1; i >= 0; i-- {
 				msg := &m.session.file.Messages[i]
 				if msg.Role == "assistant" && msg.ToolCalls != nil {
 					for j, tce := range msg.ToolCalls {
 						if tce.ID == tc.ID {
-							msg.ToolCalls[j].Result = ""
-							msg.ToolCalls[j].Error = errMsg
+							msg.ToolCalls[j].Execution.Result = ""
+							msg.ToolCalls[j].Execution.Error = errMsg
 							break
 						}
 					}
@@ -389,47 +384,23 @@ func (m *Model) executeTools(toolCalls []chat.ToolCall) {
 		resultTokens := countTokensApprox(result)
 		resultDurMs := time.Since(resultStart).Milliseconds()
 
-		if err != nil {
-			toolResults = append(toolResults, config.ToolResultEntry{
-				ToolCallID: tc.ID,
-				Name:       tc.Function.Name,
-				Result:     result,
-				Error:      err.Error(),
-			})
-		} else {
-			toolResults = append(toolResults, config.ToolResultEntry{
-				ToolCallID: tc.ID,
-				Name:       tc.Function.Name,
-				Result:     result,
-			})
-		}
-
 		for i := len(m.session.file.Messages) - 1; i >= 0; i-- {
 			msg := &m.session.file.Messages[i]
 			if msg.Role == "assistant" && msg.ToolCalls != nil {
 				for j, tce := range msg.ToolCalls {
 					if tce.ID == tc.ID {
 						if err != nil {
-							msg.ToolCalls[j].Error = err.Error()
+							msg.ToolCalls[j].Execution.Error = err.Error()
 						}
-						msg.ToolCalls[j].Result = result
-						msg.ToolCalls[j].ResultTokens = resultTokens
-						msg.ToolCalls[j].ResultDurationMs = resultDurMs
+						msg.ToolCalls[j].Execution.Result = result
+						msg.ToolCalls[j].Execution.Tokens = resultTokens
+						msg.ToolCalls[j].Execution.DurationMs = resultDurMs
 						break
 					}
 				}
 			}
 		}
 	}
-
-	// Append tool result message
-	toolMsg := config.Message{
-		ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-		Role:        "tool",
-		CreatedAt:   time.Now(),
-		ToolResults: toolResults,
-	}
-	m.session.appendMsg(toolMsg)
 }
 
 // startStream builds API messages from current session state and starts a new stream.

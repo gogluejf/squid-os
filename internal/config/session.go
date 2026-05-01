@@ -33,23 +33,23 @@ type ToolCallEntry struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
 
-	Name           string `json:"name"`
-	Arguments      string `json:"arguments"`
-	CallTokens     int    `json:"call_tokens,omitempty"`
-	CallDurationMs int64  `json:"call_duration_ms,omitempty"`
+	// Instruction: what the model requested
+	Instruction struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+		Tokens    int    `json:"tokens,omitempty"`
+		DurationMs int64  `json:"duration_ms,omitempty"`
+	} `json:"instruction"`
 
-	Result           string `json:"result,omitempty"`
-	Error            string `json:"error,omitempty"`
-	ResultTokens     int    `json:"result_tokens,omitempty"`
-	ResultDurationMs int64  `json:"result_duration_ms"`
+	// Execution: result of running the tool (empty if not yet executed)
+	Execution struct {
+		Result       string `json:"result,omitempty"`
+		Error        string `json:"error,omitempty"`
+		Tokens       int    `json:"tokens,omitempty"`
+		DurationMs   int64  `json:"duration_ms"`
+	} `json:"execution,omitempty"`
 }
 
-type ToolResultEntry struct {
-	ToolCallID string `json:"tool_call_id"`
-	Name       string `json:"name"`
-	Result     string `json:"result"`
-	Error      string `json:"error,omitempty"`
-}
 
 type Message struct {
 	ID        string    `json:"id"`
@@ -86,8 +86,6 @@ type Message struct {
 	ToolCallDurationMs         int64 `json:"tool_call_stream_duration_ms,omitempty"`
 	ToolCallTimeToFirstTokenMs int64 `json:"tool_call_time_to_first_ms,omitempty"`
 
-	//tool Choice message fields ( role tool)
-	ToolResults []ToolResultEntry `json:"tool_results,omitempty"`
 
 	StopReason string `json:"stop_reason,omitempty"`
 }

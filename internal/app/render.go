@@ -81,10 +81,6 @@ func (m *Model) updateViewportContent() {
 	showAssistantHeader := true
 	for i, rendered := range m.session.renderedMessages {
 		msg := m.session.file.Messages[i]
-		if msg.Role == "tool" {
-			b.WriteString(rendered)
-			continue
-		}
 
 		if msg.Role == "user" || showAssistantHeader {
 			if msg.Role == "user" {

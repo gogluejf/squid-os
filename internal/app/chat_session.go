@@ -144,7 +144,7 @@ func (cs *chatSession) totalTokens() int {
 	for _, msg := range cs.file.Messages {
 		total += msg.UserTokens + msg.TextTokens
 		for _, tc := range msg.ToolCalls {
-			total += tc.CallTokens + tc.ResultTokens
+			total += tc.Instruction.Tokens + tc.Execution.Tokens
 		}
 	}
 	return total

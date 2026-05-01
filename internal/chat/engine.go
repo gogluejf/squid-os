@@ -466,23 +466,26 @@ func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []c
 						Function: struct {
 							Name string `json:"name"`
 							Args string `json:"arguments"`
-						}{Name: tc.Name, Args: tc.Arguments},
-						Name:     tc.Name,
-						ArgsJSON: tc.Arguments,
+						}{Name: tc.Instruction.Name, Args: tc.Instruction.Arguments},
+						Name:     tc.Instruction.Name,
+						ArgsJSON: tc.Instruction.Arguments,
 					}
 				}
 				if msg.Text == "" {
-					cm.Content = "" // still needed for models that expect it
+					cm.Content = ""
 				}
 			}
 			msgs = append(msgs, cm)
-		case "tool":
-			for _, tr := range msg.ToolResults {
+			// Generate tool role messages for any tool calls that have results
+			for _, tc := range msg.ToolCalls {
+				if tc.Execution.Result == "" && tc.Execution.Error == "" {
+					continue
+				}
 				msgs = append(msgs, ChatMessage{
 					Role:       "tool",
-					ToolCallID: tr.ToolCallID,
-					Content:    tr.Result,
-					Name:       tr.Name,
+					ToolCallID: tc.ID,
+					Content:    tc.Execution.Result,
+					Name:       tc.Instruction.Name,
 				})
 			}
 		}

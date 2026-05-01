@@ -333,28 +333,28 @@ var toolLineBg = lipgloss.NewStyle().Background(lipgloss.Color("233")).Padding(0
 func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded bool) string {
 	var b strings.Builder
 	for _, tc := range toolCalls {
-		argsDisplay := stripNewlines(truncate(tc.Arguments, 50))
-		namePart := ToolCallInline.Render(" ↳ " + tc.Name + "(" + argsDisplay + ")")
+		argsDisplay := stripNewlines(truncate(tc.Instruction.Arguments, 50))
+		namePart := ToolCallInline.Render(" ↳ " + tc.Instruction.Name + "(" + argsDisplay + ")")
 
-		if tc.Error != "" {
-			checkAndErr := ToolErrInline.Render(" ✗ " + stripNewlines(truncate(tc.Error, 30)))
-			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.CallTokens, tc.ResultTokens, &tc.CallDurationMs, &tc.ResultDurationMs))
+		if tc.Execution.Error != "" {
+			checkAndErr := ToolErrInline.Render(" ✗ " + stripNewlines(truncate(tc.Execution.Error, 30)))
+			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndErr + stats + "\n"))
 			if expanded {
-				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Arguments) + "\n"))
-				b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + tc.Error + "\n"))
-				if tc.Result != "" && tc.Result != tc.Error {
-					b.WriteString(ToolCallResultStyle.Width(width).Render("\nResult:\n" + tc.Result + "\n"))
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
+				b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + tc.Execution.Error + "\n"))
+				if tc.Execution.Result != "" && tc.Execution.Result != tc.Execution.Error {
+					b.WriteString(ToolCallResultStyle.Width(width).Render("\nResult:\n" + tc.Execution.Result + "\n"))
 				}
 
 			}
-		} else if tc.Result != "" {
-			checkAndResult := ToolCheckInline.Render(" ✓ " + stripNewlines(truncate(tc.Result, 30)))
-			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.CallTokens, tc.ResultTokens, &tc.CallDurationMs, &tc.ResultDurationMs))
+		} else if tc.Execution.Result != "" {
+			checkAndResult := ToolCheckInline.Render(" ✓ " + stripNewlines(truncate(tc.Execution.Result, 30)))
+			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndResult + stats + "\n"))
 			if expanded {
-				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Arguments) + "\n"))
-				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Result + "\n"))
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Execution.Result + "\n"))
 			}
 		} else {
 			// No result yet (streaming, before tool execution)

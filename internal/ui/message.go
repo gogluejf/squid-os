@@ -158,10 +158,6 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	}
 	bodyWidth := bubbleWidth
 
-	streamHeader := renderStreamingHeader(data)
-	b.WriteString(streamHeader)
-	b.WriteString("\n")
-
 	// Waiting state: show "waiting..." with live elapsed before first token
 	if data.Waiting {
 		elapsed := time.Since(data.RequestStart)
@@ -221,7 +217,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 
 // renderStreamingHeader mirrors RenderAssistantHeader visually:
 // timestamp on the left, [tok/s  elapsed  N tokens] on the right.
-func renderStreamingHeader(data StreamingViewData) string {
+func RenderStreamingHeader(data StreamingViewData) string {
 	leftStr := data.RequestStart.Format("15:04:05")
 
 	var right []string

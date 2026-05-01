@@ -77,8 +77,18 @@ func (m *Model) updateViewportContent() {
 		msg := m.session.file.Messages[i]
 		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, m.expanded))
 	}
-	for _, r := range m.session.renderedMessages {
-		b.WriteString(r)
+
+	for i, rendered := range m.session.renderedMessages {
+		msg := m.session.file.Messages[i]
+		if msg.Role == "tool" {
+			continue
+		}
+		if msg.Role == "user" {
+			b.WriteString(ui.RenderUserHeader(msg, m.width))
+		} else {
+			b.WriteString(ui.RenderAssistantHeader(msg, m.width))
+		}
+		b.WriteString(rendered)
 	}
 
 	if m.stream.active {

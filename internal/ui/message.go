@@ -24,11 +24,6 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 		bodyWidth = 20
 	}
 
-	// Header line: date left, metadata right
-
-	header := renderHeader(msg, bubbleWidth)
-	b.WriteString(header)
-
 	// Message body & thinking
 
 	style := AssistantMsgStyle
@@ -70,48 +65,56 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 	return b.String()
 }
 
-func renderHeader(msg config.Message, width int) string {
-	dim := AssistantHeaderDimStyle
-	att := AssistantHeaderAttStyle
-	lineStyle := AssistantHeaderStyle
+// RenderUserHeader builds the header line for a user message.
+func RenderUserHeader(msg config.Message, width int) string {
+	inner := width - 2
 
-	if msg.Role == "user" {
-		dim = UserHeaderDimStyle
-		att = UserHeaderAttStyle
-		lineStyle = UserHeaderStyle
-	}
-	inner := width - 2 // Padding(0,1) is outer, inner content area = width-2
-
-	leftStr := dim.Render(msg.CreatedAt.Format("15:04:05"))
+	leftStr := UserHeaderDimStyle.Render(msg.CreatedAt.Format("15:04:05"))
 
 	var right []string
 	if msg.ImagePath != "" {
-		right = append(right, att.Render(msg.ImagePath))
+		right = append(right, UserHeaderAttStyle.Render(msg.ImagePath))
 	}
-	if msg.Role == "user" {
-		if msg.UserTokens > 0 {
-			right = append(right, dim.Render(tokenChipUp(msg.UserTokens, nil)))
-		}
-	} else {
-		if msg.TokensPerSecond > 0 {
-			right = append(right, dim.Render(fmt.Sprintf("%.1f tok/s", msg.TokensPerSecond)))
-		}
-		if msg.TextDurationMs > 0 {
-			right = append(right, dim.Render(formatDuration(msg.TextDurationMs)))
-		}
-		if msg.TextTokens > 0 {
-			right = append(right, dim.Render(fmt.Sprintf("%d tokens", msg.TextTokens)))
-		}
+	if msg.UserTokens > 0 {
+		right = append(right, UserHeaderDimStyle.Render(tokenChipUp(msg.UserTokens, nil)))
 	}
 
-	rightStr := strings.Join(right, dim.Render("  "))
+	rightStr := strings.Join(right, UserHeaderDimStyle.Render("  "))
 	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)
 	if gap < 1 {
 		gap = 1
 	}
 
-	return lineStyle.Width(width).Render(
-		"\n" + leftStr + dim.Render(strings.Repeat(" ", gap)) + rightStr + "\n",
+	return UserHeaderStyle.Width(width).Render(
+		"\n" + leftStr + UserHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr + "\n",
+	)
+}
+
+// RenderAssistantHeader builds the header line for an assistant message.
+func RenderAssistantHeader(msg config.Message, width int) string {
+	inner := width - 2
+
+	leftStr := AssistantHeaderDimStyle.Render(msg.CreatedAt.Format("15:04:05"))
+
+	var right []string
+	if msg.TokensPerSecond > 0 {
+		right = append(right, AssistantHeaderDimStyle.Render(fmt.Sprintf("%.1f tok/s", msg.TokensPerSecond)))
+	}
+	if msg.TextDurationMs > 0 {
+		right = append(right, AssistantHeaderDimStyle.Render(formatDuration(msg.TextDurationMs)))
+	}
+	if msg.TextTokens > 0 {
+		right = append(right, AssistantHeaderDimStyle.Render(fmt.Sprintf("%d tokens", msg.TextTokens)))
+	}
+
+	rightStr := strings.Join(right, AssistantHeaderDimStyle.Render("  "))
+	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)
+	if gap < 1 {
+		gap = 1
+	}
+
+	return AssistantHeaderStyle.Width(width).Render(
+		"\n" + leftStr + AssistantHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr + "\n",
 	)
 }
 
@@ -216,7 +219,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	return b.String()
 }
 
-// renderStreamingHeader mirrors renderHeader visually:
+// renderStreamingHeader mirrors RenderAssistantHeader visually:
 // timestamp on the left, [tok/s  elapsed  N tokens] on the right.
 func renderStreamingHeader(data StreamingViewData) string {
 	leftStr := data.RequestStart.Format("15:04:05")

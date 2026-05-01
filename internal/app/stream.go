@@ -29,6 +29,32 @@ type partialTool struct {
 	doneAt  time.Time
 }
 
+// toStreamingToolCalls converts all partial tools with a non-empty name into
+// display-ready StreamingToolCall values for the streaming viewport.
+func (ss *streamState) toStreamingToolCalls() []ui.StreamingToolCall {
+	var out []ui.StreamingToolCall
+	for _, p := range ss.partialTools {
+		if p.name == "" {
+			continue
+		}
+		dur := time.Duration(0)
+		if !p.firstAt.IsZero() {
+			end := p.doneAt
+			if end.IsZero() {
+				end = time.Now()
+			}
+			dur = end.Sub(p.firstAt)
+		}
+		out = append(out, ui.StreamingToolCall{
+			Name:      p.name,
+			Arguments: p.args,
+			Tokens:    countTokensApproxInt(p.chars),
+			Duration:  dur,
+		})
+	}
+	return out
+}
+
 // streamState bundles all transient fields for an active inference stream.
 type streamState struct {
 	text          string

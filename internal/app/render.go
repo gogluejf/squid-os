@@ -2,7 +2,6 @@ package app
 
 import (
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -100,26 +99,6 @@ func (m *Model) updateViewportContent() {
 			partial = m.stream.text[lastNL+1:]
 		}
 
-		var pendingTools []ui.StreamingToolCall
-		for _, p := range m.stream.partialTools {
-			if p.name == "" {
-				continue
-			}
-			dur := time.Duration(0)
-			if !p.firstAt.IsZero() {
-				end := p.doneAt
-				if end.IsZero() {
-					end = time.Now()
-				}
-				dur = end.Sub(p.firstAt)
-			}
-			pendingTools = append(pendingTools, ui.StreamingToolCall{
-				Name:      p.name,
-				Arguments: p.args,
-				Tokens:    countTokensApproxInt(p.chars),
-				Duration:  dur,
-			})
-		}
 		b.WriteString(ui.RenderStreamingMessage(ui.StreamingViewData{
 			RenderedMarkdown: m.stream.markdown,
 			Partial:          partial,
@@ -134,7 +113,7 @@ func (m *Model) updateViewportContent() {
 			TextDur:          m.stream.metrics.TextDuration(),
 			TokPerSec:        m.stream.metrics.AvgTokenPerSec(),
 			Waiting:          !m.stream.metrics.HasFirstToken(),
-			PendingTools:     pendingTools,
+			PendingTools:     m.stream.toStreamingToolCalls(),
 		}))
 	}
 

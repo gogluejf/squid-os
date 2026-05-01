@@ -24,57 +24,44 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 		bodyWidth = 20
 	}
 
-	// Skip tool result messages — they are rendered inline with the assistant's tool calls
-	if msg.Role == "tool" {
-		return ""
-	}
-
-	hasTools := len(msg.ToolCalls) > 0
-
-	// Determine if we should skip header/body: no text AND no thinking but has tools.
-	skipBody := msg.Role == "assistant" && msg.Text == "" && msg.ThinkingText == "" && hasTools
-
 	// Header line: date left, metadata right
-	if !skipBody {
-		header := renderHeader(msg, bubbleWidth)
-		b.WriteString(header)
-	}
+
+	header := renderHeader(msg, bubbleWidth)
+	b.WriteString(header)
 
 	// Message body & thinking
-	if !skipBody {
-		style := AssistantMsgStyle
-		if msg.Role == "user" {
-			style = UserMsgStyle
-		}
-		style = style.Width(bodyWidth)
 
-		body := msg.Text
-		if body == "" && msg.Role == "assistant" {
-			body = "..."
-		}
+	style := AssistantMsgStyle
+	if msg.Role == "user" {
+		style = UserMsgStyle
+	}
+	style = style.Width(bodyWidth)
 
-		if msg.Role == "assistant" {
-			body = RenderMarkdownOnBg(body, "233")
-		}
+	body := msg.Text
 
-		// Thinking block (collapsed/expanded) — must come BEFORE text
-		if msg.ThinkingText != "" {
-			thinkStyle := ThinkingStyle.Width(bodyWidth)
-			b.WriteString("\n")
-			thinkLabel := " thinking " + tokenChipDown(msg.ThinkingTokens, &msg.ThinkingDurationMs)
-			if expanded {
-				b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
-				b.WriteString(thinkStyle.Render("\n" + msg.ThinkingText))
-			} else {
-				b.WriteString(thinkStyle.Render("\n" + thinkLabel))
-			}
-		}
+	if body != "" && msg.Role == "assistant" {
+		body = RenderMarkdownOnBg(body, "233")
+	}
 
+	// Thinking block (collapsed/expanded) — must come BEFORE text
+	if msg.ThinkingText != "" {
+		thinkStyle := ThinkingStyle.Width(bodyWidth)
+		b.WriteString("\n")
+		thinkLabel := " thinking " + tokenChipDown(msg.ThinkingTokens, &msg.ThinkingDurationMs)
+		if expanded {
+			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
+			b.WriteString(thinkStyle.Render("\n" + msg.ThinkingText))
+		} else {
+			b.WriteString(thinkStyle.Render("\n" + thinkLabel))
+		}
+	}
+
+	if body != "" {
 		b.WriteString(style.Render("\n" + body + "\n"))
 	}
 
 	// Tool calls: render as inline lines with results
-	if hasTools {
+	if len(msg.ToolCalls) > 0 {
 		b.WriteString(renderToolCallsInline(msg.ToolCalls, bubbleWidth, expanded))
 	}
 
@@ -87,6 +74,7 @@ func renderHeader(msg config.Message, width int) string {
 	dim := AssistantHeaderDimStyle
 	att := AssistantHeaderAttStyle
 	lineStyle := AssistantHeaderStyle
+
 	if msg.Role == "user" {
 		dim = UserHeaderDimStyle
 		att = UserHeaderAttStyle

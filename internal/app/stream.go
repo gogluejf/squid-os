@@ -214,26 +214,29 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		// Tool calls: save assistant msg, execute tools synchronously, resume streaming
 		if event.StopReason == "tool_calls" && len(m.stream.partialTools) > 0 {
 			m.session.appendMsg(config.Message{
-				ID:                         fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-				Role:                       "assistant",
-				CreatedAt:                  m.stream.metrics.Start,
-				Text:                       m.stream.text,
-				ThinkingText:               m.stream.thinking,
-				ThinkingTokens:             m.stream.metrics.ThinkingTokens(),
-				ThinkingDurationMs:         m.stream.metrics.ThinkingDuration().Milliseconds(),
-				ThinkingTimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds(),
-				TextTokens:                 m.stream.metrics.TextTokens(),
-				TextDurationMs:             m.stream.metrics.TextDuration().Milliseconds(),
-				TextTimeToFirstTokenMs:     m.stream.metrics.TimeToFirstTextToken().Milliseconds(),
-				TokensPerSecond:            m.stream.metrics.AvgTokenPerSec(),
-				Tokens:                     m.stream.metrics.TotalTokens(),
-				DurationMs:                 m.stream.metrics.Duration().Milliseconds(),
-				TimeToFirstTokenMs:         m.stream.metrics.TimeToFirstToken().Milliseconds(),
-				StopReason:                 event.StopReason,
-				ToolCallTokens:             m.stream.metrics.ToolCallTokens(),
-				ToolCallDurationMs:         m.stream.metrics.ToolCallDuration().Milliseconds(),
-				ToolCallTimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds(),
-				ToolCalls:                  (&m).executeTools(m.stream.partialTools),
+				ID:           fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+				Role:         "assistant",
+				CreatedAt:    m.stream.metrics.Start,
+				Text:         m.stream.text,
+				ThinkingText: m.stream.thinking,
+				ThinkingMetrics: config.ContentMetrics{
+					Tokens:             m.stream.metrics.ThinkingTokens(),
+					DurationMs:         m.stream.metrics.ThinkingDuration().Milliseconds(),
+					TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
+				TextMetrics: config.ContentMetrics{
+					Tokens:             m.stream.metrics.TextTokens(),
+					DurationMs:         m.stream.metrics.TextDuration().Milliseconds(),
+					TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
+				TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
+				Tokens:             m.stream.metrics.TotalTokens(),
+				DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
+				TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
+				StopReason:         event.StopReason,
+				ToolCallMetrics: config.ContentMetrics{
+					Tokens:             m.stream.metrics.ToolCallTokens(),
+					DurationMs:         m.stream.metrics.ToolCallDuration().Milliseconds(),
+					TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
+				ToolCalls: (&m).executeTools(m.stream.partialTools),
 			})
 
 			m.stream.reset()
@@ -245,22 +248,24 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 
 		// Normal completion: save assistant message
 		m.session.appendMsg(config.Message{
-			ID:                         fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-			Role:                       "assistant",
-			CreatedAt:                  m.stream.metrics.Start,
-			Text:                       m.stream.text,
-			ThinkingText:               m.stream.thinking,
-			ThinkingTokens:             m.stream.metrics.ThinkingTokens(),
-			ThinkingDurationMs:         m.stream.metrics.ThinkingDuration().Milliseconds(),
-			ThinkingTimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds(),
-			TextTokens:                 m.stream.metrics.TextTokens(),
-			TextDurationMs:             m.stream.metrics.TextDuration().Milliseconds(),
-			TextTimeToFirstTokenMs:     m.stream.metrics.TimeToFirstTextToken().Milliseconds(),
-			TokensPerSecond:            m.stream.metrics.AvgTokenPerSec(),
-			Tokens:                     m.stream.metrics.TotalTokens(),
-			DurationMs:                 m.stream.metrics.Duration().Milliseconds(),
-			TimeToFirstTokenMs:         m.stream.metrics.TimeToFirstToken().Milliseconds(),
-			StopReason:                 event.StopReason,
+			ID:           fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+			Role:         "assistant",
+			CreatedAt:    m.stream.metrics.Start,
+			Text:         m.stream.text,
+			ThinkingText: m.stream.thinking,
+			ThinkingMetrics: config.ContentMetrics{
+				Tokens:             m.stream.metrics.ThinkingTokens(),
+				DurationMs:         m.stream.metrics.ThinkingDuration().Milliseconds(),
+				TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
+			TextMetrics: config.ContentMetrics{
+				Tokens:             m.stream.metrics.TextTokens(),
+				DurationMs:         m.stream.metrics.TextDuration().Milliseconds(),
+				TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
+			TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
+			Tokens:             m.stream.metrics.TotalTokens(),
+			DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
+			TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
+			StopReason:         event.StopReason,
 		})
 
 		m.stream.reset()

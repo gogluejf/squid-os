@@ -20,10 +20,10 @@ var Open = Tool{
 		},
 		"required": []string{"path"},
 	},
-	Execute: func(args map[string]interface{}) (string, error) {
+	Execute: func(args map[string]interface{}) ToolResult {
 		target, ok := args["path"].(string)
 		if !ok || target == "" {
-			return "", fmt.Errorf("path is required and must be a string")
+			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
 
 		var cmd *exec.Cmd
@@ -35,14 +35,14 @@ var Open = Tool{
 		case "windows":
 			cmd = exec.Command("cmd", "/c", "start", "", target)
 		default:
-			return "", fmt.Errorf("open is not supported on %s", runtime.GOOS)
+			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("open is not supported on %s", runtime.GOOS)}
 		}
 
 		err := cmd.Start()
 		if err != nil {
-			return "", fmt.Errorf("failed to open %s: %w", target, err)
+			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to open %s: %w", target, err)}
 		}
 
-		return fmt.Sprintf("opened: %s", target), nil
+		return ToolResult{Status: ResultStatusSuccess, Result: fmt.Sprintf("opened: %s", target)}
 	},
 }

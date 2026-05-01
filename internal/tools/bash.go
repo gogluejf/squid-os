@@ -27,10 +27,10 @@ var Bash = Tool{
 		},
 		"required": []string{"command"},
 	},
-	Execute: func(args map[string]interface{}) (string, error) {
+	Execute: func(args map[string]interface{}) ToolResult {
 		cmdStr, ok := args["command"].(string)
 		if !ok || cmdStr == "" {
-			return "", fmt.Errorf("command is required and must be a string")
+			return ToolResult{Status: ResultStatusError, Error: "command is required and must be a string"}
 		}
 
 		timeoutMs := 120000
@@ -55,9 +55,9 @@ var Bash = Tool{
 			cmd.Stderr = nil
 			err := cmd.Start()
 			if err != nil {
-				return "", fmt.Errorf("failed to run %s: %w", cmdStr, err)
+				return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to run %s: %w", cmdStr, err)}
 			}
-			return fmt.Sprintf("launched: %s", cmdStr), nil
+			return ToolResult{Status: ResultStatusSuccess, Result: fmt.Sprintf("launched: %s", cmdStr)}
 		}
 
 		var stdout, stderr bytes.Buffer
@@ -81,9 +81,9 @@ var Bash = Tool{
 				result.WriteString("\n")
 			}
 			result.WriteString(fmt.Sprintf("exit code: %v", err))
-			return result.String(), fmt.Errorf("command failed: %w", err)
+			return ToolResult{Status: ResultStatusError, Error: result.String()}
 		}
 
-		return result.String(), nil
+		return ToolResult{Status: ResultStatusSuccess, Result: result.String()}
 	},
 }

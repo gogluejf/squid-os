@@ -241,6 +241,45 @@ func RenderStreamingHeader(data StreamingViewData) string {
 	return AssistantHeaderStyle.Width(data.Width).Render("\n" + header + "\n")
 }
 
+// toolLineBg is a plain background style used as a width wrapper for composed tool lines.
+// Inline segments only set foreground — the wrapper provides background and padding.
+var toolLineBg = lipgloss.NewStyle().Background(lipgloss.Color("233")).Padding(0, 1)
+
+// renderToolCallsInline renders tool call lines with timing/token stats.
+func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded bool) string {
+	var b strings.Builder
+	for _, tc := range toolCalls {
+		argsDisplay := stripNewlines(truncate(tc.Instruction.Arguments, 50))
+		namePart := ToolCallInline.Render(" ↳ " + tc.Instruction.Name + "(" + argsDisplay + ")")
+
+		if tc.Execution.Error != "" {
+			checkAndErr := ToolErrInline.Render(" ✗ " + stripNewlines(truncate(tc.Execution.Error, 30)))
+			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
+			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndErr + stats + "\n"))
+			if expanded {
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
+				b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + tc.Execution.Error + "\n"))
+				if tc.Execution.Result != "" && tc.Execution.Result != tc.Execution.Error {
+					b.WriteString(ToolCallResultStyle.Width(width).Render("\nResult:\n" + tc.Execution.Result + "\n"))
+				}
+
+			}
+		} else if tc.Execution.Result != "" {
+			checkAndResult := ToolCheckInline.Render(" ✓ " + stripNewlines(truncate(tc.Execution.Result, 30)))
+			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
+			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndResult + stats + "\n"))
+			if expanded {
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Execution.Result + "\n"))
+			}
+		} else {
+			// No result yet (streaming, before tool execution)
+			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + "\n"))
+		}
+	}
+	return b.String()
+}
+
 func tokenChipDown(n int, durMs *int64) string {
 	s := "↓" + formatTokens(n)
 	if durMs != nil {
@@ -323,43 +362,4 @@ func truncate(s string, max int) string {
 // stripNewlines replaces newlines with spaces for clean single-line display.
 func stripNewlines(s string) string {
 	return strings.ReplaceAll(s, "\n", " ")
-}
-
-// toolLineBg is a plain background style used as a width wrapper for composed tool lines.
-// Inline segments only set foreground — the wrapper provides background and padding.
-var toolLineBg = lipgloss.NewStyle().Background(lipgloss.Color("233")).Padding(0, 1)
-
-// renderToolCallsInline renders tool call lines with timing/token stats.
-func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded bool) string {
-	var b strings.Builder
-	for _, tc := range toolCalls {
-		argsDisplay := stripNewlines(truncate(tc.Instruction.Arguments, 50))
-		namePart := ToolCallInline.Render(" ↳ " + tc.Instruction.Name + "(" + argsDisplay + ")")
-
-		if tc.Execution.Error != "" {
-			checkAndErr := ToolErrInline.Render(" ✗ " + stripNewlines(truncate(tc.Execution.Error, 30)))
-			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
-			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndErr + stats + "\n"))
-			if expanded {
-				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
-				b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + tc.Execution.Error + "\n"))
-				if tc.Execution.Result != "" && tc.Execution.Result != tc.Execution.Error {
-					b.WriteString(ToolCallResultStyle.Width(width).Render("\nResult:\n" + tc.Execution.Result + "\n"))
-				}
-
-			}
-		} else if tc.Execution.Result != "" {
-			checkAndResult := ToolCheckInline.Render(" ✓ " + stripNewlines(truncate(tc.Execution.Result, 30)))
-			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
-			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndResult + stats + "\n"))
-			if expanded {
-				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
-				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Execution.Result + "\n"))
-			}
-		} else {
-			// No result yet (streaming, before tool execution)
-			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + "\n"))
-		}
-	}
-	return b.String()
 }

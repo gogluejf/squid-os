@@ -64,7 +64,7 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 			thinkLabel := " thinking " + tokenChipDown(msg.ThinkingTokens, &msg.ThinkingDurationMs)
 			if expanded {
 				b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
-				b.WriteString(thinkStyle.Render(msg.ThinkingText + "\n"))
+				b.WriteString(thinkStyle.Render("\n" + msg.ThinkingText))
 			} else {
 				b.WriteString(thinkStyle.Render("\n" + thinkLabel))
 			}

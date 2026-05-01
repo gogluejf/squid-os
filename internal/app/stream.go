@@ -31,15 +31,15 @@ type partialTool struct {
 
 // streamState bundles all transient fields for an active inference stream.
 type streamState struct {
-	text         string
-	thinking     string
-	inThinking   bool
-	active       bool
-	markdown     string // glamour cache for completed lines
-	markdownEnd  int
-	metrics      StreamMetrics
-	cancelFn     context.CancelFunc
-	ch           <-chan chat.StreamEvent
+	text          string
+	thinking      string
+	inThinking    bool
+	active        bool
+	markdown      string // glamour cache for completed lines
+	markdownEnd   int
+	metrics       StreamMetrics
+	cancelFn      context.CancelFunc
+	ch            <-chan chat.StreamEvent
 	userCancelled bool
 	partialTools  []partialTool // live state during arg streaming, indexed by tool call index
 }

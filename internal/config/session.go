@@ -43,10 +43,11 @@ type ToolCallEntry struct {
 
 	// Execution: result of running the tool (empty if not yet executed)
 	Execution struct {
-		Result       string `json:"result,omitempty"`
-		Error        string `json:"error,omitempty"`
-		Tokens       int    `json:"tokens,omitempty"`
-		DurationMs   int64  `json:"duration_ms"`
+		Status     string `json:"status,omitempty"`
+		Result     string `json:"result,omitempty"`
+		Error      string `json:"error,omitempty"`
+		Tokens     int    `json:"tokens,omitempty"`
+		DurationMs int64  `json:"duration_ms"`
 	} `json:"execution,omitempty"`
 }
 

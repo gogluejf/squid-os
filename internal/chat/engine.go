@@ -476,15 +476,19 @@ func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []c
 				}
 			}
 			msgs = append(msgs, cm)
-			// Generate tool role messages for any tool calls that have results
+			// Generate tool role messages for any executed tool calls
 			for _, tc := range msg.ToolCalls {
-				if tc.Execution.Result == "" && tc.Execution.Error == "" {
+				if tc.Execution.Status == "" {
 					continue
+				}
+				content := tc.Execution.Result
+				if tc.Execution.Status == "error" && tc.Execution.Error != "" {
+					content = tc.Execution.Error
 				}
 				msgs = append(msgs, ChatMessage{
 					Role:       "tool",
 					ToolCallID: tc.ID,
-					Content:    tc.Execution.Result,
+					Content:    content,
 					Name:       tc.Instruction.Name,
 				})
 			}

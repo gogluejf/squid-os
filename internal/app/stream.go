@@ -364,7 +364,7 @@ func (m *Model) executeTools(toolCalls []chat.ToolCall) {
 				if msg.Role == "assistant" && msg.ToolCalls != nil {
 					for j, tce := range msg.ToolCalls {
 						if tce.ID == tc.ID {
-							msg.ToolCalls[j].Execution.Result = ""
+							msg.ToolCalls[j].Execution.Status = tools.ResultStatusError
 							msg.ToolCalls[j].Execution.Error = errMsg
 							break
 						}
@@ -380,8 +380,8 @@ func (m *Model) executeTools(toolCalls []chat.ToolCall) {
 		}
 
 		resultStart := time.Now()
-		result, err := tool.Execute(args)
-		resultTokens := countTokensApprox(result)
+		result := tool.Execute(args)
+		resultTokens := countTokensApprox(result.Result)
 		resultDurMs := time.Since(resultStart).Milliseconds()
 
 		for i := len(m.session.file.Messages) - 1; i >= 0; i-- {
@@ -389,10 +389,9 @@ func (m *Model) executeTools(toolCalls []chat.ToolCall) {
 			if msg.Role == "assistant" && msg.ToolCalls != nil {
 				for j, tce := range msg.ToolCalls {
 					if tce.ID == tc.ID {
-						if err != nil {
-							msg.ToolCalls[j].Execution.Error = err.Error()
-						}
-						msg.ToolCalls[j].Execution.Result = result
+						msg.ToolCalls[j].Execution.Status = result.Status
+						msg.ToolCalls[j].Execution.Result = result.Result
+						msg.ToolCalls[j].Execution.Error = result.Error
 						msg.ToolCalls[j].Execution.Tokens = resultTokens
 						msg.ToolCalls[j].Execution.DurationMs = resultDurMs
 						break

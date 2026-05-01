@@ -19,16 +19,16 @@ var ReadFile = Tool{
 		},
 		"required": []string{"path"},
 	},
-	Execute: func(args map[string]interface{}) (string, error) {
+	Execute: func(args map[string]interface{}) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {
-			return "", fmt.Errorf("path is required and must be a string")
+			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return "", fmt.Errorf("failed to read file %s: %w", path, err)
+			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to read file %s: %w", path, err)}
 		}
-		return string(data), nil
+		return ToolResult{Status: ResultStatusSuccess, Result: string(data)}
 	},
 }
 
@@ -50,20 +50,20 @@ var WriteFile = Tool{
 		},
 		"required": []string{"path", "content"},
 	},
-	Execute: func(args map[string]interface{}) (string, error) {
+	Execute: func(args map[string]interface{}) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {
-			return "", fmt.Errorf("path is required and must be a string")
+			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
 		content, ok := args["content"].(string)
 		if !ok {
-			return "", fmt.Errorf("content is required and must be a string")
+			return ToolResult{Status: ResultStatusError, Error: "content is required and must be a string"}
 		}
 		err := os.WriteFile(path, []byte(content), 0644)
 		if err != nil {
-			return "", fmt.Errorf("failed to write file %s: %w", path, err)
+			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to write file %s: %w", path, err)}
 		}
-		return fmt.Sprintf("file written: %s (%d bytes)", path, len(content)), nil
+		return ToolResult{Status: ResultStatusSuccess, Result: fmt.Sprintf("file written: %s (%d bytes)", path, len(content))}
 	},
 }
 
@@ -93,24 +93,24 @@ var EditFile = Tool{
 		},
 		"required": []string{"path", "old_string", "new_string"},
 	},
-	Execute: func(args map[string]interface{}) (string, error) {
+	Execute: func(args map[string]interface{}) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {
-			return "", fmt.Errorf("path is required and must be a string")
+			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
 		oldStr, ok := args["old_string"].(string)
 		if !ok {
-			return "", fmt.Errorf("old_string is required and must be a string")
+			return ToolResult{Status: ResultStatusError, Error: "old_string is required and must be a string"}
 		}
 		newStr, ok := args["new_string"].(string)
 		if !ok {
-			return "", fmt.Errorf("new_string is required and must be a string")
+			return ToolResult{Status: ResultStatusError, Error: "new_string is required and must be a string"}
 		}
 		replaceAll, _ := args["replace_all"].(bool)
 
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return "", fmt.Errorf("failed to read file %s: %w", path, err)
+			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to read file %s: %w", path, err)}
 		}
 		content := string(data)
 
@@ -125,17 +125,25 @@ var EditFile = Tool{
 				imports++
 			}
 			if imports == 0 {
-				return "old_string not found, no changes made", nil
+				return ToolResult{Status: ResultStatusSuccess, Result: "old_string not found, no changes made"}
 			}
-			return fmt.Sprintf("replaced %d occurrences in %s", imports, path), writeIfChanged(path, content, data)
+			writeErr := writeIfChanged(path, content, data)
+			if writeErr != nil {
+				return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to write file %s: %w", path, writeErr)}
+			}
+			return ToolResult{Status: ResultStatusSuccess, Result: fmt.Sprintf("replaced %d occurrences in %s", imports, path)}
 		}
 
 		idx := indexStr(content, oldStr)
 		if idx == -1 {
-			return "old_string not found, no changes made", nil
+			return ToolResult{Status: ResultStatusSuccess, Result: "old_string not found, no changes made"}
 		}
 		content = content[:idx] + newStr + content[idx+len(oldStr):]
-		return fmt.Sprintf("replaced 1 occurrence in %s", path), writeIfChanged(path, content, data)
+		writeErr := writeIfChanged(path, content, data)
+		if writeErr != nil {
+			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to write file %s: %w", path, writeErr)}
+		}
+		return ToolResult{Status: ResultStatusSuccess, Result: fmt.Sprintf("replaced 1 occurrence in %s", path)}
 	},
 }
 

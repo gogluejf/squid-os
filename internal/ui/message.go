@@ -252,19 +252,19 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 		argsDisplay := stripNewlines(truncate(tc.Instruction.Arguments, 50))
 		namePart := ToolCallInline.Render(" ↳ " + tc.Instruction.Name + "(" + argsDisplay + ")")
 
-		if tc.Execution.Error != "" {
+		switch tc.Execution.Status {
+		case "error":
 			checkAndErr := ToolErrInline.Render(" ✗ " + stripNewlines(truncate(tc.Execution.Error, 30)))
 			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndErr + stats + "\n"))
 			if expanded {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
 				b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + tc.Execution.Error + "\n"))
-				if tc.Execution.Result != "" && tc.Execution.Result != tc.Execution.Error {
+				if tc.Execution.Result != "" {
 					b.WriteString(ToolCallResultStyle.Width(width).Render("\nResult:\n" + tc.Execution.Result + "\n"))
 				}
-
 			}
-		} else if tc.Execution.Result != "" {
+		case "success":
 			checkAndResult := ToolCheckInline.Render(" ✓ " + stripNewlines(truncate(tc.Execution.Result, 30)))
 			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndResult + stats + "\n"))
@@ -272,9 +272,12 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Execution.Result + "\n"))
 			}
-		} else {
-			// No result yet (streaming, before tool execution)
+		default:
+			// No execution yet (streaming, before tool execution) — allow expand
 			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + "\n"))
+			if expanded && tc.Instruction.Arguments != "" {
+				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
+			}
 		}
 	}
 	return b.String()

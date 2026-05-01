@@ -35,9 +35,9 @@ type ToolCallEntry struct {
 
 	// Instruction: what the model requested
 	Instruction struct {
-		Name      string `json:"name"`
-		Arguments string `json:"arguments"`
-		Tokens    int    `json:"tokens,omitempty"`
+		Name       string `json:"name"`
+		Arguments  string `json:"arguments"`
+		Tokens     int    `json:"tokens,omitempty"`
 		DurationMs int64  `json:"duration_ms,omitempty"`
 	} `json:"instruction"`
 
@@ -51,7 +51,6 @@ type ToolCallEntry struct {
 	} `json:"execution,omitempty"`
 }
 
-
 type Message struct {
 	ID        string    `json:"id"`
 	Role      string    `json:"role"`
@@ -59,7 +58,7 @@ type Message struct {
 
 	TokensPerSecond    float64 `json:"tokens_per_second,omitempty"`
 	Tokens             int     `json:"tokens_ms,omitempty"`
-	DurationTimeMs     int64   `json:"duration_time_ms,omitempty"`
+	DurationMs         int64   `json:"duration_time_ms,omitempty"`
 	TimeToFirstTokenMs int64   `json:"time_to_first_token_ms,omitempty"`
 
 	//user message fields	 ( role user )
@@ -86,7 +85,6 @@ type Message struct {
 	ToolCallTokens             int   `json:"tool_call_tokens,omitempty"`
 	ToolCallDurationMs         int64 `json:"tool_call_stream_duration_ms,omitempty"`
 	ToolCallTimeToFirstTokenMs int64 `json:"tool_call_time_to_first_ms,omitempty"`
-
 
 	StopReason string `json:"stop_reason,omitempty"`
 }

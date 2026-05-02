@@ -134,18 +134,29 @@ func (cs *chatSession) invalidateRenderAll() {
 }
 
 // totalTokens returns the sum of all token counts across every message.
-// Computed from messages so it stays correct after destroy or load
+// Computed from messages so it stays correct after destroy or load.
 func (cs *chatSession) totalTokens() int {
-	total := 0
+	return cs.totalInputTokens() + cs.totalOutputTokens()
+}
 
-	// Sum tokens from all saved messages. Thinking tokens are excluded because
-	// they are never sent back to the API on subsequent calls — they only exist
-	// in the current active inference.
+// totalInputTokens sums user message tokens and tool execution tokens.
+func (cs *chatSession) totalInputTokens() int {
+	total := 0
 	for _, msg := range cs.file.Messages {
-		total += msg.UserTokens + msg.TextMetrics.Tokens
+		total += msg.UserTokens
 		for _, tc := range msg.ToolCalls {
-			total += tc.Instruction.Tokens + tc.Execution.Tokens
+			total += tc.Execution.Tokens
 		}
+	}
+	return total
+}
+
+// totalOutputTokens sums assistant text tokens.
+// Thinking tokens are excluded — they are never sent back to the API.
+func (cs *chatSession) totalOutputTokens() int {
+	total := 0
+	for _, msg := range cs.file.Messages {
+		total += msg.TextMetrics.Tokens
 	}
 	return total
 }

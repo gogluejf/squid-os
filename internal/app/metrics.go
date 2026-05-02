@@ -39,9 +39,19 @@ func (m StreamMetrics) ThinkingTokens() int {
 	return countTokensApproxInt(m.thinkingChars)
 }
 
-// TotalTokens returns the combined approximate token count.
+// TotalOutputTokens returns thinking + text tokens (model output during streaming).
+func (m StreamMetrics) TotalOutputTokens() int {
+	return countTokensApproxInt(m.thinkingChars + m.textChars)
+}
+
+// TotalInputTokens returns tool call argument tokens (fed back as input).
+func (m StreamMetrics) TotalInputTokens() int {
+	return countTokensApproxInt(m.toolCallChars)
+}
+
+// TotalTokens returns the combined approximate token count (output + input).
 func (m StreamMetrics) TotalTokens() int {
-	return countTokensApproxInt(m.thinkingChars + m.textChars + m.toolCallChars)
+	return m.TotalOutputTokens() + m.TotalInputTokens()
 }
 
 // ToolCallTokens returns the approximate token count for tool call argument characters.

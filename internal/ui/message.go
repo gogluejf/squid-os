@@ -42,7 +42,7 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 	if msg.ThinkingText != "" {
 		thinkStyle := ThinkingStyle.Width(bodyWidth)
 		b.WriteString("\n")
-		thinkLabel := " thinking " + tokenChipDown(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs)
+		thinkLabel := " thinking " + tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs)
 		if expanded {
 			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 			b.WriteString(thinkStyle.Render("\n" + msg.ThinkingText))
@@ -76,7 +76,7 @@ func RenderUserHeader(msg config.Message, width int) string {
 		right = append(right, UserHeaderAttStyle.Render(msg.ImagePath))
 	}
 	if msg.UserTokens > 0 {
-		right = append(right, UserHeaderDimStyle.Render(tokenChipUp(msg.UserTokens, nil)))
+		right = append(right, UserHeaderDimStyle.Render(tokenChipInput(msg.UserTokens, nil)))
 	}
 
 	rightStr := strings.Join(right, UserHeaderDimStyle.Render("  "))
@@ -154,7 +154,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	if data.ThinkingText != "" || data.InThinking {
 		thinkStyle := ThinkingStyle.Width(bodyWidth)
 		dur := data.ThinkingDur.Milliseconds()
-		thinkLabel := " thinking " + tokenChipDown(data.ThinkingTokens, &dur)
+		thinkLabel := " thinking " + tokenChipOutput(data.ThinkingTokens, &dur)
 		if data.Expanded {
 			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 			if data.ThinkingText != "" {
@@ -190,7 +190,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 			var statPart string
 			if tc.Tokens > 0 || tc.Duration > 0 {
 				dur := tc.Duration.Milliseconds()
-				statPart = ToolStatInline.Render("  " + tokenChipDown(tc.Tokens, &dur))
+				statPart = ToolStatInline.Render("  " + tokenChipOutput(tc.Tokens, &dur))
 			}
 			b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + namePart + statPart + "\n"))
 			if data.Expanded && tc.Arguments != "" {
@@ -262,7 +262,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 	return b.String()
 }
 
-func tokenChipDown(n int, durMs *int64) string {
+func tokenChipOutput(n int, durMs *int64) string {
 	s := "↓" + formatTokens(n)
 	if durMs != nil {
 		s += " " + formatDuration(*durMs)
@@ -270,7 +270,7 @@ func tokenChipDown(n int, durMs *int64) string {
 	return s
 }
 
-func tokenChipUp(n int, durMs *int64) string {
+func tokenChipInput(n int, durMs *int64) string {
 	s := "↑" + formatTokens(n)
 	if durMs != nil {
 		s += " " + formatDuration(*durMs)

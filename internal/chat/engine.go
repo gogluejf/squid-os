@@ -63,8 +63,15 @@ type ImageURL struct {
 
 // toolDefinition is the OpenAI-compatible tool definition sent in the request
 type toolDefinition struct {
-	Type     string                 `json:"type"`
-	Function map[string]interface{} `json:"function"`
+	Type     string          `json:"type"`
+	Function functionDef     `json:"function"`
+}
+
+// functionDef controls key ordering: name, description, parameters
+type functionDef struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Parameters  json.RawMessage `json:"parameters"`
 }
 
 // chatRequest is the OpenAI-compatible request body
@@ -124,10 +131,10 @@ func toolsToDefinitions(ts []tools.Tool) []toolDefinition {
 	for i, t := range ts {
 		defs[i] = toolDefinition{
 			Type: "function",
-			Function: map[string]interface{}{
-				"name":        t.Name,
-				"description": t.Description,
-				"parameters":  t.Schema,
+			Function: functionDef{
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters:  t.Schema,
 			},
 		}
 	}

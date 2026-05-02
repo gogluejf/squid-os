@@ -13,20 +13,20 @@ import (
 var Bash = Tool{
 	Name:        "bash",
 	Description: "Execute a shell command and return stdout/stderr. Use for git, find, grep, curl, and other CLI tools. Does not modify files. Timeout: 120 seconds.",
-	Schema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"command": map[string]interface{}{
-				"type":        "string",
-				"description": "The shell command to execute",
-			},
-			"timeout": map[string]interface{}{
-				"type":        "number",
-				"description": "Timeout in milliseconds (default 120000)",
-			},
+	Schema: []byte(`{
+	"type": "object",
+	"properties": {
+		"command": {
+			"type": "string",
+			"description": "The shell command to execute"
 		},
-		"required": []string{"command"},
+		"timeout": {
+			"type": "number",
+			"description": "Timeout in milliseconds (default 120000)"
+		}
 	},
+	"required": ["command"]
+}`),
 	Execute: func(args map[string]interface{}) ToolResult {
 		cmdStr, ok := args["command"].(string)
 		if !ok || cmdStr == "" {

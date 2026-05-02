@@ -91,9 +91,9 @@ func RenderUserHeader(msg config.Message, width int) string {
 }
 
 // RenderAssistantHeader builds the header line for an assistant message.
-func RenderAssistantHeader(msg config.Message, stat *config.SequenceStat, width int) string {
+func RenderAssistantHeader(start time.Time, stat *config.SequenceStat, width int) string {
 	inner := width - 2
-	leftStr := AssistantHeaderDimStyle.Render(msg.CreatedAt.Format("15:04:05"))
+	leftStr := AssistantHeaderDimStyle.Render(start.Format("15:04:05"))
 	rightStr := renderSeqStatRight(stat)
 	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)
 	if gap < 1 {
@@ -199,19 +199,6 @@ func RenderStreamingMessage(data StreamingViewData) string {
 		}
 	}
 	return b.String()
-}
-
-// RenderStreamingHeader renders the assistant header during an active stream.
-func RenderStreamingHeader(stat *config.SequenceStat, start time.Time, width int) string {
-	inner := width - 2
-	leftStr := start.Format("15:04:05")
-	rightStr := renderSeqStatRight(stat)
-	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)
-	if gap < 1 {
-		gap = 1
-	}
-	header := leftStr + strings.Repeat(" ", gap) + rightStr
-	return AssistantHeaderStyle.Width(width).Render("\n" + header + "\n")
 }
 
 // renderSeqStatRight builds the right-side content of an assistant header from a SequenceStat.

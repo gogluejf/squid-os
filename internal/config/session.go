@@ -44,6 +44,18 @@ type SequenceStat struct {
 	ExecDurMs            int64   `json:"exec_dur_ms,omitempty"`
 }
 
+// Add sums another SequenceStat into this one and recomputes AvgTokensPerSec.
+func (ss *SequenceStat) Add(other *SequenceStat) {
+	ss.OutputTokens += other.OutputTokens
+	ss.DurationMs += other.DurationMs
+	ss.InferenceDuractionMs += other.InferenceDuractionMs
+	ss.ExecDurMs += other.ExecDurMs
+	ss.InputTokens += other.InputTokens
+	if ss.InferenceDuractionMs > 0 {
+		ss.AvgTokensPerSec = float64(ss.OutputTokens) / float64(ss.InferenceDuractionMs) * 1000.0
+	}
+}
+
 func (ss *SequenceStat) Accumulate(msg Message) {
 	ss.OutputTokens += msg.Tokens
 	ss.DurationMs += msg.DurationTimeMs

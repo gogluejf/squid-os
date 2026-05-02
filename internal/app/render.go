@@ -80,8 +80,9 @@ func (m *Model) updateViewportContent() {
 	}
 
 	var liveSeqStat *config.SequenceStat
+	var liveSeqStatID string
 	if m.stream.active {
-		liveSeqStat = m.buildLiveSeqStat()
+		liveSeqStat, liveSeqStatID = m.buildLiveSeqStat()
 	}
 
 	for i, rendered := range m.session.renderedMessages {
@@ -90,19 +91,20 @@ func (m *Model) updateViewportContent() {
 			b.WriteString(ui.RenderUserHeader(msg, m.width))
 		} else if msg.SequenceStat != nil {
 			stat := msg.SequenceStat
-			if liveSeqStat != nil {
+			if msg.ID == liveSeqStatID {
 				stat = liveSeqStat
-				liveSeqStat = nil // consumed by sequence head
+				liveSeqStat = nil
+				liveSeqStatID = ""
 			}
-			b.WriteString(ui.RenderAssistantHeader(msg, stat, m.width))
+			b.WriteString(ui.RenderAssistantHeader(msg.CreatedAt, stat, m.width))
 		}
 		b.WriteString(rendered)
 	}
 
 	if m.stream.active {
-		if liveSeqStat != nil {
+		if liveSeqStat != nil && liveSeqStatID == "" {
 			// First of sequence — no saved assistant message yet
-			b.WriteString(ui.RenderStreamingHeader(liveSeqStat, m.stream.metrics.Start, m.width))
+			b.WriteString(ui.RenderAssistantHeader(m.stream.metrics.Start, liveSeqStat, m.width))
 			b.WriteString("\n")
 		}
 		// Only re-run glamour when a new line has completed (lastNL changed).
@@ -160,32 +162,23 @@ func (m Model) renderHelp() string {
 	return ui.RenderHelp(m.width, m.height)
 }
 
-// buildLiveSeqStat returns a SequenceStat for the active stream, combining
-// any saved stats from the sequence head with the current stream metrics.
-func (m *Model) buildLiveSeqStat() *config.SequenceStat {
+// buildLiveSeqStat returns a SequenceStat for the active stream and the ID of
+// the message it belongs to. Returns ("", stat) when there is no saved message
+// yet (the stream is the first assistant message of the sequence).
+func (m *Model) buildLiveSeqStat() (*config.SequenceStat, string) {
+	live := &config.SequenceStat{
+		OutputTokens:         m.stream.metrics.TotalTokens(),
+		DurationMs:           m.stream.metrics.Duration().Milliseconds(),
+		InferenceDuractionMs: (m.stream.metrics.Duration() - m.stream.metrics.TimeToFirstToken()).Milliseconds(),
+		AvgTokensPerSec:      m.stream.metrics.AvgTokenPerSec(),
+	}
 
 	seqIdx := config.FindSequenceHeadIdx(m.session.file.Messages)
-	outTokens := m.stream.metrics.TotalTokens()
-	infDurMs := (m.stream.metrics.Duration() - m.stream.metrics.TimeToFirstToken()).Milliseconds()
-
 	if seqIdx == -1 {
-		// First message of sequence — live stats only
-		stat := &config.SequenceStat{
-			OutputTokens:         outTokens,
-			InferenceDuractionMs: infDurMs,
-		}
-		if infDurMs > 0 {
-			stat.AvgTokensPerSec = float64(outTokens) / float64(infDurMs) * 1000.0
-		}
-		return stat
+		return live, ""
 	}
 
-	// Subsequent message — combine saved base + current stream
 	base := *m.session.file.Messages[seqIdx].SequenceStat
-	base.OutputTokens += outTokens
-	base.InferenceDuractionMs += infDurMs
-	if base.InferenceDuractionMs > 0 {
-		base.AvgTokensPerSec = float64(base.OutputTokens) / float64(base.InferenceDuractionMs) * 1000.0
-	}
-	return &base
+	base.Add(live)
+	return &base, m.session.file.Messages[seqIdx].ID
 }

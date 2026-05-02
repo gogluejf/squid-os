@@ -30,28 +30,30 @@ type Session struct {
 }
 
 type ContentMetrics struct {
-	Tokens             int   `json:"tokens,omitempty"`
-	DurationMs         int64 `json:"duration_ms,omitempty"`
-	TimeToFirstTokenMs int64 `json:"time_to_first_token_ms,omitempty"`
+	Tokens               int   `json:"tokens,omitempty"`
+	InferenceDuractionMs int64 `json:"inference_duration_ms,omitempty"`
+	TimeToFirstTokenMs   int64 `json:"time_to_first_token_ms,omitempty"`
 }
 
 type SequenceStat struct {
-	AvgTokensPerSec float64 `json:"avg_tok_per_sec,omitempty"`
-	InputTokens     int     `json:"input_tokens,omitempty"`
-	OutputTokens    int     `json:"output_tokens,omitempty"`
-	InferenceDurMs  int64   `json:"inference_dur_ms,omitempty"`
-	ExecDurMs       int64   `json:"exec_dur_ms,omitempty"`
+	AvgTokensPerSec      float64 `json:"avg_tok_per_sec,omitempty"`
+	InputTokens          int     `json:"input_tokens,omitempty"`
+	OutputTokens         int     `json:"output_tokens,omitempty"`
+	DurationMs           int64   `json:"duration_ms,omitempty"`
+	InferenceDuractionMs int64   `json:"inference_duration_ms,omitempty"`
+	ExecDurMs            int64   `json:"exec_dur_ms,omitempty"`
 }
 
 func (ss *SequenceStat) Accumulate(msg Message) {
 	ss.OutputTokens += msg.Tokens
-	ss.InferenceDurMs += msg.DurationTimeMs - msg.TimeToFirstTokenMs
+	ss.DurationMs += msg.DurationTimeMs
+	ss.InferenceDuractionMs += msg.DurationTimeMs - msg.TimeToFirstTokenMs
 	for _, tc := range msg.ToolCalls {
 		ss.ExecDurMs += tc.Execution.DurationMs
 		ss.InputTokens += tc.Execution.Tokens
 	}
-	if ss.InferenceDurMs > 0 {
-		ss.AvgTokensPerSec = float64(ss.OutputTokens) / float64(ss.InferenceDurMs) * 1000.0
+	if ss.InferenceDuractionMs > 0 {
+		ss.AvgTokensPerSec = float64(ss.OutputTokens) / float64(ss.InferenceDuractionMs) * 1000.0
 	}
 }
 

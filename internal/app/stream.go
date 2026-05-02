@@ -218,11 +218,11 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				Role:               "assistant",
 				CreatedAt:          m.stream.metrics.Start,
 				ThinkingText:       m.stream.thinking,
-				ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), DurationMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
+				ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
 				Text:               m.stream.text,
-				TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), DurationMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
+				TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
 				ToolCalls:          (&m).executeTools(m.stream.partialTools),
-				ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), DurationMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
+				ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), InferenceDuractionMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
 				TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
 				Tokens:             m.stream.metrics.TotalTokens(),
 				DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
@@ -243,9 +243,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			Role:               "assistant",
 			CreatedAt:          m.stream.metrics.Start,
 			ThinkingText:       m.stream.thinking,
-			ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), DurationMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
+			ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
 			Text:               m.stream.text,
-			TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), DurationMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
+			TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
 			TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
 			Tokens:             m.stream.metrics.TotalTokens(),
 			DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
@@ -378,9 +378,10 @@ func (m *Model) appendAssistantMsg(msg config.Message) {
 	if seqIdx == -1 {
 		// First of sequence — init SequenceStat
 		stat := &config.SequenceStat{
-			OutputTokens:    msg.Tokens,
-			InferenceDurMs:  msg.DurationTimeMs - msg.TimeToFirstTokenMs,
-			AvgTokensPerSec: msg.TokensPerSecond,
+			OutputTokens:         msg.Tokens,
+			DurationMs:           msg.DurationTimeMs,
+			InferenceDuractionMs: msg.DurationTimeMs - msg.TimeToFirstTokenMs,
+			AvgTokensPerSec:      msg.TokensPerSecond,
 		}
 		for _, tc := range msg.ToolCalls {
 			stat.ExecDurMs += tc.Execution.DurationMs

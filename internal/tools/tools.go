@@ -1,5 +1,10 @@
 package tools
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
 // Tool execution result
 const (
 	ResultStatusSuccess = "success"
@@ -15,20 +20,41 @@ type ToolResult struct {
 
 // Tool defines the contract for a callable tool.
 // Each tool has a JSON Schema definition (for the LLM) and an Execute function.
+// Schema is stored as pre-serialized JSON bytes to control key ordering.
 type Tool struct {
 	Name        string
 	Description string
-	Schema      map[string]interface{}
+	Schema      []byte
 	Execute     func(args map[string]interface{}) ToolResult
 }
 
-// GetTools returns all available tools.
-func GetTools() []Tool {
-	return []Tool{
+var allTools []Tool
+
+func init() {
+	allTools = []Tool{
 		ReadFile,
 		WriteFile,
 		EditFile,
 		Bash,
 		Open,
 	}
+	if err := validateSchemas(allTools); err != nil {
+		panic(err)
+	}
+}
+
+func validateSchemas(tools []Tool) error {
+	for _, t := range tools {
+		if !json.Valid(t.Schema) {
+			return fmt.Errorf("invalid JSON schema for tool %q", t.Name)
+		}
+	}
+	return nil
+}
+
+// GetTools returns a copy of all available tools.
+func GetTools() []Tool {
+	cp := make([]Tool, len(allTools))
+	copy(cp, allTools)
+	return cp
 }

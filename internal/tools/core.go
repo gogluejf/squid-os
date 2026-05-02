@@ -9,16 +9,16 @@ import (
 var ReadFile = Tool{
 	Name:        "read_file",
 	Description: "Read the contents of a file at the given path. Returns the raw text content. Use for reading code, configs, documents, and any text-based files.",
-	Schema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"path": map[string]interface{}{
-				"type":        "string",
-				"description": "Absolute path to the file to read",
-			},
-		},
-		"required": []string{"path"},
+	Schema: []byte(`{
+	"type": "object",
+	"properties": {
+		"path": {
+			"type": "string",
+			"description": "Absolute path to the file to read"
+		}
 	},
+	"required": ["path"]
+}`),
 	Execute: func(args map[string]interface{}) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {
@@ -36,20 +36,20 @@ var ReadFile = Tool{
 var WriteFile = Tool{
 	Name:        "write_file",
 	Description: "Create a new file or completely overwrite an existing file with the given content. Use for new files or full rewrites only. Path must be absolute.",
-	Schema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"path": map[string]interface{}{
-				"type":        "string",
-				"description": "Absolute path to the file to write",
-			},
-			"content": map[string]interface{}{
-				"type":        "string",
-				"description": "The content to write to the file",
-			},
+	Schema: []byte(`{
+	"type": "object",
+	"properties": {
+		"path": {
+			"type": "string",
+			"description": "Absolute path to the file to write"
 		},
-		"required": []string{"path", "content"},
+		"content": {
+			"type": "string",
+			"description": "The content to write to the file"
+		}
 	},
+	"required": ["path", "content"]
+}`),
 	Execute: func(args map[string]interface{}) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {
@@ -71,28 +71,28 @@ var WriteFile = Tool{
 var EditFile = Tool{
 	Name:        "edit_file",
 	Description: "Perform a precise string replacement in an existing file. old_string must match exactly. replace_all replaces every occurrence. Prefer over write_file for modifications.",
-	Schema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"path": map[string]interface{}{
-				"type":        "string",
-				"description": "Absolute path to the file to edit",
-			},
-			"old_string": map[string]interface{}{
-				"type":        "string",
-				"description": "The exact text to replace",
-			},
-			"new_string": map[string]interface{}{
-				"type":        "string",
-				"description": "The replacement text",
-			},
-			"replace_all": map[string]interface{}{
-				"type":        "boolean",
-				"description": "Replace all occurrences (default: false)",
-			},
+	Schema: []byte(`{
+	"type": "object",
+	"properties": {
+		"path": {
+			"type": "string",
+			"description": "Absolute path to the file to edit"
 		},
-		"required": []string{"path", "old_string", "new_string"},
+		"old_string": {
+			"type": "string",
+			"description": "The exact text to replace"
+		},
+		"new_string": {
+			"type": "string",
+			"description": "The replacement text"
+		},
+		"replace_all": {
+			"type": "boolean",
+			"description": "Replace all occurrences (default: false)"
+		}
 	},
+	"required": ["path", "old_string", "new_string"]
+}`),
 	Execute: func(args map[string]interface{}) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {

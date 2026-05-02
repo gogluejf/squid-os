@@ -10,16 +10,16 @@ import (
 var Open = Tool{
 	Name:        "open",
 	Description: "Open a file, URL, or directory with the system default application (xdg-open on Linux, open on macOS, start on Windows). Use for launching browsers, editors, or previewing files.",
-	Schema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"path": map[string]interface{}{
-				"type":        "string",
-				"description": "The file path, URL, or directory to open",
-			},
-		},
-		"required": []string{"path"},
+	Schema: []byte(`{
+	"type": "object",
+	"properties": {
+		"path": {
+			"type": "string",
+			"description": "The file path, URL, or directory to open"
+		}
 	},
+	"required": ["path"]
+}`),
 	Execute: func(args map[string]interface{}) ToolResult {
 		target, ok := args["path"].(string)
 		if !ok || target == "" {

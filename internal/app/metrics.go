@@ -10,8 +10,9 @@ type StreamMetrics struct {
 	Start                time.Time
 	firstThinkingTokenAt time.Time
 	thinkingDoneAt       time.Time
-	firstTextTokenAt     time.Time
-	thinkingChars        int // private — updated by streamState
+	firstTextTokenAt   time.Time
+	textDoneAt         time.Time
+	thinkingChars      int // private — updated by streamState
 	textChars            int
 	firstToolCallTokenAt time.Time
 	toolCallDoneAt       time.Time
@@ -91,26 +92,34 @@ func (m StreamMetrics) ThinkingDuration() time.Duration {
 	return end.Sub(m.firstThinkingTokenAt)
 }
 
-// TextDuration returns the duration from the first text token to now.
+// MarkTextDone records when the model finished streaming text tokens.
+func (m *StreamMetrics) MarkTextDone() {
+	m.textDoneAt = time.Now()
+}
+
+// TextDuration returns the duration from the first text token to when text ended
+// (or now if text is still active).
 func (m StreamMetrics) TextDuration() time.Duration {
 	if m.firstTextTokenAt.IsZero() {
 		return 0
 	}
-	return time.Since(m.firstTextTokenAt)
+	end := m.textDoneAt
+	if end.IsZero() {
+		end = time.Now()
+	}
+	return end.Sub(m.firstTextTokenAt)
 }
 
 // firstTokenAt returns the earliest timestamp at which any token arrived.
 func (m StreamMetrics) firstTokenAt() time.Time {
-	switch {
-	case m.firstThinkingTokenAt.IsZero():
-		return m.firstTextTokenAt
-	case m.firstTextTokenAt.IsZero():
-		return m.firstThinkingTokenAt
-	case m.firstThinkingTokenAt.Before(m.firstTextTokenAt):
-		return m.firstThinkingTokenAt
-	default:
-		return m.firstTextTokenAt
+	earliest := m.firstThinkingTokenAt
+	if !m.firstTextTokenAt.IsZero() && (earliest.IsZero() || m.firstTextTokenAt.Before(earliest)) {
+		earliest = m.firstTextTokenAt
 	}
+	if !m.firstToolCallTokenAt.IsZero() && (earliest.IsZero() || m.firstToolCallTokenAt.Before(earliest)) {
+		earliest = m.firstToolCallTokenAt
+	}
+	return earliest
 }
 
 // TimeToFirstToken returns the earliest time from stream start to any first token.

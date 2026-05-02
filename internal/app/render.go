@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"rig-chat/internal/config"
 	"rig-chat/internal/ui"
 )
 
@@ -78,35 +79,31 @@ func (m *Model) updateViewportContent() {
 		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, m.expanded))
 	}
 
-	showAssistantHeader := true
+	var liveSeqStat *config.SequenceStat
+	if m.stream.active {
+		liveSeqStat = m.buildLiveSeqStat()
+	}
+
 	for i, rendered := range m.session.renderedMessages {
 		msg := m.session.file.Messages[i]
-
-		if msg.Role == "user" || showAssistantHeader {
-			if msg.Role == "user" {
-				b.WriteString(ui.RenderUserHeader(msg, m.width))
-			} else {
-				b.WriteString(ui.RenderAssistantHeader(msg, m.width))
+		if msg.Role == "user" {
+			b.WriteString(ui.RenderUserHeader(msg, m.width))
+		} else if msg.SequenceStat != nil {
+			stat := msg.SequenceStat
+			if liveSeqStat != nil {
+				stat = liveSeqStat
+				liveSeqStat = nil // consumed by sequence head
 			}
+			b.WriteString(ui.RenderAssistantHeader(msg, stat, m.width))
 		}
-
-		showAssistantHeader = msg.Role == "user"
-
 		b.WriteString(rendered)
 	}
 
 	if m.stream.active {
-		// Streaming header: only if no assistant header was shown yet in this sequence
-		if showAssistantHeader {
-			b.WriteString(ui.RenderStreamingHeader(ui.StreamingViewData{
-				RequestStart: m.stream.metrics.Start,
-				TextTokens:   m.stream.metrics.TextTokens(),
-				TextDur:      m.stream.metrics.TextDuration(),
-				TokPerSec:    m.stream.metrics.AvgTokenPerSec(),
-				Width:        m.width,
-			}))
+		if liveSeqStat != nil {
+			// First of sequence — no saved assistant message yet
+			b.WriteString(ui.RenderStreamingHeader(liveSeqStat, m.stream.metrics.Start, m.width))
 			b.WriteString("\n")
-			showAssistantHeader = true
 		}
 		// Only re-run glamour when a new line has completed (lastNL changed).
 		lastNL := strings.LastIndex(m.stream.text, "\n")
@@ -161,4 +158,33 @@ func (m Model) buildFooterData() ui.FooterData {
 // renderHelp delegates to the ui package to produce the full help screen.
 func (m Model) renderHelp() string {
 	return ui.RenderHelp(m.width, m.height)
+}
+
+// buildLiveSeqStat returns a SequenceStat for the active stream, combining
+// any saved stats from the sequence head with the current stream metrics.
+func (m *Model) buildLiveSeqStat() *config.SequenceStat {
+	seqIdx := config.FindSequenceHeadIdx(m.session.file.Messages)
+	outTokens := m.stream.metrics.TotalTokens()
+	infDurMs := (m.stream.metrics.Duration() - m.stream.metrics.TimeToFirstToken()).Milliseconds()
+
+	if seqIdx == -1 {
+		// First message of sequence — live stats only
+		stat := &config.SequenceStat{
+			OutputTokens:   outTokens,
+			InferenceDurMs: infDurMs,
+		}
+		if infDurMs > 0 {
+			stat.AvgTokensPerSec = float64(outTokens) / float64(infDurMs) * 1000.0
+		}
+		return stat
+	}
+
+	// Subsequent message — combine saved base + current stream
+	base := *m.session.file.Messages[seqIdx].SequenceStat
+	base.OutputTokens += outTokens
+	base.InferenceDurMs += infDurMs
+	if base.InferenceDurMs > 0 {
+		base.AvgTokensPerSec = float64(base.OutputTokens) / float64(base.InferenceDurMs) * 1000.0
+	}
+	return &base
 }

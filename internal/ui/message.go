@@ -91,28 +91,14 @@ func RenderUserHeader(msg config.Message, width int) string {
 }
 
 // RenderAssistantHeader builds the header line for an assistant message.
-func RenderAssistantHeader(msg config.Message, width int) string {
+func RenderAssistantHeader(msg config.Message, stat *config.SequenceStat, width int) string {
 	inner := width - 2
-
 	leftStr := AssistantHeaderDimStyle.Render(msg.CreatedAt.Format("15:04:05"))
-
-	var right []string
-	if msg.TokensPerSecond > 0 {
-		right = append(right, AssistantHeaderDimStyle.Render(fmt.Sprintf("%.1f tok/s", msg.TokensPerSecond)))
-	}
-	if msg.TextMetrics.DurationMs > 0 {
-		right = append(right, AssistantHeaderDimStyle.Render(formatDuration(msg.TextMetrics.DurationMs)))
-	}
-	if msg.TextMetrics.Tokens > 0 {
-		right = append(right, AssistantHeaderDimStyle.Render(fmt.Sprintf("%d tokens", msg.TextMetrics.Tokens)))
-	}
-
-	rightStr := strings.Join(right, AssistantHeaderDimStyle.Render("  "))
+	rightStr := renderSeqStatRight(stat)
 	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)
 	if gap < 1 {
 		gap = 1
 	}
-
 	return AssistantHeaderStyle.Width(width).Render(
 		"\n" + leftStr + AssistantHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr + "\n",
 	)
@@ -215,30 +201,36 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	return b.String()
 }
 
-// renderStreamingHeader mirrors RenderAssistantHeader visually:
-// timestamp on the left, [tok/s  elapsed  N tokens] on the right.
-func RenderStreamingHeader(data StreamingViewData) string {
-	leftStr := data.RequestStart.Format("15:04:05")
-
-	var right []string
-	if data.TokPerSec > 0 {
-		right = append(right, fmt.Sprintf("%.1f tok/s", data.TokPerSec))
-	}
-	if data.TextDur > 0 {
-		right = append(right, formatDuration(data.TextDur.Milliseconds()))
-	}
-	if data.TextTokens > 0 {
-		right = append(right, fmt.Sprintf("%d tokens", data.TextTokens))
-	}
-
-	rightStr := strings.Join(right, "  ")
-	gap := data.Width - lipgloss.Width(leftStr) - lipgloss.Width(rightStr) - 2
+// RenderStreamingHeader renders the assistant header during an active stream.
+func RenderStreamingHeader(stat *config.SequenceStat, start time.Time, width int) string {
+	inner := width - 2
+	leftStr := start.Format("15:04:05")
+	rightStr := renderSeqStatRight(stat)
+	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)
 	if gap < 1 {
 		gap = 1
 	}
-
 	header := leftStr + strings.Repeat(" ", gap) + rightStr
-	return AssistantHeaderStyle.Width(data.Width).Render("\n" + header + "\n")
+	return AssistantHeaderStyle.Width(width).Render("\n" + header + "\n")
+}
+
+// renderSeqStatRight builds the right-side content of an assistant header from a SequenceStat.
+func renderSeqStatRight(stat *config.SequenceStat) string {
+	if stat == nil {
+		return ""
+	}
+	var parts []string
+	if stat.AvgTokensPerSec > 0 {
+		parts = append(parts, AssistantHeaderDimStyle.Render(fmt.Sprintf("%.1f tok/s", stat.AvgTokensPerSec)))
+	}
+	var execDur *int64
+	if stat.InputTokens > 0 {
+		execDur = &stat.ExecDurMs
+	}
+	if chip := tokenChipBoth(stat.OutputTokens, stat.InputTokens, &stat.InferenceDurMs, execDur); chip != "" {
+		parts = append(parts, AssistantHeaderDimStyle.Render(chip))
+	}
+	return strings.Join(parts, AssistantHeaderDimStyle.Render("  "))
 }
 
 // toolLineBg is a plain background style used as a width wrapper for composed tool lines.
@@ -341,7 +333,7 @@ func formatTokens(n int) string {
 
 func formatDuration(ms int64) string {
 	if ms == 0 {
-		return "1ms"
+		return "<1ms"
 	}
 	if ms < 1000 {
 		return fmt.Sprintf("%dms", ms)

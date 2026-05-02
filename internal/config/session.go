@@ -35,6 +35,40 @@ type ContentMetrics struct {
 	TimeToFirstTokenMs int64 `json:"time_to_first_token_ms,omitempty"`
 }
 
+type SequenceStat struct {
+	AvgTokensPerSec float64 `json:"avg_tok_per_sec,omitempty"`
+	InputTokens     int     `json:"input_tokens,omitempty"`
+	OutputTokens    int     `json:"output_tokens,omitempty"`
+	InferenceDurMs  int64   `json:"inference_dur_ms,omitempty"`
+	ExecDurMs       int64   `json:"exec_dur_ms,omitempty"`
+}
+
+func (ss *SequenceStat) Accumulate(msg Message) {
+	ss.OutputTokens += msg.Tokens
+	ss.InferenceDurMs += msg.DurationTimeMs - msg.TimeToFirstTokenMs
+	for _, tc := range msg.ToolCalls {
+		ss.ExecDurMs += tc.Execution.DurationMs
+		ss.InputTokens += tc.Execution.Tokens
+	}
+	if ss.InferenceDurMs > 0 {
+		ss.AvgTokensPerSec = float64(ss.OutputTokens) / float64(ss.InferenceDurMs) * 1000.0
+	}
+}
+
+// FindSequenceHeadIdx returns the index of the first assistant message after
+// the last user message, or -1 if none exists yet.
+func FindSequenceHeadIdx(msgs []Message) int {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "user" {
+			if i+1 < len(msgs) {
+				return i + 1
+			}
+			return -1
+		}
+	}
+	return -1
+}
+
 type ToolCallEntry struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
@@ -70,13 +104,15 @@ type Message struct {
 	ImagePath  string `json:"image_path,omitempty"`
 	UserTokens int    `json:"user_tokens"`
 
-	Text            string          `json:"text"`
-	TextMetrics     ContentMetrics  `json:"text_metrics,omitempty"`
-	ThinkingText    string          `json:"thinking_text,omitempty"`
-	ThinkingMetrics ContentMetrics  `json:"thinking_metrics,omitempty"`
+	Text            string         `json:"text"`
+	TextMetrics     ContentMetrics `json:"text_metrics,omitempty"`
+	ThinkingText    string         `json:"thinking_text,omitempty"`
+	ThinkingMetrics ContentMetrics `json:"thinking_metrics,omitempty"`
 
 	ToolCalls       []ToolCallEntry `json:"tool_calls,omitempty"`
 	ToolCallMetrics ContentMetrics  `json:"tool_call_metrics,omitempty"`
+
+	SequenceStat *SequenceStat `json:"sequence_stat,omitempty"`
 
 	StopReason string `json:"stop_reason,omitempty"`
 }

@@ -213,30 +213,21 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 
 		// Tool calls: save assistant msg, execute tools synchronously, resume streaming
 		if event.StopReason == "tool_calls" && len(m.stream.partialTools) > 0 {
-			m.session.appendMsg(config.Message{
-				ID:           fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-				Role:         "assistant",
-				CreatedAt:    m.stream.metrics.Start,
-				Text:         m.stream.text,
-				ThinkingText: m.stream.thinking,
-				ThinkingMetrics: config.ContentMetrics{
-					Tokens:             m.stream.metrics.ThinkingTokens(),
-					DurationMs:         m.stream.metrics.ThinkingDuration().Milliseconds(),
-					TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
-				TextMetrics: config.ContentMetrics{
-					Tokens:             m.stream.metrics.TextTokens(),
-					DurationMs:         m.stream.metrics.TextDuration().Milliseconds(),
-					TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
+			(&m).appendAssistantMsg(config.Message{
+				ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+				Role:               "assistant",
+				CreatedAt:          m.stream.metrics.Start,
+				ThinkingText:       m.stream.thinking,
+				ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), DurationMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
+				Text:               m.stream.text,
+				TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), DurationMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
+				ToolCalls:          (&m).executeTools(m.stream.partialTools),
+				ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), DurationMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
 				TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
 				Tokens:             m.stream.metrics.TotalTokens(),
 				DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
 				TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
 				StopReason:         event.StopReason,
-				ToolCallMetrics: config.ContentMetrics{
-					Tokens:             m.stream.metrics.ToolCallTokens(),
-					DurationMs:         m.stream.metrics.ToolCallDuration().Milliseconds(),
-					TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
-				ToolCalls: (&m).executeTools(m.stream.partialTools),
 			})
 
 			m.stream.reset()
@@ -247,20 +238,14 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		}
 
 		// Normal completion: save assistant message
-		m.session.appendMsg(config.Message{
-			ID:           fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-			Role:         "assistant",
-			CreatedAt:    m.stream.metrics.Start,
-			Text:         m.stream.text,
-			ThinkingText: m.stream.thinking,
-			ThinkingMetrics: config.ContentMetrics{
-				Tokens:             m.stream.metrics.ThinkingTokens(),
-				DurationMs:         m.stream.metrics.ThinkingDuration().Milliseconds(),
-				TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
-			TextMetrics: config.ContentMetrics{
-				Tokens:             m.stream.metrics.TextTokens(),
-				DurationMs:         m.stream.metrics.TextDuration().Milliseconds(),
-				TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
+		(&m).appendAssistantMsg(config.Message{
+			ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+			Role:               "assistant",
+			CreatedAt:          m.stream.metrics.Start,
+			ThinkingText:       m.stream.thinking,
+			ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), DurationMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
+			Text:               m.stream.text,
+			TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), DurationMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
 			TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
 			Tokens:             m.stream.metrics.TotalTokens(),
 			DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
@@ -290,11 +275,12 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		if p.firstAt.IsZero() {
 			p.firstAt = time.Now()
 		}
-		// End thinking phase if still active (model moved on to tool calls)
+		// End thinking and text phases if still active (model moved on to tool calls)
 		if m.stream.inThinking {
 			m.stream.metrics.MarkThinkingDone()
 			m.stream.inThinking = false
 		}
+		m.stream.metrics.MarkTextDone()
 		m.updateViewportContent()
 		return m, waitForStreamEvent(m.stream.ch)
 	}
@@ -382,6 +368,31 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 
 	m.updateViewportContent()
 	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd())
+}
+
+// appendAssistantMsg saves an assistant message and maintains SequenceStat on the
+// sequence head (first assistant message after the last user message).
+// InputTokens accumulates tool execution result tokens (fed back to the model).
+func (m *Model) appendAssistantMsg(msg config.Message) {
+	seqIdx := config.FindSequenceHeadIdx(m.session.file.Messages)
+	if seqIdx == -1 {
+		// First of sequence — init SequenceStat
+		stat := &config.SequenceStat{
+			OutputTokens:    msg.Tokens,
+			InferenceDurMs:  msg.DurationTimeMs - msg.TimeToFirstTokenMs,
+			AvgTokensPerSec: msg.TokensPerSecond,
+		}
+		for _, tc := range msg.ToolCalls {
+			stat.ExecDurMs += tc.Execution.DurationMs
+			stat.InputTokens += tc.Execution.Tokens
+		}
+		msg.SequenceStat = stat
+		m.session.appendMsg(msg)
+	} else {
+		// Subsequent message — accumulate into sequence head
+		m.session.appendMsg(msg)
+		m.session.file.Messages[seqIdx].SequenceStat.Accumulate(msg)
+	}
 }
 
 func findTool(name string, toolList []tools.Tool) *tools.Tool {

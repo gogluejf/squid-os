@@ -42,7 +42,7 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 	if msg.ThinkingText != "" {
 		thinkStyle := ThinkingStyle.Width(bodyWidth)
 		b.WriteString("\n")
-		thinkLabel := " thinking " + tokenChipDown(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.DurationMs)
+		thinkLabel := " thinking " + tokenChipDown(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs)
 		if expanded {
 			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 			b.WriteString(thinkStyle.Render("\n" + msg.ThinkingText))
@@ -227,7 +227,7 @@ func renderSeqStatRight(stat *config.SequenceStat) string {
 	if stat.InputTokens > 0 {
 		execDur = &stat.ExecDurMs
 	}
-	if chip := tokenChipBoth(stat.OutputTokens, stat.InputTokens, &stat.InferenceDurMs, execDur); chip != "" {
+	if chip := tokenChipBoth(stat.OutputTokens, stat.InputTokens, &stat.InferenceDuractionMs, execDur); chip != "" {
 		parts = append(parts, AssistantHeaderDimStyle.Render(chip))
 	}
 	return strings.Join(parts, AssistantHeaderDimStyle.Render("  "))

@@ -163,6 +163,7 @@ func (m Model) renderHelp() string {
 // buildLiveSeqStat returns a SequenceStat for the active stream, combining
 // any saved stats from the sequence head with the current stream metrics.
 func (m *Model) buildLiveSeqStat() *config.SequenceStat {
+
 	seqIdx := config.FindSequenceHeadIdx(m.session.file.Messages)
 	outTokens := m.stream.metrics.TotalTokens()
 	infDurMs := (m.stream.metrics.Duration() - m.stream.metrics.TimeToFirstToken()).Milliseconds()
@@ -170,8 +171,8 @@ func (m *Model) buildLiveSeqStat() *config.SequenceStat {
 	if seqIdx == -1 {
 		// First message of sequence — live stats only
 		stat := &config.SequenceStat{
-			OutputTokens:   outTokens,
-			InferenceDurMs: infDurMs,
+			OutputTokens:         outTokens,
+			InferenceDuractionMs: infDurMs,
 		}
 		if infDurMs > 0 {
 			stat.AvgTokensPerSec = float64(outTokens) / float64(infDurMs) * 1000.0
@@ -182,9 +183,9 @@ func (m *Model) buildLiveSeqStat() *config.SequenceStat {
 	// Subsequent message — combine saved base + current stream
 	base := *m.session.file.Messages[seqIdx].SequenceStat
 	base.OutputTokens += outTokens
-	base.InferenceDurMs += infDurMs
-	if base.InferenceDurMs > 0 {
-		base.AvgTokensPerSec = float64(base.OutputTokens) / float64(base.InferenceDurMs) * 1000.0
+	base.InferenceDuractionMs += infDurMs
+	if base.InferenceDuractionMs > 0 {
+		base.AvgTokensPerSec = float64(base.OutputTokens) / float64(base.InferenceDuractionMs) * 1000.0
 	}
 	return &base
 }

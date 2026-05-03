@@ -209,6 +209,10 @@ var (
 			Foreground(lipgloss.Color(P.TextAccent)).
 			Padding(0, 1)
 
+	ToolLineBg = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp)).
+			Padding(0, 1)
+
 	ToolCallInline = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextAccent))

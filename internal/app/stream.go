@@ -186,9 +186,11 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	if event.Error != nil {
 		(&m).setNotification(ui.NotificationError, event.Error.Error())
 
-		text, image := m.session.truncateToUser()
-		m.textarea.SetValue(text)
-		m.attachedImage = image
+		text, image := m.session.cancelTruncate()
+		if text != "" {
+			m.textarea.SetValue(text)
+			m.attachedImage = image
+		}
 
 		m.stream.reset()
 		cmd := (&m).setChatMode()
@@ -198,11 +200,18 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 
 	if event.Done {
 		if m.stream.userCancelled {
-			text, image := m.session.truncateToUser()
-			m.textarea.SetValue(text)
-			m.attachedImage = image
+			text, image := m.session.cancelTruncate()
+			if text != "" {
+				m.textarea.SetValue(text)
+				m.attachedImage = image
+			}
 
-			(&m).setNotification(ui.NotificationInfo, "stream cancelled")
+			// Differentiate: if we kept history (mid-loop cancel) vs full truncate.
+			if len(m.session.file.Messages) > 0 && m.session.file.Messages[len(m.session.file.Messages)-1].Role != "user" {
+				(&m).setNotification(ui.NotificationInfo, "stream cancelled, history preserved")
+			} else {
+				(&m).setNotification(ui.NotificationInfo, "stream cancelled")
+			}
 
 			m.stream.reset()
 			blinkCmd := (&m).setChatMode()

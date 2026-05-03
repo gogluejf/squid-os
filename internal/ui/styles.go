@@ -68,32 +68,58 @@ var P = Palette{
 // Derived styles — each uses palette constants
 // -------------------------------------------------------
 
+// BoxMargin is the side gutter (cols) around UserBox and ToolBox.
+const BoxMargin = 2
+
 var (
-	// Message backgrounds
-	UserMsgStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgUser)).
+	// Box-composition primitives. Each emits its own trailing 1-row gap
+	// (MarginBottom in BgApp) so concatenating blocks produces a uniform
+	// 1-blank-row rhythm without inline "\n" math.
+
+	// CanvasSpan — full viewport width, BgApp. Hosts thinking, waiting,
+	// assistant text, and the assistant header. Side padding aligns content
+	// with the inside edge of UserBox/ToolBox content (BoxMargin + 2).
+	// Callers wrap content with explicit "\n" rows for vertical spacing.
+	CanvasSpan = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextPrimary)).
-			Padding(0, 1)
+			Padding(0, BoxMargin+2).
+			MarginBottom(1).
+			MarginBackground(lipgloss.Color(P.BgApp))
 
-	AssistantMsgStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(P.BgApp)).
-				Foreground(lipgloss.Color(P.TextPrimary)).
-				Padding(0, 1)
+	// UserBox — narrower BgUser block centered on the canvas. No internal
+	// vertical padding: callers put explicit "\n" rows in content for the
+	// internal frame, since Padding(1, ...) does not reliably emit
+	// bg-painted blank rows in this lipgloss version when combined with
+	// Margin/MarginBackground. MarginBottom adds the 1-row BgApp gap after.
+	// Caller sets .Width(width - 2*BoxMargin) before Render.
+	UserBox = lipgloss.NewStyle().
+		Background(lipgloss.Color(P.BgUser)).
+		Foreground(lipgloss.Color(P.TextPrimary)).
+		Padding(0, 2).
+		Margin(0, BoxMargin, 1, BoxMargin).
+		MarginBackground(lipgloss.Color(P.BgApp))
 
-	// Thinking block
+	// ToolBox — narrower BgCode block (one shade lighter than canvas).
+	// Same content-blank pattern as UserBox.
+	ToolBox = lipgloss.NewStyle().
+		Background(lipgloss.Color(P.BgCode)).
+		Foreground(lipgloss.Color(P.TextPrimary)).
+		Padding(0, 2).
+		Margin(0, BoxMargin, 1, BoxMargin).
+		MarginBackground(lipgloss.Color(P.BgApp))
+
+	// Thinking / waiting label (BgApp — sits on the canvas)
 	ThinkingStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextMuted))
 
-	// Message headers
-	MsgHeaderStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(P.TextDim))
+	// Stat chip on the canvas (e.g. "· ↓1.2k 250ms" after thinking/waiting)
+	CanvasStatInline = lipgloss.NewStyle().
+				Background(lipgloss.Color(P.BgApp)).
+				Foreground(lipgloss.Color(P.TextDim))
 
-	UserHeaderStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgUser)).
-			Foreground(lipgloss.Color(P.TextSecondary)).
-			Padding(0, 1)
-
+	// Message header inline styles (painted on the parent box's bg)
 	UserHeaderDimStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color(P.BgUser)).
 				Foreground(lipgloss.Color(P.TextSecondary))
@@ -102,18 +128,9 @@ var (
 				Background(lipgloss.Color(P.BgUser)).
 				Foreground(lipgloss.Color(P.TextAttachment))
 
-	AssistantHeaderStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(P.BgApp)).
-				Foreground(lipgloss.Color(P.TextSecondary)).
-				Padding(0, 1)
-
 	AssistantHeaderDimStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color(P.BgApp)).
 				Foreground(lipgloss.Color(P.TextSecondary))
-
-	AssistantHeaderAttStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(P.BgApp)).
-				Foreground(lipgloss.Color(P.TextAttachment))
 
 	// Top header
 	TopHeaderStyle = lipgloss.NewStyle().
@@ -203,43 +220,32 @@ var (
 				Foreground(lipgloss.Color(P.TextSuccess)).
 				Bold(true)
 
-	// Tool call line
-	ToolCallStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
-			Foreground(lipgloss.Color(P.TextAccent)).
-			Padding(0, 1)
-
-	ToolLineBg = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
-			Padding(0, 1)
-
-	ToolCallInline = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
+	// Tool box inline sub-styles (BgCode — match the ToolBox background)
+	ToolCallOnTool = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgCode)).
 			Foreground(lipgloss.Color(P.TextAccent))
 
-	ToolParamInline = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
+	ToolParamOnTool = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgCode)).
 			Foreground(lipgloss.Color(P.TextToolParam))
 
-	ToolCheckInline = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
+	ToolCheckOnTool = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgCode)).
 			Foreground(lipgloss.Color(P.TextSuccess))
 
-	ToolErrInline = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
+	ToolErrOnTool = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgCode)).
 			Foreground(lipgloss.Color(P.TextError))
 
-	ToolStatInline = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
+	ToolStatOnTool = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgCode)).
 			Foreground(lipgloss.Color(P.TextDim))
 
-	ToolCallResultStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(P.BgApp)).
-				Foreground(lipgloss.Color(P.TextDim)).
-				Padding(0, 1)
+	ToolResultOnTool = lipgloss.NewStyle().
+				Background(lipgloss.Color(P.BgCode)).
+				Foreground(lipgloss.Color(P.TextDim))
 
-	ToolCallErrorStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(P.BgApp)).
-				Foreground(lipgloss.Color(P.TextError)).
-				Padding(0, 1)
+	ToolErrorOnTool = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgCode)).
+			Foreground(lipgloss.Color(P.TextError))
 )

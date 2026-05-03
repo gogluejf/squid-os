@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/glamour/ansi"
+	"github.com/charmbracelet/glamour/styles"
 )
 
 var mdRenderer *glamour.TermRenderer
@@ -11,12 +13,24 @@ var mdRenderer *glamour.TermRenderer
 func init() {
 	var err error
 	mdRenderer, err = glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStyles(noIndentStyles()),
 		glamour.WithWordWrap(0), // we control width ourselves
 	)
 	if err != nil {
 		mdRenderer = nil
 	}
+}
+
+// noIndentStyles returns the standard dark glamour style with all block
+// indentation and document margin removed so markdown renders flush-left.
+func noIndentStyles() ansi.StyleConfig {
+	cfg := styles.DarkStyleConfig
+	cfg.Document.Indent = nil
+	cfg.Document.Margin = nil
+	cfg.Paragraph.Indent = nil
+	cfg.Heading.Indent = nil
+	cfg.BlockQuote.Indent = nil
+	return cfg
 }
 
 // RenderMarkdown renders markdown text to styled terminal output.

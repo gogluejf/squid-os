@@ -87,9 +87,7 @@ func (m *Model) updateViewportContent() {
 
 	for i, rendered := range m.session.renderedMessages {
 		msg := m.session.file.Messages[i]
-		if msg.Role == "user" {
-			b.WriteString(ui.RenderUserHeader(msg, m.width))
-		} else if msg.SequenceStat != nil {
+		if msg.Role != "user" && msg.SequenceStat != nil {
 			stat := msg.SequenceStat
 			if msg.ID == liveSeqStatID {
 				stat = liveSeqStat

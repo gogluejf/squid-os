@@ -45,12 +45,12 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 
 	// Thinking block
 	if msg.ThinkingText != "" {
-		thinkStyle := ThinkingStyle.Width(bodyWidth)
-		thinkLabel := "[thinking] " + tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs)
+		thinkLabel := ThinkingStyle.Render("↳ thinking ") + ToolStatInline.Render(" "+tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs))
 		if expanded {
-			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n\n" + msg.ThinkingText))
+			b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + thinkLabel + "\n"))
+			b.WriteString(ToolCallResultStyle.Width(bodyWidth).Render(msg.ThinkingText + "\n"))
 		} else {
-			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
+			b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + thinkLabel + "\n"))
 		}
 	}
 
@@ -145,22 +145,23 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	// Waiting state
 	if data.Waiting {
 		elapsed := time.Since(data.RequestStart)
-		b.WriteString(ThinkingStyle.Width(bodyWidth).Render("\n[waiting] " + formatDuration(elapsed.Milliseconds()) + "\n"))
+		waitLabel := ThinkingStyle.Render("↳ waiting ") + ToolStatInline.Render(" "+formatDuration(elapsed.Milliseconds()))
+		b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + waitLabel + "\n"))
 	}
 
 	// Thinking block
 	if data.ThinkingText != "" || data.InThinking {
-		thinkStyle := ThinkingStyle.Width(bodyWidth)
 		dur := data.ThinkingDur.Milliseconds()
-		thinkLabel := "[thinking] " + tokenChipOutput(data.ThinkingTokens, &dur)
+		thinkLabel := ThinkingStyle.Render("↳ thinking ") + ToolStatInline.Render(" "+tokenChipOutput(data.ThinkingTokens, &dur))
 		if data.Expanded {
+			b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + thinkLabel + "\n"))
 			if data.ThinkingText != "" {
-				b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n\n" + data.ThinkingText + "\n"))
+				b.WriteString(ToolCallResultStyle.Width(bodyWidth).Render(data.ThinkingText + "\n"))
 			} else {
-				b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n\n...\n"))
+				b.WriteString(ToolCallResultStyle.Width(bodyWidth).Render(" ... \n"))
 			}
 		} else {
-			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
+			b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + thinkLabel + "\n"))
 		}
 	}
 

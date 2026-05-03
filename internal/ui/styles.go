@@ -83,8 +83,7 @@ var (
 	// Thinking block
 	ThinkingStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgApp)).
-			Foreground(lipgloss.Color(P.TextMuted)).
-			Padding(0, 1)
+			Foreground(lipgloss.Color(P.TextMuted))
 
 	// Message headers
 	MsgHeaderStyle = lipgloss.NewStyle().

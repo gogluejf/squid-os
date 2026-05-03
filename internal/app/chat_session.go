@@ -62,6 +62,33 @@ func (cs *chatSession) truncateToUser() (userText, userImage string) {
 	return "", ""
 }
 
+// cancelTruncate always finds and returns the last user message's text/image
+// for restoring to the textarea. It truncates only if that user message is the
+// last one in the session (i.e., not mid-tool-loop). This lets the user cancel
+// mid-loop without losing earlier assistant work, while still getting their
+// input back for quick re-edit.
+func (cs *chatSession) cancelTruncate() (userText, userImage string) {
+	n := len(cs.file.Messages)
+	if n == 0 {
+		return "", ""
+	}
+
+	// Always find the last user message for restoring input.
+	for i := n - 1; i >= 0; i-- {
+		if cs.file.Messages[i].Role == "user" {
+			userText, userImage = cs.file.Messages[i].Text, cs.file.Messages[i].ImagePath
+			break
+		}
+	}
+
+	// Truncate only if the user message is on top.
+	if n > 0 && cs.file.Messages[n-1].Role == "user" {
+		cs.truncateTo(n - 1)
+	}
+
+	return userText, userImage
+}
+
 // destroyLastSequence removes the last user message and everything after it,
 // pushes the removed messages onto the undo stack, and returns the destroyed
 // user message's text and image so the caller can restore them to the textarea.

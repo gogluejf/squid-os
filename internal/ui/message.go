@@ -45,7 +45,7 @@ func renderUserMessage(msg config.Message, width int) string {
 	}
 	headerLine := leftStr + UserHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr
 
-	return UserBox.Width(boxWidth).Render("\n\n" + headerLine + "\n\n" + msg.Text + "\n")
+	return UserBox.Width(boxWidth).Render("\n" + headerLine + "\n\n" + msg.Text)
 }
 
 // RenderAssistantHeader emits the assistant header as a CanvasSpan.
@@ -59,7 +59,7 @@ func RenderAssistantHeader(start time.Time, stat *config.SequenceStat, width int
 		gap = 1
 	}
 	line := leftStr + AssistantHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr
-	return CanvasSpan.Width(width).Render(line)
+	return CanvasSpan.Width(width).Render("\n" + line)
 }
 
 // renderAssistantMessage renders an assistant message as canvas spans
@@ -72,7 +72,7 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 	}
 
 	if msg.ThinkingText != "" {
-		thinkLabel := ThinkingStyle.Render("↳ thinking") +
+		thinkLabel := ThinkingStyle.Render("\n↳ thinking") +
 			CanvasStatInline.Render(" · "+tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs))
 		content := thinkLabel
 		if expanded {
@@ -81,7 +81,7 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 		b.WriteString(CanvasSpan.Width(width).Render(content))
 	}
 
-	if msg.Text != "" {
+	if msg.Text != "" && msg.Text != "\n\n" {
 		body := RenderMarkdownOnBg(msg.Text, P.BgApp)
 		b.WriteString(CanvasSpan.Width(width).Render(body))
 	}
@@ -131,7 +131,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 				}
 			}
 		}
-		b.WriteString(ToolBox.Width(boxWidth).Render("\n\n" + content + "\n"))
+		b.WriteString(ToolBox.Width(boxWidth).Render("\n\n" + content))
 	}
 	return b.String()
 }
@@ -181,7 +181,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 
 	if data.Waiting {
 		elapsed := time.Since(data.RequestStart)
-		waitLabel := ThinkingStyle.Render("↳ waiting") +
+		waitLabel := ThinkingStyle.Render("\n↳ waiting") +
 			CanvasStatInline.Render(" · "+formatDuration(elapsed.Milliseconds()))
 		b.WriteString(CanvasSpan.Width(width).Render(waitLabel))
 	}

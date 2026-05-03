@@ -241,7 +241,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 
 		switch tc.Execution.Status {
 		case "error":
-			checkAndErr := ToolErrInline.Render(" ✗ " + stripNewlines(truncate(tc.Execution.Error, 30)))
+			checkAndErr := ToolErrInline.Render(" ✗ error")
 			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 			b.WriteString(toolLineBg.Width(width).Render("\n" + label + checkAndErr + stats + "\n"))
 			if expanded {
@@ -252,7 +252,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 				}
 			}
 		case "success":
-			checkAndResult := ToolCheckInline.Render(" ✓ " + stripNewlines(truncate(tc.Execution.Result, 30)))
+			checkAndResult := ToolCheckInline.Render(" ✓ success")
 			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 			b.WriteString(toolLineBg.Width(width).Render("\n" + label + checkAndResult + stats + "\n"))
 			if expanded {

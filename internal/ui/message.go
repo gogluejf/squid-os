@@ -80,7 +80,7 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 
 	// Thinking block
 	if msg.ThinkingText != "" {
-		thinkLabel := ThinkingStyle.Render("↳ thinking ") + ToolStatInline.Render(" "+tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs))
+		thinkLabel := ThinkingStyle.Render("↳ thinking") + ToolStatInline.Render(" · "+tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs))
 		if expanded {
 			b.WriteString(ToolLineBg.Width(bodyWidth).Render("\n" + thinkLabel + "\n"))
 			b.WriteString(ToolCallResultStyle.Width(bodyWidth).Render(msg.ThinkingText + "\n"))
@@ -109,13 +109,13 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 		namePart, paramPart := formatToolDisplay(tc.Instruction.Name, tc.Instruction.Arguments, reg)
 		label := ToolCallInline.Render(namePart)
 		if paramPart != "" {
-			label += ToolParamInline.Render(paramPart)
+			label += ToolParamInline.Render(" · " + paramPart)
 		}
 
+		stats := ToolStatInline.Render(" · " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 		switch tc.Execution.Status {
 		case "error":
 			checkAndErr := ToolErrInline.Render(" [✗]")
-			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 			b.WriteString(ToolLineBg.Width(width).Render("\n" + label + checkAndErr + stats + "\n"))
 			if expanded {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
@@ -126,18 +126,12 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 			}
 		case "success":
 			checkAndResult := ToolCheckInline.Render(" [✓]")
-			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 			b.WriteString(ToolLineBg.Width(width).Render("\n" + label + checkAndResult + stats + "\n"))
 			if expanded {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
 				if tc.Execution.Result != "" {
 					b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Execution.Result + "\n"))
 				}
-			}
-		default:
-			b.WriteString(ToolLineBg.Width(width).Render("\n" + label + "\n"))
-			if expanded && tc.Instruction.Arguments != "" {
-				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
 			}
 		}
 	}
@@ -187,14 +181,14 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	// Waiting state
 	if data.Waiting {
 		elapsed := time.Since(data.RequestStart)
-		waitLabel := ThinkingStyle.Render("↳ waiting ") + ToolStatInline.Render(" "+formatDuration(elapsed.Milliseconds()))
+		waitLabel := ThinkingStyle.Render("↳ waiting") + ToolStatInline.Render(" · "+formatDuration(elapsed.Milliseconds()))
 		b.WriteString(ToolLineBg.Width(bodyWidth).Render("\n" + waitLabel + "\n"))
 	}
 
 	// Thinking block
 	if data.ThinkingText != "" || data.InThinking {
 		dur := data.ThinkingDur.Milliseconds()
-		thinkLabel := ThinkingStyle.Render("↳ thinking ") + ToolStatInline.Render(" "+tokenChipOutput(data.ThinkingTokens, &dur))
+		thinkLabel := ThinkingStyle.Render("↳ thinking") + ToolStatInline.Render(" · "+tokenChipOutput(data.ThinkingTokens, &dur))
 		if data.Expanded {
 			b.WriteString(ToolLineBg.Width(bodyWidth).Render("\n" + thinkLabel + "\n"))
 			if data.ThinkingText != "" {
@@ -252,7 +246,7 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, width int, expan
 		namePart, paramPart := formatToolDisplay(tc.Name, tc.Arguments, reg)
 		label := ToolCallInline.Render(namePart)
 		if paramPart != "" {
-			label += ToolParamInline.Render(paramPart)
+			label += ToolParamInline.Render(" · " + paramPart)
 		}
 		var statPart string
 		if tc.Tokens > 0 || tc.Duration > 0 {
@@ -359,7 +353,7 @@ func formatToolDisplay(name, args string, reg *tools.Registry) (namePart string,
 		tool := reg.Get(name)
 		if tool != nil {
 			if display := tool.DisplayValue(args); display != "" {
-				return "↳ " + name, " " + truncate(display, 50)
+				return "↳ " + name, truncate(display, 50)
 			}
 		}
 	}

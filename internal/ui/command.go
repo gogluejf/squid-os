@@ -101,8 +101,8 @@ func (cp *CommandPalette) RenderHeight() int {
 }
 
 // palette background colours
-const paletteBg = lipgloss.Color("235")
-const paletteSelectedBg = lipgloss.Color("237")
+var paletteBg = lipgloss.Color(P.BgFooter)
+var paletteSelectedBg = lipgloss.Color(P.BgSelected)
 
 // Render renders the command palette
 func (cp *CommandPalette) Render(width int) string {
@@ -111,7 +111,7 @@ func (cp *CommandPalette) Render(width int) string {
 		return lipgloss.NewStyle().
 			Background(paletteBg).
 			Width(width).
-			Render(lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color("243")).Render("  No matching commands"))
+			Render(lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(P.TextMuted)).Render("  No matching commands"))
 	}
 	// Cap rendered items to match RenderHeight.
 	if len(items) > maxCmdItems {
@@ -122,12 +122,12 @@ func (cp *CommandPalette) Render(width int) string {
 	const nameColWidth = 13
 
 	// Inline styles that carry the background so ANSI resets don't punch holes.
-	normalNameStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color("110")).Bold(true).Width(nameColWidth)
-	normalDescStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color("243"))
+	normalNameStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(P.TextAccent)).Bold(true).Width(nameColWidth)
+	normalDescStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(P.TextMuted))
 	normalRowStyle := lipgloss.NewStyle().Background(paletteBg).Width(width)
 
-	selNameStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color("252")).Bold(true).Width(nameColWidth)
-	selDescStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color("243"))
+	selNameStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(P.TextPrimary)).Bold(true).Width(nameColWidth)
+	selDescStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(P.TextMuted))
 	selRowStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Width(width)
 
 	var rows []string
@@ -229,7 +229,7 @@ func (pl *PickerList) Render(width int) string {
 	if len(items) == 0 {
 		b.WriteString(CommandDescStyle.Render("  No matches"))
 		return lipgloss.NewStyle().
-			Background(lipgloss.Color("235")).
+			Background(lipgloss.Color(P.BgFooter)).
 			Width(width).
 			Render(strings.TrimRight(b.String(), "\n"))
 	}
@@ -253,7 +253,7 @@ func (pl *PickerList) Render(width int) string {
 	}
 
 	return lipgloss.NewStyle().
-		Background(lipgloss.Color("235")).
+		Background(lipgloss.Color(P.BgFooter)).
 		Width(width).
 		Render(strings.TrimRight(b.String(), "\n"))
 }

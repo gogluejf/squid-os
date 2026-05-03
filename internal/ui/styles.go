@@ -2,181 +2,236 @@ package ui
 
 import "github.com/charmbracelet/lipgloss"
 
+// -------------------------------------------------------
+// Palette — change these constants to reskin the whole UI
+// -------------------------------------------------------
+
+type Palette struct {
+	// Backgrounds
+	BgApp       string // main app / assistant message bg
+	BgUser      string // user message bg
+	BgFooter    string // footer / top header bg
+	BgCode      string // code block bg
+	BgIncognito string // incognito mode bg
+	BgSelected  string // picker/command selected row bg
+
+	// Foreground / Text
+	TextPrimary   string // main text (white)
+	TextSecondary string // secondary text (light gray)
+	TextDim       string // dim text (headers, labels)
+	TextMuted     string // very dim (timestamps, separators)
+	TextHeading   string // markdown headings
+	TextAccent    string // links, keys, bullets (cyan)
+	TextCode      string // inline code / code block text
+	TextSuccess   string // success indicators (green)
+	TextError     string // error indicators (red)
+	TextWarning   string // warning indicators (yellow/orange)
+	TextInfo      string // info/notice (muted)
+	TextSpinner   string // spinner / active indicator (pink)
+	TextAttachment string // image attachment chip (orange)
+
+	// Context bar
+	CtxBarUsed   string // context bar: used portion bg (darker)
+	CtxBarEmpty  string // context bar: remaining portion bg (lighter)
+}
+
+// Current palette (defaults to the existing color scheme)
+var P = Palette{
+	BgApp:       "233",
+	BgUser:      "236",
+	BgFooter:    "235",
+	BgCode:      "234",
+	BgIncognito: "54",
+	BgSelected:  "237",
+
+	TextPrimary:   "252",
+	TextSecondary: "245",
+	TextDim:       "240",
+	TextMuted:     "243",
+	TextHeading:   "255",
+	TextAccent:    "110", // cyan
+	TextCode:      "228", // yellow
+	TextSuccess:   "22",  // dark green
+	TextError:     "196", // red
+	TextWarning:   "214", // orange/yellow
+	TextInfo:      "243",
+	TextSpinner:   "205", // pink
+	TextAttachment: "214", // orange
+
+	CtxBarUsed:  "237",
+	CtxBarEmpty: "233",
+}
+
+// -------------------------------------------------------
+// Derived styles — each uses palette constants
+// -------------------------------------------------------
+
 var (
 	// Message backgrounds
 	UserMsgStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("236")). // dark gray
-			Foreground(lipgloss.Color("252")).
-			Padding(0, 1)
+		Background(lipgloss.Color(P.BgUser)).
+		Foreground(lipgloss.Color(P.TextPrimary)).
+		Padding(0, 1)
 
 	AssistantMsgStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("233")). // near-black
-				Foreground(lipgloss.Color("252")).
-				Padding(0, 1)
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextPrimary)).
+		Padding(0, 1)
 
-	// Thinking block (default style, color rotation handled dynamically)
+	// Thinking block
 	ThinkingStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("233")). // same as AssistantMsgStyle
-			Foreground(lipgloss.Color("243")). // mid-gray dim
-			Italic(true).
-			Padding(0, 1)
-	// Message header (dim line with date, tokens, etc.)
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextMuted)).
+		Italic(true).
+		Padding(0, 1)
+
+	// Message headers
 	MsgHeaderStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240"))
+		Foreground(lipgloss.Color(P.TextDim))
 
 	UserHeaderStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("236")).
-			Foreground(lipgloss.Color("245")).
-			Padding(0, 1)
+		Background(lipgloss.Color(P.BgUser)).
+		Foreground(lipgloss.Color(P.TextSecondary)).
+		Padding(0, 1)
 
-	// Inline styles for user header content — must carry the same background
-	// so embedded ANSI resets don't punch holes in the header row.
 	UserHeaderDimStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("236")).
-				Foreground(lipgloss.Color("245"))
+		Background(lipgloss.Color(P.BgUser)).
+		Foreground(lipgloss.Color(P.TextSecondary))
 
 	UserHeaderAttStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("236")).
-				Foreground(lipgloss.Color("214"))
+		Background(lipgloss.Color(P.BgUser)).
+		Foreground(lipgloss.Color(P.TextAttachment))
 
 	AssistantHeaderStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("233")).
-				Foreground(lipgloss.Color("245")).
-				Padding(0, 1)
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextSecondary)).
+		Padding(0, 1)
 
-	// Inline styles for assistant header content.
 	AssistantHeaderDimStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("233")).
-				Foreground(lipgloss.Color("245"))
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextSecondary))
 
 	AssistantHeaderAttStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("233")).
-				Foreground(lipgloss.Color("214"))
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextAttachment))
 
+	// Top header
 	TopHeaderStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("235")).
-			Foreground(lipgloss.Color("245")).
-			Bold(true).
-			Padding(0, 1)
+		Background(lipgloss.Color(P.BgFooter)).
+		Foreground(lipgloss.Color(P.TextSecondary)).
+		Bold(true).
+		Padding(0, 1)
 
 	// Footer bar
 	FooterStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("235")).
-			Foreground(lipgloss.Color("245")).
-			Padding(0, 1)
+		Background(lipgloss.Color(P.BgFooter)).
+		Foreground(lipgloss.Color(P.TextSecondary)).
+		Padding(0, 1)
 
 	FooterKeyStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("235")).
-			Foreground(lipgloss.Color("110")). // soft blue
-			Bold(true)
+		Background(lipgloss.Color(P.BgFooter)).
+		Foreground(lipgloss.Color(P.TextAccent)).
+		Bold(true)
 
 	FooterDimStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("235")).
-			Foreground(lipgloss.Color("240"))
+		Background(lipgloss.Color(P.BgFooter)).
+		Foreground(lipgloss.Color(P.TextDim))
 
 	FooterValueStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("235")).
-				Foreground(lipgloss.Color("252"))
+		Background(lipgloss.Color(P.BgFooter)).
+		Foreground(lipgloss.Color(P.TextPrimary))
 
 	// Code blocks
 	CodeBlockStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("234")).
-			Foreground(lipgloss.Color("228")). // yellow
-			Padding(0, 1)
+		Background(lipgloss.Color(P.BgCode)).
+		Foreground(lipgloss.Color(P.TextCode)).
+		Padding(0, 1)
 
 	// Markdown elements
 	HeadingStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("255")). // bright white
-			Bold(true)
+		Foreground(lipgloss.Color(P.TextHeading)).
+		Bold(true)
 
 	BulletStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("110")) // cyan-blue
+		Foreground(lipgloss.Color(P.TextAccent))
 
 	// Spinner / status
 	SpinnerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")) // pink
+		Foreground(lipgloss.Color(P.TextSpinner))
 
 	// Error
 	ErrorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")). // red
-			Bold(true)
+		Foreground(lipgloss.Color(P.TextError)).
+		Bold(true)
 
-	// Warning notification (yellow, reserved for future use)
+	// Warning
 	WarningStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("214")).
-			Bold(true)
+		Foreground(lipgloss.Color(P.TextWarning)).
+		Bold(true)
 
-	// Info/notice notification (muted)
+	// Info
 	InfoStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("243"))
+		Foreground(lipgloss.Color(P.TextInfo))
 
 	// Image attachment chip
 	AttachmentStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("214")). // orange
-			Padding(0, 1)
+		Foreground(lipgloss.Color(P.TextAttachment)).
+		Padding(0, 1)
 
 	// Incognito indicator
 	IncognitoStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("54")).
-			Foreground(lipgloss.Color("255")).
-			Bold(true)
+		Background(lipgloss.Color(P.BgIncognito)).
+		Foreground(lipgloss.Color(P.TextPrimary)).
+		Bold(true)
 
 	IncognitoHeaderStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("54")).  // dark purple
-				Foreground(lipgloss.Color("255")). // white
-				Bold(true).
-				Padding(0, 1)
+		Background(lipgloss.Color(P.BgIncognito)).
+		Foreground(lipgloss.Color(P.TextPrimary)).
+		Bold(true).
+		Padding(0, 1)
 
 	// Command palette
 	CommandStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("110")).
-			Bold(true)
+		Foreground(lipgloss.Color(P.TextAccent)).
+		Bold(true)
 
 	CommandDescStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("243"))
+		Foreground(lipgloss.Color(P.TextMuted))
 
 	CommandSelectedStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("237")).
-				Foreground(lipgloss.Color("117")).
-				Bold(true)
+		Background(lipgloss.Color(P.BgSelected)).
+		Foreground(lipgloss.Color(P.TextSuccess)).
+		Bold(true)
 
-	// Tool call line ( ↳ tool_name(args) ✓ result )
+	// Tool call line
 	ToolCallStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("233")).
-			Foreground(lipgloss.Color("110")).
-			Padding(0, 1)
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextAccent)).
+		Padding(0, 1)
 
-	// Inline styles for composing segments inside a tool line wrapper.
-	// Must carry the same background (233) so embedded ANSI resets don't
-	// punch holes in the background row — same pattern as AssistantHeaderDimStyle.
 	ToolCallInline = lipgloss.NewStyle().
-			Background(lipgloss.Color("233")).
-			Foreground(lipgloss.Color("110"))
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextAccent))
 
-	// Tool checkmark + result text — dark green
 	ToolCheckInline = lipgloss.NewStyle().
-			Background(lipgloss.Color("233")).
-			Foreground(lipgloss.Color("22"))
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextSuccess))
 
-	// Tool error checkmark + error text — red
 	ToolErrInline = lipgloss.NewStyle().
-			Background(lipgloss.Color("233")).
-			Foreground(lipgloss.Color("196"))
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextError))
 
-	// Tool stats suffix — dim gray
 	ToolStatInline = lipgloss.NewStyle().
-			Background(lipgloss.Color("233")).
-			Foreground(lipgloss.Color("242"))
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextDim))
 
-	// Tool call overflow output
 	ToolCallResultStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("233")).
-				Foreground(lipgloss.Color("242")).
-				Padding(0, 2)
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextDim)).
+		Padding(0, 2)
 
-	// Tool call overflow output
 	ToolCallErrorStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("233")).
-				Foreground(lipgloss.Color("196")).
-				Padding(0, 2)
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextError)).
+		Padding(0, 2)
 )

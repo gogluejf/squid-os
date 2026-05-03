@@ -222,7 +222,7 @@ func renderSeqStatRight(stat *config.SequenceStat) string {
 
 // toolLineBg is a plain background style used as a width wrapper for composed tool lines.
 // Inline segments only set foreground — the wrapper provides background and padding.
-var toolLineBg = lipgloss.NewStyle().Background(lipgloss.Color("233")).Padding(0, 1)
+var toolLineBg = lipgloss.NewStyle().Background(lipgloss.Color(P.BgApp)).Padding(0, 1)
 
 // renderToolCallsInline renders tool call lines with timing/token stats.
 func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded bool) string {

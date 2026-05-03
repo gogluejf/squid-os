@@ -8,7 +8,7 @@ func RenderHelp(width, height int) string {
 
 	shortcuts := `
 	 Keyboard Shortcuts
-	 ` + lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("────────────────────────────────") + `
+	 ` + lipgloss.NewStyle().Foreground(lipgloss.Color(P.TextDim)).Render("────────────────────────────────") + `
 	 ` + FooterKeyStyle.Render("ctrl+d") + `           Destroy last message pair
 	 ` + FooterKeyStyle.Render("ctrl+u") + `           Undo last destroy
 	 ` + FooterKeyStyle.Render("enter") + `            Send message
@@ -32,7 +32,7 @@ func RenderHelp(width, height int) string {
 
 	commands := `
   Slash Commands
-  ` + lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("────────────────────────────────") + `
+  ` + lipgloss.NewStyle().Foreground(lipgloss.Color(P.TextDim)).Render("────────────────────────────────") + `
   ` + CommandStyle.Render("/model") + `           Select model
   ` + CommandStyle.Render("/thinking") + `        Toggle thinking mode
   ` + CommandStyle.Render("/image") + `           Attach image to next message
@@ -51,8 +51,8 @@ func RenderHelp(width, height int) string {
 		Width(width).
 		Height(height).
 		Padding(1, 2).
-		Background(lipgloss.Color("234")).
-		Foreground(lipgloss.Color("252"))
+		Background(lipgloss.Color(P.BgCode)).
+		Foreground(lipgloss.Color(P.TextPrimary))
 
 	return style.Render(content)
 }

@@ -24,7 +24,7 @@ type FooterData struct {
 // Line 2: tok/s · ↓output[↑input] · [tok/total] · context bar %, right-aligned
 func RenderFooter(data FooterData, width int) string {
 	lineStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("235")).
+		Background(lipgloss.Color(P.BgFooter)).
 		Width(width)
 
 	bgSpace := func(n int) string {
@@ -111,11 +111,11 @@ func renderContextBar(totalTokens, contextWindow int) string {
 
 	pctStr := fmt.Sprintf("%.1f%%", usagePct)
 
-	darkStyle := lipgloss.NewStyle().Background(lipgloss.Color("237"))
-	lightStyle := lipgloss.NewStyle().Background(lipgloss.Color("233"))
+	darkStyle := lipgloss.NewStyle().Background(lipgloss.Color(P.CtxBarUsed))
+	lightStyle := lipgloss.NewStyle().Background(lipgloss.Color(P.CtxBarEmpty))
 
 	bar := darkStyle.Render(strings.Repeat(" ", darkChars)) +
 		lightStyle.Render(strings.Repeat(" ", lightChars))
 
-	return FooterValueStyle.Render(pctStr+" ") + bar
+	return FooterDimStyle.Render(pctStr + " ") + bar
 }

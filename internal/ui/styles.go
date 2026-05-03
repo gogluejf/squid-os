@@ -205,24 +205,32 @@ var (
 	BulletStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(P.TextAccent))
 
-	// Error
+	// Error — carries BgApp so ANSI resets don't punch holes
 	ErrorStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextError)).
 			Bold(true)
 
-	// Warning
+	// Warning — carries BgApp
 	WarningStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextWarning)).
 			Bold(true)
 
-	// Info
+	// Info — carries BgApp (so blue text stays on app bg, not terminal bg)
 	InfoStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextInfo))
 
-	// Image attachment chip
+	// Image attachment chip — carries BgApp
 	AttachmentStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextAttachment)).
 			Padding(0, 1)
+
+	// Status line bg — wraps the full row so styled segments don't punch holes
+	StatusLineStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp))
 
 	// Incognito indicator
 	IncognitoStyle = lipgloss.NewStyle().
@@ -246,6 +254,6 @@ var (
 
 	CommandSelectedStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color(P.BgSelected)).
-				Foreground(lipgloss.Color(P.TextSuccess)).
+				Foreground(lipgloss.Color(P.TextAccent)).
 				Bold(true)
 )

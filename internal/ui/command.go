@@ -122,12 +122,12 @@ func (cp *CommandPalette) Render(width int) string {
 	const nameColWidth = 13
 
 	// Inline styles that carry the background so ANSI resets don't punch holes.
-	normalNameStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(P.TextAccent)).Bold(true).Width(nameColWidth)
+	normalNameStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(P.TextMuted)).Width(nameColWidth)
 	normalDescStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(P.TextMuted))
 	normalRowStyle := lipgloss.NewStyle().Background(paletteBg).Width(width)
 
-	selNameStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(P.TextPrimary)).Bold(true).Width(nameColWidth)
-	selDescStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(P.TextMuted))
+	selNameStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(P.TextAccent)).Bold(true).Width(nameColWidth)
+	selDescStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(P.TextAccent)).Bold(true)
 	selRowStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Width(width)
 
 	var rows []string

@@ -164,7 +164,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.attachedImage = ""
 
 	(&m).setStreamMode()
-	(&m).availTools = tools.GetTools()
+	(&m).toolReg = tools.GetRegistry()
 	(&m).clearNotification()
 
 	chatURL := config.ResolveChatURL(m.endpoints, m.settings.Provider)
@@ -173,7 +173,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.stream.cancelFn = cancel
 
-	ch := engine.Stream(ctx, apiMsgs, m.availTools)
+	ch := engine.Stream(ctx, apiMsgs, tools.GetTools())
 	m.stream.ch = ch
 
 	m.updateViewportContent()
@@ -337,7 +337,7 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 			}{Name: p.name, Arguments: p.args, Tokens: countTokensApprox(p.args), DurationMs: dur},
 		}
 
-		tool := findTool(p.name, m.availTools)
+		tool := m.toolReg.Get(p.name)
 		if tool == nil {
 			entries[i].Execution.Status = tools.ResultStatusError
 			entries[i].Execution.Error = fmt.Sprintf("unknown tool: %s", p.name)
@@ -365,6 +365,7 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 	apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, m.session.file.Messages)
 
 	m.setStreamMode()
+	m.toolReg = tools.GetRegistry()
 
 	chatURL := config.ResolveChatURL(m.endpoints, m.settings.Provider)
 	engine := chat.NewEngine(chatURL, m.settings.Model, m.settings.Thinking)
@@ -372,7 +373,7 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.stream.cancelFn = cancel
 
-	ch := engine.Stream(ctx, apiMsgs, m.availTools)
+	ch := engine.Stream(ctx, apiMsgs, tools.GetTools())
 	m.stream.ch = ch
 
 	m.updateViewportContent()
@@ -403,13 +404,4 @@ func (m *Model) appendAssistantMsg(msg config.Message) {
 		m.session.appendMsg(msg)
 		m.session.file.Messages[seqIdx].SequenceStat.Accumulate(msg)
 	}
-}
-
-func findTool(name string, toolList []tools.Tool) *tools.Tool {
-	for _, t := range toolList {
-		if t.Name == name {
-			return &t
-		}
-	}
-	return nil
 }

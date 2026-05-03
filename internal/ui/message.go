@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"rig-chat/internal/config"
+	"rig-chat/internal/tools"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -57,7 +58,7 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 
 	// Tool calls: render as inline lines with results
 	if len(msg.ToolCalls) > 0 {
-		b.WriteString(renderToolCallsInline(msg.ToolCalls, bubbleWidth, expanded))
+		b.WriteString(renderToolCallsInline(msg.ToolCalls, bubbleWidth, expanded, tools.GetRegistry()))
 	}
 
 	// One trailing spacer line after each message block.
@@ -184,15 +185,19 @@ func RenderStreamingMessage(data StreamingViewData) string {
 
 	// Pending tool calls — shown during streaming before execution
 	if len(data.PendingTools) > 0 {
+		reg := tools.GetRegistry()
 		for _, tc := range data.PendingTools {
-			argsDisplay := stripNewlines(truncate(tc.Arguments, 50))
-			namePart := ToolCallInline.Render(" ↳ " + tc.Name + "(" + argsDisplay + ")")
+			namePart, paramPart := formatToolDisplay(tc.Name, tc.Arguments, reg)
+			label := ToolCallInline.Render(namePart)
+			if paramPart != "" {
+				label += ToolParamInline.Render(paramPart)
+			}
 			var statPart string
 			if tc.Tokens > 0 || tc.Duration > 0 {
 				dur := tc.Duration.Milliseconds()
 				statPart = ToolStatInline.Render("  " + tokenChipOutput(tc.Tokens, &dur))
 			}
-			b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + namePart + statPart + "\n"))
+			b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + label + statPart + "\n"))
 			if data.Expanded && tc.Arguments != "" {
 				b.WriteString(ToolCallResultStyle.Width(bodyWidth).Render("\n" + tc.Arguments + "\n"))
 			}
@@ -225,17 +230,20 @@ func renderSeqStatRight(stat *config.SequenceStat) string {
 var toolLineBg = lipgloss.NewStyle().Background(lipgloss.Color(P.BgApp)).Padding(0, 1)
 
 // renderToolCallsInline renders tool call lines with timing/token stats.
-func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded bool) string {
+func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded bool, reg *tools.Registry) string {
 	var b strings.Builder
 	for _, tc := range toolCalls {
-		argsDisplay := stripNewlines(truncate(tc.Instruction.Arguments, 50))
-		namePart := ToolCallInline.Render(" ↳ " + tc.Instruction.Name + "(" + argsDisplay + ")")
+		namePart, paramPart := formatToolDisplay(tc.Instruction.Name, tc.Instruction.Arguments, reg)
+		label := ToolCallInline.Render(namePart)
+		if paramPart != "" {
+			label += ToolParamInline.Render(paramPart)
+		}
 
 		switch tc.Execution.Status {
 		case "error":
 			checkAndErr := ToolErrInline.Render(" ✗ " + stripNewlines(truncate(tc.Execution.Error, 30)))
 			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
-			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndErr + stats + "\n"))
+			b.WriteString(toolLineBg.Width(width).Render("\n" + label + checkAndErr + stats + "\n"))
 			if expanded {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
 				b.WriteString(ToolCallErrorStyle.Width(width).Render("\n" + tc.Execution.Error + "\n"))
@@ -246,14 +254,14 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 		case "success":
 			checkAndResult := ToolCheckInline.Render(" ✓ " + stripNewlines(truncate(tc.Execution.Result, 30)))
 			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
-			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + checkAndResult + stats + "\n"))
+			b.WriteString(toolLineBg.Width(width).Render("\n" + label + checkAndResult + stats + "\n"))
 			if expanded {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Execution.Result + "\n"))
 			}
 		default:
 			// No execution yet (streaming, before tool execution) — allow expand
-			b.WriteString(toolLineBg.Width(width).Render("\n" + namePart + "\n"))
+			b.WriteString(toolLineBg.Width(width).Render("\n" + label + "\n"))
 			if expanded && tc.Instruction.Arguments != "" {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
 			}
@@ -344,4 +352,19 @@ func truncate(s string, max int) string {
 // stripNewlines replaces newlines with spaces for clean single-line display.
 func stripNewlines(s string) string {
 	return strings.ReplaceAll(s, "\n", " ")
+}
+
+// formatToolDisplay returns a display-friendly label: ↳ name or ↳ name(display_value).
+// When args is empty or the tool has no DisplayParam, it shows just ↳ name.
+// Once args arrive, it returns (namePart, paramPart) where paramPart may be empty.
+func formatToolDisplay(name, args string, reg *tools.Registry) (namePart string, paramPart string) {
+	if args != "" && reg != nil {
+		tool := reg.Get(name)
+		if tool != nil {
+			if display := tool.DisplayValue(args); display != "" {
+				return " ↳ " + name, " [" + truncate(display, 50) + "]"
+			}
+		}
+	}
+	return " ↳ " + name, ""
 }

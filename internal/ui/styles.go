@@ -22,6 +22,7 @@ type Palette struct {
 	TextMuted     string // very dim (timestamps, separators)
 	TextHeading   string // markdown headings
 	TextAccent    string // links, keys, bullets (cyan)
+	TextToolParam string // tool display param value (lighter blue)
 	TextCode      string // inline code / code block text
 	TextSuccess   string // success indicators (green)
 	TextError     string // error indicators (red)
@@ -50,6 +51,7 @@ var P = Palette{
 	TextMuted:     "243",
 	TextHeading:   "255",
 	TextAccent:    "110", // cyan
+	TextToolParam: "67",  // dark gray-blue for tool param display
 	TextCode:      "228", // yellow
 	TextSuccess:   "22",  // dark green
 	TextError:     "196", // red
@@ -212,6 +214,10 @@ var (
 	ToolCallInline = lipgloss.NewStyle().
 		Background(lipgloss.Color(P.BgApp)).
 		Foreground(lipgloss.Color(P.TextAccent))
+
+	ToolParamInline = lipgloss.NewStyle().
+		Background(lipgloss.Color(P.BgApp)).
+		Foreground(lipgloss.Color(P.TextToolParam))
 
 	ToolCheckInline = lipgloss.NewStyle().
 		Background(lipgloss.Color(P.BgApp)).

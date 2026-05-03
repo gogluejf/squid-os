@@ -119,9 +119,14 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 		selected := m.modelPicker.SelectedItem()
 		if selected != "" {
 			for _, e := range m.modelEntries {
-				if fmt.Sprintf("%-12s  %s", e.Provider, e.ID) == selected {
+				label := fmt.Sprintf("%-12s  %s", e.Provider, e.ID)
+				if e.ContextLength > 0 {
+					label += "  " + formatContextLength(e.ContextLength)
+				}
+				if label == selected {
 					m.settings.Model = e.ID
 					m.settings.Provider = e.Provider
+					m.settings.ContextWindow = e.ContextLength
 					break
 				}
 			}

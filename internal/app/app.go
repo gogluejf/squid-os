@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -129,8 +131,19 @@ func (m *Model) setNotification(level ui.NotificationLevel, msg string) {
 
 func (m *Model) clearNotification() { m.notification = ui.Notification{} }
 
-// Init starts the cursor blink command.
+// Init starts the cursor blink command and refreshes the context window.
 func (m Model) Init() tea.Cmd {
-	// Call setChatMode to ensure placeholder and focus are properly initialized
-	return (&m).setChatMode()
+	chatMode := (&m).setChatMode()
+	return tea.Batch(chatMode, (&m).refreshContextCmd())
+}
+
+// refreshContextCmd scans models in the background and updates the context
+// window for the current model without changing the UI mode.
+func (m *Model) refreshContextCmd() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		models := chat.ScanModels(ctx, m.endpoints)
+		return contextRefreshMsg{models: models}
+	}
 }

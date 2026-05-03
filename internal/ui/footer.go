@@ -16,11 +16,12 @@ type FooterData struct {
 	TotalOutTokens   int
 	TokPerSec        float64
 	Streaming        bool
+	ContextWindow    int // model context window in tokens; 0 if unknown
 }
 
 // RenderFooter renders the fixed 2-line footer bar, always exactly `width` chars wide.
 // Line 1: command hints (left) + model label (right) — Provider · Model
-// Line 2: tok/s · ↓output[↑input] · total, right-aligned
+// Line 2: tok/s · ↓output[↑input] · [tok/total] · context bar %, right-aligned
 func RenderFooter(data FooterData, width int) string {
 	lineStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color("235")).
@@ -41,7 +42,7 @@ func RenderFooter(data FooterData, width int) string {
 		FooterKeyStyle.Render("ctrl+l") + FooterDimStyle.Render(" load") +
 		FooterDimStyle.Render("  ") +
 		FooterKeyStyle.Render("ctrl+h") + FooterDimStyle.Render(" help")
-	modelLabel := FooterDimStyle.Render(fmt.Sprintf("%s · %s", data.Provider, data.Model))
+	modelLabel := FooterDimStyle.Render(data.Model)
 
 	gap1 := width - lipgloss.Width(left1) - lipgloss.Width(modelLabel)
 	if gap1 < 1 {
@@ -49,13 +50,22 @@ func RenderFooter(data FooterData, width int) string {
 	}
 	line1 := lineStyle.Render(left1 + bgSpace(gap1) + modelLabel)
 
-	// ── Line 2: tok/s · ↓out[↑in] · total, right-aligned ───────────────
+	// ── Line 2: tok/s · ↓out[↑in] · [tok/total] · context bar % ────────
 	var parts []string
 	if data.Streaming && data.TokPerSec > 0 {
 		parts = append(parts, FooterValueStyle.Render(fmt.Sprintf("%.1f tok/s", data.TokPerSec)))
 	}
 
-	parts = append(parts, FooterValueStyle.Render(tokenChipBoth(data.TotalOutTokens, data.TotalInputTokens, nil, nil)+" ["+formatTokens(data.TotalTokens)+"]"))
+	tokLabel := FooterDimStyle.Render(tokenChipBoth(data.TotalOutTokens, data.TotalInputTokens, nil, nil)) +
+		FooterValueStyle.Render(" [") + FooterValueStyle.Render(formatTokens(data.TotalTokens)) +
+		FooterDimStyle.Render("/"+formatTokens(data.ContextWindow)) + FooterValueStyle.Render("]")
+	parts = append(parts, tokLabel)
+
+	// Context usage bar: 20-char bar showing token usage vs context window
+	ctxBar := renderContextBar(data.TotalTokens, data.ContextWindow)
+	if ctxBar != "" {
+		parts = append(parts, ctxBar)
+	}
 
 	right2 := sep + strings.Join(parts, sep)
 	prefix2 := width - lipgloss.Width(right2)
@@ -65,4 +75,44 @@ func RenderFooter(data FooterData, width int) string {
 	line2 := lineStyle.Render(bgSpace(prefix2) + right2)
 
 	return line1 + "\n" + line2
+}
+
+// renderContextBar renders a 20-char context usage bar followed by the percentage.
+// If contextWindow is 0 (unknown), returns "".
+//
+// The bar is 20 space characters: used portion on bg "237" (darker),
+// remaining portion on bg "233" (lighter). Percentage follows after 1 space.
+func renderContextBar(totalTokens, contextWindow int) string {
+	if contextWindow == 0 {
+		return ""
+	}
+
+	// Cap usage at 100%
+	usagePct := float64(totalTokens) / float64(contextWindow) * 100.0
+	if usagePct > 100 {
+		usagePct = 100
+	}
+	if totalTokens == 0 {
+		usagePct = 0
+	}
+
+	// 20 chars = 100%, each char = 5%
+	darkChars := int(usagePct / 5.0)
+	if darkChars > 20 {
+		darkChars = 20
+	}
+	if darkChars < 0 {
+		darkChars = 0
+	}
+	lightChars := 20 - darkChars
+
+	pctStr := fmt.Sprintf("%.1f%%", usagePct)
+
+	darkStyle := lipgloss.NewStyle().Background(lipgloss.Color("237"))
+	lightStyle := lipgloss.NewStyle().Background(lipgloss.Color("233"))
+
+	bar := darkStyle.Render(strings.Repeat(" ", darkChars)) +
+		lightStyle.Render(strings.Repeat(" ", lightChars))
+
+	return FooterValueStyle.Render(pctStr+" ") + bar
 }

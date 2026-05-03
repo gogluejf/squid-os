@@ -105,7 +105,6 @@ func (m *Model) updateViewportContent() {
 		if liveSeqStat != nil && liveSeqStatID == "" {
 			// First of sequence — no saved assistant message yet
 			b.WriteString(ui.RenderAssistantHeader(m.stream.metrics.Start, liveSeqStat, m.width))
-			b.WriteString("\n")
 		}
 		// Only re-run glamour when a new line has completed (lastNL changed).
 		lastNL := strings.LastIndex(m.stream.text, "\n")

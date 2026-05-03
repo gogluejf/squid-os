@@ -11,67 +11,66 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// RenderMessage renders a single chat message for the viewport
+// RenderMessage dispatches to the correct renderer by role.
 func RenderMessage(msg config.Message, width int, expanded bool) string {
-	var b strings.Builder
-
-	bubbleWidth := width
-	if bubbleWidth < 20 {
-		bubbleWidth = 20
+	switch msg.Role {
+	case "user":
+		return renderUserMessage(msg, width)
+	default:
+		return renderAssistantMessage(msg, width, expanded)
 	}
+}
 
-	bodyWidth := bubbleWidth
+// renderUserMessage renders a user message: just text.
+func renderUserMessage(msg config.Message, width int) string {
+	bodyWidth := width
+	if bodyWidth < 20 {
+		bodyWidth = 20
+	}
+	return UserMsgStyle.Width(bodyWidth).Render("\n" + msg.Text + "\n")
+}
+
+// renderAssistantMessage renders an assistant message: thinking, text, tool calls.
+func renderAssistantMessage(msg config.Message, width int, expanded bool) string {
+	var b strings.Builder
+	bodyWidth := width
 	if bodyWidth < 20 {
 		bodyWidth = 20
 	}
 
-	// Message body & thinking
-
-	style := AssistantMsgStyle
-	if msg.Role == "user" {
-		style = UserMsgStyle
-	}
-	style = style.Width(bodyWidth)
-
 	body := msg.Text
-
-	if body != "" && msg.Role == "assistant" {
+	if body != "" {
 		body = RenderMarkdownOnBg(body, "233")
 	}
 
-	// Thinking block (collapsed/expanded) — must come BEFORE text
+	// Thinking block
 	if msg.ThinkingText != "" {
 		thinkStyle := ThinkingStyle.Width(bodyWidth)
-		b.WriteString("\n")
-		thinkLabel := " thinking " + tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs)
+		thinkLabel := "[thinking] " + tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs)
 		if expanded {
-			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
-			b.WriteString(thinkStyle.Render("\n" + msg.ThinkingText))
+			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n\n" + msg.ThinkingText))
 		} else {
-			b.WriteString(thinkStyle.Render("\n" + thinkLabel))
+			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 		}
 	}
 
+	// Text body
 	if body != "" {
-		b.WriteString(style.Render("\n" + body + "\n"))
+		b.WriteString(AssistantMsgStyle.Width(bodyWidth).Render(body + "\n"))
 	}
 
-	// Tool calls: render as inline lines with results
+	// Tool calls
 	if len(msg.ToolCalls) > 0 {
-		b.WriteString(renderToolCallsInline(msg.ToolCalls, bubbleWidth, expanded, tools.GetRegistry()))
+		b.WriteString(renderToolCallsInline(msg.ToolCalls, bodyWidth, expanded, tools.GetRegistry()))
 	}
 
-	// One trailing spacer line after each message block.
-	b.WriteString("\n")
 	return b.String()
 }
 
 // RenderUserHeader builds the header line for a user message.
 func RenderUserHeader(msg config.Message, width int) string {
 	inner := width - 2
-
 	leftStr := UserHeaderDimStyle.Render(msg.CreatedAt.Format("15:04:05"))
-
 	var right []string
 	if msg.ImagePath != "" {
 		right = append(right, UserHeaderAttStyle.Render(msg.ImagePath))
@@ -79,15 +78,13 @@ func RenderUserHeader(msg config.Message, width int) string {
 	if msg.UserTokens > 0 {
 		right = append(right, UserHeaderDimStyle.Render(tokenChipInput(msg.UserTokens, nil)))
 	}
-
 	rightStr := strings.Join(right, UserHeaderDimStyle.Render("  "))
 	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)
 	if gap < 1 {
 		gap = 1
 	}
-
 	return UserHeaderStyle.Width(width).Render(
-		"\n" + leftStr + UserHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr + "\n",
+		"\n\n" + leftStr + UserHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr + "\n",
 	)
 }
 
@@ -101,7 +98,7 @@ func RenderAssistantHeader(start time.Time, stat *config.SequenceStat, width int
 		gap = 1
 	}
 	return AssistantHeaderStyle.Width(width).Render(
-		"\n" + leftStr + AssistantHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr + "\n",
+		"\n\n" + leftStr + AssistantHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr + "\n",
 	)
 }
 
@@ -145,27 +142,25 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	}
 	bodyWidth := bubbleWidth
 
-	// Waiting state: show "waiting..." with live elapsed before first token
+	// Waiting state
 	if data.Waiting {
 		elapsed := time.Since(data.RequestStart)
-		b.WriteString(ThinkingStyle.Width(bodyWidth).Render("\n  waiting...  " + formatDuration(elapsed.Milliseconds()) + "\n"))
+		b.WriteString(ThinkingStyle.Width(bodyWidth).Render("\n[waiting] " + formatDuration(elapsed.Milliseconds()) + "\n"))
 	}
 
-	// Thinking block — shown when thinking text exists or we're in thinking mode
+	// Thinking block
 	if data.ThinkingText != "" || data.InThinking {
 		thinkStyle := ThinkingStyle.Width(bodyWidth)
 		dur := data.ThinkingDur.Milliseconds()
-		thinkLabel := " thinking " + tokenChipOutput(data.ThinkingTokens, &dur)
+		thinkLabel := "[thinking] " + tokenChipOutput(data.ThinkingTokens, &dur)
 		if data.Expanded {
-			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 			if data.ThinkingText != "" {
-				b.WriteString(thinkStyle.Render(data.ThinkingText))
+				b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n\n" + data.ThinkingText + "\n"))
 			} else {
-				b.WriteString(thinkStyle.Render("\n thinking...\n"))
+				b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n\n...\n"))
 			}
 		} else {
-			// Collapsed: only show the label, NOT the thinking text
-			b.WriteString(thinkStyle.Render("\n" + thinkLabel))
+			b.WriteString(thinkStyle.Render("\n" + thinkLabel + "\n"))
 		}
 	}
 
@@ -174,35 +169,16 @@ func RenderStreamingMessage(data StreamingViewData) string {
 		style := AssistantMsgStyle.Width(bodyWidth)
 		body := data.RenderedMarkdown
 		if data.Partial != "" {
-			if body != "" {
-				body += "\n"
-			}
 			body += data.Partial
 		}
 		b.WriteString(style.Render("\n" + body + "\n"))
-		b.WriteString("\n")
 	}
 
-	// Pending tool calls — shown during streaming before execution
+	// Pending tool calls
 	if len(data.PendingTools) > 0 {
-		reg := tools.GetRegistry()
-		for _, tc := range data.PendingTools {
-			namePart, paramPart := formatToolDisplay(tc.Name, tc.Arguments, reg)
-			label := ToolCallInline.Render(namePart)
-			if paramPart != "" {
-				label += ToolParamInline.Render(paramPart)
-			}
-			var statPart string
-			if tc.Tokens > 0 || tc.Duration > 0 {
-				dur := tc.Duration.Milliseconds()
-				statPart = ToolStatInline.Render("  " + tokenChipOutput(tc.Tokens, &dur))
-			}
-			b.WriteString(toolLineBg.Width(bodyWidth).Render("\n" + label + statPart + "\n"))
-			if data.Expanded && tc.Arguments != "" {
-				b.WriteString(ToolCallResultStyle.Width(bodyWidth).Render("\n" + tc.Arguments + "\n"))
-			}
-		}
+		b.WriteString(renderStreamingToolCalls(data.PendingTools, bodyWidth, data.Expanded))
 	}
+
 	return b.String()
 }
 
@@ -241,7 +217,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 
 		switch tc.Execution.Status {
 		case "error":
-			checkAndErr := ToolErrInline.Render(" ✗ error")
+			checkAndErr := ToolErrInline.Render(" [✗]")
 			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 			b.WriteString(toolLineBg.Width(width).Render("\n" + label + checkAndErr + stats + "\n"))
 			if expanded {
@@ -252,19 +228,43 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, width int, expanded
 				}
 			}
 		case "success":
-			checkAndResult := ToolCheckInline.Render(" ✓ success")
+			checkAndResult := ToolCheckInline.Render(" [✓]")
 			stats := ToolStatInline.Render(" " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 			b.WriteString(toolLineBg.Width(width).Render("\n" + label + checkAndResult + stats + "\n"))
 			if expanded {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
-				b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Execution.Result + "\n"))
+				if tc.Execution.Result != "" {
+					b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Execution.Result + "\n"))
+				}
 			}
 		default:
-			// No execution yet (streaming, before tool execution) — allow expand
 			b.WriteString(toolLineBg.Width(width).Render("\n" + label + "\n"))
 			if expanded && tc.Instruction.Arguments != "" {
 				b.WriteString(ToolCallResultStyle.Width(width).Render("\n  " + stripNewlines(tc.Instruction.Arguments) + "\n"))
 			}
+		}
+	}
+	return b.String()
+}
+
+// renderStreamingToolCalls renders pending tool calls during streaming.
+func renderStreamingToolCalls(pendingTools []StreamingToolCall, width int, expanded bool) string {
+	var b strings.Builder
+	reg := tools.GetRegistry()
+	for _, tc := range pendingTools {
+		namePart, paramPart := formatToolDisplay(tc.Name, tc.Arguments, reg)
+		label := ToolCallInline.Render(namePart)
+		if paramPart != "" {
+			label += ToolParamInline.Render(paramPart)
+		}
+		var statPart string
+		if tc.Tokens > 0 || tc.Duration > 0 {
+			dur := tc.Duration.Milliseconds()
+			statPart = ToolStatInline.Render("  " + tokenChipOutput(tc.Tokens, &dur))
+		}
+		b.WriteString(toolLineBg.Width(width).Render("\n" + label + statPart + "\n"))
+		if expanded && tc.Arguments != "" {
+			b.WriteString(ToolCallResultStyle.Width(width).Render("\n" + tc.Arguments + "\n"))
 		}
 	}
 	return b.String()
@@ -362,9 +362,9 @@ func formatToolDisplay(name, args string, reg *tools.Registry) (namePart string,
 		tool := reg.Get(name)
 		if tool != nil {
 			if display := tool.DisplayValue(args); display != "" {
-				return " ↳ " + name, " [" + truncate(display, 50) + "]"
+				return "↳ " + name, " " + truncate(display, 50)
 			}
 		}
 	}
-	return " ↳ " + name, ""
+	return "↳ " + name, ""
 }

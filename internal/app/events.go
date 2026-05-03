@@ -27,6 +27,11 @@ type modelsLoadedMsg struct {
 	models []chat.ModelEntry
 }
 
+// contextRefreshMsg silently updates the context window from a background scan
+type contextRefreshMsg struct {
+	models []chat.ModelEntry
+}
+
 // waitForStreamEvent blocks on the stream channel and returns the next event as a Tea message.
 func waitForStreamEvent(ch <-chan chat.StreamEvent) tea.Cmd {
 	return func() tea.Msg {

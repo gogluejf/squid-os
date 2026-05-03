@@ -1,7 +1,12 @@
 package app
 
 import (
+	"fmt"
+
 	tea "github.com/charmbracelet/bubbletea"
+
+	"rig-chat/internal/chat"
+	"rig-chat/internal/config"
 )
 
 // historyUp moves the prompt history cursor back one entry.
@@ -84,4 +89,35 @@ func (m *Model) SetAttachedImage(path string) {
 // SetInitialPrompt sets the textarea content (from --prompt flag).
 func (m *Model) SetInitialPrompt(text string) {
 	m.textarea.SetValue(text)
+}
+
+// formatContextLength returns a human-readable context window label (e.g. "128k", "32k").
+func formatContextLength(ctxLen int) string {
+	if ctxLen == 0 {
+		return ""
+	}
+	if ctxLen >= 1000 {
+		k := ctxLen / 1000
+		// Round to nearest for nice display
+		rem := ctxLen % 1000
+		if rem >= 500 {
+			k++
+		}
+		return fmt.Sprintf("%dk", k)
+	}
+	return fmt.Sprintf("%d", ctxLen)
+}
+
+// refreshContextWindow looks up the current model in the entries and updates
+// settings.ContextWindow, then persists to disk.
+func (m *Model) refreshContextWindow(entries []chat.ModelEntry) {
+	for _, e := range entries {
+		if e.ID == m.settings.Model && e.Provider == m.settings.Provider {
+			if e.ContextLength != m.settings.ContextWindow {
+				m.settings.ContextWindow = e.ContextLength
+				_ = config.SaveSettings(m.paths, m.settings)
+			}
+			return
+		}
+	}
 }

@@ -156,6 +156,7 @@ func (m Model) buildFooterData() ui.FooterData {
 		TotalOutTokens:   m.session.totalOutputTokens() + m.stream.metrics.TotalOutputTokens(),
 		Streaming:        m.stream.active,
 		TokPerSec:        m.stream.metrics.AvgTokenPerSec(),
+		ContextWindow:    m.settings.ContextWindow,
 	}
 }
 

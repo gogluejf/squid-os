@@ -14,6 +14,7 @@ type Settings struct {
 	LastSessionName     string `json:"last_session_name"`
 	AutoSave            bool   `json:"auto_save"`
 	AutoLoadLastSession bool   `json:"auto_load_last_session"`
+	ContextWindow       int    `json:"context_window"`
 }
 
 func DefaultSettings() Settings {

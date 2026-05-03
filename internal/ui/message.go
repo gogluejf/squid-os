@@ -214,7 +214,7 @@ func renderSeqStatRight(stat *config.SequenceStat) string {
 	if stat.InputTokens > 0 {
 		execDur = &stat.ExecDurMs
 	}
-	if chip := tokenChipBoth(stat.OutputTokens, stat.InputTokens, &stat.InferenceDuractionMs, execDur); chip != "" {
+	if chip := tokenChipBoth(stat.OutputTokens, stat.InputTokens, &stat.DurationMs, execDur); chip != "" {
 		parts = append(parts, AssistantHeaderDimStyle.Render(chip))
 	}
 	return strings.Join(parts, AssistantHeaderDimStyle.Render("  "))

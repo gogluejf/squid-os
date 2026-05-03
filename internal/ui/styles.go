@@ -83,21 +83,23 @@ var (
 	CanvasSpan = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextPrimary)).
-			Padding(0, BoxMargin+2).
-			MarginBottom(1).
+			Padding(0, 2).
+			PaddingBottom(1).
+			Margin(0, BoxMargin, 1, BoxMargin).
 			MarginBackground(lipgloss.Color(P.BgApp))
 
 	// UserBox — narrower BgUser block centered on the canvas. No internal
 	// vertical padding: callers put explicit "\n" rows in content for the
 	// internal frame, since Padding(1, ...) does not reliably emit
 	// bg-painted blank rows in this lipgloss version when combined with
-	// Margin/MarginBackground. MarginBottom adds the 1-row BgApp gap after.
-	// Caller sets .Width(width - 2*BoxMargin) before Render.
+	// Margin/MarginBackground. MarginTop + MarginBottom each add a 1-row
+	// BgApp gap. Caller sets .Width(width - 2*BoxMargin) before Render.
 	UserBox = lipgloss.NewStyle().
 		Background(lipgloss.Color(P.BgUser)).
 		Foreground(lipgloss.Color(P.TextPrimary)).
 		Padding(0, 2).
-		Margin(0, BoxMargin, 1, BoxMargin).
+		PaddingBottom(1).
+		Margin(1, BoxMargin, 1, BoxMargin).
 		MarginBackground(lipgloss.Color(P.BgApp))
 
 	// ToolBox — narrower BgCode block (one shade lighter than canvas).
@@ -106,6 +108,7 @@ var (
 		Background(lipgloss.Color(P.BgCode)).
 		Foreground(lipgloss.Color(P.TextPrimary)).
 		Padding(0, 2).
+		PaddingBottom(1).
 		Margin(0, BoxMargin, 1, BoxMargin).
 		MarginBackground(lipgloss.Color(P.BgApp))
 

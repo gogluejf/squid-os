@@ -47,8 +47,8 @@ type Model struct {
 	// Stream state (bundled)
 	stream streamState
 
-	// Tools (survives across stream resets)
-	availTools []tools.Tool
+	// Tools registry (survives across stream resets)
+	toolReg *tools.Registry
 
 	// Config
 	settings  config.Settings

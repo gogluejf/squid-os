@@ -21,40 +21,114 @@ type ToolResult struct {
 // Tool defines the contract for a callable tool.
 // Each tool has a JSON Schema definition (for the LLM) and an Execute function.
 // Schema is stored as pre-serialized JSON bytes to control key ordering.
+// DisplayParam is the arg field name to show in the UI instead of the full JSON
+// args. E.g., "path" renders as [read_file(/home/...)] instead of dumping all args.
 type Tool struct {
 	Name        string
 	Description string
+	DisplayParam string
 	Schema      []byte
 	Execute     func(args map[string]interface{}) ToolResult
 }
 
-var allTools []Tool
+// Registry holds tools by name for O(1) lookup.
+type Registry struct {
+	tools  []Tool
+	index  map[string]*Tool
+}
+
+var registry *Registry
 
 func init() {
-	allTools = []Tool{
+	list := []Tool{
 		ReadFile,
 		WriteFile,
 		EditFile,
 		Bash,
 		Open,
 	}
-	if err := validateSchemas(allTools); err != nil {
-		panic(err)
+	for i := range list {
+		if err := validateSchema(list[i]); err != nil {
+			panic(err)
+		}
 	}
+	registry = newRegistry(list)
 }
 
-func validateSchemas(tools []Tool) error {
-	for _, t := range tools {
-		if !json.Valid(t.Schema) {
-			return fmt.Errorf("invalid JSON schema for tool %q", t.Name)
-		}
+func newRegistry(tools []Tool) *Registry {
+	r := &Registry{
+		tools: make([]Tool, len(tools)),
+		index: make(map[string]*Tool, len(tools)),
+	}
+	copy(r.tools, tools)
+	for i := range r.tools {
+		r.index[r.tools[i].Name] = &r.tools[i]
+	}
+	return r
+}
+
+func validateSchema(t Tool) error {
+	if !json.Valid(t.Schema) {
+		return fmt.Errorf("invalid JSON schema for tool %q", t.Name)
 	}
 	return nil
 }
 
+// GetRegistry returns the global tool registry.
+func GetRegistry() *Registry {
+	return registry
+}
+
 // GetTools returns a copy of all available tools.
 func GetTools() []Tool {
-	cp := make([]Tool, len(allTools))
-	copy(cp, allTools)
+	if registry == nil {
+		return nil
+	}
+	cp := make([]Tool, len(registry.tools))
+	copy(cp, registry.tools)
 	return cp
+}
+
+// Get looks up a tool by name. Returns nil if not found.
+func (r *Registry) Get(name string) *Tool {
+	if r == nil {
+		return nil
+	}
+	return r.index[name]
+}
+
+// List returns a copy of all tools.
+func (r *Registry) List() []Tool {
+	if r == nil {
+		return nil
+	}
+	cp := make([]Tool, len(r.tools))
+	copy(cp, r.tools)
+	return cp
+}
+
+// DisplayValue extracts the display-friendly value from args JSON string using
+// the tool's DisplayParam. Returns "" if the param isn't set or not found in args.
+func (t *Tool) DisplayValue(argsJSON string) string {
+	if t == nil || t.DisplayParam == "" || argsJSON == "" {
+		return ""
+	}
+	var args map[string]interface{}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return ""
+	}
+	val, ok := args[t.DisplayParam]
+	if !ok {
+		return ""
+	}
+	switch v := val.(type) {
+	case string:
+		return v
+	case float64:
+		return fmt.Sprintf("%g", v)
+	case bool:
+		return fmt.Sprintf("%v", v)
+	default:
+		return ""
+	}
 }

@@ -45,7 +45,7 @@ func renderUserMessage(msg config.Message, width int) string {
 	}
 	headerLine := leftStr + UserHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr
 
-	return UserBox.Width(boxWidth).Render("\n" + headerLine + "\n\n" + msg.Text)
+	return UserBox.Width(boxWidth).Render("\n" + headerLine + "\n\n" + msg.Text + "\n")
 }
 
 // RenderAssistantHeader emits the assistant header as a CanvasSpan.
@@ -72,13 +72,13 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 	}
 
 	if msg.ThinkingText != "" {
-		thinkLabel := ThinkingStyle.Render("\n↳ thinking") +
+		thinkLabel := ThinkingLabel.Render("\n↳ thinking") +
 			CanvasStatInline.Render(" · "+tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs))
 		content := thinkLabel
 		if expanded {
 			content += "\n\n" + msg.ThinkingText
 		}
-		b.WriteString(CanvasSpan.Width(width).Render(content))
+		b.WriteString(CanvasThinkingSpan.Width(width).Render(content))
 	}
 
 	if msg.Text != "" && msg.Text != "\n\n" {
@@ -100,7 +100,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 	var b strings.Builder
 	for _, tc := range toolCalls {
 		namePart, paramPart := formatToolDisplay(tc.Instruction.Name, tc.Instruction.Arguments, reg)
-		label := ToolCallOnTool.Render(namePart)
+		label := ToolLabel.Render(namePart)
 		if paramPart != "" {
 			label += ToolParamOnTool.Render(" · " + paramPart)
 		}
@@ -117,21 +117,21 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 		content := label + marker + stats
 		if expanded {
 			if tc.Instruction.Arguments != "" {
-				content += "\n\n" + ToolResultOnTool.Render(stripNewlines(tc.Instruction.Arguments))
+				content += "\n\n" + stripNewlines(tc.Instruction.Arguments)
 			}
 			switch tc.Execution.Status {
 			case "error":
 				content += "\n\n" + ToolErrorOnTool.Render(tc.Execution.Error)
 				if tc.Execution.Result != "" {
-					content += "\n\n" + ToolResultOnTool.Render("Result:\n"+tc.Execution.Result)
+					content += "\n\n" + "Result:\n" + tc.Execution.Result
 				}
 			case "success":
 				if tc.Execution.Result != "" {
-					content += "\n\n" + ToolResultOnTool.Render(tc.Execution.Result)
+					content += "\n\n" + tc.Execution.Result
 				}
 			}
 		}
-		b.WriteString(ToolBox.Width(boxWidth).Render("\n\n" + content))
+		b.WriteString(ToolBox.Width(boxWidth).Render("\n\n" + content + "\n"))
 	}
 	return b.String()
 }
@@ -181,14 +181,13 @@ func RenderStreamingMessage(data StreamingViewData) string {
 
 	if data.Waiting {
 		elapsed := time.Since(data.RequestStart)
-		waitLabel := ThinkingStyle.Render("\n↳ waiting") +
-			CanvasStatInline.Render(" · "+formatDuration(elapsed.Milliseconds()))
-		b.WriteString(CanvasSpan.Width(width).Render(waitLabel))
+		waitLabel := ThinkingLabel.Render("\n↳ waiting") + CanvasStatInline.Render(" · "+formatDuration(elapsed.Milliseconds()))
+		b.WriteString(CanvasThinkingSpan.Width(width).Render(waitLabel))
 	}
 
 	if data.ThinkingText != "" || data.InThinking {
 		dur := data.ThinkingDur.Milliseconds()
-		thinkLabel := ThinkingStyle.Render("\n↳ thinking") +
+		thinkLabel := ThinkingLabel.Render("\n↳ thinking") +
 			CanvasStatInline.Render(" · "+tokenChipOutput(data.ThinkingTokens, &dur))
 		content := thinkLabel
 		if data.Expanded {
@@ -198,7 +197,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 				content += "\n\n ... "
 			}
 		}
-		b.WriteString(CanvasSpan.Width(width).Render(content))
+		b.WriteString(CanvasThinkingSpan.Width(width).Render(content))
 	}
 
 	if data.RenderedMarkdown != "" || data.Partial != "" {
@@ -238,7 +237,7 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, ex
 	reg := tools.GetRegistry()
 	for _, tc := range pendingTools {
 		namePart, paramPart := formatToolDisplay(tc.Name, tc.Arguments, reg)
-		label := ToolCallOnTool.Render(namePart)
+		label := ToolLabel.Render(namePart)
 		if paramPart != "" {
 			label += ToolParamOnTool.Render(" · " + paramPart)
 		}
@@ -249,7 +248,7 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, ex
 		}
 		content := label + statPart
 		if expanded && tc.Arguments != "" {
-			content += "\n\n" + ToolResultOnTool.Render(tc.Arguments)
+			content += "\n\n" + tc.Arguments
 		}
 		b.WriteString(ToolBox.Width(boxWidth).Render("\n\n" + content + "\n"))
 	}

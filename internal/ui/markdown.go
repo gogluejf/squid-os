@@ -23,6 +23,7 @@ func init() {
 
 // noIndentStyles returns the standard dark glamour style with all block
 // indentation and document margin removed so markdown renders flush-left.
+// Code block background is removed so it blends with the terminal.
 func noIndentStyles() ansi.StyleConfig {
 	cfg := styles.DarkStyleConfig
 	cfg.Document.Indent = nil
@@ -30,6 +31,11 @@ func noIndentStyles() ansi.StyleConfig {
 	cfg.Paragraph.Indent = nil
 	cfg.Heading.Indent = nil
 	cfg.BlockQuote.Indent = nil
+
+	// Remove background from code blocks and inline code so they blend with the terminal
+	cfg.CodeBlock.BackgroundColor = nil
+	cfg.Code.BackgroundColor = nil
+
 	return cfg
 }
 

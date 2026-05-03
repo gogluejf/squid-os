@@ -49,11 +49,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modelEntries = msg.models
 		labels := make([]string, len(msg.models))
 		for i, e := range msg.models {
+			name := modelBasename(e.ID)
 			ctxLabel := ""
 			if e.ContextLength > 0 {
 				ctxLabel = "  " + formatContextLength(e.ContextLength)
 			}
-			labels[i] = fmt.Sprintf("%-12s  %s%s", e.Provider, e.ID, ctxLabel)
+			labels[i] = fmt.Sprintf("%-12s  %s%s", e.Provider, name, ctxLabel)
 		}
 		m.modelPicker = ui.NewPickerList("Select Model", labels)
 		// Update context window for current model

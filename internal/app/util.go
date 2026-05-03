@@ -2,12 +2,26 @@ package app
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"rig-chat/internal/chat"
 	"rig-chat/internal/config"
 )
+
+// modelBasename strips any path prefix from a model ID, e.g.
+// "Lorbus/Qwen3.6-27B-int4-AutoRound" -> "Qwen3.6-27B-int4-AutoRound".
+func modelBasename(id string) string {
+	if idx := strings.LastIndex(id, "/"); idx >= 0 {
+		return id[idx+1:]
+	}
+	if idx := strings.LastIndex(id, "\\"); idx >= 0 {
+		return id[idx+1:]
+	}
+	return filepath.Base(id)
+}
 
 // historyUp moves the prompt history cursor back one entry.
 // New behavior:

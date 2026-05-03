@@ -56,9 +56,12 @@ func RenderFooter(data FooterData, width int) string {
 		parts = append(parts, FooterValueStyle.Render(fmt.Sprintf("%.1f tok/s", data.TokPerSec)))
 	}
 
-	tokLabel := FooterDimStyle.Render(tokenChipBoth(data.TotalOutTokens, data.TotalInputTokens, nil, nil)) +
-		FooterValueStyle.Render(" [") + FooterValueStyle.Render(formatTokens(data.TotalTokens)) +
-		FooterDimStyle.Render("/"+formatTokens(data.ContextWindow)) + FooterValueStyle.Render("]")
+	tokLabel := FooterValueStyle.Render(tokenChipBoth(data.TotalOutTokens, data.TotalInputTokens, nil, nil)) +
+		FooterValueStyle.Render(" [") + FooterValueStyle.Render(formatTokens(data.TotalTokens))
+	if data.ContextWindow > 0 {
+		tokLabel += FooterDimStyle.Render("/" + formatTokens(data.ContextWindow))
+	}
+	tokLabel += FooterValueStyle.Render("]")
 	parts = append(parts, tokLabel)
 
 	// Context usage bar: 20-char bar showing token usage vs context window

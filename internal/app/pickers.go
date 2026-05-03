@@ -119,7 +119,8 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 		selected := m.modelPicker.SelectedItem()
 		if selected != "" {
 			for _, e := range m.modelEntries {
-				label := fmt.Sprintf("%-12s  %s", e.Provider, e.ID)
+				name := modelBasename(e.ID)
+				label := fmt.Sprintf("%-12s  %s", e.Provider, name)
 				if e.ContextLength > 0 {
 					label += "  " + formatContextLength(e.ContextLength)
 				}
@@ -131,7 +132,7 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 				}
 			}
 			_ = config.SaveSettings(m.paths, m.settings)
-			(&m).setNotification(ui.NotificationInfo, "switched to model: "+m.settings.Model)
+			(&m).setNotification(ui.NotificationInfo, "switched to model: "+modelBasename(m.settings.Model))
 		}
 
 	case "session":

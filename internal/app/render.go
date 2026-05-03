@@ -149,7 +149,7 @@ func (m *Model) updateViewportContent() {
 // buildFooterData assembles the dynamic footer data.
 func (m Model) buildFooterData() ui.FooterData {
 	return ui.FooterData{
-		Model:            m.settings.Model,
+		Model:            modelBasename(m.settings.Model),
 		Provider:         m.settings.Provider,
 		TotalTokens:      m.session.totalTokens() + m.stream.metrics.TotalTokens(),
 		TotalInputTokens: m.session.totalInputTokens() + m.stream.metrics.TotalInputTokens(),

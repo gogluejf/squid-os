@@ -38,11 +38,12 @@ func RenderStatusLine(n Notification, attachmentChip string, width int) string {
 	}
 
 	if left == "" && attachmentChip == "" {
-		return strings.Repeat(" ", width)
+		return StatusLineStyle.Render(strings.Repeat(" ", width))
 	}
 	gap := width - lipgloss.Width(left) - lipgloss.Width(attachmentChip)
 	if gap < 1 {
 		gap = 1
 	}
-	return left + strings.Repeat(" ", gap) + attachmentChip
+	mid := StatusLineStyle.Render(strings.Repeat(" ", gap))
+	return left + mid + attachmentChip
 }

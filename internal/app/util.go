@@ -100,11 +100,6 @@ func (m *Model) SetAttachedImage(path string) {
 	m.attachedImage = path
 }
 
-// SetInitialPrompt sets the textarea content (from --prompt flag).
-func (m *Model) SetInitialPrompt(text string) {
-	m.textarea.SetValue(text)
-}
-
 // formatContextLength returns a human-readable context window label (e.g. "128k", "32k").
 func formatContextLength(ctxLen int) string {
 	if ctxLen == 0 {

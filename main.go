@@ -13,12 +13,10 @@ import (
 )
 
 var (
-	flagConfigDir string
 	flagThinking  string
 	flagPrompt    string
 	flagImage     string
 	flagSystem    string
-	flagHeadless  bool
 	flagIncognito bool
 )
 
@@ -29,12 +27,10 @@ func main() {
 		RunE:  run,
 	}
 
-	rootCmd.Flags().StringVar(&flagConfigDir, "config-dir", "", "config directory path")
 	rootCmd.Flags().StringVar(&flagThinking, "thinking", "", "thinking mode (on/off)")
-	rootCmd.Flags().StringVar(&flagPrompt, "prompt", "", "send first prompt immediately")
-	rootCmd.Flags().StringVar(&flagImage, "image", "", "attach image to first message")
+	rootCmd.Flags().StringVarP(&flagPrompt, "prompt", "p", "", "send prompt in headless mode")
+	rootCmd.Flags().StringVarP(&flagImage, "image", "i", "", "attach image to first message")
 	rootCmd.Flags().StringVar(&flagSystem, "system", "", "system prompt file")
-	rootCmd.Flags().BoolVar(&flagHeadless, "headless", false, "no TUI, stream to stdout")
 	rootCmd.Flags().BoolVar(&flagIncognito, "incognito", false, "start in incognito mode (no history or session saving)")
 
 	if err := rootCmd.Execute(); err != nil {
@@ -44,14 +40,11 @@ func main() {
 
 func run(cmd *cobra.Command, args []string) error {
 	// Resolve config dir
-	cfgDir := flagConfigDir
-	if cfgDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("cannot determine home dir: %w", err)
-		}
-		cfgDir = home + "/.config/rig-chat"
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("cannot determine home dir: %w", err)
 	}
+	cfgDir := home + "/.config/rig-chat"
 
 	paths := config.NewPaths(cfgDir)
 	if err := paths.EnsureDirs(); err != nil {
@@ -83,8 +76,8 @@ func run(cmd *cobra.Command, args []string) error {
 		settings.SystemPromptFile = flagSystem
 	}
 
-	// Headless mode
-	if flagHeadless {
+	// Headless mode: -p implies headless
+	if flagPrompt != "" {
 		return runHeadless(paths, settings, endpoints)
 	}
 
@@ -104,11 +97,6 @@ func run(cmd *cobra.Command, args []string) error {
 		m.SetAttachedImage(flagImage)
 	}
 
-	// Handle --prompt flag (set initial text, user sends on first Enter)
-	if flagPrompt != "" {
-		m.SetInitialPrompt(flagPrompt)
-	}
-
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)
@@ -119,7 +107,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 func runHeadless(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig) error {
 	if flagPrompt == "" {
-		return fmt.Errorf("--headless requires --prompt")
+		return fmt.Errorf("-p/--prompt is required for headless mode")
 	}
 	return headless.Run(paths, settings, endpoints, flagPrompt, flagImage)
 }

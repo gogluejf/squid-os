@@ -147,12 +147,26 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cmdPalette.MoveUp()
 			return m, nil
 		}
+		// Only browse history if cursor is on the first line of the textarea
+		if m.textarea.Line() > 0 {
+			// Not on first line: let textarea handle it (move cursor up)
+			var cmd tea.Cmd
+			m.textarea, cmd = m.textarea.Update(msg)
+			return m, cmd
+		}
 		return m.historyUp()
 
 	case key.Matches(msg, keys.Down):
 		if m.cmdPalette.Visible {
 			m.cmdPalette.MoveDown()
 			return m, nil
+		}
+		// Only browse history if cursor is on the last line of the textarea
+		if m.textarea.Line() < m.textarea.LineCount()-1 {
+			// Not on last line: let textarea handle it (move cursor down)
+			var cmd tea.Cmd
+			m.textarea, cmd = m.textarea.Update(msg)
+			return m, cmd
 		}
 		return m.historyDown()
 

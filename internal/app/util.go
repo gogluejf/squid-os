@@ -80,7 +80,11 @@ func (m Model) historyDown() (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Not in history mode yet: save draft and clear textarea
+	// Not in history mode yet
+	if m.textarea.Value() == "" {
+		// Nothing to save, don't touch the draft
+		return m, nil
+	}
 	m.draft = m.textarea.Value()
 	m.textarea.SetValue("")
 	return m, nil

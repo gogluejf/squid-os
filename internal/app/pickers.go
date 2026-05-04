@@ -45,7 +45,7 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 			m.modelPicker.MoveUp()
 		case "session":
 			m.sessionPicker.MoveUp()
-			m = m.previewSession(m.sessionPicker.SelectedItem())
+			m = m.previewSession(m.sessionPickerSelectedRaw())
 		case "image", "system":
 			m.filePicker.MoveUp()
 		}
@@ -57,7 +57,7 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 			m.modelPicker.MoveDown()
 		case "session":
 			m.sessionPicker.MoveDown()
-			m = m.previewSession(m.sessionPicker.SelectedItem())
+			m = m.previewSession(m.sessionPickerSelectedRaw())
 		case "image", "system":
 			m.filePicker.MoveDown()
 		}
@@ -72,7 +72,7 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 			m.modelPicker.MoveDown()
 		case "session":
 			m.sessionPicker.MoveDown()
-			m = m.previewSession(m.sessionPicker.SelectedItem())
+			m = m.previewSession(m.sessionPickerSelectedRaw())
 		case "image", "system":
 			m.filePicker.MoveDown()
 		}
@@ -136,7 +136,7 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 		}
 
 	case "session":
-		selected := m.sessionPicker.SelectedItem()
+		selected := m.sessionPickerSelectedRaw()
 		if selected != "" && !m.incognito {
 			m.settings.LastSessionName = selected
 			_ = config.SaveSettings(m.paths, m.settings)

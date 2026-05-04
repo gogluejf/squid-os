@@ -54,7 +54,7 @@ var P = Palette{
 	TextToolParam:  "67",  // dark gray-blue for tool param display
 	TextCode:       "228", // yellow
 	TextSuccess:    "22",  // dark green
-	TextError:      "196", // red
+	TextError:      "124", // red
 	TextWarning:    "214", // orange/yellow
 	TextInfo:       "243",
 	TextSpinner:    "205", // pink

@@ -186,10 +186,21 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	if event.Error != nil {
 		(&m).setNotification(ui.NotificationError, event.Error.Error())
 
-		text, image := m.session.cancelTruncate()
+		text, image, truncated := m.session.cancelTruncate()
 		if text != "" {
 			m.textarea.SetValue(text)
 			m.attachedImage = image
+		}
+
+		// Push an internal "aborted" message only if the user message was NOT truncated
+		// (i.e., we cancelled mid-tool-loop, and the user message is still in history).
+		if !truncated {
+			m.session.appendMsg(config.Message{
+				ID:        fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+				Role:      "internal",
+				CreatedAt: time.Now(),
+				Text:      "Stream aborted by user",
+			})
 		}
 
 		m.stream.reset()
@@ -200,18 +211,25 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 
 	if event.Done {
 		if m.stream.userCancelled {
-			text, image := m.session.cancelTruncate()
-			if text != "" {
-				m.textarea.SetValue(text)
-				m.attachedImage = image
+			text, image, truncated := m.session.cancelTruncate()
+
+			if truncated {
+				if text != "" {
+					m.textarea.SetValue(text)
+					m.attachedImage = image
+				}
+			} else {
+				// Push an internal "aborted" message only if the user message was NOT truncated
+				// (i.e., we cancelled mid-tool-loop, user message is still in history).
+				m.session.appendMsg(config.Message{
+					ID:        fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+					Role:      "internal",
+					CreatedAt: time.Now(),
+					Text:      "Stream aborted by user",
+				})
 			}
 
-			// Differentiate: if we kept history (mid-loop cancel) vs full truncate.
-			if len(m.session.file.Messages) > 0 && m.session.file.Messages[len(m.session.file.Messages)-1].Role != "user" {
-				(&m).setNotification(ui.NotificationInfo, "stream cancelled, history preserved")
-			} else {
-				(&m).setNotification(ui.NotificationInfo, "stream cancelled")
-			}
+			(&m).setNotification(ui.NotificationInfo, "stream cancelled")
 
 			m.stream.reset()
 			blinkCmd := (&m).setChatMode()
@@ -226,9 +244,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 				Role:               "assistant",
 				CreatedAt:          m.stream.metrics.Start,
-				ThinkingText:       m.stream.thinking,
+				ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
 				ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
-				Text:               m.stream.text,
+				Text:               strings.TrimLeft(m.stream.text, "\n"),
 				TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
 				ToolCalls:          (&m).executeTools(m.stream.partialTools),
 				ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), InferenceDuractionMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
@@ -251,9 +269,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 			Role:               "assistant",
 			CreatedAt:          m.stream.metrics.Start,
-			ThinkingText:       strings.TrimRight(m.stream.thinking, "\n"),
+			ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
 			ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
-			Text:               strings.TrimRight(m.stream.text, "\n"),
+			Text:               strings.TrimLeft(m.stream.text, "\n"),
 			TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
 			TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
 			Tokens:             m.stream.metrics.TotalTokens(),

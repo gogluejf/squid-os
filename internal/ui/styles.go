@@ -90,6 +90,11 @@ var (
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextMuted))
 
+	// Internal label (e.g. "aborted") on canvas background
+	InternalLabel = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp)).
+			Foreground(lipgloss.Color(P.TextWarning))
+
 	// Tool box inline sub-styles (BgCode — match the ToolBox background)
 	ToolLabel = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgCode)).

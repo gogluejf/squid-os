@@ -37,7 +37,7 @@ func noIndentStyles() ansi.StyleConfig {
 	cfg.Code.BackgroundColor = nil
 
 	// Change inline code color from red to orange
-	orange := "137"
+	orange := "209"
 	cfg.Code.Color = &orange
 
 	return cfg

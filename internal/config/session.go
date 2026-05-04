@@ -70,12 +70,15 @@ func (ss *SequenceStat) Accumulate(msg Message) {
 }
 
 // FindSequenceHeadIdx returns the index of the first assistant message after
-// the last user message, or -1 if none exists yet.
+// the last user message, skipping any "internal" messages in between,
+// or -1 if none exists yet.
 func FindSequenceHeadIdx(msgs []Message) int {
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if msgs[i].Role == "user" {
-			if i+1 < len(msgs) {
-				return i + 1
+			for j := i + 1; j < len(msgs); j++ {
+				if msgs[j].Role == "assistant" {
+					return j
+				}
 			}
 			return -1
 		}

@@ -11,6 +11,81 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// DrawCanvas renders a single styled block (canvas, toolbox, userbox).
+//
+//   - parts:  pre-styled title segments rendered as "↳ part0 · part1 · ..."
+//     the "↳ " prefix and " · " separators carry the box bg color.
+//     pass nil/empty for no title line.
+//   - content: body blocks joined with "\n\n".  Each element can be
+//     pre-styled (ANSI) or plain text.  Pass nil/empty for no body.
+//   - fg / bg: foreground and background color names (lipgloss color spec).
+//   - topGap:  number of leading blank rows (0, 1, or 2) before the first line.
+//     Canvas blocks use 1, tool boxes use 2 to match legacy spacing.
+//   - width:   total rendered width (includes margins + padding).
+//
+// Trailing spacing: one blank row after content, then MarginBottom=1 (bg-colored).
+// Callers never concatenate newlines manually.
+func DrawCanvas(parts []string, content []string, fg, bg string, topGap int, width int, marginBottom int) string {
+
+	st := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(fg)).
+		Background(lipgloss.Color(bg)).
+		Margin(0, BoxMargin, marginBottom, BoxMargin).
+		MarginBackground(lipgloss.Color(P.BgApp)).
+		Padding(0, 2).
+		Width(width)
+
+	var b strings.Builder
+	for i := 0; i < topGap; i++ {
+		b.WriteByte('\n')
+	}
+
+	if len(parts) > 0 {
+
+		sep := lipgloss.NewStyle().Foreground(lipgloss.Color(fg)).Background(lipgloss.Color(bg)).Render(" · ")
+		arrow := lipgloss.NewStyle().Background(lipgloss.Color(bg)).Render("↳ ")
+
+		b.WriteString(arrow)
+		b.WriteString(parts[0])
+		for i := 1; i < len(parts); i++ {
+			b.WriteString(sep)
+			b.WriteString(parts[i])
+		}
+	}
+
+	if len(content) > 0 {
+		if len(parts) > 0 {
+			b.WriteString("\n\n")
+		} else if topGap < 1 {
+			// No parts and no leading gap → add one blank row before content
+			b.WriteByte('\n')
+		}
+		b.WriteString(strings.Join(content, "\n\n"))
+	}
+
+	b.WriteByte('\n')
+
+	return st.Render(b.String())
+}
+
+// drawCanvasSpan is a convenience for full-canvas blocks (BgApp background).
+// topGap=1 matches the legacy CanvasSpan one leading blank row.
+func drawCanvasSpan(parts []string, content []string, fg string, width int) string {
+	return DrawCanvas(parts, content, fg, P.BgApp, 1, width, 0)
+}
+
+// drawToolBox is a convenience for tool call blocks (BgCode background).
+// topGap=2 matches the legacy ToolBox "\n\n" two leading blank rows.
+func drawToolBox(parts []string, content []string, fg string, boxWidth int) string {
+	return DrawCanvas(parts, content, fg, P.BgCode, 2, boxWidth, 1)
+}
+
+// drawUserBox is a convenience for user message blocks (BgUser background).
+// topGap=1 matches the legacy UserBox MarginTop=1 (one BgApp row).
+func drawUserBox(parts []string, content []string, fg string, boxWidth int) string {
+	return DrawCanvas(parts, content, fg, P.BgUser, 1, boxWidth, 1)
+}
+
 // RenderMessage dispatches to the correct renderer by role.
 func RenderMessage(msg config.Message, width int, expanded bool) string {
 	switch msg.Role {
@@ -22,7 +97,8 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 }
 
 // renderUserMessage renders a user message as a single UserBox containing
-// the header line + body text.
+// the header line + body text.  The header is content inside the box
+// (not a DrawCanvas title part) since it has no ↳ prefix.
 func renderUserMessage(msg config.Message, width int) string {
 	boxWidth := width - 2*BoxMargin
 	if boxWidth < 20 {
@@ -45,11 +121,11 @@ func renderUserMessage(msg config.Message, width int) string {
 	}
 	headerLine := leftStr + UserHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr
 
-	return UserBox.Width(boxWidth).Render("\n" + headerLine + "\n\n" + msg.Text + "\n")
+	return drawUserBox(nil, []string{"\n" + headerLine, msg.Text}, P.TextPrimary, boxWidth)
 }
 
-// RenderAssistantHeader emits the assistant header as a CanvasSpan.
-// Stays uncached: SequenceStat mutates while a stream is live.
+// RenderAssistantHeader emits the assistant header as a bare canvas line
+// (not a box).  Stays uncached: SequenceStat mutates while a stream is live.
 func RenderAssistantHeader(start time.Time, stat *config.SequenceStat, width int) string {
 	inner := width - 2*(BoxMargin+2) // canvas horizontal padding (BoxMargin+2 each side)
 	leftStr := AssistantHeaderDimStyle.Render(start.Format("15:04:05"))
@@ -72,18 +148,20 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 	}
 
 	if msg.ThinkingText != "" {
-		thinkLabel := ThinkingLabel.Render("\n↳ thinking") +
-			CanvasStatInline.Render(" · "+tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs))
-		content := thinkLabel
-		if expanded {
-			content += "\n\n" + msg.ThinkingText
+		parts := []string{
+			ThinkingLabel.Render("thinking"),
+			CanvasStatInline.Render(tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs)),
 		}
-		b.WriteString(CanvasThinkingSpan.Width(width).Render(content))
+		var content []string
+		if expanded {
+			content = []string{msg.ThinkingText}
+		}
+		b.WriteString(drawCanvasSpan(parts, content, P.TextMuted, width))
 	}
 
 	if msg.Text != "" && msg.Text != "\n\n" {
 		body := RenderMarkdownOnBg(msg.Text, P.BgApp)
-		b.WriteString(CanvasSpan.Width(width).Render(body))
+		b.WriteString(drawCanvasSpan(nil, []string{body}, P.TextPrimary, width))
 	}
 
 	if len(msg.ToolCalls) > 0 {
@@ -100,38 +178,48 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 	var b strings.Builder
 	for _, tc := range toolCalls {
 		namePart, paramPart := formatToolDisplay(tc.Instruction.Name, tc.Instruction.Arguments, reg)
-		label := ToolLabel.Render(namePart)
-		if paramPart != "" {
-			label += ToolParamOnTool.Render(" · " + paramPart)
-		}
-		stats := ToolStatOnTool.Render(" · " + tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs))
 
-		var marker string
+		var parts []string
+		parts = append(parts, ToolLabel.Render(namePart))
+		if paramPart != "" {
+			parts = append(parts, ToolParamOnTool.Render(paramPart))
+		}
+
+		// Status marker as its own part
 		switch tc.Execution.Status {
 		case "error":
-			marker = ToolErrOnTool.Render(" [✗]")
+			parts = append(parts, ToolErrOnTool.Render("[✗]"))
 		case "success":
-			marker = ToolCheckOnTool.Render(" [✓]")
+			parts = append(parts, ToolCheckOnTool.Render("[✓]"))
 		}
 
-		content := label + marker + stats
+		stats := tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs)
+		if stats != "" {
+			parts = append(parts, ToolStatOnTool.Render(stats))
+		}
+
+		// Build content blocks
+		var content []string
 		if expanded {
 			if tc.Instruction.Arguments != "" {
-				content += "\n\n" + stripNewlines(tc.Instruction.Arguments)
+				content = append(content, stripNewlines(tc.Instruction.Arguments))
 			}
 			switch tc.Execution.Status {
 			case "error":
-				content += "\n\n" + ToolErrorOnTool.Render(tc.Execution.Error)
+				if tc.Execution.Error != "" {
+					content = append(content, ToolErrorOnTool.Render(tc.Execution.Error))
+				}
 				if tc.Execution.Result != "" {
-					content += "\n\n" + "Result:\n" + tc.Execution.Result
+					content = append(content, "Result:\n"+tc.Execution.Result)
 				}
 			case "success":
 				if tc.Execution.Result != "" {
-					content += "\n\n" + tc.Execution.Result
+					content = append(content, tc.Execution.Result)
 				}
 			}
 		}
-		b.WriteString(ToolBox.Width(boxWidth).Render("\n\n" + content + "\n"))
+
+		b.WriteString(drawToolBox(parts, content, P.TextDim, boxWidth))
 	}
 	return b.String()
 }
@@ -181,28 +269,33 @@ func RenderStreamingMessage(data StreamingViewData) string {
 
 	if data.Waiting {
 		elapsed := time.Since(data.RequestStart)
-		waitLabel := ThinkingLabel.Render("\n↳ waiting") + CanvasStatInline.Render(" · "+formatDuration(elapsed.Milliseconds()))
-		b.WriteString(CanvasThinkingSpan.Width(width).Render(waitLabel))
+		parts := []string{
+			ThinkingLabel.Render("waiting"),
+			CanvasStatInline.Render(formatDuration(elapsed.Milliseconds())),
+		}
+		b.WriteString(drawCanvasSpan(parts, nil, P.TextMuted, width))
 	}
 
 	if data.ThinkingText != "" || data.InThinking {
 		dur := data.ThinkingDur.Milliseconds()
-		thinkLabel := ThinkingLabel.Render("\n↳ thinking") +
-			CanvasStatInline.Render(" · "+tokenChipOutput(data.ThinkingTokens, &dur))
-		content := thinkLabel
+		parts := []string{
+			ThinkingLabel.Render("thinking"),
+			CanvasStatInline.Render(tokenChipOutput(data.ThinkingTokens, &dur)),
+		}
+		var content []string
 		if data.Expanded {
 			if data.ThinkingText != "" {
-				content += "\n\n" + data.ThinkingText
+				content = []string{data.ThinkingText}
 			} else {
-				content += "\n\n ... "
+				content = []string{"..."}
 			}
 		}
-		b.WriteString(CanvasThinkingSpan.Width(width).Render(content))
+		b.WriteString(drawCanvasSpan(parts, content, P.TextMuted, width))
 	}
 
 	if data.RenderedMarkdown != "" || data.Partial != "" {
 		body := data.RenderedMarkdown + data.Partial
-		b.WriteString(CanvasSpan.Width(width).Render(body))
+		b.WriteString(drawCanvasSpan(nil, []string{body}, P.TextPrimary, width))
 	}
 
 	if len(data.PendingTools) > 0 {
@@ -237,20 +330,23 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, ex
 	reg := tools.GetRegistry()
 	for _, tc := range pendingTools {
 		namePart, paramPart := formatToolDisplay(tc.Name, tc.Arguments, reg)
-		label := ToolLabel.Render(namePart)
+
+		var parts []string
+		parts = append(parts, ToolLabel.Render(namePart))
 		if paramPart != "" {
-			label += ToolParamOnTool.Render(" · " + paramPart)
+			parts = append(parts, ToolParamOnTool.Render(paramPart))
 		}
-		var statPart string
 		if tc.Tokens > 0 || tc.Duration > 0 {
 			dur := tc.Duration.Milliseconds()
-			statPart = ToolStatOnTool.Render("  " + tokenChipOutput(tc.Tokens, &dur))
+			parts = append(parts, ToolStatOnTool.Render(tokenChipOutput(tc.Tokens, &dur)))
 		}
-		content := label + statPart
+
+		var content []string
 		if expanded && tc.Arguments != "" {
-			content += "\n\n" + tc.Arguments
+			content = []string{tc.Arguments}
 		}
-		b.WriteString(ToolBox.Width(boxWidth).Render("\n\n" + content + "\n"))
+
+		b.WriteString(drawToolBox(parts, content, P.TextDim, boxWidth))
 	}
 	return b.String()
 }
@@ -339,17 +435,17 @@ func stripNewlines(s string) string {
 	return strings.ReplaceAll(s, "\n", " ")
 }
 
-// formatToolDisplay returns a display-friendly label: ↳ name or ↳ name(display_value).
-// When args is empty or the tool has no DisplayParam, it shows just ↳ name.
-// Once args arrive, it returns (namePart, paramPart) where paramPart may be empty.
+// formatToolDisplay returns a display-friendly (namePart, paramPart).
+// The "↳ " prefix is now added by DrawCanvas.
+// When args is empty or the tool has no DisplayParam, paramPart is empty.
 func formatToolDisplay(name, args string, reg *tools.Registry) (namePart string, paramPart string) {
 	if args != "" && reg != nil {
 		tool := reg.Get(name)
 		if tool != nil {
 			if display := tool.DisplayValue(args); display != "" {
-				return "↳ " + name, truncate(display, 50)
+				return name, truncate(display, 50)
 			}
 		}
 	}
-	return "↳ " + name, ""
+	return name, ""
 }

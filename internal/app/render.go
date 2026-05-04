@@ -85,6 +85,9 @@ func (m *Model) updateViewportContent() {
 		liveSeqStat, liveSeqStatID = m.buildLiveSeqStat()
 	}
 
+	//this is needed to have a black first line before rendering message
+	b.WriteString(ui.StatusLineStyle.Width(m.width).Render(""))
+
 	for i, rendered := range m.session.renderedMessages {
 		msg := m.session.file.Messages[i]
 		if msg.Role != "user" && msg.SequenceStat != nil {

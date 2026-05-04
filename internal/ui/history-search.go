@@ -112,8 +112,8 @@ func (hs *HistorySearchOverlay) Render(width int) string {
 	// Only show match info after at least one character is typed
 	if hs.filterStr == "" {
 		// No filter typed yet - just show prompt, no background bar
-		dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Render("(esc to exit)")
-		return prefix + dimSuffix
+		dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Background(lipgloss.Color(P.BgApp)).Render("(esc to exit)")
+		return StatusLineStyle.Width(width).Render(prefix + dimSuffix)
 
 	}
 
@@ -139,8 +139,8 @@ func (hs *HistorySearchOverlay) Render(width int) string {
 	filterStyled := filterStyle.Render(hs.filterStr)
 
 	// Style the suffix as dim
-	dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Render(suffix)
+	dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Background(lipgloss.Color(P.BgApp)).Render(suffix)
 
 	// Construct: prefix + styled_filter + dim_suffix
-	return prefix + filterStyled + dimSuffix
+	return StatusLineStyle.Width(width).Render(prefix + filterStyled + dimSuffix)
 }

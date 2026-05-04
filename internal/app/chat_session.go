@@ -67,10 +67,12 @@ func (cs *chatSession) truncateToUser() (userText, userImage string) {
 // last one in the session (i.e., not mid-tool-loop). This lets the user cancel
 // mid-loop without losing earlier assistant work, while still getting their
 // input back for quick re-edit.
-func (cs *chatSession) cancelTruncate() (userText, userImage string) {
+// Returns (userText, userImage, truncated) where truncated is true if the
+// user message was the last message and was removed.
+func (cs *chatSession) cancelTruncate() (userText, userImage string, truncated bool) {
 	n := len(cs.file.Messages)
 	if n == 0 {
-		return "", ""
+		return "", "", false
 	}
 
 	// Always find the last user message for restoring input.
@@ -84,9 +86,10 @@ func (cs *chatSession) cancelTruncate() (userText, userImage string) {
 	// Truncate only if the user message is on top.
 	if n > 0 && cs.file.Messages[n-1].Role == "user" {
 		cs.truncateTo(n - 1)
+		truncated = true
 	}
 
-	return userText, userImage
+	return userText, userImage, truncated
 }
 
 // destroyLastSequence removes the last user message and everything after it,

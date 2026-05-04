@@ -91,9 +91,24 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 	switch msg.Role {
 	case "user":
 		return renderUserMessage(msg, width)
+	case "internal":
+		return renderInternalMessage(msg, width, expanded)
 	default:
 		return renderAssistantMessage(msg, width, expanded)
 	}
+}
+
+// renderInternalMessage renders an internal message (e.g. stream aborted)
+// as a canvas span. When collapsed, shows only the label; when expanded, shows the body too.
+func renderInternalMessage(msg config.Message, width int, expanded bool) string {
+	parts := []string{
+		InternalLabel.Render("aborted"),
+	}
+	var content []string
+	if expanded && msg.Text != "" {
+		content = []string{msg.Text}
+	}
+	return drawCanvasSpan(parts, content, P.TextMuted, width)
 }
 
 // renderUserMessage renders a user message as a single UserBox containing

@@ -72,53 +72,14 @@ var P = Palette{
 const BoxMargin = 2
 
 var (
-	// Box-composition primitives. Each emits its own trailing 1-row gap
-	// (MarginBottom in BgApp) so concatenating blocks produces a uniform
-	// 1-blank-row rhythm without inline "\n" math.
-
-	// CanvasSpan — full viewport width, BgApp. Hosts thinking, waiting,
-	// assistant text, and the assistant header. Side padding aligns content
-	// with the inside edge of UserBox/ToolBox content (BoxMargin + 2).
-	// Callers wrap content with explicit "\n" rows for vertical spacing.
+	// CanvasSpan — full viewport width, BgApp. Bare canvas paint for headers.
+	// Callers prepend "\n" for vertical spacing.
 	CanvasSpan = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextPrimary)).
 			Padding(0, 2).
-		//PaddingBottom(1).
-		Margin(0, BoxMargin, 1, BoxMargin).
-		MarginBackground(lipgloss.Color(P.BgApp))
-
-	CanvasThinkingSpan = lipgloss.NewStyle().
-				Background(lipgloss.Color(P.BgApp)).
-				Foreground(lipgloss.Color(P.TextMuted)).
-				Padding(0, 2).
-		//PaddingBottom(1).
-		Margin(0, BoxMargin, 1, BoxMargin).
-		MarginBackground(lipgloss.Color(P.BgApp))
-
-	// UserBox — narrower BgUser block centered on the canvas. No internal
-	// vertical padding: callers put explicit "\n" rows in content for the
-	// internal frame, since Padding(1, ...) does not reliably emit
-	// bg-painted blank rows in this lipgloss version when combined with
-	// Margin/MarginBackground. MarginTop + MarginBottom each add a 1-row
-	// BgApp gap. Caller sets .Width(width - 2*BoxMargin) before Render.
-	UserBox = lipgloss.NewStyle().
-		Background(lipgloss.Color(P.BgUser)).
-		Foreground(lipgloss.Color(P.TextPrimary)).
-		Padding(0, 2).
-		//PaddingBottom(1).
-		Margin(1, BoxMargin, 1, BoxMargin).
-		MarginBackground(lipgloss.Color(P.BgApp))
-
-	// ToolBox — narrower BgCode block (one shade lighter than canvas).
-	// Same content-blank pattern as UserBox.
-	ToolBox = lipgloss.NewStyle().
-		Background(lipgloss.Color(P.BgCode)).
-		Foreground(lipgloss.Color(P.TextDim)).
-		Padding(0, 2).
-		//PaddingBottom(1).
-		Margin(0, BoxMargin, 1, BoxMargin).
-		MarginBackground(lipgloss.Color(P.BgApp))
+			Margin(0, BoxMargin, 1, BoxMargin).
+			MarginBackground(lipgloss.Color(P.BgApp))
 
 	// Stat chip on the canvas (e.g. "· ↓1.2k 250ms" after thinking/waiting)
 	CanvasStatInline = lipgloss.NewStyle().

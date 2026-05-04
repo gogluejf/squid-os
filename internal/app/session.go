@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -106,12 +108,20 @@ func (m Model) startLoad() (Model, tea.Cmd) {
 	snap := m.session
 	m.sessionSnapshot = &snap
 
-	picker := ui.NewPickerList("Load Session", sessions)
+	// Build 2-column display strings: "name           modified"
+	// Name column width = 30 (padded), date in friendly relative format.
+	items := make([]string, len(sessions))
+	for i, s := range sessions {
+		dateLabel := friendlyModDate(s.ModTime)
+		items[i] = fmt.Sprintf("%-30s  %s", s.Name, dateLabel)
+	}
+
+	picker := ui.NewPickerList("Load Session", items)
 
 	// Pre-select LastSessionName if it exists in the list
 	if m.settings.LastSessionName != "" {
 		for i, s := range sessions {
-			if s == m.settings.LastSessionName {
+			if s.Name == m.settings.LastSessionName {
 				picker.Selected = i
 				break
 			}
@@ -119,11 +129,12 @@ func (m Model) startLoad() (Model, tea.Cmd) {
 	}
 
 	m.sessionPicker = picker
+	m.sessionPickerRaw = sessions // keep raw names for selection
 	m.mode = ModeSessionPicker
 	(&m).recalcLayout()
 
 	// Preview the initially selected session immediately
-	m = m.previewSession(m.sessionPicker.SelectedItem())
+	m = m.previewSession(m.sessionPickerSelectedRaw())
 	return m, nil
 }
 
@@ -139,4 +150,68 @@ func (m Model) previewSession(name string) Model {
 	m.session.setFrom(sf, false)
 	m.updateViewportContent()
 	return m
+}
+
+// sessionPickerSelectedRaw returns the raw session name for the currently
+// selected picker item, using the parallel sessionPickerRaw slice.
+func (m Model) sessionPickerSelectedRaw() string {
+	filtered := m.sessionPicker.FilteredItems()
+	if m.sessionPicker.Selected < 0 || m.sessionPicker.Selected >= len(filtered) {
+		return ""
+	}
+	// The picker's filtered items correspond positionally to filtered raw items.
+	rawFiltered := filterSessionList(m.sessionPickerRaw, m.sessionPicker.Filter)
+	if m.sessionPicker.Selected >= len(rawFiltered) {
+		return ""
+	}
+	return rawFiltered[m.sessionPicker.Selected].Name
+}
+
+// filterSessionList filters the raw session list by the same text filter used by the picker.
+func filterSessionList(items []config.SessionInfo, filter string) []config.SessionInfo {
+	if filter == "" {
+		return items
+	}
+	f := filter
+	var result []config.SessionInfo
+	for _, item := range items {
+		if matchesFilter(item.Name, f) || matchesFilter(friendlyModDate(item.ModTime), f) {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+// friendlyModDate returns a human-readable relative time string for a modified date.
+func friendlyModDate(t time.Time) string {
+	ago := time.Since(t)
+	switch {
+	case ago < time.Minute:
+		return "just now"
+	case ago < time.Hour:
+		m := int(ago.Minutes())
+		if m == 1 {
+			return "1 min ago"
+		}
+		return fmt.Sprintf("%d min ago", m)
+	case ago < 24*time.Hour:
+		h := int(ago.Hours())
+		if h == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", h)
+	case ago < 7*24*time.Hour:
+		d := int(ago.Hours() / 24)
+		if d == 1 {
+			return "yesterday"
+		}
+		return fmt.Sprintf("%d days ago", d)
+	default:
+		return t.Format("Jan 2")
+	}
+}
+
+// matchesFilter is a case-insensitive substring match used for session picker filtering.
+func matchesFilter(s, f string) bool {
+	return strings.Contains(strings.ToLower(s), strings.ToLower(f))
 }

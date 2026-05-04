@@ -180,38 +180,36 @@ func LoadSession(p Paths, name string) (SessionFile, error) {
 	return sf, nil
 }
 
-// ListSessions returns available session names (without .chat.json), sorted by most recently modified.
-func ListSessions(p Paths) []string {
+// SessionInfo holds display metadata for a saved session.
+type SessionInfo struct {
+	Name    string
+	ModTime time.Time
+}
+
+// ListSessions returns available session info (name + modified time), sorted by most recently modified.
+func ListSessions(p Paths) []SessionInfo {
 	entries, err := os.ReadDir(p.Sessions)
 	if err != nil {
 		return nil
 	}
 
-	type entry struct {
-		name    string
-		modTime time.Time
-	}
-	var sessions []entry
+	var sessions []SessionInfo
 	for _, e := range entries {
 		if !e.IsDir() && strings.HasSuffix(e.Name(), ".chat.json") {
 			info, err := e.Info()
 			if err != nil {
 				continue
 			}
-			sessions = append(sessions, entry{
-				name:    strings.TrimSuffix(e.Name(), ".chat.json"),
-				modTime: info.ModTime(),
+			sessions = append(sessions, SessionInfo{
+				Name:    strings.TrimSuffix(e.Name(), ".chat.json"),
+				ModTime: info.ModTime(),
 			})
 		}
 	}
 
 	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].modTime.After(sessions[j].modTime)
+		return sessions[i].ModTime.After(sessions[j].ModTime)
 	})
 
-	names := make([]string, len(sessions))
-	for i, s := range sessions {
-		names[i] = s.name
-	}
-	return names
+	return sessions
 }

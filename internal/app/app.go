@@ -33,13 +33,14 @@ type Model struct {
 	historySearch ui.HistorySearchOverlay
 
 	// Pickers
-	modelEntries   []chat.ModelEntry
-	modelPicker    ui.PickerList
-	sessionPicker  ui.PickerList
-	filePicker     ui.PickerList
-	thinkingToggle ui.ThinkingToggle
-	savePrompt     ui.SavePrompt
-	filePickerFor  string // "image" or "system"
+	modelEntries     []chat.ModelEntry
+	modelPicker      ui.PickerList
+	sessionPicker    ui.PickerList
+	sessionPickerRaw []config.SessionInfo // parallel raw names for session picker selection
+	filePicker       ui.PickerList
+	thinkingToggle   ui.ThinkingToggle
+	savePrompt       ui.SavePrompt
+	filePickerFor    string // "image" or "system"
 
 	// Session + messages (bundled)
 	session chatSession

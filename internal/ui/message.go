@@ -160,7 +160,7 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 	}
 
 	if msg.Text != "" && msg.Text != "\n\n" {
-		body := RenderMarkdownOnBg(msg.Text, P.BgApp)
+		body := RenderMarkdownOnBg(msg.Text, P.BgApp) + "\n"
 		b.WriteString(drawCanvasSpan(nil, []string{body}, P.TextPrimary, width))
 	}
 
@@ -443,7 +443,7 @@ func formatToolDisplay(name, args string, reg *tools.Registry) (namePart string,
 		tool := reg.Get(name)
 		if tool != nil {
 			if display := tool.DisplayValue(args); display != "" {
-				return name, truncate(display, 50)
+				return name, truncate(display, 60)
 			}
 		}
 	}

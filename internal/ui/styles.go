@@ -71,6 +71,38 @@ var P = Palette{
 // BoxMargin is the side gutter (cols) around UserBox and ToolBox.
 const BoxMargin = 2
 
+// BoxWidth computes the outer box width for a given viewport width.
+// The box is inset by BoxMargin on each side, with a minimum of 20 cols.
+func BoxWidth(viewportWidth int) int {
+	w := viewportWidth - 2*BoxMargin
+	if w < 20 {
+		w = 20
+	}
+	return w
+}
+
+// ContentWidth computes the usable inner width for content inside a box
+// (box width minus left+right padding of 2 each). Minimum 10 cols.
+// Used for word-wrapping text/markdown inside any box.
+func ContentWidth(viewportWidth int) int {
+	w := BoxWidth(viewportWidth) - 4 // 2 left + 2 right padding
+	if w < 10 {
+		w = 10
+	}
+	return w
+}
+
+// CanvasContentWidth computes the usable inner width for content inside a
+// canvas-span box (full-viewport width minus margins and padding).
+// Canvas spans use the full viewport width as their box width.
+func CanvasContentWidth(viewportWidth int) int {
+	w := viewportWidth - 2*BoxMargin - 4
+	if w < 10 {
+		w = 10
+	}
+	return w
+}
+
 var (
 	// CanvasSpan — full viewport width, BgApp. Bare canvas paint for headers.
 	// Callers prepend "\n" for vertical spacing.

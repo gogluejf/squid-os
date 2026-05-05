@@ -304,6 +304,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		if p.firstAt.IsZero() {
 			p.firstAt = time.Now()
 		}
+		p.doneAt = time.Now() // update doneAt on each delta; final value = last delta time
 		// End thinking and text phases if still active (model moved on to tool calls)
 		if m.stream.inThinking {
 			m.stream.metrics.MarkThinkingDone()
@@ -316,12 +317,13 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 
 	// ToolCalls flush: enrich partialTools with ID/Type and mark done.
 	if len(event.ToolCalls) > 0 {
-		now := time.Now()
 		for i, tc := range event.ToolCalls {
 			if i < len(m.stream.partialTools) {
 				m.stream.partialTools[i].id = tc.ID
 				m.stream.partialTools[i].typeStr = tc.Type
-				m.stream.partialTools[i].doneAt = now
+				if m.stream.partialTools[i].doneAt.IsZero() {
+					m.stream.partialTools[i].doneAt = time.Now() // fallback if no deltas streamed
+				}
 			}
 		}
 		m.stream.metrics.MarkToolCallDone()

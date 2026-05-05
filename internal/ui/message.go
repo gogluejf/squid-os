@@ -115,11 +115,8 @@ func renderInternalMessage(msg config.Message, width int, expanded bool) string 
 // the header line + body text.  The header is content inside the box
 // (not a DrawCanvas title part) since it has no ↳ prefix.
 func renderUserMessage(msg config.Message, width int) string {
-	boxWidth := width - 2*BoxMargin
-	if boxWidth < 20 {
-		boxWidth = 20
-	}
-	inner := boxWidth - 4 // minus left+right padding (2+2)
+	boxWidth := BoxWidth(width)
+	inner := ContentWidth(width)
 
 	leftStr := UserHeaderDimStyle.Render(msg.CreatedAt.Format("15:04:05"))
 	var right []string
@@ -142,7 +139,7 @@ func renderUserMessage(msg config.Message, width int) string {
 // RenderAssistantHeader emits the assistant header as a bare canvas line
 // (not a box).  Stays uncached: SequenceStat mutates while a stream is live.
 func RenderAssistantHeader(start time.Time, stat *config.SequenceStat, width int) string {
-	inner := width - 2*(BoxMargin+2) // canvas horizontal padding (BoxMargin+2 each side)
+	inner := CanvasContentWidth(width)
 	leftStr := AssistantHeaderDimStyle.Render(start.Format("15:04:05"))
 	rightStr := renderSeqStatRight(stat)
 	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)
@@ -157,10 +154,7 @@ func RenderAssistantHeader(start time.Time, stat *config.SequenceStat, width int
 // (thinking, text body) followed by one ToolBox per tool call.
 func renderAssistantMessage(msg config.Message, width int, expanded bool) string {
 	var b strings.Builder
-	boxWidth := width - 2*BoxMargin
-	if boxWidth < 20 {
-		boxWidth = 20
-	}
+	boxWidth := BoxWidth(width)
 
 	if msg.ThinkingText != "" {
 		parts := []string{
@@ -175,11 +169,7 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 	}
 
 	if msg.Text != "" && msg.Text != "\n\n" {
-		contentWidth := width - 2*BoxMargin - 4 // box width minus left+right padding
-		if contentWidth < 10 {
-			contentWidth = 10
-		}
-		body := RenderMarkdownOnBg(msg.Text, P.BgApp, contentWidth) + "\n"
+		body := RenderMarkdownOnBg(msg.Text, P.BgApp, CanvasContentWidth(width)) + "\n"
 		b.WriteString(drawCanvasSpan(nil, []string{body}, P.TextPrimary, width))
 	}
 
@@ -278,13 +268,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	var b strings.Builder
 
 	width := data.Width
-	if width < 20 {
-		width = 20
-	}
-	boxWidth := width - 2*BoxMargin
-	if boxWidth < 20 {
-		boxWidth = 20
-	}
+	boxWidth := BoxWidth(width)
 
 	if data.Waiting {
 		elapsed := time.Since(data.RequestStart)
@@ -320,11 +304,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 			body = data.RenderedMarkdown
 		}
 		if data.Partial != "" {
-			contentWidth := data.Width - 2*BoxMargin - 4
-			if contentWidth < 10 {
-				contentWidth = 10
-			}
-			wrappedPartial := RenderMarkdownOnBg(data.Partial, P.BgApp, contentWidth)
+			wrappedPartial := RenderMarkdownOnBg(data.Partial, P.BgApp, CanvasContentWidth(data.Width))
 			if body != "" {
 				body = body + "\n" + wrappedPartial
 			} else {

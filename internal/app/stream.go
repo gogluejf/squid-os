@@ -27,6 +27,7 @@ type partialTool struct {
 	chars   int
 	firstAt time.Time
 	doneAt  time.Time
+	ended   bool // true when no more deltas expected for this tool
 }
 
 // toStreamingToolCalls converts all partial tools with a non-empty name into
@@ -39,11 +40,11 @@ func (ss *streamState) toStreamingToolCalls() []ui.StreamingToolCall {
 		}
 		dur := time.Duration(0)
 		if !p.firstAt.IsZero() {
-			end := p.doneAt
-			if end.IsZero() {
-				end = time.Now()
+			if p.ended {
+				dur = p.doneAt.Sub(p.firstAt)
+			} else {
+				dur = time.Since(p.firstAt)
 			}
-			dur = end.Sub(p.firstAt)
 		}
 		out = append(out, ui.StreamingToolCall{
 			Name:      p.name,
@@ -68,6 +69,7 @@ type streamState struct {
 	ch            <-chan chat.StreamEvent
 	userCancelled bool
 	partialTools  []partialTool // live state during arg streaming, indexed by tool call index
+	lastToolIdx   int           // index of the last tool that received a delta (-1 if none)
 }
 
 // AddTextChunk appends text and updates metrics.
@@ -100,6 +102,7 @@ func (ss *streamState) reset() {
 	ss.ch = nil
 	ss.userCancelled = false
 	ss.partialTools = nil
+	ss.lastToolIdx = -1
 }
 
 // setStreamMode initializes the stream state for a new request.
@@ -295,6 +298,13 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		for len(m.stream.partialTools) <= event.ToolCallIdx {
 			m.stream.partialTools = append(m.stream.partialTools, partialTool{})
 		}
+		// Mark previous tool as ended when a new one starts streaming
+		if event.ToolCallIdx != m.stream.lastToolIdx && m.stream.lastToolIdx >= 0 {
+			prev := &m.stream.partialTools[m.stream.lastToolIdx]
+			prev.ended = true
+			prev.doneAt = time.Now()
+		}
+		m.stream.lastToolIdx = event.ToolCallIdx
 		p := &m.stream.partialTools[event.ToolCallIdx]
 		if event.ToolCallName != "" {
 			p.name = event.ToolCallName
@@ -304,7 +314,6 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		if p.firstAt.IsZero() {
 			p.firstAt = time.Now()
 		}
-		p.doneAt = time.Now() // update doneAt on each delta; final value = last delta time
 		// End thinking and text phases if still active (model moved on to tool calls)
 		if m.stream.inThinking {
 			m.stream.metrics.MarkThinkingDone()
@@ -315,14 +324,18 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		return m, waitForStreamEvent(m.stream.ch)
 	}
 
-	// ToolCalls flush: enrich partialTools with ID/Type and mark done.
+	// ToolCalls flush: enrich partialTools with ID/Type and mark all as ended.
 	if len(event.ToolCalls) > 0 {
+		now := time.Now()
 		for i, tc := range event.ToolCalls {
 			if i < len(m.stream.partialTools) {
 				m.stream.partialTools[i].id = tc.ID
 				m.stream.partialTools[i].typeStr = tc.Type
-				if m.stream.partialTools[i].doneAt.IsZero() {
-					m.stream.partialTools[i].doneAt = time.Now() // fallback if no deltas streamed
+				if !m.stream.partialTools[i].ended {
+					m.stream.partialTools[i].ended = true
+					if m.stream.partialTools[i].doneAt.IsZero() {
+						m.stream.partialTools[i].doneAt = now
+					}
 				}
 			}
 		}

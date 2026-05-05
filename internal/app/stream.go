@@ -221,11 +221,13 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			} else {
 				// Push an internal "aborted" message only if the user message was NOT truncated
 				// (i.e., we cancelled mid-tool-loop, user message is still in history).
+				text := "Stream aborted by user"
 				m.session.appendMsg(config.Message{
-					ID:        fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-					Role:      "internal",
-					CreatedAt: time.Now(),
-					Text:      "Stream aborted by user",
+					ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+					Role:        "internal",
+					CreatedAt:   time.Now(),
+					Text:        text,
+					TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(text)},
 				})
 			}
 

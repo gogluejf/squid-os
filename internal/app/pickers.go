@@ -94,9 +94,11 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 			if len(s) == 1 {
 				m.sessionPicker.Filter += s
 				m.sessionPicker.Selected = 0
+				m = m.previewSession(m.sessionPickerSelectedRaw())
 			} else if s == "backspace" && len(m.sessionPicker.Filter) > 0 {
 				m.sessionPicker.Filter = m.sessionPicker.Filter[:len(m.sessionPicker.Filter)-1]
 				m.sessionPicker.Selected = 0
+				m = m.previewSession(m.sessionPickerSelectedRaw())
 			}
 		case "image", "system":
 			if len(s) == 1 {

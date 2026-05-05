@@ -45,17 +45,36 @@ func noIndentStyles() ansi.StyleConfig {
 
 // RenderMarkdown renders markdown text to styled terminal output.
 // Falls back to plain text if renderer is unavailable.
+// If width > 0, it reuses a renderer with that word-wrap width.
 func RenderMarkdown(text string, width int) string {
-	if mdRenderer == nil || text == "" {
+	if text == "" {
 		return text
 	}
 
-	rendered, err := mdRenderer.Render(text)
+	// Use the default renderer for width=0
+	if width == 0 {
+		if mdRenderer == nil {
+			return text
+		}
+		rendered, err := mdRenderer.Render(text)
+		if err != nil {
+			return text
+		}
+		return strings.TrimRight(rendered, "\n")
+	}
+
+	// For a specific width, create a one-off renderer with word wrapping
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStyles(noIndentStyles()),
+		glamour.WithWordWrap(width),
+	)
 	if err != nil {
 		return text
 	}
-
-	// glamour adds trailing newlines, trim them
+	rendered, err := r.Render(text)
+	if err != nil {
+		return text
+	}
 	return strings.TrimRight(rendered, "\n")
 }
 
@@ -63,9 +82,10 @@ func RenderMarkdown(text string, width int) string {
 // immediately restores the given 256-colour background.  This prevents glamour's
 // reset codes from "punching holes" in the lipgloss block that wraps the output.
 // bg256 is the xterm-256 colour number as a string (e.g. "233").
+// wrapWidth is the content width to wrap at (0 = no wrap).
 // Falls back to plain text if the renderer is unavailable.
-func RenderMarkdownOnBg(text, bg256 string) string {
-	rendered := RenderMarkdown(text, 0)
+func RenderMarkdownOnBg(text, bg256 string, wrapWidth int) string {
+	rendered := RenderMarkdown(text, wrapWidth)
 	if rendered == text {
 		return text // renderer unavailable or empty — no post-processing needed
 	}

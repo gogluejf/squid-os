@@ -175,7 +175,11 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 	}
 
 	if msg.Text != "" && msg.Text != "\n\n" {
-		body := RenderMarkdownOnBg(msg.Text, P.BgApp) + "\n"
+		contentWidth := width - 2*BoxMargin - 4 // box width minus left+right padding
+		if contentWidth < 10 {
+			contentWidth = 10
+		}
+		body := RenderMarkdownOnBg(msg.Text, P.BgApp, contentWidth) + "\n"
 		b.WriteString(drawCanvasSpan(nil, []string{body}, P.TextPrimary, width))
 	}
 
@@ -309,8 +313,25 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	}
 
 	if data.RenderedMarkdown != "" || data.Partial != "" {
-		body := data.RenderedMarkdown + data.Partial
-		b.WriteString(drawCanvasSpan(nil, []string{body}, P.TextPrimary, width))
+		// RenderedMarkdown is already pre-wrapped and styled.
+		// Partial is raw, unwrapped text — render it with wrapping.
+		var body string
+		if data.RenderedMarkdown != "" {
+			body = data.RenderedMarkdown
+		}
+		if data.Partial != "" {
+			contentWidth := data.Width - 2*BoxMargin - 4
+			if contentWidth < 10 {
+				contentWidth = 10
+			}
+			wrappedPartial := RenderMarkdownOnBg(data.Partial, P.BgApp, contentWidth)
+			if body != "" {
+				body = body + "\n" + wrappedPartial
+			} else {
+				body = wrappedPartial
+			}
+		}
+		b.WriteString(drawCanvasSpan(nil, []string{body}, P.TextPrimary, data.Width))
 	}
 
 	if len(data.PendingTools) > 0 {

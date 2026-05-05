@@ -111,8 +111,12 @@ func (m *Model) updateViewportContent() {
 		lastNL := strings.LastIndex(m.stream.text, "\n")
 		if lastNL > m.stream.markdownEnd || (lastNL < 0 && m.stream.markdown != "") {
 			if lastNL >= 0 {
+				contentWidth := m.width - 2*ui.BoxMargin - 4
+				if contentWidth < 10 {
+					contentWidth = 10
+				}
 				m.stream.markdown = strings.TrimRight(
-					ui.RenderMarkdownOnBg(m.stream.text[:lastNL], "233"), "\n")
+					ui.RenderMarkdownOnBg(m.stream.text[:lastNL], "233", contentWidth), "\n")
 				m.stream.markdownEnd = lastNL
 			} else {
 				m.stream.markdown = ""

@@ -202,7 +202,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				ID:        fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 				Role:      "internal",
 				CreatedAt: time.Now(),
-				Text:      "Stream aborted by user",
+				Text:      "Stream error [" + event.Error.Error() + "]",
 			})
 		}
 

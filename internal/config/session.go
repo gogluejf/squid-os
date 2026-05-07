@@ -70,7 +70,7 @@ func (ss *SequenceStat) Accumulate(msg Message) {
 }
 
 // FindSequenceHeadIdx returns the index of the first assistant message after
-// the last user message, skipping any "internal" messages in between,
+// the last user message, skipping any "synthetic" messages in between,
 // or -1 if none exists yet.
 func FindSequenceHeadIdx(msgs []Message) int {
 	for i := len(msgs) - 1; i >= 0; i-- {
@@ -132,6 +132,9 @@ type Message struct {
 	SequenceStat *SequenceStat `json:"sequence_stat,omitempty"`
 
 	StopReason string `json:"stop_reason,omitempty"`
+
+	// Label is a human-readable label for synthetic/internal messages (e.g. "Stream aborted by user", "Stream error [details]").
+	Label string `json:"label,omitempty"`
 }
 
 // NewSessionFile creates a new empty session

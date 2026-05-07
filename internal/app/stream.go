@@ -195,14 +195,17 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			m.attachedImage = image
 		}
 
-		// Push an internal "aborted" message only if the user message was NOT truncated
+		// Push a synthetic error message only if the user message was NOT truncated
 		// (i.e., we cancelled mid-tool-loop, and the user message is still in history).
 		if !truncated {
+			text := "Stream error: " + event.Error.Error()
 			m.session.appendMsg(config.Message{
-				ID:        fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-				Role:      "internal",
-				CreatedAt: time.Now(),
-				Text:      "Stream error [" + event.Error.Error() + "]",
+				ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+				Role:        "synthetic",
+				CreatedAt:   time.Now(),
+				Text:        text,
+				Label:       "stream error",
+				TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(text)},
 			})
 		}
 
@@ -222,14 +225,15 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 					m.attachedImage = image
 				}
 			} else {
-				// Push an internal "aborted" message only if the user message was NOT truncated
+				// Push a synthetic message only if the user message was NOT truncated
 				// (i.e., we cancelled mid-tool-loop, user message is still in history).
 				text := "Stream aborted by user"
 				m.session.appendMsg(config.Message{
 					ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-					Role:        "internal",
+					Role:        "synthetic",
 					CreatedAt:   time.Now(),
 					Text:        text,
+					Label:       "aborted",
 					TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(text)},
 				})
 			}

@@ -40,6 +40,15 @@ func noIndentStyles() ansi.StyleConfig {
 	orange := "209"
 	cfg.Code.Color = &orange
 
+	// Custom heading styles — H1 has dark blue bg, with # prefix and space
+	h1Color := "141"
+	h1Bg := "236"
+	h2Color := "39"
+	h3Color := "110"
+	cfg.H1 = ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: &h1Color, BackgroundColor: &h1Bg, Bold: boolPtr(true), Prefix: "# ", Suffix: " "}}
+	cfg.H2 = ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: &h2Color, Bold: boolPtr(true), Prefix: "## "}}
+	cfg.H3 = ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: &h3Color, Bold: boolPtr(true), Prefix: "### "}}
+
 	return cfg
 }
 
@@ -84,6 +93,8 @@ func RenderMarkdown(text string, width int) string {
 // bg256 is the xterm-256 colour number as a string (e.g. "233").
 // wrapWidth is the content width to wrap at (0 = no wrap).
 // Falls back to plain text if the renderer is unavailable.
+func boolPtr(b bool) *bool { return &b }
+
 func RenderMarkdownOnBg(text, bg256 string, wrapWidth int) string {
 	rendered := RenderMarkdown(text, wrapWidth)
 	if rendered == text {

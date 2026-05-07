@@ -70,6 +70,7 @@ type streamState struct {
 	userCancelled bool
 	partialTools  []partialTool // live state during arg streaming, indexed by tool call index
 	lastToolIdx   int           // index of the last tool that received a delta (-1 if none)
+	tokenCount    int           // counter for throttling viewport updates
 }
 
 // AddTextChunk appends text and updates metrics.
@@ -103,6 +104,7 @@ func (ss *streamState) reset() {
 	ss.userCancelled = false
 	ss.partialTools = nil
 	ss.lastToolIdx = -1
+	ss.tokenCount = 0
 }
 
 // setStreamMode initializes the stream state for a new request.
@@ -355,7 +357,11 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		m.stream.metrics.MarkThinkingDone()
 	}
 	m.stream.inThinking = event.InThinking
-	m.updateViewportContent()
+	// Throttle viewport updates: render every 5 tokens to avoid SetContent() spam
+	m.stream.tokenCount++
+	if m.stream.tokenCount%3 == 0 {
+		m.updateViewportContent()
+	}
 	return m, waitForStreamEvent(m.stream.ch)
 }
 

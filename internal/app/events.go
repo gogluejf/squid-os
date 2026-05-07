@@ -16,8 +16,10 @@ type streamEventMsg chat.StreamEvent
 type streamTickMsg struct{}
 
 // streamTickCmd schedules the next tick while streaming is active.
+// Uses 200ms to avoid overwhelming the UI thread with SetContent() calls
+// on large viewports during heavy streaming.
 func streamTickCmd() tea.Cmd {
-	return tea.Tick(20*time.Millisecond, func(_ time.Time) tea.Msg {
+	return tea.Tick(200*time.Millisecond, func(_ time.Time) tea.Msg {
 		return streamTickMsg{}
 	})
 }

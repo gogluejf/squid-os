@@ -1,20 +1,20 @@
-# rig-chat
+# squid-os
 
 High-speed, local-first AI chat in your terminal — built for observability, fast iteration, and fail-fast experimentation.
 
-`rig-chat` exists to remove WebUI friction when testing local inference. The loop is keyboard-native and intentionally fast: load, switch model, stream, observe `tok/s` + token counts + TTFT, cancel instantly, adjust, retry.
+`squid-os` exists to remove WebUI friction when testing local inference. The loop is keyboard-native and intentionally fast: load, switch model, stream, observe `tok/s` + token counts + TTFT, cancel instantly, adjust, retry.
 
 It started as an extension of rig-stack (GPU AI local cloud server), and is evolving into a powerful, easy, and fun standalone TUI chat for local AI experimentation.
 
 ## Fast local AI, visualized
 
-![rig-chat TUI screenshot](docs/images/rig-chat-tui.png)
+![squid-os TUI screenshot](docs/images/squid-os-tui.png)
 
 ---
 
 ## Why this exists
 
-Most chat UIs are optimized for convenience. `rig-chat` is optimized for **feedback speed**.
+Most chat UIs are optimized for convenience. `squid-os` is optimized for **feedback speed**.
 
 When you are tuning local inference, speed and observability matter more than glossy interaction:
 - minimize interaction overhead,
@@ -40,7 +40,7 @@ This project is also a deliberate Go journey: an opportunity to build a complete
 ## Feature highlights
 
 ### 1) Streaming observability loop (core value)
-`rig-chat` continuously surfaces streaming performance so you can evaluate model/runtime behavior in real time:
+`squid-os` continuously surfaces streaming performance so you can evaluate model/runtime behavior in real time:
 - live `tok/s`,
 - token counts,
 - elapsed durations,
@@ -100,7 +100,7 @@ CLI entry in [`main.go`](main.go), runtime in [`internal/headless/headless.go`](
 
 ## Local AI OS experimentation direction
 
-`rig-chat` is evolving beyond “just a chat client.”
+`squid-os` is evolving beyond “just a chat client.”
 
 The direction is a fast local AI experimentation surface where observability comes first, then orchestration:
 - quick behavior probing and regression testing,
@@ -134,12 +134,12 @@ Build target in [`Makefile`](Makefile).
 
 ### Run
 ```bash
-./bin/rig-chat
+./bin/squid-os
 ```
 
 Headless example:
 ```bash
-./bin/rig-chat --headless --prompt "hello"
+./bin/squid-os --headless --prompt "hello"
 ```
 
 Core CLI flags are defined in [`main.go`](main.go).
@@ -174,7 +174,7 @@ High-impact shortcuts (see [`internal/ui/help.go`](internal/ui/help.go)):
 ## Configuration and data paths
 
 Default config root:
-- `~/.config/rig-chat`
+- `~/.config/squid-os`
 
 If not specified, this default is resolved in [`main.go`](main.go). Path layout is defined in [`internal/config/paths.go`](internal/config/paths.go).
 

@@ -10,10 +10,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"rig-chat/internal/chat"
-	"rig-chat/internal/config"
-	"rig-chat/internal/tools"
-	"rig-chat/internal/ui"
+	"squid-os/internal/chat"
+	"squid-os/internal/config"
+	"squid-os/internal/tools"
+	"squid-os/internal/ui"
 )
 
 // Model is the top-level Bubble Tea model

@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/signal"
 
-	"rig-chat/internal/chat"
-	"rig-chat/internal/config"
+	"squid-os/internal/chat"
+	"squid-os/internal/config"
 )
 
 // Run executes a single prompt and streams the response to stdout
@@ -16,7 +16,7 @@ func Run(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	chatURL := config.ResolveChatURL(endpoints, settings.Provider)
 
 	if settings.Model == "" {
-		return fmt.Errorf("no model configured. Run rig-chat and use /model to select one, or set it in settings.json")
+		return fmt.Errorf("no model configured. Run squid-os and use /model to select one, or set it in settings.json")
 	}
 
 	engine := chat.NewEngine(chatURL, settings.Model, settings.Thinking)

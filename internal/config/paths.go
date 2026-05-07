@@ -7,9 +7,9 @@ import (
 
 // Paths holds all resolved config directory paths
 type Paths struct {
-	Root       string // config/rig-chat
-	Sessions   string // config/rig-chat/sessions
-	SysPrompts string // config/rig-chat/sys-prompts
+	Root       string // config/squid-os
+	Sessions   string // config/squid-os/sessions
+	SysPrompts string // config/squid-os/sys-prompts
 }
 
 func NewPaths(configDir string) Paths {

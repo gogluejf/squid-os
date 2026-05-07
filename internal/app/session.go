@@ -7,8 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"rig-chat/internal/config"
-	"rig-chat/internal/ui"
+	"squid-os/internal/config"
+	"squid-os/internal/ui"
 )
 
 // startManualSave opens the save prompt so the user can confirm or edit the session name.

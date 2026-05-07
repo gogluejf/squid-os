@@ -7,9 +7,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
-	"rig-chat/internal/app"
-	"rig-chat/internal/config"
-	"rig-chat/internal/headless"
+	"squid-os/internal/app"
+	"squid-os/internal/config"
+	"squid-os/internal/headless"
 )
 
 var (
@@ -22,7 +22,7 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "rig-chat",
+		Use:   "squid-os",
 		Short: "Interactive TUI chat with OpenAI-compatible endpoints",
 		RunE:  run,
 	}
@@ -44,7 +44,7 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("cannot determine home dir: %w", err)
 	}
-	cfgDir := home + "/.config/rig-chat"
+	cfgDir := home + "/.config/squid-os"
 
 	paths := config.NewPaths(cfgDir)
 	if err := paths.EnsureDirs(); err != nil {

@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"rig-chat/internal/chat"
-	"rig-chat/internal/ui"
+	"squid-os/internal/chat"
+	"squid-os/internal/ui"
 )
 
 // Update is the top-level Bubble Tea update function — routes every incoming

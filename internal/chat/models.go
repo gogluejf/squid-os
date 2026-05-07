@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"rig-chat/internal/config"
+	"squid-os/internal/config"
 )
 
 // ModelEntry represents a discovered model with its provider

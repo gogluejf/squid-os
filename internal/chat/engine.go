@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"rig-chat/internal/config"
-	"rig-chat/internal/tools"
+	"squid-os/internal/config"
+	"squid-os/internal/tools"
 	"strings"
 	"time"
 )
@@ -174,7 +174,7 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 
 		var prettyBody bytes.Buffer
 		json.Indent(&prettyBody, body, "", "  ")
-		f, _ := os.Create("/tmp/rig-chat-debug.json")
+		f, _ := os.Create("/tmp/squid-os-debug.json")
 		defer f.Close()
 		f.Write(prettyBody.Bytes())
 

@@ -4,7 +4,7 @@ import "github.com/charmbracelet/lipgloss"
 
 // RenderHelp renders the full-screen help overlay
 func RenderHelp(width, height int) string {
-	title := HeadingStyle.Render("  rig-chat")
+	title := HeadingStyle.Render("  squid-os")
 
 	shortcuts := `
 	 Keyboard Shortcuts
@@ -40,7 +40,7 @@ func RenderHelp(width, height int) string {
   ` + CommandStyle.Render("/load") + `            Load a saved session
   ` + CommandStyle.Render("/clear") + `           Clear chat and start fresh
   ` + CommandStyle.Render("/system") + `          Load system prompt
-  ` + CommandStyle.Render("/exit") + `            Exit rig-chat
+  ` + CommandStyle.Render("/exit") + `            Exit squid-os
   ` + CommandStyle.Render("/help") + `            Show this help`
 
 	footer := "\n  " + FooterDimStyle.Render("Press ctrl+h or esc to close")

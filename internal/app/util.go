@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"rig-chat/internal/chat"
-	"rig-chat/internal/config"
+	"squid-os/internal/chat"
+	"squid-os/internal/config"
 )
 
 // modelBasename strips any path prefix from a model ID, e.g.

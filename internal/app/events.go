@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"rig-chat/internal/chat"
+	"squid-os/internal/chat"
 )
 
 // streamEventMsg wraps a StreamEvent for the Bubble Tea message loop

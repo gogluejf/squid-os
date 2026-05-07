@@ -21,7 +21,7 @@ var AllCommands = []CommandInfo{
 	{Name: "load", Description: "Load a saved session"},
 	{Name: "clear", Description: "Clear chat and start fresh"},
 	{Name: "system", Description: "Load system prompt"},
-	{Name: "exit", Description: "Exit rig-chat"},
+	{Name: "exit", Description: "Exit squid-os"},
 	{Name: "help", Description: "Show help"},
 }
 

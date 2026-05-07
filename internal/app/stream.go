@@ -10,10 +10,10 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"rig-chat/internal/chat"
-	"rig-chat/internal/config"
-	"rig-chat/internal/tools"
-	"rig-chat/internal/ui"
+	"squid-os/internal/chat"
+	"squid-os/internal/config"
+	"squid-os/internal/tools"
+	"squid-os/internal/ui"
 )
 
 // partialTool holds the streaming-in-progress state for a single tool call.

@@ -1,6 +1,6 @@
 package app
 
-import "rig-chat/internal/config"
+import "squid-os/internal/config"
 
 // chatSession bundles the active chat: its session file and render cache.
 // Messages live in file.Messages — there is no separate copy.

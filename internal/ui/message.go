@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"rig-chat/internal/config"
-	"rig-chat/internal/tools"
+	"squid-os/internal/config"
+	"squid-os/internal/tools"
 
 	"github.com/charmbracelet/lipgloss"
 )

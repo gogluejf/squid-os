@@ -5,8 +5,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"rig-chat/internal/config"
-	"rig-chat/internal/ui"
+	"squid-os/internal/config"
+	"squid-os/internal/ui"
 )
 
 // View is the top-level Bubble Tea render function — assembles all visible

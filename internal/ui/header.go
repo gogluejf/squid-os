@@ -14,10 +14,10 @@ type HeaderData struct {
 // RenderHeader renders the top header bar, including the incognito indicator when active.
 func RenderHeader(data HeaderData, width int) string {
 	if !data.Incognito {
-		return TopHeaderStyle.Width(width).Render("rig-chat v0.1")
+		return TopHeaderStyle.Width(width).Render("squid-os v0.1")
 	}
 	headerStyle := IncognitoHeaderStyle.Width(width)
-	title := "rig-chat v0.1"
+	title := "squid-os v0.1"
 	label := "👻 incognito"
 	titleWidth := lipgloss.Width(IncognitoHeaderStyle.Render(title))
 	labelWidth := lipgloss.Width(IncognitoHeaderStyle.Render(label))

@@ -7,8 +7,8 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"rig-chat/internal/config"
-	"rig-chat/internal/ui"
+	"squid-os/internal/config"
+	"squid-os/internal/ui"
 )
 
 // handlePickerKey handles key input while any picker overlay is visible

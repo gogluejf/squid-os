@@ -1,4 +1,4 @@
-module rig-chat
+module squid-os
 
 go 1.24.2
 

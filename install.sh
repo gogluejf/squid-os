@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rig-chat/install.sh — bootstrap Go toolchain + build rig-chat
+# squid-os/install.sh — bootstrap Go toolchain + build squid-os
 #
 # Fully idempotent: every step checks before acting, safe to re-run anytime.
 # Each step prints ✓ (already done) or ↓/⚙ (action taken).
@@ -7,9 +7,9 @@
 # What it does (5 steps):
 #   1. Go SDK     — downloads Go 1.24.2 to /usr/local/go if missing
 #   2. PATH       — appends Go bin dirs to ~/.bashrc if not already there
-#   3. Config     — creates ${XDG_CONFIG_HOME:-~/.config}/rig-chat/ dirs + defaults
+#   3. Config     — creates ${XDG_CONFIG_HOME:-~/.config}/squid-os/ dirs + defaults
 #   4. Modules    — runs `go mod tidy` in repo root if go.sum is missing
-#   5. Build      — compiles rig-chat static binary into ./bin/rig-chat
+#   5. Build      — compiles squid-os static binary into ./bin/squid-os
 #
 # Flags:
 #   --clean    force-rebuild (re-fetch modules + recompile binary)
@@ -28,11 +28,11 @@ GO_VERSION="1.24.2"
 GO_ARCHIVE="go${GO_VERSION}.linux-amd64.tar.gz"
 GO_SDK="/usr/local/go"
 GO_BIN="${GO_SDK}/bin/go"
-BINARY="rig-chat"
+BINARY="squid-os"
 BINARY_PATH="${BIN_DIR}/${BINARY}"
 LEGACY_BINARY="${REPO_ROOT}/${BINARY}"
 
-CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/rig-chat"
+CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/squid-os"
 
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
@@ -43,7 +43,7 @@ RESET='\033[0m'
 CLEAN=false
 [[ "${1:-}" == "--clean" ]] && CLEAN=true
 
-echo -e "\n${BOLD}  rig-chat install${RESET}"
+echo -e "\n${BOLD}  squid-os install${RESET}"
 echo -e "  ${DIM}Go ${GO_VERSION} · Bubble Tea · Cobra · Glamour · Lip Gloss · Chroma${RESET}\n"
 
 if [[ ! -f "${REPO_ROOT}/go.mod" ]]; then

@@ -3,20 +3,28 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"time"
 )
 
 type History struct {
 	Entries []string `json:"entries"`
 }
 
-// LoadHistory loads history.json or returns empty
+// LoadHistory loads history.json or returns empty.
+// If the file exists but is malformed, it backs it up with a .corrupted.TIMESTAMP suffix.
 func LoadHistory(p Paths) History {
 	h := History{}
 	data, err := os.ReadFile(p.HistoryFile())
 	if err != nil {
 		return h
 	}
-	_ = json.Unmarshal(data, &h)
+	if err := json.Unmarshal(data, &h); err != nil {
+		// Corrupted file — back it up before we overwrite it on next save
+		ts := time.Now().Format("20060102-150405")
+		backup := p.HistoryFile() + ".corrupted." + ts
+		_ = os.Rename(p.HistoryFile(), backup)
+		return h
+	}
 	return h
 }
 

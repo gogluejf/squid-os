@@ -91,18 +91,18 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 	switch msg.Role {
 	case "user":
 		return renderUserMessage(msg, width)
-	case "internal":
-		return renderInternalMessage(msg, width, expanded)
+	case "synthetic":
+		return renderSyntheticMessage(msg, width, expanded)
 	default:
 		return renderAssistantMessage(msg, width, expanded)
 	}
 }
 
-// renderInternalMessage renders an internal message (e.g. stream aborted)
+// renderSyntheticMessage renders a synthetic message (e.g. stream aborted, error)
 // as a canvas span. When collapsed, shows only the label; when expanded, shows the body too.
-func renderInternalMessage(msg config.Message, width int, expanded bool) string {
+func renderSyntheticMessage(msg config.Message, width int, expanded bool) string {
 	parts := []string{
-		InternalLabel.Render("aborted"),
+		InternalLabel.Render(msg.Label),
 	}
 	var content []string
 	if expanded && msg.Text != "" {

@@ -499,7 +499,7 @@ func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []c
 					Name:       tc.Instruction.Name,
 				})
 			}
-		case "internal":
+		case "synthetic":
 			// Internal messages (e.g. stream aborted) become a synthetic assistant
 			// message for the API so the model knows the previous turn was interrupted.
 			msgs = append(msgs, ChatMessage{Role: "assistant", Content: msg.Text})

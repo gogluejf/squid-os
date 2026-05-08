@@ -63,8 +63,8 @@ type ImageURL struct {
 
 // toolDefinition is the OpenAI-compatible tool definition sent in the request
 type toolDefinition struct {
-	Type     string          `json:"type"`
-	Function functionDef     `json:"function"`
+	Type     string      `json:"type"`
+	Function functionDef `json:"function"`
 }
 
 // functionDef controls key ordering: name, description, parameters
@@ -441,17 +441,41 @@ func FetchModels(ctx context.Context, modelsURL string) ([]string, error) {
 
 // BuildAPIMessages converts Message to ChatMessages for the API.
 // This function centralizes message building logic used by both headless and TUI modes.
+//
+// System prompt: read from the first role="system" message in the session.
+// If no system message exists, fall back to loading from settings file (backwards compat).
+//
+// TODO: Tools are loaded from current engine config (tools.GetTools()), not from
+// session messages. This means if tools change between sessions, the saved
+// tools_definition internal message will not match the actual tools sent in
+// the API request. Fix later.
 func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []config.Message) []ChatMessage {
 	var msgs []ChatMessage
 
-	// Add system prompt
-	sysPrompt := config.LoadSystemPrompt(paths, settings.SystemPromptFile)
-	msgs = append(msgs, ChatMessage{Role: "system", Content: sysPrompt})
+	// Find system prompt from session messages (role = "system")
+	systemPrompt := ""
+	for _, msg := range messages {
+		if msg.Role == config.RoleSystem {
+			systemPrompt = msg.Text
+			break
+		}
+	}
+	// Fallback: load from settings file if no system message (backwards compat)
+	if systemPrompt == "" {
+		systemPrompt = config.LoadSystemPrompt(paths, settings.SystemPromptFile)
+	}
+	msgs = append(msgs, ChatMessage{Role: "system", Content: systemPrompt})
 
 	// Convert display messages to API messages
 	for _, msg := range messages {
+		// Skip system and internal messages — system is handled above, internal is metadata only
 		switch msg.Role {
-		case "user":
+		case config.RoleSystem, config.RoleInternal:
+			continue
+		}
+
+		switch msg.Role {
+		case config.RoleUser:
 			if msg.ImagePath != "" {
 				parts, err := BuildMultimodalContent(msg.Text, msg.ImagePath)
 				if err == nil {
@@ -462,7 +486,7 @@ func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []c
 			} else {
 				msgs = append(msgs, ChatMessage{Role: "user", Content: msg.Text})
 			}
-		case "assistant":
+		case config.RoleAssistant:
 			cm := ChatMessage{Role: "assistant", Content: msg.Text}
 			if len(msg.ToolCalls) > 0 {
 				cm.ToolCalls = make([]ToolCall, len(msg.ToolCalls))
@@ -499,7 +523,7 @@ func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []c
 					Name:       tc.Instruction.Name,
 				})
 			}
-		case "synthetic":
+		case config.RoleSynthetic:
 			// Internal messages (e.g. stream aborted) become a synthetic assistant
 			// message for the API so the model knows the previous turn was interrupted.
 			msgs = append(msgs, ChatMessage{Role: "assistant", Content: msg.Text})

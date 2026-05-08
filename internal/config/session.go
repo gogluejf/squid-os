@@ -11,6 +11,15 @@ import (
 	"github.com/google/uuid"
 )
 
+// Role constants — used for message filtering in buildAPI and rendering
+const (
+	RoleUser      = "user"      // user context (chat)
+	RoleAssistant = "assistant" // model output
+	RoleSynthetic = "synthetic" // inject synthetic messages as assistant message, those message are shaped by the app
+	RoleSystem    = "system"    // system prompt loaded from file; included in API
+	RoleInternal  = "internal"  // metadata visible to user; excluded from API
+)
+
 type SessionFile struct {
 	Version     int       `json:"version"`
 	Session     Session   `json:"session"`

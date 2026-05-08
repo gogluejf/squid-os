@@ -101,7 +101,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 			Message: fmt.Sprintf("Auto-load on, last session loaded: %s", config.SessionPath(paths, settings.LastSessionName)),
 		}
 	} else {
-		sess.clear(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
+		sess.clear(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile, paths)
 		// Fresh session — clear LastSessionName so auto-save doesn't overwrite the previous session
 		if settings.LastSessionName != "" {
 			settings.LastSessionName = ""

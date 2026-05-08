@@ -63,7 +63,7 @@ func (m Model) autoSave() (Model, tea.Cmd) {
 
 // clearSession resets all messages and session state to start fresh.
 func (m Model) clearSession() (Model, tea.Cmd) {
-	m.session.clear(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile)
+	m.session.clear(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile, m.paths)
 	if !m.incognito {
 		m.settings.LastSessionName = ""
 		_ = config.SaveSettings(m.paths, m.settings)
@@ -80,7 +80,7 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 // toggleIncognito switches incognito mode on/off and resets the chat either way.
 func (m Model) toggleIncognito() (Model, tea.Cmd) {
 	m.incognito = !m.incognito
-	m.session.clear(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile)
+	m.session.clear(m.settings.Provider, m.settings.Model, m.settings.Thinking, m.settings.SystemPromptFile, m.paths)
 	if !m.incognito {
 		// Leaving incognito: also reset last session name so auto-save doesn't
 		// accidentally write to the previous session.

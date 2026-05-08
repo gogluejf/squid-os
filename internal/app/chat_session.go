@@ -1,6 +1,12 @@
 package app
 
-import "squid-os/internal/config"
+import (
+	"encoding/json"
+	"fmt"
+	"squid-os/internal/config"
+	"squid-os/internal/tools"
+	"strings"
+)
 
 // chatSession bundles the active chat: its session file and render cache.
 // Messages live in file.Messages — there is no separate copy.
@@ -11,12 +17,102 @@ type chatSession struct {
 	undoStack        [][]config.Message
 }
 
-// clear resets to a fresh session.
-func (cs *chatSession) clear(provider, model string, thinking bool, systemPromptFile string) {
+// clear resets to a fresh session and pushes init messages (system prompt + tools).
+func (cs *chatSession) clear(provider, model string, thinking bool, systemPromptFile string, paths config.Paths) {
 	cs.file = config.NewSessionFile(provider, model, thinking, systemPromptFile)
 	cs.renderedMessages = nil
 	cs.renderedWidth = 0
 	cs.undoStack = nil
+
+	// Push system prompt message (included in API as system role)
+	sysContent := config.LoadSystemPrompt(paths, systemPromptFile)
+	cs.appendMsg(config.Message{
+		ID:          "sys0",
+		Role:        config.RoleSystem,
+		Text:        sysContent,
+		Label:       "System Prompt",
+		InputTokens: countTokensApprox(sysContent),
+	})
+
+	// Push tools enabled internal message
+	names, tokens := buildToolsEnabledContent()
+	if names != "" {
+		cs.appendMsg(config.Message{
+			ID:          "tools0",
+			Role:        config.RoleInternal,
+			Text:        names,
+			Label:       "Tools Enabled",
+			InputTokens: tokens,
+		})
+	}
+}
+
+// updateSystemPromptMsg updates the existing sys0 message and pushes an internal message.
+func (cs *chatSession) updateSystemPromptMsg(oldFile, newFile string, paths config.Paths) {
+	for i := range cs.file.Messages {
+		if cs.file.Messages[i].ID == "sys0" {
+			newContent := config.LoadSystemPrompt(paths, newFile)
+			cs.file.Messages[i].Text = newContent
+			cs.file.Messages[i].Label = "System Prompt"
+			cs.file.Messages[i].InputTokens = countTokensApprox(newContent)
+
+			// Push internal message for the change
+			cs.appendMsg(config.Message{
+				ID:    fmt.Sprintf("msg_%d", len(cs.file.Messages)+1),
+				Role:  config.RoleInternal,
+				Text:  fmt.Sprintf("Switched system prompt from %s to %s", oldFile, newFile),
+				Label: "System Prompt Changed",
+			})
+			return
+		}
+	}
+}
+
+// pushModelSwitchMsg pushes an internal message when the model is switched.
+func (cs *chatSession) pushModelSwitchMsg(oldModel, newModel string) {
+	cs.appendMsg(config.Message{
+		ID:    fmt.Sprintf("msg_%d", len(cs.file.Messages)+1),
+		Role:  config.RoleInternal,
+		Text:  fmt.Sprintf("Switched model from %s to %s", oldModel, newModel),
+		Label: "Model Switched",
+	})
+}
+
+// buildToolsEnabledContent returns a comma-separated list of tool names and the
+// token count of the raw JSON tool definitions (sent in the API request body).
+func buildToolsEnabledContent() (string, int) {
+	tl := tools.GetTools()
+	if len(tl) == 0 {
+		return "", 0
+	}
+
+	// Build display string: just comma-separated names.
+	names := make([]string, len(tl))
+	for i, t := range tl {
+		names[i] = t.Name
+	}
+	display := strings.Join(names, ", ")
+
+	// Count tokens from the raw JSON we'd actually send in the API request.
+	type toolDef struct {
+		Type     string `json:"type"`
+		Function struct {
+			Name        string          `json:"name"`
+			Description string          `json:"description"`
+			Parameters  json.RawMessage `json:"parameters"`
+		} `json:"function"`
+	}
+	defs := make([]toolDef, len(tl))
+	for i, t := range tl {
+		defs[i] = toolDef{Type: "function"}
+		defs[i].Function.Name = t.Name
+		defs[i].Function.Description = t.Description
+		defs[i].Function.Parameters = t.Schema
+	}
+	rawJSON, _ := json.Marshal(defs)
+	tokens := countTokensApprox(string(rawJSON))
+
+	return display, tokens
 }
 
 // setFrom loads a saved session, replacing all state and clearing the render cache.

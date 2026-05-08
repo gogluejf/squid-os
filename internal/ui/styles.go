@@ -127,6 +127,16 @@ var (
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextWarning))
 
+	// System prompt label (color 141 - green) on canvas background
+	SystemLabel = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp)).
+			Foreground(lipgloss.Color("141"))
+
+	// Internal message label (color 39 - teal) on canvas background
+	InternalMsgLabel = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp)).
+			Foreground(lipgloss.Color("39"))
+
 	// Tool box inline sub-styles (BgCode — match the ToolBox background)
 	ToolLabel = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgCode)).
@@ -219,6 +229,10 @@ var (
 	InfoStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextInfo))
+
+	// TextMutedStyle — for rendering muted content inside canvas spans (system/internal)
+	TextMutedStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(P.TextMuted))
 
 	// Image attachment chip — carries BgApp
 	AttachmentStyle = lipgloss.NewStyle().

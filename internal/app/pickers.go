@@ -127,6 +127,11 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 					label += "  " + formatContextLength(e.ContextLength)
 				}
 				if label == selected {
+					if m.settings.Model != e.ID {
+						oldModel := modelBasename(m.settings.Model)
+						(&m).session.pushModelSwitchMsg(oldModel, name)
+						(&m).session.invalidateRenderAll()
+					}
 					m.settings.Model = e.ID
 					m.settings.Provider = e.Provider
 					m.settings.ContextWindow = e.ContextLength
@@ -159,11 +164,31 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 	case "system":
 		selected := m.filePicker.SelectedItem()
 		if selected != "" {
+			changed := false
+			if m.settings.SystemPromptFile != "" && m.settings.SystemPromptFile != selected {
+				(&m).session.updateSystemPromptMsg(m.settings.SystemPromptFile, selected, m.paths)
+				changed = true
+			} else {
+				// First set — update sys0 directly
+				for i := range m.session.file.Messages {
+					if m.session.file.Messages[i].ID == "sys0" {
+						newContent := config.LoadSystemPrompt(m.paths, selected)
+						m.session.file.Messages[i].Text = newContent
+						m.session.file.Messages[i].InputTokens = countTokensApprox(newContent)
+						changed = true
+						break
+					}
+				}
+			}
+			if changed {
+				(&m).session.invalidateRenderAll()
+			}
 			m.settings.SystemPromptFile = selected
 			_ = config.SaveSettings(m.paths, m.settings)
 		}
 	}
 
+	(&m).updateViewportContent()
 	return m, m.setChatMode()
 }
 

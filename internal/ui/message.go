@@ -105,12 +105,17 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 }
 
 // renderSystemMessage renders a system prompt message (role = system).
-// Expandable like thinking/tool. Label color 141, content muted.
+// Expandable like thinking/tool. Label color 141, params muted, content muted.
 func renderSystemMessage(msg config.Message, width int, expanded bool) string {
 	parts := []string{
 		SystemLabel.Render(msg.Label),
-		CanvasStatInline.Render(tokenChipInput(msg.InputTokens, nil)),
 	}
+	if msg.Params != nil {
+		for k, v := range msg.Params {
+			parts = append(parts, SystemParam.Render(fmt.Sprintf("%s=%s", k, v)))
+		}
+	}
+	parts = append(parts, CanvasStatInline.Render(tokenChipInput(msg.InputTokens, nil)))
 
 	var content []string
 	if expanded && msg.Text != "" {
@@ -120,10 +125,15 @@ func renderSystemMessage(msg config.Message, width int, expanded bool) string {
 }
 
 // renderInternalMessage renders an internal metadata message (role = internal).
-// Expandable. Label color 39 (teal), content muted. No tokens (except tools def).
+// Expandable. Label color 39 (teal), params muted, content muted. No tokens (except tools def).
 func renderInternalMessage(msg config.Message, width int, expanded bool) string {
 	parts := []string{
 		InternalMsgLabel.Render(msg.Label),
+	}
+	if msg.Params != nil {
+		for k, v := range msg.Params {
+			parts = append(parts, InternalParam.Render(fmt.Sprintf("%s=%s", k, v)))
+		}
 	}
 	if msg.InputTokens > 0 {
 		parts = append(parts, CanvasStatInline.Render(tokenChipInput(msg.InputTokens, nil)))
@@ -142,6 +152,13 @@ func renderSyntheticMessage(msg config.Message, width int, expanded bool) string
 		InternalLabel.Render(msg.Label),
 		CanvasStatInline.Render(tokenChipOutput(msg.TextMetrics.Tokens, nil)),
 	}
+
+	if msg.Params != nil {
+		for k, v := range msg.Params {
+			parts = append(parts, InternalParam.Render(fmt.Sprintf("%s=%s", k, v)))
+		}
+	}
+
 	var content []string
 	if expanded && msg.Text != "" {
 		content = []string{msg.Text}

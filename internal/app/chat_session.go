@@ -31,6 +31,7 @@ func (cs *chatSession) clear(provider, model string, thinking bool, systemPrompt
 		Role:        config.RoleSystem,
 		Text:        sysContent,
 		Label:       "System Prompt",
+		Params:      map[string]string{"file": systemPromptFile},
 		InputTokens: countTokensApprox(sysContent),
 	})
 
@@ -42,6 +43,7 @@ func (cs *chatSession) clear(provider, model string, thinking bool, systemPrompt
 			Role:        config.RoleInternal,
 			Text:        names,
 			Label:       "Tools Enabled",
+			Params:      map[string]string{"count": fmt.Sprintf("%d", len(tools.GetTools()))},
 			InputTokens: tokens,
 		})
 	}
@@ -54,6 +56,7 @@ func (cs *chatSession) updateSystemPromptMsg(oldFile, newFile string, paths conf
 			newContent := config.LoadSystemPrompt(paths, newFile)
 			cs.file.Messages[i].Text = newContent
 			cs.file.Messages[i].Label = "System Prompt"
+			cs.file.Messages[i].Params = map[string]string{"file": newFile}
 			cs.file.Messages[i].InputTokens = countTokensApprox(newContent)
 
 			// Push internal message for the change
@@ -62,6 +65,7 @@ func (cs *chatSession) updateSystemPromptMsg(oldFile, newFile string, paths conf
 				Role:  config.RoleInternal,
 				Text:  fmt.Sprintf("Switched system prompt from %s to %s", oldFile, newFile),
 				Label: "System Prompt Changed",
+				Params: map[string]string{"from": oldFile, "to": newFile},
 			})
 			return
 		}
@@ -75,6 +79,7 @@ func (cs *chatSession) pushModelSwitchMsg(oldModel, newModel string) {
 		Role:  config.RoleInternal,
 		Text:  fmt.Sprintf("Switched model from %s to %s", oldModel, newModel),
 		Label: "Model Switched",
+		Params: map[string]string{"from": oldModel, "to": newModel},
 	})
 }
 

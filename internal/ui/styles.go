@@ -23,6 +23,8 @@ type Palette struct {
 	TextHeading    string // markdown headings
 	TextAccent     string // links, keys, bullets (cyan)
 	TextToolParam  string // tool display param value (lighter blue)
+	TextSystemParam  string // system message param value (darker green)
+	TextInternalParam string // internal message param value (darker teal)
 	TextCode       string // inline code / code block text
 	TextSuccess    string // success indicators (green)
 	TextError      string // error indicators (red)
@@ -52,6 +54,8 @@ var P = Palette{
 	TextHeading:    "255",
 	TextAccent:     "110", // cyan
 	TextToolParam:  "67",  // dark gray-blue for tool param display
+	TextSystemParam:  "100",  // darker green than label 141
+	TextInternalParam: "24",  // darker teal than label 39
 	TextCode:       "228", // yellow
 	TextSuccess:    "22",  // dark green
 	TextError:      "124", // red
@@ -132,10 +136,20 @@ var (
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color("141"))
 
+	// System prompt param value — darker green inline on canvas bg (like ToolParamOnTool but on BgApp)
+	SystemParam = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp)).
+			Foreground(lipgloss.Color(P.TextSystemParam))
+
 	// Internal message label (color 39 - teal) on canvas background
 	InternalMsgLabel = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color("39"))
+
+	// Internal message param value — darker teal inline on canvas bg
+	InternalParam = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgApp)).
+			Foreground(lipgloss.Color(P.TextInternalParam))
 
 	// Tool box inline sub-styles (BgCode — match the ToolBox background)
 	ToolLabel = lipgloss.NewStyle().

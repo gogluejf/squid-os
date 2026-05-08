@@ -144,8 +144,16 @@ type Message struct {
 
 	StopReason string `json:"stop_reason,omitempty"`
 
-	// Label is a human-readable label for synthetic/internal messages (e.g. "Stream aborted by user", "Stream error [details]").
+	// Label is a human-readable label for synthetic/internal/system messages
+	// (e.g. "Stream aborted by user", "System Prompt", "Tools Enabled").
+	// Displayed as the primary title in the UI.
 	Label string `json:"label,omitempty"`
+
+	// Params is a key-value map of parameters for syntethic/system/internal messages.
+	// they allow to provide second level metadata for the message, which can be used for display ( like tools with their params)
+	// Rendered as styled chips next to the label, analogous to tool DisplayParam.
+	// Not sent to the API — metadata only.
+	Params map[string]string `json:"params,omitempty"`
 }
 
 // NewSessionFile creates a new empty session

@@ -120,8 +120,8 @@ type Message struct {
 	TimeToFirstTokenMs int64   `json:"time_to_first_token_ms,omitempty"`
 	TokensPerSecond    float64 `json:"tok_per_sec,omitempty"`
 
-	ImagePath  string `json:"image_path,omitempty"`
-	UserTokens int    `json:"user_tokens"`
+	ImagePath   string `json:"image_path,omitempty"`
+	InputTokens int    `json:"user_tokens"`
 
 	Text            string         `json:"text"`
 	TextMetrics     ContentMetrics `json:"text_metrics,omitempty"`

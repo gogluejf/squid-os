@@ -173,7 +173,7 @@ func (cs *chatSession) totalTokens() int {
 func (cs *chatSession) totalInputTokens() int {
 	total := 0
 	for _, msg := range cs.file.Messages {
-		total += msg.UserTokens
+		total += msg.InputTokens
 		for _, tc := range msg.ToolCalls {
 			total += tc.Execution.Tokens
 		}

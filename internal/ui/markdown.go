@@ -41,10 +41,10 @@ func noIndentStyles() ansi.StyleConfig {
 	cfg.Code.Color = &orange
 
 	// Custom heading styles — H1 has dark blue bg, with # prefix and space
-	h1Color := "141"
-	h1Bg := "236"
-	h2Color := "39"
-	h3Color := "110"
+	h1Color := P.TextSystemLabel
+	h1Bg := P.BgUser
+	h2Color := P.TextInternalLabel
+	h3Color := P.TextAccent
 	cfg.H1 = ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: &h1Color, BackgroundColor: &h1Bg, Bold: boolPtr(true), Prefix: "# ", Suffix: " "}}
 	cfg.H2 = ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: &h2Color, Bold: boolPtr(true), Prefix: "## "}}
 	cfg.H3 = ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: &h3Color, Bold: boolPtr(true), Prefix: "### "}}

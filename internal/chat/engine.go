@@ -141,6 +141,12 @@ func toolsToDefinitions(ts []tools.Tool) []toolDefinition {
 	return defs
 }
 
+// MarshalToolsJSON returns the raw JSON of tool definitions as sent in the API request body.
+// Used by the app for token counting on internal messages.
+func MarshalToolsJSON(ts []tools.Tool) ([]byte, error) {
+	return json.Marshal(toolsToDefinitions(ts))
+}
+
 // Stream sends the chat request and returns a channel of StreamEvents.
 // Cancel via the context. The channel is closed when done.
 // Pass nil for toolDefs if no tools are available.

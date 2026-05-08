@@ -16,22 +16,24 @@ type Palette struct {
 	BgSelected  string // picker/command selected row bg
 
 	// Foreground / Text
-	TextPrimary    string // main text (white)
-	TextSecondary  string // secondary text (light gray)
-	TextDim        string // dim text (headers, labels)
-	TextMuted      string // very dim (timestamps, separators)
-	TextHeading    string // markdown headings
-	TextAccent     string // links, keys, bullets (cyan)
-	TextToolParam  string // tool display param value (lighter blue)
-	TextSystemParam  string // system message param value (darker green)
+	TextPrimary       string // main text (white)
+	TextSecondary     string // secondary text (light gray)
+	TextDim           string // dim text (headers, labels)
+	TextMuted         string // very dim (timestamps, separators)
+	TextHeading       string // markdown headings
+	TextAccent        string // links, keys, bullets (cyan)
+	TextToolParam     string // tool display param value (lighter blue)
+	TextSystemLabel   string // system message label (green)
+	TextSystemParam   string // system message param value (darker green)
+	TextInternalLabel string // internal message label (teal)
 	TextInternalParam string // internal message param value (darker teal)
-	TextCode       string // inline code / code block text
-	TextSuccess    string // success indicators (green)
-	TextError      string // error indicators (red)
-	TextWarning    string // warning indicators (yellow/orange)
-	TextInfo       string // info/notice (muted)
-	TextSpinner    string // spinner / active indicator (pink)
-	TextAttachment string // image attachment chip (orange)
+	TextCode          string // inline code / code block text
+	TextSuccess       string // success indicators (green)
+	TextError         string // error indicators (red)
+	TextWarning       string // warning indicators (yellow/orange)
+	TextInfo          string // info/notice (muted)
+	TextSpinner       string // spinner / active indicator (pink)
+	TextAttachment    string // image attachment chip (orange)
 
 	// Context bar
 	CtxBarUsed  string // context bar: used portion bg (darker)
@@ -47,22 +49,24 @@ var P = Palette{
 	BgIncognito: "54",
 	BgSelected:  "237",
 
-	TextPrimary:    "252",
-	TextSecondary:  "245",
-	TextDim:        "240",
-	TextMuted:      "243",
-	TextHeading:    "255",
-	TextAccent:     "110", // cyan
-	TextToolParam:  "67",  // dark gray-blue for tool param display
-	TextSystemParam:  "100",  // darker green than label 141
-	TextInternalParam: "24",  // darker teal than label 39
-	TextCode:       "228", // yellow
-	TextSuccess:    "22",  // dark green
-	TextError:      "124", // red
-	TextWarning:    "214", // orange/yellow
-	TextInfo:       "243",
-	TextSpinner:    "205", // pink
-	TextAttachment: "214", // orange
+	TextPrimary:       "252",
+	TextSecondary:     "245",
+	TextDim:           "240",
+	TextMuted:         "243",
+	TextHeading:       "255",
+	TextAccent:        "110", // cyan
+	TextToolParam:     "67",   // dark gray-blue for tool param display
+	TextSystemLabel:   "141",  // system message label (green)
+	TextSystemParam:   "140",  // darker green than label
+	TextInternalLabel: "39",   // internal message label (teal)
+	TextInternalParam: "24",   // darker teal than label
+	TextCode:          "228", // yellow
+	TextSuccess:       "22",  // dark green
+	TextError:         "124", // red
+	TextWarning:       "214", // orange/yellow
+	TextInfo:          "243",
+	TextSpinner:       "205", // pink
+	TextAttachment:    "214", // orange
 
 	CtxBarUsed:  "237",
 	CtxBarEmpty: "233",
@@ -131,20 +135,20 @@ var (
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextWarning))
 
-	// System prompt label (color 141 - green) on canvas background
+	// System prompt label on canvas background
 	SystemLabel = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgApp)).
-			Foreground(lipgloss.Color("141"))
+			Foreground(lipgloss.Color(P.TextSystemLabel))
 
 	// System prompt param value — darker green inline on canvas bg (like ToolParamOnTool but on BgApp)
 	SystemParam = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextSystemParam))
 
-	// Internal message label (color 39 - teal) on canvas background
+	// Internal message label on canvas background
 	InternalMsgLabel = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
-			Foreground(lipgloss.Color("39"))
+				Background(lipgloss.Color(P.BgApp)).
+				Foreground(lipgloss.Color(P.TextInternalLabel))
 
 	// Internal message param value — darker teal inline on canvas bg
 	InternalParam = lipgloss.NewStyle().

@@ -1,8 +1,8 @@
 package app
 
 import (
-	"encoding/json"
 	"fmt"
+	"squid-os/internal/chat"
 	"squid-os/internal/config"
 	"squid-os/internal/tools"
 	"strings"
@@ -35,17 +35,10 @@ func (cs *chatSession) clear(provider, model string, thinking bool, systemPrompt
 		InputTokens: countTokensApprox(sysContent),
 	})
 
-	// Push tools enabled internal message
-	names, tokens := buildToolsEnabledContent()
-	if names != "" {
-		cs.appendMsg(config.Message{
-			ID:          "tools0",
-			Role:        config.RoleInternal,
-			Text:        names,
-			Label:       "Tools Enabled",
-			Params:      map[string]string{"count": fmt.Sprintf("%d", len(tools.GetTools()))},
-			InputTokens: tokens,
-		})
+	// Push tools enabled internal message (collapsed: tools=names, expanded: name→description table)
+	toolsMsg := buildToolsEnabledMsg()
+	if toolsMsg.Text != "" {
+		cs.appendMsg(toolsMsg)
 	}
 }
 
@@ -61,10 +54,10 @@ func (cs *chatSession) updateSystemPromptMsg(oldFile, newFile string, paths conf
 
 			// Push internal message for the change
 			cs.appendMsg(config.Message{
-				ID:    fmt.Sprintf("msg_%d", len(cs.file.Messages)+1),
-				Role:  config.RoleInternal,
-				Text:  fmt.Sprintf("Switched system prompt from %s to %s", oldFile, newFile),
-				Label: "System Prompt Changed",
+				ID:     fmt.Sprintf("msg_%d", len(cs.file.Messages)+1),
+				Role:   config.RoleInternal,
+				Text:   fmt.Sprintf("Switched system prompt from %s to %s", oldFile, newFile),
+				Label:  "System Prompt Changed",
 				Params: map[string]string{"from": oldFile, "to": newFile},
 			})
 			return
@@ -75,49 +68,49 @@ func (cs *chatSession) updateSystemPromptMsg(oldFile, newFile string, paths conf
 // pushModelSwitchMsg pushes an internal message when the model is switched.
 func (cs *chatSession) pushModelSwitchMsg(oldModel, newModel string) {
 	cs.appendMsg(config.Message{
-		ID:    fmt.Sprintf("msg_%d", len(cs.file.Messages)+1),
-		Role:  config.RoleInternal,
-		Text:  fmt.Sprintf("Switched model from %s to %s", oldModel, newModel),
-		Label: "Model Switched",
+		ID:     fmt.Sprintf("msg_%d", len(cs.file.Messages)+1),
+		Role:   config.RoleInternal,
+		Text:   fmt.Sprintf("Switched model from %s to %s", oldModel, newModel),
+		Label:  "Model Switched",
 		Params: map[string]string{"from": oldModel, "to": newModel},
 	})
 }
 
-// buildToolsEnabledContent returns a comma-separated list of tool names and the
-// token count of the raw JSON tool definitions (sent in the API request body).
-func buildToolsEnabledContent() (string, int) {
+// buildToolsEnabledMsg builds the internal tools message.
+// Collapsed: shows a single param "tools= name1, name2, ..."
+// Expanded: shows a neat table of name -> description.
+// Includes InputTokens from the real JSON sent in the API request body.
+func buildToolsEnabledMsg() config.Message {
 	tl := tools.GetTools()
 	if len(tl) == 0 {
-		return "", 0
+		return config.Message{}
 	}
 
-	// Build display string: just comma-separated names.
 	names := make([]string, len(tl))
 	for i, t := range tl {
 		names[i] = t.Name
 	}
-	display := strings.Join(names, ", ")
 
-	// Count tokens from the raw JSON we'd actually send in the API request.
-	type toolDef struct {
-		Type     string `json:"type"`
-		Function struct {
-			Name        string          `json:"name"`
-			Description string          `json:"description"`
-			Parameters  json.RawMessage `json:"parameters"`
-		} `json:"function"`
-	}
-	defs := make([]toolDef, len(tl))
+	var b strings.Builder
 	for i, t := range tl {
-		defs[i] = toolDef{Type: "function"}
-		defs[i].Function.Name = t.Name
-		defs[i].Function.Description = t.Description
-		defs[i].Function.Parameters = t.Schema
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(fmt.Sprintf("%-15s %s", t.Name, t.Description))
 	}
-	rawJSON, _ := json.Marshal(defs)
+
+	// Fake the token count by measuring the actual JSON sent in the API request.
+	rawJSON, _ := chat.MarshalToolsJSON(tl)
 	tokens := countTokensApprox(string(rawJSON))
 
-	return display, tokens
+	return config.Message{
+		ID:          "tools0",
+		Role:        config.RoleInternal,
+		Text:        b.String(),
+		Label:       "Tools Enabled",
+		Params:      map[string]string{"tools": strings.Join(names, ", ")},
+		InputTokens: tokens,
+	}
 }
 
 // setFrom loads a saved session, replacing all state and clearing the render cache.

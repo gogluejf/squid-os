@@ -5,6 +5,7 @@ import (
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
 	"squid-os/internal/tools"
+	"squid-os/internal/util"
 	"strings"
 )
 
@@ -92,11 +93,12 @@ func buildToolsEnabledMsg() config.Message {
 	}
 
 	var b strings.Builder
+	descMax := 62 // 15 (name) + 1 (space) + 62 = 78 chars per line, stays on one line
 	for i, t := range tl {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString(fmt.Sprintf("%-15s %s", t.Name, t.Description))
+		b.WriteString(fmt.Sprintf("%-15s %s", t.Name, util.Truncate(t.Description, descMax)))
 	}
 
 	// Fake the token count by measuring the actual JSON sent in the API request.

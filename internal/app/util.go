@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -136,31 +135,4 @@ func (m *Model) refreshContextWindow(entries []chat.ModelEntry) {
 	}
 }
 
-// friendlyModDate returns a human-readable relative time string for a modified date.
-func friendlyModDate(t time.Time) string {
-	ago := time.Since(t)
-	switch {
-	case ago < time.Minute:
-		return "just now"
-	case ago < time.Hour:
-		m := int(ago.Minutes())
-		if m == 1 {
-			return "1 min ago"
-		}
-		return fmt.Sprintf("%d min ago", m)
-	case ago < 24*time.Hour:
-		h := int(ago.Hours())
-		if h == 1 {
-			return "1 hour ago"
-		}
-		return fmt.Sprintf("%d hours ago", h)
-	case ago < 7*24*time.Hour:
-		d := int(ago.Hours() / 24)
-		if d == 1 {
-			return "yesterday"
-		}
-		return fmt.Sprintf("%d days ago", d)
-	default:
-		return t.Format("Jan 2")
-	}
-}
+

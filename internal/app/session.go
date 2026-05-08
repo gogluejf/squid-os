@@ -9,6 +9,7 @@ import (
 
 	"squid-os/internal/config"
 	"squid-os/internal/ui"
+	"squid-os/internal/util"
 )
 
 // startManualSave opens the save prompt so the user can confirm or edit the session name.
@@ -112,7 +113,7 @@ func (m Model) startLoad() (Model, tea.Cmd) {
 	// Name column width = 30 (padded), date in friendly relative format.
 	items := make([]string, len(sessions))
 	for i, s := range sessions {
-		dateLabel := friendlyModDate(s.ModTime)
+		dateLabel := util.FriendlyModDate(s.ModTime)
 		items[i] = fmt.Sprintf("%-30s  %s", s.Name, dateLabel)
 	}
 
@@ -175,7 +176,7 @@ func filterSessionList(items []config.SessionInfo, filter string) []config.Sessi
 	f := filter
 	var result []config.SessionInfo
 	for _, item := range items {
-		if matchesFilter(item.Name, f) || matchesFilter(friendlyModDate(item.ModTime), f) {
+		if matchesFilter(item.Name, f) || matchesFilter(util.FriendlyModDate(item.ModTime), f) {
 			result = append(result, item)
 		}
 	}

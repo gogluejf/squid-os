@@ -7,6 +7,7 @@ import (
 
 	"squid-os/internal/config"
 	"squid-os/internal/tools"
+	"squid-os/internal/util"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -266,7 +267,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 		var content []string
 		if expanded {
 			if tc.Instruction.Arguments != "" {
-				content = append(content, stripNewlines(tc.Instruction.Arguments))
+				content = append(content, util.StripNewlines(tc.Instruction.Arguments))
 			}
 			switch tc.Execution.Status {
 			case "error":
@@ -494,18 +495,6 @@ func formatDuration(ms int64) string {
 	return fmt.Sprintf("%dm%ds", minutes, seconds)
 }
 
-func truncate(s string, max int) string {
-	if len(s) > max {
-		return s[:max] + "..."
-	}
-	return s
-}
-
-// stripNewlines replaces newlines with spaces for clean single-line display.
-func stripNewlines(s string) string {
-	return strings.ReplaceAll(s, "\n", " ")
-}
-
 // formatToolDisplay returns a display-friendly (namePart, paramPart).
 // The "↳ " prefix is now added by DrawCanvas.
 // When args is empty or the tool has no DisplayParam, paramPart is empty.
@@ -514,7 +503,7 @@ func formatToolDisplay(name, args string, reg *tools.Registry) (namePart string,
 		tool := reg.Get(name)
 		if tool != nil {
 			if display := tool.DisplayValue(args); display != "" {
-				return name, truncate(display, 60)
+				return name, util.Truncate(display, 60)
 			}
 		}
 	}

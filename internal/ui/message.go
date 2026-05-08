@@ -89,10 +89,10 @@ func drawUserBox(parts []string, content []string, fg string, boxWidth int) stri
 // RenderMessage dispatches to the correct renderer by role.
 func RenderMessage(msg config.Message, width int, expanded bool) string {
 	switch msg.Role {
-	case "user":
-		return renderUserMessage(msg, width)
 	case "synthetic":
 		return renderSyntheticMessage(msg, width, expanded)
+	case "user":
+		return renderUserMessage(msg, width)
 	default:
 		return renderAssistantMessage(msg, width, expanded)
 	}

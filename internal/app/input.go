@@ -173,8 +173,8 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		var cmd tea.Cmd
 		m.textarea, cmd = m.textarea.Update(msg)
-		// Reset history navigation when user starts typing
-		if m.historyIdx != -1 {
+		// Reset history navigation when user starts typing (not cursor movement)
+		if m.historyIdx != -1 && !key.Matches(msg, keys.Left) && !key.Matches(msg, keys.Right) {
 			m.draft = ""
 			m.historyIdx = -1
 		}

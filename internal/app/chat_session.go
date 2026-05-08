@@ -111,7 +111,6 @@ func buildConfigMsg(provider, model string, thinking bool) config.Message {
 		Role:   config.RoleInternal,
 		Label:  "Config",
 		Params: map[string]string{"provider": provider, "model": model, "thinking": thinkStr},
-		ParamOrder: []string{"provider", "model", "thinking"},
 	}
 }
 

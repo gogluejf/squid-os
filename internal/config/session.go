@@ -154,6 +154,10 @@ type Message struct {
 	// Rendered as styled chips next to the label, analogous to tool DisplayParam.
 	// Not sent to the API — metadata only.
 	Params map[string]string `json:"params,omitempty"`
+
+	// ParamOrder defines the display order of params keys.
+	// If empty, params are sorted alphabetically.
+	ParamOrder []string `json:"param_order,omitempty"`
 }
 
 // NewSessionFile creates a new empty session

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,7 +13,19 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// DrawCanvas renders a single styled block (canvas, toolbox, userbox).
+// orderedParams returns the keys of msg.Params in defined order (ParamOrder),
+// or sorted alphabetically if ParamOrder is empty.
+func orderedParams(msg config.Message) []string {
+	if len(msg.ParamOrder) > 0 {
+		return msg.ParamOrder
+	}
+	keys := make([]string, 0, len(msg.Params))
+	for k := range msg.Params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
 //
 //   - parts:  pre-styled title segments rendered as "↳ part0 · part1 · ..."
 //     the "↳ " prefix and " · " separators carry the box bg color.
@@ -112,7 +125,8 @@ func renderSystemMessage(msg config.Message, width int, expanded bool) string {
 		SystemLabel.Render(msg.Label),
 	}
 	if msg.Params != nil {
-		for k, v := range msg.Params {
+		for _, k := range orderedParams(msg) {
+			v := msg.Params[k]
 			parts = append(parts, SystemParam.Render(fmt.Sprintf("%s=%s", k, v)))
 		}
 	}
@@ -132,7 +146,8 @@ func renderInternalMessage(msg config.Message, width int, expanded bool) string 
 		InternalMsgLabel.Render(msg.Label),
 	}
 	if msg.Params != nil {
-		for k, v := range msg.Params {
+		for _, k := range orderedParams(msg) {
+			v := msg.Params[k]
 			parts = append(parts, InternalParam.Render(fmt.Sprintf("%s=%s", k, v)))
 		}
 	}
@@ -155,7 +170,8 @@ func renderSyntheticMessage(msg config.Message, width int, expanded bool) string
 	}
 
 	if msg.Params != nil {
-		for k, v := range msg.Params {
+		for _, k := range orderedParams(msg) {
+			v := msg.Params[k]
 			parts = append(parts, InternalParam.Render(fmt.Sprintf("%s=%s", k, v)))
 		}
 	}

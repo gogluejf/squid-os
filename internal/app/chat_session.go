@@ -19,25 +19,25 @@ type chatSession struct {
 }
 
 // clear resets to a fresh session and pushes init messages (system prompt + tools + config).
-func (cs *chatSession) clear(provider, model string, thinking bool, systemPromptFile string, paths config.Paths) {
-	cs.file = config.NewSessionFile(provider, model, thinking, systemPromptFile)
+func (cs *chatSession) clear(settings config.Settings, paths config.Paths) {
+	cs.file = config.NewSessionFile(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
 	cs.renderedMessages = nil
 	cs.renderedWidth = 0
 	cs.undoStack = nil
 
 	// Push system prompt message (included in API as system role)
-	sysContent := config.LoadSystemPrompt(paths, systemPromptFile)
+	sysContent := config.LoadSystemPrompt(paths, settings.SystemPromptFile)
 	cs.appendMsg(config.Message{
 		ID:          "sys0",
 		Role:        config.RoleSystem,
 		Text:        sysContent,
 		Label:       "System Prompt",
-		Params:      map[string]string{"file": systemPromptFile},
+		Params:      map[string]string{"file": settings.SystemPromptFile},
 		InputTokens: countTokensApprox(sysContent),
 	})
 
 	// Push current config internal message (collapsed: provider=model · thinking=on/off)
-	cs.appendMsg(buildConfigMsg(provider, model, thinking))
+	cs.appendMsg(buildConfigMsg(settings.Provider, settings.Model, settings.Thinking))
 
 	// Push tools enabled internal message (collapsed: tools=names, expanded: name→description table)
 	toolsMsg := buildToolsEnabledMsg()

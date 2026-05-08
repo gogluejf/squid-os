@@ -13,12 +13,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// orderedParams returns the keys of msg.Params in defined order (ParamOrder),
-// or sorted alphabetically if ParamOrder is empty.
+// orderedParams returns the keys of msg.Params sorted alphabetically.
 func orderedParams(msg config.Message) []string {
-	if len(msg.ParamOrder) > 0 {
-		return msg.ParamOrder
-	}
 	keys := make([]string, 0, len(msg.Params))
 	for k := range msg.Params {
 		keys = append(keys, k)

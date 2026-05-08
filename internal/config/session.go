@@ -59,7 +59,9 @@ func (ss *SequenceStat) Add(other *SequenceStat) {
 func (ss *SequenceStat) Accumulate(msg Message) {
 	ss.OutputTokens += msg.Tokens
 	ss.DurationMs += msg.DurationTimeMs
-	ss.InferenceDuractionMs += msg.DurationTimeMs - msg.TimeToFirstTokenMs
+	ss.InferenceDuractionMs += msg.TextMetrics.InferenceDuractionMs
+	ss.InferenceDuractionMs += msg.ThinkingMetrics.InferenceDuractionMs
+	ss.InferenceDuractionMs += msg.ToolCallMetrics.InferenceDuractionMs
 	for _, tc := range msg.ToolCalls {
 		ss.ExecDurMs += tc.Execution.DurationMs
 		ss.InputTokens += tc.Execution.Tokens

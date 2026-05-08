@@ -435,7 +435,7 @@ func (m *Model) appendAssistantMsg(msg config.Message) {
 		stat := &config.SequenceStat{
 			OutputTokens:         msg.Tokens,
 			DurationMs:           msg.DurationTimeMs,
-			InferenceDuractionMs: msg.DurationTimeMs - msg.TimeToFirstTokenMs,
+			InferenceDuractionMs: msg.TextMetrics.InferenceDuractionMs + msg.ThinkingMetrics.InferenceDuractionMs + msg.ToolCallMetrics.InferenceDuractionMs,
 			AvgTokensPerSec:      msg.TokensPerSecond,
 		}
 		for _, tc := range msg.ToolCalls {

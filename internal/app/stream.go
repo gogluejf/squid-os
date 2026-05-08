@@ -151,12 +151,12 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.draft = ""
 
 	userMsg := config.Message{
-		ID:         fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-		Role:       "user",
-		CreatedAt:  time.Now(),
-		Text:       text,
-		ImagePath:  m.attachedImage,
-		UserTokens: countTokensApprox(text),
+		ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+		Role:        "user",
+		CreatedAt:   time.Now(),
+		Text:        text,
+		ImagePath:   m.attachedImage,
+		InputTokens: countTokensApprox(text),
 	}
 
 	m.session.appendMsg(userMsg)

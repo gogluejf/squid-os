@@ -123,8 +123,8 @@ func renderUserMessage(msg config.Message, width int) string {
 	if msg.ImagePath != "" {
 		right = append(right, UserHeaderAttStyle.Render(msg.ImagePath))
 	}
-	if msg.UserTokens > 0 {
-		right = append(right, UserHeaderDimStyle.Render(tokenChipInput(msg.UserTokens, nil)))
+	if msg.InputTokens > 0 {
+		right = append(right, UserHeaderDimStyle.Render(tokenChipInput(msg.InputTokens, nil)))
 	}
 	rightStr := strings.Join(right, UserHeaderDimStyle.Render("  "))
 	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)

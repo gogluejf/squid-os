@@ -130,14 +130,15 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 					if m.settings.Model != e.ID {
 						oldModel := modelBasename(m.settings.Model)
 						(&m).session.pushModelSwitchMsg(oldModel, name)
-						(&m).session.invalidateRenderAll()
 					}
+					(&m).session.updateConfigMsg(e.Provider, e.ID, m.settings.Thinking)
 					m.settings.Model = e.ID
 					m.settings.Provider = e.Provider
 					m.settings.ContextWindow = e.ContextLength
 					break
 				}
 			}
+			(&m).session.invalidateRenderAll()
 			_ = config.SaveSettings(m.paths, m.settings)
 			(&m).setNotification(ui.NotificationInfo, "switched to model: "+modelBasename(m.settings.Model))
 		}
@@ -237,6 +238,9 @@ func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
 		m.thinkingToggle = ui.NewThinkingToggle(m.settings.Thinking)
 		m.settings.Thinking = !m.settings.Thinking
 		_ = config.SaveSettings(m.paths, m.settings)
+		(&m).session.updateConfigMsg(m.settings.Provider, m.settings.Model, m.settings.Thinking)
+		(&m).session.invalidateRenderAll()
+		(&m).updateViewportContent()
 		if m.settings.Thinking {
 			(&m).setNotification(ui.NotificationInfo, "thinking is now on")
 		} else {

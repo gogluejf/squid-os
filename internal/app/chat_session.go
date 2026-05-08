@@ -18,7 +18,7 @@ type chatSession struct {
 	undoStack        [][]config.Message
 }
 
-// clear resets to a fresh session and pushes init messages (system prompt + tools).
+// clear resets to a fresh session and pushes init messages (system prompt + tools + config).
 func (cs *chatSession) clear(provider, model string, thinking bool, systemPromptFile string, paths config.Paths) {
 	cs.file = config.NewSessionFile(provider, model, thinking, systemPromptFile)
 	cs.renderedMessages = nil
@@ -35,6 +35,9 @@ func (cs *chatSession) clear(provider, model string, thinking bool, systemPrompt
 		Params:      map[string]string{"file": systemPromptFile},
 		InputTokens: countTokensApprox(sysContent),
 	})
+
+	// Push current config internal message (collapsed: provider=model · thinking=on/off)
+	cs.appendMsg(buildConfigMsg(provider, model, thinking))
 
 	// Push tools enabled internal message (collapsed: tools=names, expanded: name→description table)
 	toolsMsg := buildToolsEnabledMsg()
@@ -66,6 +69,23 @@ func (cs *chatSession) updateSystemPromptMsg(oldFile, newFile string, paths conf
 	}
 }
 
+// updateConfigMsg refreshes the existing config0 message in place with new values.
+// Like updateSystemPromptMsg — it updates the fixed-ID message, no history message pushed.
+func (cs *chatSession) updateConfigMsg(provider, model string, thinking bool) {
+	for i := range cs.file.Messages {
+		if cs.file.Messages[i].ID == "config0" {
+			cs.file.Messages[i] = buildConfigMsg(provider, model, thinking)
+
+			// Sync session metadata
+			cs.file.Session.Provider = provider
+			cs.file.Session.Model = model
+			cs.file.Session.Thinking = thinking
+
+			return
+		}
+	}
+}
+
 // pushModelSwitchMsg pushes an internal message when the model is switched.
 func (cs *chatSession) pushModelSwitchMsg(oldModel, newModel string) {
 	cs.appendMsg(config.Message{
@@ -75,6 +95,24 @@ func (cs *chatSession) pushModelSwitchMsg(oldModel, newModel string) {
 		Label:  "Model Switched",
 		Params: map[string]string{"from": oldModel, "to": newModel},
 	})
+}
+
+// buildConfigMsg creates an internal message showing current config state.
+// Collapsed: params "provider=... · model=... · thinking=on/off"
+// Expanded: multi-line detail.
+func buildConfigMsg(provider, model string, thinking bool) config.Message {
+	thinkStr := "off"
+	if thinking {
+		thinkStr = "on"
+	}
+
+	return config.Message{
+		ID:     "config0",
+		Role:   config.RoleInternal,
+		Label:  "Config",
+		Params: map[string]string{"provider": provider, "model": model, "thinking": thinkStr},
+		ParamOrder: []string{"provider", "model", "thinking"},
+	}
 }
 
 // buildToolsEnabledMsg builds the internal tools message.
@@ -257,6 +295,13 @@ func (cs *chatSession) invalidateRenderFrom(i int) {
 // invalidateRenderAll clears the entire render cache.
 func (cs *chatSession) invalidateRenderAll() {
 	cs.renderedMessages = nil
+}
+
+// invalidateRenderAt clears the cached render at a single index so it gets re-rendered next time.
+func (cs *chatSession) invalidateRenderAt(i int) {
+	if i < len(cs.renderedMessages) {
+		cs.renderedMessages[i] = ""
+	}
 }
 
 // totalTokens returns the sum of all token counts across every message.

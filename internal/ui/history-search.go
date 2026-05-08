@@ -38,7 +38,9 @@ func (hs *HistorySearchOverlay) Filter(filter string) {
 		f := strings.ToLower(filter)
 		seen := make(map[string]struct{}, len(hs.filtered))
 		hs.filtered = hs.filtered[:0]
-		for _, item := range hs.Items {
+		// Iterate in reverse so we keep the LAST (most recent) occurrence of duplicates
+		for i := len(hs.Items) - 1; i >= 0; i-- {
+			item := hs.Items[i]
 			if strings.Contains(strings.ToLower(item), f) {
 				if _, ok := seen[item]; !ok {
 					seen[item] = struct{}{}

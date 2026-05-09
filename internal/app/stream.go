@@ -191,30 +191,29 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	if event.Error != nil {
 		(&m).setNotification(ui.NotificationError, event.Error.Error())
 
-		text, image, truncated := m.session.cancelTruncate()
+		text, image, _ := m.session.cancelTruncate()
 		if text != "" {
 			m.textarea.SetValue(text)
 			m.attachedImage = image
 		}
 
-		// Push a synthetic error message only if the user message was NOT truncated
-		// (i.e., we cancelled mid-tool-loop, and the user message is still in history).
-		if !truncated {
-			text := "Stream error: " + event.Error.Error()
-			m.session.appendMsg(config.Message{
-				ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-				Role:        "synthetic",
-				CreatedAt:   time.Now(),
-				Text:        text,
-				Label:       "stream error",
-				TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(text)},
-			})
-		}
+		errText := "Stream error: " + event.Error.Error()
+		m.session.appendMsg(config.Message{
+			ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+			Role:        config.RoleSynthetic,
+			CreatedAt:   time.Now(),
+			Text:        errText,
+			Label:       "stream error",
+			TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(errText)},
+		})
+
+		nm, autoSaveCmd := m.autoSave()
+		m = nm
 
 		m.stream.reset()
 		cmd := (&m).setChatMode()
 		m.updateViewportContent()
-		return m, cmd
+		return m, tea.Batch(cmd, autoSaveCmd)
 	}
 
 	if event.Done {
@@ -247,6 +246,38 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			m.updateViewportContent()
 			nm, autoSaveCmd := m.autoSave()
 			return nm, tea.Batch(blinkCmd, autoSaveCmd)
+		}
+
+		// Detect silent failure: stream ended with no content and no stop reason.
+		// This happens when the server drops the connection (VRAM OOM, etc.) without
+		// sending an error or proper finish_reason. Treat it as an error.
+		hasContent := m.stream.text != "" || m.stream.thinking != "" || len(m.stream.partialTools) > 0
+		if !hasContent && event.StopReason == "" {
+			(&m).setNotification(ui.NotificationError, "stream ended unexpectedly — server may be overloaded")
+
+			text, image, _ := m.session.cancelTruncate()
+			if text != "" {
+				m.textarea.SetValue(text)
+				m.attachedImage = image
+			}
+
+			errText := "Stream ended unexpectedly — server may be overloaded (VRAM / model loading)"
+			m.session.appendMsg(config.Message{
+				ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+				Role:        config.RoleSynthetic,
+				CreatedAt:   time.Now(),
+				Text:        errText,
+				Label:       "stream error",
+				TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(errText)},
+			})
+
+			nm, autoSaveCmd := m.autoSave()
+			m = nm
+
+			m.stream.reset()
+			cmd := (&m).setChatMode()
+			m.updateViewportContent()
+			return m, tea.Batch(cmd, autoSaveCmd)
 		}
 
 		// Tool calls: save assistant msg, execute tools synchronously, resume streaming

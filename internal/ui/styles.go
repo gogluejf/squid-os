@@ -68,8 +68,8 @@ var P = Palette{
 	TextSpinner:       "205", // pink
 	TextAttachment:    "214", // orange
 
-	CtxBarUsed:  "237",
-	CtxBarEmpty: "233",
+	CtxBarUsed:  "255",
+	CtxBarEmpty: "237",
 }
 
 // -------------------------------------------------------

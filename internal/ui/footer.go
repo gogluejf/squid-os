@@ -16,7 +16,8 @@ type FooterData struct {
 	TotalOutTokens   int
 	TokPerSec        float64
 	Streaming        bool
-	ContextWindow    int // model context window in tokens; 0 if unknown
+	Thinking         bool // thinking mode on/off (always visible)
+	ContextWindow    int  // model context window in tokens; 0 if unknown
 }
 
 // RenderFooter renders the fixed 2-line footer bar, always exactly `width` chars wide.
@@ -50,7 +51,7 @@ func RenderFooter(data FooterData, width int) string {
 	}
 	line1 := lineStyle.Render(left1 + bgSpace(gap1) + modelLabel)
 
-	// ── Line 2: tok/s · ↓out[↑in] · [tok/total] · context bar % ────────
+	// ── Line 2: [thinking: on/off] (left) + tok/s · ↓out[↑in] · [tok/total] · context bar % (right) ──
 	var parts []string
 	if data.Streaming && data.TokPerSec > 0 {
 		parts = append(parts, FooterValueStyle.Render(fmt.Sprintf("%.1f tok/s", data.TokPerSec)))
@@ -71,11 +72,20 @@ func RenderFooter(data FooterData, width int) string {
 	}
 
 	right2 := sep + strings.Join(parts, sep)
-	prefix2 := width - lipgloss.Width(right2)
-	if prefix2 < 0 {
-		prefix2 = 0
+
+	// Thinking indicator — always visible, white text, left-aligned
+	thinkLabel := " " + FooterValueStyle.Render(fmt.Sprintf("[thinking: %s]", func() string {
+		if data.Thinking {
+			return "on"
+		}
+		return "off"
+	}()))
+
+	midSpace := width - lipgloss.Width(thinkLabel) - lipgloss.Width(right2)
+	if midSpace < 1 {
+		midSpace = 1
 	}
-	line2 := lineStyle.Render(bgSpace(prefix2) + right2)
+	line2 := lineStyle.Render(thinkLabel + bgSpace(midSpace) + right2)
 
 	return line1 + "\n" + line2
 }

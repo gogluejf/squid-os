@@ -43,7 +43,7 @@ func RenderFooter(data FooterData, width int) string {
 		FooterKeyStyle.Render("ctrl+l") + FooterDimStyle.Render(" load") +
 		FooterDimStyle.Render("  ") +
 		FooterKeyStyle.Render("ctrl+h") + FooterDimStyle.Render(" help")
-	modelLabel := FooterDimStyle.Render(data.Model)
+	modelLabel := FooterValueStyle.Render(data.Model)
 
 	gap1 := width - lipgloss.Width(left1) - lipgloss.Width(modelLabel)
 	if gap1 < 1 {
@@ -127,5 +127,5 @@ func renderContextBar(totalTokens, contextWindow int) string {
 	bar := darkStyle.Render(strings.Repeat(" ", darkChars)) +
 		lightStyle.Render(strings.Repeat(" ", lightChars))
 
-	return FooterDimStyle.Render(pctStr + " ") + bar
+	return FooterValueStyle.Render(pctStr + " ") + bar
 }

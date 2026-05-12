@@ -16,6 +16,7 @@ type FooterData struct {
 	TotalOutTokens   int
 	TokPerSec        float64
 	Streaming        bool
+	ThinkingOn       bool // thinking mode on/off (always visible)
 	ContextWindow    int // model context window in tokens; 0 if unknown
 }
 
@@ -71,7 +72,15 @@ func RenderFooter(data FooterData, width int) string {
 	}
 
 	right2 := sep + strings.Join(parts, sep)
-	left2 := ""
+
+	// Thinking indicator — always visible, white text on footer bg
+	var thinkLabel string
+	if data.ThinkingOn {
+		thinkLabel = FooterValueStyle.Render("[thinking: on]")
+	} else {
+		thinkLabel = FooterValueStyle.Render("[thinking: off]")
+	}
+	left2 := thinkLabel
 
 	midSpace := width - lipgloss.Width(left2) - lipgloss.Width(right2)
 	if midSpace < 1 {

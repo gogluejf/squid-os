@@ -236,6 +236,12 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 		// Buffer for accumulating tool call deltas by index
 		toolBuffers := make(map[int]*toolCallBuffer)
 
+		// Debug: log every SSE chunk to file
+		logFile, err := os.OpenFile("sse_chunks.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err == nil {
+			defer logFile.Close()
+		}
+
 		scanner := bufio.NewScanner(resp.Body)
 		// Increase buffer for large chunks
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -255,6 +261,11 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 			payload := strings.TrimPrefix(line, "data: ")
 			payload = strings.TrimPrefix(payload, "data:")
 			payload = strings.TrimSpace(payload)
+
+			// Debug: log raw payload with timestamp
+			if logFile != nil {
+				logFile.WriteString(fmt.Sprintf("%s %s\n", time.Now().Format("15:04:05.000000"), line))
+			}
 
 			if payload == "[DONE]" {
 				// Return: Server sent explicit [DONE] marker
@@ -286,6 +297,19 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 			}
 
 			choice := sse.Choices[0]
+
+			// Flush parser carry before tool call deltas so buffered text doesn't
+			// linger and get emitted after tool call timing has started.
+			if len(choice.Delta.ToolCalls) > 0 {
+				result := parser.Flush()
+				if result.Text != "" || result.Thinking != "" {
+					ch <- StreamEvent{
+						Text:       result.Text,
+						Thinking:   result.Thinking,
+						InThinking: parser.InThink,
+					}
+				}
+			}
 
 			// Process tool call deltas
 			for _, tc := range choice.Delta.ToolCalls {

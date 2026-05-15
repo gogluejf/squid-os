@@ -1,8 +1,20 @@
 package app
 
 import (
+	"log"
+	"os"
 	"time"
 )
+
+// metricsLog writes timestamped debug lines for addTextChars/addThinkChars/addToolCallCalls.
+var metricsLog *log.Logger
+
+func init() {
+	f, err := os.OpenFile("squid-metrics.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err == nil {
+		metricsLog = log.New(f, "", 0)
+	}
+}
 
 // StreamMetrics owns all timing and token-count metrics for an active inference stream.
 // Text/thinking accumulation lives in streamState; this type owns the derived metrics.
@@ -22,11 +34,18 @@ type StreamMetrics struct {
 /* ================== THINKING TOKENS ================ */
 
 // addThinkChars adds character count to thinkingChars and records firstThinkingTokenAt on first call.
-func (m *StreamMetrics) addThinkChars(n int) {
+func (m *StreamMetrics) addThinkChars(s string) {
+	n := len(s)
 	if m.thinkingChars == 0 && n > 0 {
 		m.firstThinkingTokenAt = time.Now()
 	}
 	m.thinkingChars += n
+	m.thinkingDoneAt = time.Now()
+	if metricsLog != nil {
+		metricsLog.Printf("%s addThinkChars n=%d chars=%d chunk=%q first=%s done=%s\n",
+			time.Now().Format("15:04:05.000000"), n, m.thinkingChars, s,
+			m.firstThinkingTokenAt.Format("15:04:05.000000"), m.thinkingDoneAt.Format("15:04:05.000000"))
+	}
 }
 
 // ThinkingDuration returns the duration from the first thinking token to when thinking ended
@@ -55,19 +74,21 @@ func (m StreamMetrics) TimeToFirstThinkingToken() time.Duration {
 	return m.firstThinkingTokenAt.Sub(m.Start)
 }
 
-// MarkThinkingDone records the time when thinking mode ends.
-func (m *StreamMetrics) MarkThinkingDone() {
-	m.thinkingDoneAt = time.Now()
-}
-
 /* ================== TEXT TOKENS ================ */
 
 // addTextChars adds character count to textChars and records firstTextTokenAt on first call.
-func (m *StreamMetrics) addTextChars(n int) {
+func (m *StreamMetrics) addTextChars(s string) {
+	n := len(s)
 	if m.textChars == 0 && n > 0 {
 		m.firstTextTokenAt = time.Now()
 	}
 	m.textChars += n
+	m.textDoneAt = time.Now()
+	if metricsLog != nil {
+		metricsLog.Printf("%s addTextChars n=%d chars=%d chunk=%q first=%s done=%s\n",
+			time.Now().Format("15:04:05.000000"), n, m.textChars, s,
+			m.firstTextTokenAt.Format("15:04:05.000000"), m.textDoneAt.Format("15:04:05.000000"))
+	}
 }
 
 // TextTokens returns the approximate token count for text characters.
@@ -96,20 +117,22 @@ func (m StreamMetrics) TextDuration() time.Duration {
 	return end.Sub(m.firstTextTokenAt)
 }
 
-// MarkTextDone records when the model finished streaming text tokens.
-func (m *StreamMetrics) MarkTextDone() {
-	m.textDoneAt = time.Now()
-}
+/* ================== TOOL TOKENS ================ */
 
 // addToolCallChars adds character count to toolCallChars and records firstToolCallTokenAt on first call.
-func (m *StreamMetrics) addToolCallChars(n int) {
+func (m *StreamMetrics) addToolCallChars(s string) {
+	n := len(s)
 	if m.toolCallChars == 0 && n > 0 {
 		m.firstToolCallTokenAt = time.Now()
 	}
 	m.toolCallChars += n
+	m.toolCallDoneAt = time.Now()
+	if metricsLog != nil {
+		metricsLog.Printf("%s addToolCallChars n=%d chars=%d chunk=%q first=%s done=%s\n",
+			time.Now().Format("15:04:05.000000"), n, m.toolCallChars, s,
+			m.firstToolCallTokenAt.Format("15:04:05.000000"), m.toolCallDoneAt.Format("15:04:05.000000"))
+	}
 }
-
-/* ================== TOOL TOKENS ================ */
 
 // ToolCallTokens returns the approximate token count for tool call argument characters.
 func (m StreamMetrics) ToolCallTokens() int {
@@ -134,11 +157,6 @@ func (m StreamMetrics) ToolCallDuration() time.Duration {
 		end = time.Now()
 	}
 	return end.Sub(m.firstToolCallTokenAt)
-}
-
-// MarkToolCallDone records when the model finished streaming tool call arguments.
-func (m *StreamMetrics) MarkToolCallDone() {
-	m.toolCallDoneAt = time.Now()
 }
 
 // firstTokenAt returns the earliest timestamp at which any token arrived.

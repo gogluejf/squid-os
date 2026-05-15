@@ -27,7 +27,6 @@ type partialTool struct {
 	chars   int
 	firstAt time.Time
 	doneAt  time.Time
-	ended   bool // true when no more deltas expected for this tool
 }
 
 // toStreamingToolCalls converts all partial tools with a non-empty name into
@@ -40,11 +39,7 @@ func (ss *streamState) toStreamingToolCalls() []ui.StreamingToolCall {
 		}
 		dur := time.Duration(0)
 		if !p.firstAt.IsZero() {
-			if p.ended {
-				dur = p.doneAt.Sub(p.firstAt)
-			} else {
-				dur = time.Since(p.firstAt)
-			}
+			dur = p.doneAt.Sub(p.firstAt)
 		}
 		out = append(out, ui.StreamingToolCall{
 			Name:      p.name,
@@ -76,18 +71,18 @@ type streamState struct {
 // AddTextChunk appends text and updates metrics.
 func (ss *streamState) AddTextChunk(text string) {
 	ss.text += text
-	ss.metrics.addTextChars(len(text))
+	ss.metrics.addTextChars(text)
 }
 
 // AddThinkChunk appends thinking text and updates metrics.
 func (ss *streamState) AddThinkChunk(think string) {
 	ss.thinking += think
-	ss.metrics.addThinkChars(len(think))
+	ss.metrics.addThinkChars(think)
 }
 
 // AddToolCallChunk tracks tool call argument streaming for timing/token metrics.
 func (ss *streamState) AddToolCallChunk(delta string) {
-	ss.metrics.addToolCallChars(len(delta))
+	ss.metrics.addToolCallChars(delta)
 }
 
 // reset clears all stream state before a new request.
@@ -340,12 +335,6 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		for len(m.stream.partialTools) <= event.ToolCallIdx {
 			m.stream.partialTools = append(m.stream.partialTools, partialTool{})
 		}
-		// Mark previous tool as ended when a new one starts streaming
-		if event.ToolCallIdx != m.stream.lastToolIdx && m.stream.lastToolIdx >= 0 {
-			prev := &m.stream.partialTools[m.stream.lastToolIdx]
-			prev.ended = true
-			prev.doneAt = time.Now()
-		}
 		m.stream.lastToolIdx = event.ToolCallIdx
 		p := &m.stream.partialTools[event.ToolCallIdx]
 		if event.ToolCallName != "" {
@@ -356,32 +345,24 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		if p.firstAt.IsZero() {
 			p.firstAt = time.Now()
 		}
-		// End thinking and text phases if still active (model moved on to tool calls)
+		p.doneAt = time.Now()
+
 		if m.stream.inThinking {
-			m.stream.metrics.MarkThinkingDone()
 			m.stream.inThinking = false
 		}
-		m.stream.metrics.MarkTextDone()
 		m.updateViewportContent()
 		return m, waitForStreamEvent(m.stream.ch)
 	}
 
-	// ToolCalls flush: enrich partialTools with ID/Type and mark all as ended.
+	// ToolCalls flush: enrich partialTools with ID/Type.
 	if len(event.ToolCalls) > 0 {
-		now := time.Now()
 		for i, tc := range event.ToolCalls {
 			if i < len(m.stream.partialTools) {
 				m.stream.partialTools[i].id = tc.ID
 				m.stream.partialTools[i].typeStr = tc.Type
-				if !m.stream.partialTools[i].ended {
-					m.stream.partialTools[i].ended = true
-					if m.stream.partialTools[i].doneAt.IsZero() {
-						m.stream.partialTools[i].doneAt = now
-					}
-				}
 			}
 		}
-		m.stream.metrics.MarkToolCallDone()
+
 	}
 	if event.Text != "" {
 		m.stream.AddTextChunk(event.Text)
@@ -389,9 +370,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	if event.Thinking != "" {
 		m.stream.AddThinkChunk(event.Thinking)
 	}
-	if m.stream.inThinking && !event.InThinking {
-		m.stream.metrics.MarkThinkingDone()
-	}
+
 	m.stream.inThinking = event.InThinking
 	// Throttle viewport updates: render every 5 tokens to avoid SetContent() spam
 	m.stream.tokenCount++

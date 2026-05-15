@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/config"
+	"squid-os/internal/log"
 	"squid-os/internal/ui"
 	"squid-os/internal/util"
 )
@@ -88,6 +89,8 @@ func (m Model) toggleIncognito() (Model, tea.Cmd) {
 		m.settings.LastSessionName = ""
 		_ = config.SaveSettings(m.paths, m.settings)
 	}
+	// Disable logging in incognito, re-enable if debug is on
+	log.SetEnabled(m.settings.DebugEnabled && !m.incognito)
 	if m.incognito {
 		(&m).setNotification(ui.NotificationInfo, "incognito is on")
 	} else {

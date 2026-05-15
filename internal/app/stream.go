@@ -280,8 +280,12 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmd, autoSaveCmd)
 		}
 
+		//need to be processed before execution of tools, because tool calls can update the stream state (e.g. end thinking)
+		avgTokenPerSec := m.stream.metrics.AvgTokenPerSec()
+
 		// Tool calls: save assistant msg, execute tools synchronously, resume streaming
 		if event.StopReason == "tool_calls" && len(m.stream.partialTools) > 0 {
+			toolEntries := (&m).executeTools(m.stream.partialTools)
 			(&m).appendAssistantMsg(config.Message{
 				ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 				Role:               "assistant",
@@ -290,10 +294,11 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
 				Text:               strings.TrimLeft(m.stream.text, "\n"),
 				TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
-				ToolCalls:          (&m).executeTools(m.stream.partialTools),
+				ToolCalls:          toolEntries,
 				ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), InferenceDuractionMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
-				TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
-				Tokens:             m.stream.metrics.TotalTokens(),
+				TokensPerSecond:    avgTokenPerSec,
+				OutputTokens:       m.stream.metrics.TotalOutputTokens(),
+				InputTokens:        config.TotalExecutionTokens(toolEntries),
 				DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
 				TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
 				StopReason:         event.StopReason,
@@ -315,8 +320,8 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
 			Text:               strings.TrimLeft(m.stream.text, "\n"),
 			TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
-			TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
-			Tokens:             m.stream.metrics.TotalTokens(),
+			TokensPerSecond:    avgTokenPerSec,
+			OutputTokens:       m.stream.metrics.TotalOutputTokens(),
 			DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
 			TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
 			StopReason:         event.StopReason,
@@ -464,14 +469,14 @@ func (m *Model) appendAssistantMsg(msg config.Message) {
 	if seqIdx == -1 {
 		// First of sequence — init SequenceStat
 		stat := &config.SequenceStat{
-			OutputTokens:         msg.Tokens,
+			OutputTokens:         msg.OutputTokens,
 			DurationMs:           msg.DurationTimeMs,
 			InferenceDuractionMs: msg.TextMetrics.InferenceDuractionMs + msg.ThinkingMetrics.InferenceDuractionMs + msg.ToolCallMetrics.InferenceDuractionMs,
 			AvgTokensPerSec:      msg.TokensPerSecond,
+			InputTokens:          msg.InputTokens,
 		}
 		for _, tc := range msg.ToolCalls {
 			stat.ExecDurMs += tc.Execution.DurationMs
-			stat.InputTokens += tc.Execution.Tokens
 		}
 		msg.SequenceStat = stat
 		m.session.appendMsg(msg)

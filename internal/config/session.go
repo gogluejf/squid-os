@@ -66,15 +66,16 @@ func (ss *SequenceStat) Add(other *SequenceStat) {
 }
 
 func (ss *SequenceStat) Accumulate(msg Message) {
-	ss.OutputTokens += msg.Tokens
+	ss.OutputTokens += msg.OutputTokens
 	ss.DurationMs += msg.DurationTimeMs
 	ss.InferenceDuractionMs += msg.TextMetrics.InferenceDuractionMs
 	ss.InferenceDuractionMs += msg.ThinkingMetrics.InferenceDuractionMs
 	ss.InferenceDuractionMs += msg.ToolCallMetrics.InferenceDuractionMs
+	ss.InputTokens += msg.InputTokens
 	for _, tc := range msg.ToolCalls {
 		ss.ExecDurMs += tc.Execution.DurationMs
-		ss.InputTokens += tc.Execution.Tokens
 	}
+
 	if ss.InferenceDuractionMs > 0 {
 		ss.AvgTokensPerSec = float64(ss.OutputTokens) / float64(ss.InferenceDuractionMs) * 1000.0
 	}
@@ -119,18 +120,27 @@ type ToolCallEntry struct {
 	} `json:"execution,omitempty"`
 }
 
+// TotalExecutionTokens sums the execution tokens across a slice of ToolCallEntry.
+func TotalExecutionTokens(entries []ToolCallEntry) int {
+	var total int
+	for _, tc := range entries {
+		total += tc.Execution.Tokens
+	}
+	return total
+}
+
 type Message struct {
 	ID        string    `json:"id"`
 	Role      string    `json:"role"`
 	CreatedAt time.Time `json:"created_at"`
 
-	Tokens             int     `json:"tokens,omitempty"`
+	OutputTokens       int     `json:"output_tokens,omitempty"` // total output tokens for this message
 	DurationTimeMs     int64   `json:"duration_ms,omitempty"`
 	TimeToFirstTokenMs int64   `json:"time_to_first_token_ms,omitempty"`
 	TokensPerSecond    float64 `json:"tok_per_sec,omitempty"`
 
 	ImagePath   string `json:"image_path,omitempty"`
-	InputTokens int    `json:"user_tokens"`
+	InputTokens int    `json:"input_tokens"` // user message and execution tokens
 
 	Text            string         `json:"text"`
 	TextMetrics     ContentMetrics `json:"text_metrics,omitempty"`

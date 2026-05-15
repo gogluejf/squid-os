@@ -314,21 +314,16 @@ func (cs *chatSession) totalInputTokens() int {
 	total := 0
 	for _, msg := range cs.file.Messages {
 		total += msg.InputTokens
-		for _, tc := range msg.ToolCalls {
-			total += tc.Execution.Tokens
-		}
 	}
 	return total
 }
 
-// totalOutputTokens sums assistant and synthetic text tokens.
 // Thinking tokens are excluded — they are never sent back to the API.
 func (cs *chatSession) totalOutputTokens() int {
 	total := 0
 	for _, msg := range cs.file.Messages {
-		if msg.Role == "assistant" || msg.Role == "synthetic" {
-			total += msg.TextMetrics.Tokens
-		}
+		total += msg.TextMetrics.Tokens + msg.ToolCallMetrics.Tokens
+
 	}
 	return total
 }

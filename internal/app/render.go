@@ -151,8 +151,8 @@ func (m Model) buildFooterData() ui.FooterData {
 	return ui.FooterData{
 		Model:            modelBasename(m.settings.Model),
 		Provider:         m.settings.Provider,
-		TotalTokens:      m.session.totalTokens() + m.stream.metrics.TotalTokens(),
-		TotalInputTokens: m.session.totalInputTokens() + m.stream.metrics.TotalInputTokens(),
+		TotalTokens:      m.session.totalTokens() + m.stream.metrics.TotalOutputTokens(),
+		TotalInputTokens: m.session.totalInputTokens(),
 		TotalOutTokens:   m.session.totalOutputTokens() + m.stream.metrics.TotalOutputTokens(),
 		Streaming:        m.stream.active,
 		ThinkingOn:       m.settings.Thinking,
@@ -171,7 +171,7 @@ func (m Model) renderHelp() string {
 // yet (the stream is the first assistant message of the sequence).
 func (m *Model) buildLiveSeqStat() (*config.SequenceStat, string) {
 	live := &config.SequenceStat{
-		OutputTokens:         m.stream.metrics.TotalTokens(),
+		OutputTokens:         m.stream.metrics.TotalOutputTokens(),
 		DurationMs:           m.stream.metrics.Duration().Milliseconds(),
 		InferenceDuractionMs: (m.stream.metrics.TextDuration() + m.stream.metrics.ThinkingDuration() + m.stream.metrics.ToolCallDuration()).Milliseconds(),
 		AvgTokensPerSec:      m.stream.metrics.AvgTokenPerSec(),

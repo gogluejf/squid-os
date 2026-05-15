@@ -67,6 +67,8 @@ func run(cmd *cobra.Command, args []string) error {
 	endpoints := config.LoadEndpoints(paths)
 	history := config.LoadHistory(paths)
 
+	log.SetEnabled(settings.DebugEnabled && !flagIncognito)
+
 	// Apply CLI flag overrides
 	switch flagThinking {
 	case "on":

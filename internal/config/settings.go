@@ -15,6 +15,7 @@ type Settings struct {
 	AutoSave            bool   `json:"auto_save"`
 	AutoLoadLastSession bool   `json:"auto_load_last_session"`
 	ContextWindow       int    `json:"context_window"`
+	DebugEnabled        bool   `json:"debug_enabled"`
 }
 
 func DefaultSettings() Settings {

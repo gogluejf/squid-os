@@ -3,12 +3,15 @@ package log
 import (
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"squid-os/internal/config"
 )
 
 var (
+	mu            sync.Mutex
+	enabled       bool
 	sseLogger     *log.Logger
 	metricsLogger *log.Logger
 )
@@ -30,8 +33,25 @@ func Init(paths config.Paths) {
 	}
 }
 
+// SetEnabled enables or disables logging at runtime.
+func SetEnabled(v bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	enabled = v
+}
+
+// IsEnabled returns true if logging is currently active.
+func IsEnabled() bool {
+	mu.Lock()
+	defer mu.Unlock()
+	return enabled
+}
+
 // LogSSEChunk writes a timestamped SSE line to sse_chunks.log.
 func LogSSEChunk(line string) {
+	if !IsEnabled() {
+		return
+	}
 	if sseLogger == nil {
 		return
 	}
@@ -41,6 +61,9 @@ func LogSSEChunk(line string) {
 // LogStreamMetrics writes a timestamped metric event to stream_metrics.log.
 // kind is one of: "addTextChars", "addThinkChars", "addToolCallChars"
 func LogStreamMetrics(kind, chunk string, n, total int, first, done time.Time) {
+	if !IsEnabled() {
+		return
+	}
 	if metricsLogger == nil {
 		return
 	}

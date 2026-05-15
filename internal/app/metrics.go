@@ -1,20 +1,10 @@
 package app
 
 import (
-	"log"
-	"os"
 	"time"
+
+	"squid-os/internal/log"
 )
-
-// metricsLog writes timestamped debug lines for addTextChars/addThinkChars/addToolCallCalls.
-var metricsLog *log.Logger
-
-func init() {
-	f, err := os.OpenFile("squid-metrics.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err == nil {
-		metricsLog = log.New(f, "", 0)
-	}
-}
 
 // StreamMetrics owns all timing and token-count metrics for an active inference stream.
 // Text/thinking accumulation lives in streamState; this type owns the derived metrics.
@@ -41,11 +31,7 @@ func (m *StreamMetrics) addThinkChars(s string) {
 	}
 	m.thinkingChars += n
 	m.thinkingDoneAt = time.Now()
-	if metricsLog != nil {
-		metricsLog.Printf("%s addThinkChars n=%d chars=%d chunk=%q first=%s done=%s\n",
-			time.Now().Format("15:04:05.000000"), n, m.thinkingChars, s,
-			m.firstThinkingTokenAt.Format("15:04:05.000000"), m.thinkingDoneAt.Format("15:04:05.000000"))
-	}
+	log.LogStreamMetrics("addThinkChars", s, n, m.thinkingChars, m.firstThinkingTokenAt, m.thinkingDoneAt)
 }
 
 // ThinkingDuration returns the duration from the first thinking token to when thinking ended
@@ -84,11 +70,7 @@ func (m *StreamMetrics) addTextChars(s string) {
 	}
 	m.textChars += n
 	m.textDoneAt = time.Now()
-	if metricsLog != nil {
-		metricsLog.Printf("%s addTextChars n=%d chars=%d chunk=%q first=%s done=%s\n",
-			time.Now().Format("15:04:05.000000"), n, m.textChars, s,
-			m.firstTextTokenAt.Format("15:04:05.000000"), m.textDoneAt.Format("15:04:05.000000"))
-	}
+	log.LogStreamMetrics("addTextChars", s, n, m.textChars, m.firstTextTokenAt, m.textDoneAt)
 }
 
 // TextTokens returns the approximate token count for text characters.
@@ -127,11 +109,7 @@ func (m *StreamMetrics) addToolCallChars(s string) {
 	}
 	m.toolCallChars += n
 	m.toolCallDoneAt = time.Now()
-	if metricsLog != nil {
-		metricsLog.Printf("%s addToolCallChars n=%d chars=%d chunk=%q first=%s done=%s\n",
-			time.Now().Format("15:04:05.000000"), n, m.toolCallChars, s,
-			m.firstToolCallTokenAt.Format("15:04:05.000000"), m.toolCallDoneAt.Format("15:04:05.000000"))
-	}
+	log.LogStreamMetrics("addToolCallChars", s, n, m.toolCallChars, m.firstToolCallTokenAt, m.toolCallDoneAt)
 }
 
 // ToolCallTokens returns the approximate token count for tool call argument characters.

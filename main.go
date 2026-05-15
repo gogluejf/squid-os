@@ -10,6 +10,7 @@ import (
 	"squid-os/internal/app"
 	"squid-os/internal/config"
 	"squid-os/internal/headless"
+	"squid-os/internal/log"
 )
 
 var (
@@ -50,6 +51,7 @@ func run(cmd *cobra.Command, args []string) error {
 	if err := paths.EnsureDirs(); err != nil {
 		return fmt.Errorf("create config dirs: %w", err)
 	}
+	log.Init(paths)
 
 	// Seed default config files on first run
 	if _, err := os.Stat(paths.EndpointsFile()); os.IsNotExist(err) {

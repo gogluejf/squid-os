@@ -4,13 +4,16 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+
+	"squid-os/internal/style"
 )
 
 // Open opens a file, URL, or directory with the system default application.
 var Open = Tool{
-	Name:        "open",
-	Description: "Open a file, URL, or directory with the system default application (xdg-open on Linux, open on macOS, start on Windows). Use for launching browsers, editors, or previewing files.",
+	Name:         "open",
+	Description:  "Open a file, URL, or directory with the system default application (xdg-open on Linux, open on macOS, start on Windows). Use for launching browsers, editors, or previewing files.",
 	DisplayParam: "path",
+	Style:        style.ToolStyle(),
 	Schema: []byte(`{
 	"type": "object",
 	"properties": {

@@ -254,15 +254,14 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expanded bool, reg *tools.Registry) string {
 	var b strings.Builder
 	for _, tc := range toolCalls {
-		namePart, paramPart := formatToolDisplay(tc.Instruction.Name, tc.Instruction.Arguments, reg)
+		t := reg.Get(tc.Instruction.Name)
 
 		var parts []string
-		parts = append(parts, ToolLabel.Render(namePart))
-		if paramPart != "" {
-			parts = append(parts, ToolParamOnTool.Render(paramPart))
+		parts = append(parts, t.Style.Label.Render(tc.Instruction.Name))
+		if display := t.DisplayValue(tc.Instruction.Arguments); display != "" {
+			parts = append(parts, t.Style.Param.Render(util.Truncate(display, 60)))
 		}
 
-		// Status marker as its own part
 		switch tc.Execution.Status {
 		case "error":
 			parts = append(parts, ToolErrOnTool.Render("[✗]"))
@@ -275,7 +274,6 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 			parts = append(parts, ToolStatOnTool.Render(stats))
 		}
 
-		// Build content blocks
 		var content []string
 		if expanded {
 			if tc.Instruction.Arguments != "" {
@@ -413,12 +411,12 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, ex
 	var b strings.Builder
 	reg := tools.GetRegistry()
 	for _, tc := range pendingTools {
-		namePart, paramPart := formatToolDisplay(tc.Name, tc.Arguments, reg)
+		t := reg.Get(tc.Name)
 
 		var parts []string
-		parts = append(parts, ToolLabel.Render(namePart))
-		if paramPart != "" {
-			parts = append(parts, ToolParamOnTool.Render(paramPart))
+		parts = append(parts, t.Style.Label.Render(tc.Name))
+		if display := t.DisplayValue(tc.Arguments); display != "" {
+			parts = append(parts, t.Style.Param.Render(util.Truncate(display, 60)))
 		}
 		if tc.Tokens > 0 || tc.Duration > 0 {
 			dur := tc.Duration.Milliseconds()
@@ -505,19 +503,4 @@ func formatDuration(ms int64) string {
 	minutes := int(d / time.Minute)
 	seconds := int((d % time.Minute) / time.Second)
 	return fmt.Sprintf("%dm%ds", minutes, seconds)
-}
-
-// formatToolDisplay returns a display-friendly (namePart, paramPart).
-// The "↳ " prefix is now added by DrawCanvas.
-// When args is empty or the tool has no DisplayParam, paramPart is empty.
-func formatToolDisplay(name, args string, reg *tools.Registry) (namePart string, paramPart string) {
-	if args != "" && reg != nil {
-		tool := reg.Get(name)
-		if tool != nil {
-			if display := tool.DisplayValue(args); display != "" {
-				return name, util.Truncate(display, 60)
-			}
-		}
-	}
-	return name, ""
 }

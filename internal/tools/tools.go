@@ -3,6 +3,8 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+
+	"squid-os/internal/style"
 )
 
 // Tool execution result
@@ -24,11 +26,12 @@ type ToolResult struct {
 // DisplayParam is the arg field name to show in the UI instead of the full JSON
 // args. E.g., "path" renders as [read_file(/home/...)] instead of dumping all args.
 type Tool struct {
-	Name        string
-	Description string
+	Name         string
+	Description  string
 	DisplayParam string
-	Schema      []byte
-	Execute     func(args map[string]interface{}) ToolResult
+	Style        style.StyleLabel
+	Schema       []byte
+	Execute      func(args map[string]interface{}) ToolResult
 }
 
 // Registry holds tools by name for O(1) lookup.
@@ -46,6 +49,9 @@ func init() {
 		EditFile,
 		Bash,
 		Open,
+		SkillLoad,
+		SkillList,
+		SkillBuild,
 	}
 	for i := range list {
 		if err := validateSchema(list[i]); err != nil {

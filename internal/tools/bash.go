@@ -7,13 +7,16 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"squid-os/internal/style"
 )
 
 // Bash executes a shell command and returns stdout/stderr.
 var Bash = Tool{
-	Name:        "bash",
-	Description: "Execute a shell command and return stdout/stderr. Use for git, find, grep, curl, and other CLI tools. Does not modify files. Timeout: 120 seconds.",
+	Name:         "bash",
+	Description:  "Execute a shell command and return stdout/stderr. Use for git, find, grep, curl, and other CLI tools. Does not modify files. Timeout: 120 seconds.",
 	DisplayParam: "command",
+	Style:        style.ToolStyle(),
 	Schema: []byte(`{
 	"type": "object",
 	"properties": {

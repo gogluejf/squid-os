@@ -12,6 +12,7 @@ import (
 
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
+	"squid-os/internal/skills"
 	"squid-os/internal/tools"
 	"squid-os/internal/ui"
 )
@@ -135,7 +136,15 @@ func (m *Model) clearNotification() { m.notification = ui.Notification{} }
 // Init starts the cursor blink command and refreshes the context window.
 func (m Model) Init() tea.Cmd {
 	chatMode := (&m).setChatMode()
-	return tea.Batch(chatMode, (&m).refreshContextCmd())
+
+	// Initialize skill registry
+	var skillCmd tea.Cmd
+	if err := skills.InitRegistry(m.paths.Skills); err != nil {
+		// Non-fatal: log but don't crash
+		skillCmd = func() tea.Msg { return nil }
+	}
+
+	return tea.Batch(chatMode, (&m).refreshContextCmd(), skillCmd)
 }
 
 // refreshContextCmd scans models in the background and updates the context

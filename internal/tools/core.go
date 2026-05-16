@@ -3,6 +3,8 @@ package tools
 import (
 	"fmt"
 	"os"
+
+	"squid-os/internal/style"
 )
 
 // ReadFile reads a file and returns its contents.
@@ -10,6 +12,7 @@ var ReadFile = Tool{
 	Name:        "read_file",
 	Description: "Read the contents of a file at the given path. Returns the raw text content. Use for reading code, configs, documents, and any text-based files.",
 	DisplayParam: "path",
+	Style:       style.ToolStyle(),
 	Schema: []byte(`{
 	"type": "object",
 	"properties": {
@@ -38,6 +41,7 @@ var WriteFile = Tool{
 	Name:        "write_file",
 	Description: "Create a new file or completely overwrite an existing file with the given content. Use for new files or full rewrites only. Path must be absolute.",
 	DisplayParam: "path",
+	Style:       style.ToolStyle(),
 	Schema: []byte(`{
 	"type": "object",
 	"properties": {
@@ -74,6 +78,7 @@ var EditFile = Tool{
 	Name:        "edit_file",
 	Description: "Perform a precise string replacement in an existing file. old_string must match exactly. replace_all replaces every occurrence. Prefer over write_file for modifications.",
 	DisplayParam: "path",
+	Style:       style.ToolStyle(),
 	Schema: []byte(`{
 	"type": "object",
 	"properties": {

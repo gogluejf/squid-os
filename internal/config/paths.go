@@ -11,6 +11,7 @@ type Paths struct {
 	Sessions   string // config/squid-os/sessions
 	SysPrompts string // config/squid-os/sys-prompts
 	Logs       string // config/squid-os/logs
+	Skills     string // config/squid-os/skills
 }
 
 func NewPaths(configDir string) Paths {
@@ -19,12 +20,13 @@ func NewPaths(configDir string) Paths {
 		Sessions:   filepath.Join(configDir, "sessions"),
 		SysPrompts: filepath.Join(configDir, "sys-prompts"),
 		Logs:       filepath.Join(configDir, "logs"),
+		Skills:     filepath.Join(configDir, "skills"),
 	}
 }
 
 // EnsureDirs creates all config directories if they don't exist
 func (p Paths) EnsureDirs() error {
-	dirs := []string{p.Root, p.Sessions, p.SysPrompts, p.Logs}
+	dirs := []string{p.Root, p.Sessions, p.SysPrompts, p.Logs, p.Skills}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0755); err != nil {
 			return err

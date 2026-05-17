@@ -90,14 +90,15 @@ type skillBuildArgs struct {
 	Description  string            `json:"description"`
 	Version      string            `json:"version,omitempty"`
 	License      string            `json:"license,omitempty"`
-	AllowedTools []string          `json:"allowed_tools,omitempty"`
+	AllowedTools string            `json:"allowed_tools,omitempty"`
 	Metadata     map[string]string `json:"metadata,omitempty"`
 	Overview     string            `json:"overview"`
 	Instructions string            `json:"instructions"`
 	Rules        string            `json:"rules,omitempty"`
 	OutputFormat string            `json:"output_format,omitempty"`
 	Examples     string            `json:"examples,omitempty"`
-	References   string            `json:"references,omitempty"`
+	References   map[string]string `json:"references,omitempty"`
+	Assets       map[string]string `json:"assets,omitempty"`
 	Scripts      map[string]string `json:"scripts,omitempty"`
 }
 
@@ -127,38 +128,43 @@ var SkillBuild = Tool{
 			"description": "Optional license string"
 		},
 		"allowed_tools": {
-			"type": "array",
-			"items": {"type": "string"},
-			"description": "Optional list of pre-approved tools"
+			"type": "string",
+			"description": "Space-separated tool names the skill is authorized to call (e.g., 'bash read_file write_file'). Stored as-is in frontmatter. The agent can only use these tools while the skill is active."
 		},
 		"overview": {
 			"type": "string",
-			"description": "One-paragraph summary"
+			"description": "One-paragraph summary of what the skill does and why it exists."
 		},
 		"instructions": {
 			"type": "string",
-			"description": "Step-by-step instructions"
+			"description": "Step-by-step instructions the agent follows when this skill is loaded. Can reference scripts via 'scripts/filename' to execute code during the workflow."
 		},
 		"rules": {
 			"type": "string",
-			"description": "Do/never/always constraints"
+			"description": "Do/never/always constraints that govern how this skill should be used."
 		},
 		"output_format": {
 			"type": "string",
-			"description": "Expected output structure"
+			"description": "Expected output structure of the skill. Can reference asset templates via 'assets/filename' to define the output shape (e.g., markdown template for generated files)."
 		},
 		"examples": {
 			"type": "string",
-			"description": "Input/output examples"
+			"description": "Input/output examples demonstrating how the skill should be used in practice."
 		},
 		"references": {
-			"type": "string",
-			"description": "File paths and documentation references"
+			"type": "object",
+			"additionalProperties": {"type": "string"},
+			"description": "Documentation files (0 to N) as filename->content pairs. Written to references/. These are supplementary docs the skill may need (API guides, architecture notes, etc.)."
+		},
+		"assets": {
+			"type": "object",
+			"additionalProperties": {"type": "string"},
+			"description": "Template or resource files (0 to N) as filename->content pairs. Written to assets/. Use these for output templates that the skill's output_format will reference to generate structured output."
 		},
 		"scripts": {
 			"type": "object",
 			"additionalProperties": {"type": "string"},
-			"description": "Script contents as filename->content pairs"
+			"description": "Executable scripts (0 to N) as filename->content pairs. Written to scripts/ with +x permission. These are executable code that the skill's instructions can call during workflow (e.g., bash scripts, python scripts)."
 		}
 	},
 	"required": ["name", "description", "overview", "instructions"]
@@ -186,6 +192,7 @@ var SkillBuild = Tool{
 			OutputFormat: a.OutputFormat,
 			Examples:     a.Examples,
 			References:   a.References,
+			Assets:       a.Assets,
 			Scripts:      a.Scripts,
 		}
 

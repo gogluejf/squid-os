@@ -12,7 +12,7 @@ type Skill struct {
 	Description  string            // from frontmatter
 	Version      string            // from frontmatter (optional)
 	License      string            // from frontmatter (optional)
-	AllowedTools []string          // from frontmatter (optional)
+	AllowedTools string            // space-separated tool names (e.g. "bash read_file write_file")
 	Metadata     map[string]string // from frontmatter (optional)
 
 	// Content
@@ -31,7 +31,7 @@ type Frontmatter struct {
 	License       string            `yaml:"license"`
 	Compatibility string            `yaml:"compatibility"`
 	Metadata      map[string]string `yaml:"metadata"`
-	AllowedTools  []string          `yaml:"allowed-tools"`
+	AllowedTools  string            `yaml:"allowed-tools"`
 }
 
 // SkillEntry is the lightweight registry entry (frontmatter only)
@@ -47,14 +47,15 @@ type BuildParams struct {
 	Description  string
 	Version      string
 	License      string
-	AllowedTools []string
+	AllowedTools string // space-separated tool names (e.g. "bash read_file write_file")
 	Metadata     map[string]string
 	Overview     string
 	Instructions string
 	Rules        string
 	OutputFormat string
 	Examples     string
-	References   string
+	References   map[string]string // filename -> content
+	Assets       map[string]string // filename -> content
 	Scripts      map[string]string // filename -> content
 }
 

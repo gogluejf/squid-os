@@ -157,14 +157,29 @@ func (r *Registry) Build(params BuildParams) (*Skill, error) {
 		}
 	}
 
-	// Write references if provided (as a single file)
-	if params.References != "" {
+	// Write references if any
+	if len(params.References) > 0 {
 		refsDir := filepath.Join(skillDir, "references")
 		if err := os.MkdirAll(refsDir, 0755); err != nil {
 			return nil, fmt.Errorf("create references directory: %w", err)
 		}
-		if err := os.WriteFile(filepath.Join(refsDir, "docs.md"), []byte(params.References), 0644); err != nil {
-			return nil, fmt.Errorf("write references: %w", err)
+		for fname, content := range params.References {
+			if err := os.WriteFile(filepath.Join(refsDir, fname), []byte(content), 0644); err != nil {
+				return nil, fmt.Errorf("write reference %s: %w", fname, err)
+			}
+		}
+	}
+
+	// Write assets if any
+	if len(params.Assets) > 0 {
+		assetsDir := filepath.Join(skillDir, "assets")
+		if err := os.MkdirAll(assetsDir, 0755); err != nil {
+			return nil, fmt.Errorf("create assets directory: %w", err)
+		}
+		for fname, content := range params.Assets {
+			if err := os.WriteFile(filepath.Join(assetsDir, fname), []byte(content), 0644); err != nil {
+				return nil, fmt.Errorf("write asset %s: %w", fname, err)
+			}
 		}
 	}
 

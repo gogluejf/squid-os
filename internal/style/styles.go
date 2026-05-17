@@ -1,6 +1,10 @@
 package style
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"sync"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 // -------------------------------------------------------
 // Palette — change these constants to reskin the whole UI
@@ -73,7 +77,7 @@ var P = Palette{
 }
 
 // -------------------------------------------------------
-// Derived styles — each uses palette constants
+// Width helpers
 // -------------------------------------------------------
 
 // BoxMargin is the side gutter (cols) around UserBox and ToolBox.
@@ -111,6 +115,10 @@ func CanvasContentWidth(viewportWidth int) int {
 	return w
 }
 
+// -------------------------------------------------------
+// Non-label styles — used directly (not inlined into StyleLabel)
+// -------------------------------------------------------
+
 var (
 	// CanvasSpan — full viewport width, BgApp. Bare canvas paint for headers.
 	// Callers prepend "\n" for vertical spacing.
@@ -121,81 +129,9 @@ var (
 			Margin(0, BoxMargin, 1, BoxMargin).
 			MarginBackground(lipgloss.Color(P.BgApp))
 
-	// Stat chip on the canvas (e.g. "· ↓1.2k 250ms" after thinking/waiting)
-	CanvasStatInline = lipgloss.NewStyle().
-				Background(lipgloss.Color(P.BgApp)).
-				Foreground(lipgloss.Color(P.TextDim))
-
-	ThinkingLabel = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
-			Foreground(lipgloss.Color(P.TextMuted))
-
-	// Internal label (e.g. "aborted") on canvas background
-	InternalLabel = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
-			Foreground(lipgloss.Color(P.TextWarning))
-
-	// System prompt label on canvas background
-	SystemLabel = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
-			Foreground(lipgloss.Color(P.TextSystemLabel))
-
-	// System prompt param value — darker green inline on canvas bg (like ToolParamOnTool but on BgApp)
-	SystemParam = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
-			Foreground(lipgloss.Color(P.TextSystemParam))
-
-	// Internal message label on canvas background
-	InternalMsgLabel = lipgloss.NewStyle().
-				Background(lipgloss.Color(P.BgApp)).
-				Foreground(lipgloss.Color(P.TextInternalLabel))
-
-	// Internal message param value — darker teal inline on canvas bg
-	InternalParam = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgApp)).
-			Foreground(lipgloss.Color(P.TextInternalParam))
-
-	// Tool box inline sub-styles (BgCode — match the ToolBox background)
-	ToolLabel = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgCode)).
-			Foreground(lipgloss.Color(P.TextAccent))
-
-	ToolParamOnTool = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgCode)).
-			Foreground(lipgloss.Color(P.TextToolParam))
-
-	ToolCheckOnTool = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgCode)).
-			Foreground(lipgloss.Color(P.TextSuccess))
-
-	ToolErrOnTool = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgCode)).
-			Foreground(lipgloss.Color(P.TextError))
-
-	ToolStatOnTool = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgCode)).
-			Foreground(lipgloss.Color(P.TextDim))
-
-	ToolResultOnTool = lipgloss.NewStyle().
-				Background(lipgloss.Color(P.BgCode)).
-				Foreground(lipgloss.Color(P.TextDim))
-
-	ToolErrorOnTool = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgCode)).
-			Foreground(lipgloss.Color(P.TextError))
-
-	// Message header inline styles (painted on the parent box's bg)
-	UserHeaderStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgUser)).
-			Foreground(lipgloss.Color(P.TextSecondary))
-
 	UserHeaderAttStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color(P.BgUser)).
 				Foreground(lipgloss.Color(P.TextAttachment))
-
-	AssistantHeaderStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(P.BgApp)).
-				Foreground(lipgloss.Color(P.TextSecondary))
 
 	// Top header
 	TopHeaderStyle = lipgloss.NewStyle().
@@ -248,10 +184,6 @@ var (
 			Background(lipgloss.Color(P.BgApp)).
 			Foreground(lipgloss.Color(P.TextInfo))
 
-	// TextMutedStyle — for rendering muted content inside canvas spans (system/internal)
-	TextMutedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(P.TextMuted))
-
 	// Image attachment chip — carries BgApp
 	AttachmentStyle = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgApp)).
@@ -274,6 +206,15 @@ var (
 				Bold(true).
 				Padding(0, 1)
 
+	// Generic status indicators — used on tool boxes for success/error badges
+	CheckSuccess = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgCode)).
+			Foreground(lipgloss.Color(P.TextSuccess))
+
+	CheckError = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgCode)).
+			Foreground(lipgloss.Color(P.TextError))
+
 	// Command palette
 	CommandStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(P.TextAccent)).
@@ -289,32 +230,191 @@ var (
 )
 
 // -------------------------------------------------------
-// StyleLabel — pre-built styles for tools/skills
+// StyleLabel — pre-built styles for message boxes
 // -------------------------------------------------------
 
-// StyleLabel holds pre-built lipgloss styles for a tool/skill.
+// StyleLabel holds pre-built lipgloss styles for a single message box type.
+// Label/Param/Dim are used for the header line parts.
+// Content/Error are used for expanded body text.
+// Bg/Fg define the box background and default foreground for DrawCanvas.
 type StyleLabel struct {
-	Label lipgloss.Style // label style (e.g. tool name)
-	Param lipgloss.Style // param style (e.g. display value)
-	Dim   lipgloss.Style // dim style (e.g. separators, muted text)
+	Label   lipgloss.Style
+	Param   lipgloss.Style
+	Dim     lipgloss.Style
+	Content lipgloss.Style
+	Error   lipgloss.Style
+	Bg      string
+	Fg      string
 }
+
+// cachedBuilder lazily builds and caches a StyleLabel after the first call.
+type cachedBuilder struct {
+	once   sync.Once
+	result StyleLabel
+}
+
+// build constructs the label and caches it.
+func (c *cachedBuilder) build(fn func() StyleLabel) {
+	c.once.Do(func() { c.result = fn() })
+}
+
+// Get returns the cached label, building on first access.
+func (c *cachedBuilder) Get(fn func() StyleLabel) StyleLabel {
+	c.build(fn)
+	return c.result
+}
+
+// -------------------------------------------------------
+// Canvas labels (BgApp background)
+// -------------------------------------------------------
+
+var _systemLabel cachedBuilder
+
+// SystemStyleLabel returns the style for system prompt messages (green label).
+func SystemStyleLabel() StyleLabel {
+	return _systemLabel.Get(func() StyleLabel {
+		bg := lipgloss.Color(P.BgApp)
+		return StyleLabel{
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSystemLabel)),
+			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSystemParam)),
+			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextMuted)),
+			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+			Bg:      P.BgApp,
+			Fg:      P.TextMuted,
+		}
+	})
+}
+
+var _internalLabel cachedBuilder
+
+// InternalStyleLabel returns the style for internal metadata messages (teal label).
+func InternalStyleLabel() StyleLabel {
+	return _internalLabel.Get(func() StyleLabel {
+		bg := lipgloss.Color(P.BgApp)
+		return StyleLabel{
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextInternalLabel)),
+			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextInternalParam)),
+			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextMuted)),
+			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+			Bg:      P.BgApp,
+			Fg:      P.TextMuted,
+		}
+	})
+}
+
+var _syntheticLabel cachedBuilder
+
+// SyntheticStyleLabel returns the style for synthetic messages (warning label, e.g. "aborted").
+func SyntheticStyleLabel() StyleLabel {
+	return _syntheticLabel.Get(func() StyleLabel {
+		bg := lipgloss.Color(P.BgApp)
+		return StyleLabel{
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextWarning)),
+			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextInternalParam)),
+			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextMuted)),
+			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+			Bg:      P.BgApp,
+			Fg:      P.TextMuted,
+		}
+	})
+}
+
+var _thinkingLabel cachedBuilder
+
+// ThinkingStyleLabel returns the style for thinking blocks (muted label).
+func ThinkingStyleLabel() StyleLabel {
+	return _thinkingLabel.Get(func() StyleLabel {
+		bg := lipgloss.Color(P.BgApp)
+		return StyleLabel{
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextMuted)),
+			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextMuted)),
+			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+			Bg:      P.BgApp,
+			Fg:      P.TextMuted,
+		}
+	})
+}
+
+// -------------------------------------------------------
+// User / assistant labels
+// -------------------------------------------------------
+
+var _userLabel cachedBuilder
+
+// UserStyleLabel returns the style for user message boxes.
+func UserStyleLabel() StyleLabel {
+	return _userLabel.Get(func() StyleLabel {
+		bg := lipgloss.Color(P.BgUser)
+		return StyleLabel{
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSecondary)),
+			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSecondary)),
+			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSecondary)),
+			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextPrimary)),
+			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+			Bg:      P.BgUser,
+			Fg:      P.TextPrimary,
+		}
+	})
+}
+
+var _assistantLabel cachedBuilder
+
+// AssistantStyleLabel returns the style for assistant body blocks.
+func AssistantStyleLabel() StyleLabel {
+	return _assistantLabel.Get(func() StyleLabel {
+		bg := lipgloss.Color(P.BgApp)
+		return StyleLabel{
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextPrimary)),
+			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextPrimary)),
+			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSecondary)),
+			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextPrimary)),
+			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+			Bg:      P.BgApp,
+			Fg:      P.TextPrimary,
+		}
+	})
+}
+
+// -------------------------------------------------------
+// Tool / skill labels (BgCode background)
+// -------------------------------------------------------
+
+var _toolLabel cachedBuilder
 
 // ToolStyle returns the style for core tools (cyan label, dark gray-blue param).
 func ToolStyle() StyleLabel {
-	bg := lipgloss.Color(P.BgCode)
-	return StyleLabel{
-		Label: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextAccent)),
-		Param: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextToolParam)),
-		Dim:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextMuted)),
-	}
+	return _toolLabel.Get(func() StyleLabel {
+		bg := lipgloss.Color(P.BgCode)
+		return StyleLabel{
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextAccent)),
+			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextToolParam)),
+			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+			Bg:      P.BgCode,
+			Fg:      P.TextDim,
+		}
+	})
 }
+
+var _skillLabel cachedBuilder
 
 // SkillStyle returns the style for skill tools (yellow label, darker yellow param).
 func SkillStyle() StyleLabel {
-	bg := lipgloss.Color(P.BgCode)
-	return StyleLabel{
-		Label: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("178")),
-		Param: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("180")),
-		Dim:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextMuted)),
-	}
+	return _skillLabel.Get(func() StyleLabel {
+		bg := lipgloss.Color(P.BgCode)
+		return StyleLabel{
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("178")),
+			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("180")),
+			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+			Bg:      P.BgCode,
+			Fg:      P.TextDim,
+		}
+	})
 }

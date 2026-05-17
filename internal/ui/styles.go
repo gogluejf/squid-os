@@ -55,11 +55,11 @@ var P = Palette{
 	TextMuted:         "243",
 	TextHeading:       "255",
 	TextAccent:        "110", // cyan
-	TextToolParam:     "67",   // dark gray-blue for tool param display
-	TextSystemLabel:   "141",  // system message label (green)
-	TextSystemParam:   "140",  // darker green than label
-	TextInternalLabel: "39",   // internal message label (teal)
-	TextInternalParam: "24",   // darker teal than label
+	TextToolParam:     "67",  // dark gray-blue for tool param display
+	TextSystemLabel:   "141", // system message label (green)
+	TextSystemParam:   "140", // darker green than label
+	TextInternalLabel: "39",  // internal message label (teal)
+	TextInternalParam: "24",  // darker teal than label
 	TextCode:          "228", // yellow
 	TextSuccess:       "22",  // dark green
 	TextError:         "124", // red
@@ -185,15 +185,15 @@ var (
 			Foreground(lipgloss.Color(P.TextError))
 
 	// Message header inline styles (painted on the parent box's bg)
-	UserHeaderDimStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color(P.BgUser)).
-				Foreground(lipgloss.Color(P.TextSecondary))
+	UserHeaderStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgUser)).
+			Foreground(lipgloss.Color(P.TextSecondary))
 
 	UserHeaderAttStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color(P.BgUser)).
 				Foreground(lipgloss.Color(P.TextAttachment))
 
-	AssistantHeaderDimStyle = lipgloss.NewStyle().
+	AssistantHeaderStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color(P.BgApp)).
 				Foreground(lipgloss.Color(P.TextSecondary))
 

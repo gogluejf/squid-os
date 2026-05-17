@@ -22,7 +22,7 @@ func orderedParams(msg config.Message) []string {
 	sort.Strings(keys)
 	return keys
 }
-//
+
 //   - parts:  pre-styled title segments rendered as "↳ part0 · part1 · ..."
 //     the "↳ " prefix and " · " separators carry the box bg color.
 //     pass nil/empty for no title line.
@@ -186,20 +186,20 @@ func renderUserMessage(msg config.Message, width int) string {
 	boxWidth := BoxWidth(width)
 	inner := ContentWidth(width)
 
-	leftStr := UserHeaderDimStyle.Render(msg.CreatedAt.Format("15:04:05"))
+	leftStr := UserHeaderStyle.Render(msg.CreatedAt.Format("15:04:05"))
 	var right []string
 	if msg.ImagePath != "" {
 		right = append(right, UserHeaderAttStyle.Render(msg.ImagePath))
 	}
 	if msg.InputTokens > 0 {
-		right = append(right, UserHeaderDimStyle.Render(tokenChipInput(msg.InputTokens, nil)))
+		right = append(right, UserHeaderStyle.Render(tokenChipInput(msg.InputTokens, nil)))
 	}
-	rightStr := strings.Join(right, UserHeaderDimStyle.Render("  "))
+	rightStr := strings.Join(right, UserHeaderStyle.Render("  "))
 	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)
 	if gap < 1 {
 		gap = 1
 	}
-	headerLine := leftStr + UserHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr
+	headerLine := leftStr + UserHeaderStyle.Render(strings.Repeat(" ", gap)) + rightStr
 
 	return drawUserBox(nil, []string{"\n" + headerLine, msg.Text}, P.TextPrimary, boxWidth)
 }
@@ -208,13 +208,13 @@ func renderUserMessage(msg config.Message, width int) string {
 // (not a box).  Stays uncached: SequenceStat mutates while a stream is live.
 func RenderAssistantHeader(start time.Time, stat *config.SequenceStat, width int) string {
 	inner := CanvasContentWidth(width)
-	leftStr := AssistantHeaderDimStyle.Render(start.Format("15:04:05"))
+	leftStr := AssistantHeaderStyle.Render(start.Format("15:04:05"))
 	rightStr := renderSeqStatRight(stat)
 	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)
 	if gap < 1 {
 		gap = 1
 	}
-	line := leftStr + AssistantHeaderDimStyle.Render(strings.Repeat(" ", gap)) + rightStr
+	line := leftStr + AssistantHeaderStyle.Render(strings.Repeat(" ", gap)) + rightStr
 	return CanvasSpan.Width(width).Render("\n" + line)
 }
 
@@ -394,16 +394,16 @@ func renderSeqStatRight(stat *config.SequenceStat) string {
 	}
 	var parts []string
 	if stat.AvgTokensPerSec > 0 {
-		parts = append(parts, AssistantHeaderDimStyle.Render(fmt.Sprintf("%.1f tok/s", stat.AvgTokensPerSec)))
+		parts = append(parts, AssistantHeaderStyle.Render(fmt.Sprintf("%.1f tok/s", stat.AvgTokensPerSec)))
 	}
 	var execDur *int64
 	if stat.InputTokens > 0 {
 		execDur = &stat.ExecDurMs
 	}
 	if chip := tokenChipBoth(stat.OutputTokens, stat.InputTokens, &stat.DurationMs, execDur); chip != "" {
-		parts = append(parts, AssistantHeaderDimStyle.Render(chip))
+		parts = append(parts, AssistantHeaderStyle.Render(chip))
 	}
-	return strings.Join(parts, AssistantHeaderDimStyle.Render("  "))
+	return strings.Join(parts, AssistantHeaderStyle.Render("  "))
 }
 
 // renderStreamingToolCalls renders pending tool calls during streaming.

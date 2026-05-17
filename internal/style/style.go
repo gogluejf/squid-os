@@ -6,6 +6,7 @@ import "github.com/charmbracelet/lipgloss"
 type StyleLabel struct {
 	Label lipgloss.Style // label style (e.g. tool name)
 	Param lipgloss.Style // param style (e.g. display value)
+	Dim   lipgloss.Style // dim style (e.g. separators, muted text)
 }
 
 // ToolStyle returns the style for core tools (cyan label, dark gray-blue param).
@@ -14,6 +15,7 @@ func ToolStyle() StyleLabel {
 	return StyleLabel{
 		Label: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("110")),
 		Param: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("67")),
+		Dim:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("243")),
 	}
 }
 
@@ -23,5 +25,6 @@ func SkillStyle() StyleLabel {
 	return StyleLabel{
 		Label: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("178")),
 		Param: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("180")),
+		Dim:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("243")),
 	}
 }

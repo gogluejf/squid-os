@@ -115,7 +115,7 @@ func buildConfigMsg(provider, model string, thinking bool) config.Message {
 }
 
 // buildToolsEnabledMsg builds the internal tools message.
-// Collapsed: shows a single param "tools= name1, name2, ..."
+// Collapsed: shows a single param "tools= name1, name2, ..." (styled with each tool's color)
 // Expanded: shows a neat table of name -> description.
 // Includes InputTokens from the real JSON sent in the API request body.
 func buildToolsEnabledMsg() config.Message {
@@ -124,9 +124,13 @@ func buildToolsEnabledMsg() config.Message {
 		return config.Message{}
 	}
 
-	names := make([]string, len(tl))
+	// Build styled list with dim separators so the bg runs continuous without bleeding into the next name.
+	var styled strings.Builder
 	for i, t := range tl {
-		names[i] = t.Name
+		if i > 0 {
+			styled.WriteString(t.Style.Dim.Render(", "))
+		}
+		styled.WriteString(t.Style.Label.Render(t.Name))
 	}
 
 	var b strings.Builder
@@ -147,7 +151,7 @@ func buildToolsEnabledMsg() config.Message {
 		Role:        config.RoleInternal,
 		Text:        b.String(),
 		Label:       "Tools Enabled",
-		Params:      map[string]string{"tools": strings.Join(names, ", ")},
+		Params:      map[string]string{"tools": styled.String()},
 		InputTokens: tokens,
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"squid-os/internal/style"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -25,25 +27,25 @@ type FooterData struct {
 // Line 2: tok/s · ↓output[↑input] · [tok/total] · context bar %, right-aligned
 func RenderFooter(data FooterData, width int) string {
 	lineStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color(P.BgFooter)).
+		Background(lipgloss.Color(style.P.BgFooter)).
 		Width(width)
 
 	bgSpace := func(n int) string {
 		if n <= 0 {
 			return ""
 		}
-		return FooterDimStyle.Render(strings.Repeat(" ", n))
+		return style.FooterDimStyle.Render(strings.Repeat(" ", n))
 	}
 
-	sep := FooterDimStyle.Render(" · ")
+	sep := style.FooterDimStyle.Render(" · ")
 
 	// ── Line 1: command hints (left) + model label (right) ─────────────
-	left1 := " " + FooterKeyStyle.Render("/") + FooterDimStyle.Render("cmd") +
-		FooterDimStyle.Render("  ") +
-		FooterKeyStyle.Render("ctrl+l") + FooterDimStyle.Render(" load") +
-		FooterDimStyle.Render("  ") +
-		FooterKeyStyle.Render("ctrl+h") + FooterDimStyle.Render(" help")
-	modelLabel := FooterValueStyle.Render(data.Model)
+	left1 := " " + style.FooterKeyStyle.Render("/") + style.FooterDimStyle.Render("cmd") +
+		style.FooterDimStyle.Render("  ") +
+		style.FooterKeyStyle.Render("ctrl+l") + style.FooterDimStyle.Render(" load") +
+		style.FooterDimStyle.Render("  ") +
+		style.FooterKeyStyle.Render("ctrl+h") + style.FooterDimStyle.Render(" help")
+	modelLabel := style.FooterValueStyle.Render(data.Model)
 
 	gap1 := width - lipgloss.Width(left1) - lipgloss.Width(modelLabel)
 	if gap1 < 1 {
@@ -54,15 +56,15 @@ func RenderFooter(data FooterData, width int) string {
 	// ── Line 2: [thinking: on/off] (left) + tok/s · ↓out[↑in] · [tok/total] · context bar % (right) ──
 	var parts []string
 	if data.Streaming && data.TokPerSec > 0 {
-		parts = append(parts, FooterValueStyle.Render(fmt.Sprintf("%.1f tok/s", data.TokPerSec)))
+		parts = append(parts, style.FooterValueStyle.Render(fmt.Sprintf("%.1f tok/s", data.TokPerSec)))
 	}
 
-	tokLabel := FooterValueStyle.Render(tokenChipBoth(data.TotalOutTokens, data.TotalInputTokens, nil, nil)) +
-		FooterValueStyle.Render(" [") + FooterValueStyle.Render(formatTokens(data.TotalTokens))
+	tokLabel := style.FooterValueStyle.Render(tokenChipBoth(data.TotalOutTokens, data.TotalInputTokens, nil, nil)) +
+		style.FooterValueStyle.Render(" [") + style.FooterValueStyle.Render(formatTokens(data.TotalTokens))
 	if data.ContextWindow > 0 {
-		tokLabel += FooterDimStyle.Render("/" + formatTokens(data.ContextWindow))
+		tokLabel += style.FooterDimStyle.Render("/" + formatTokens(data.ContextWindow))
 	}
-	tokLabel += FooterValueStyle.Render("]")
+	tokLabel += style.FooterValueStyle.Render("]")
 	parts = append(parts, tokLabel)
 
 	// Context usage bar: 20-char bar showing token usage vs context window
@@ -76,9 +78,9 @@ func RenderFooter(data FooterData, width int) string {
 	// Thinking indicator — always visible, white text on footer bg
 	var thinkLabel string
 	if data.ThinkingOn {
-		thinkLabel = FooterValueStyle.Render("[thinking: on]")
+		thinkLabel = style.FooterValueStyle.Render("[thinking: on]")
 	} else {
-		thinkLabel = FooterValueStyle.Render("[thinking: off]")
+		thinkLabel = style.FooterValueStyle.Render("[thinking: off]")
 	}
 	left2 := thinkLabel
 
@@ -122,11 +124,11 @@ func renderContextBar(totalTokens, contextWindow int) string {
 
 	pctStr := fmt.Sprintf("%.1f%%", usagePct)
 
-	darkStyle := lipgloss.NewStyle().Background(lipgloss.Color(P.CtxBarUsed))
-	lightStyle := lipgloss.NewStyle().Background(lipgloss.Color(P.CtxBarEmpty))
+	darkStyle := lipgloss.NewStyle().Background(lipgloss.Color(style.P.CtxBarUsed))
+	lightStyle := lipgloss.NewStyle().Background(lipgloss.Color(style.P.CtxBarEmpty))
 
 	bar := darkStyle.Render(strings.Repeat(" ", darkChars)) +
 		lightStyle.Render(strings.Repeat(" ", lightChars))
 
-	return FooterValueStyle.Render(pctStr+" ") + bar
+	return style.FooterValueStyle.Render(pctStr+" ") + bar
 }

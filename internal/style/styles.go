@@ -1,4 +1,4 @@
-package ui
+package style
 
 import "github.com/charmbracelet/lipgloss"
 
@@ -287,3 +287,34 @@ var (
 				Foreground(lipgloss.Color(P.TextAccent)).
 				Bold(true)
 )
+
+// -------------------------------------------------------
+// StyleLabel — pre-built styles for tools/skills
+// -------------------------------------------------------
+
+// StyleLabel holds pre-built lipgloss styles for a tool/skill.
+type StyleLabel struct {
+	Label lipgloss.Style // label style (e.g. tool name)
+	Param lipgloss.Style // param style (e.g. display value)
+	Dim   lipgloss.Style // dim style (e.g. separators, muted text)
+}
+
+// ToolStyle returns the style for core tools (cyan label, dark gray-blue param).
+func ToolStyle() StyleLabel {
+	bg := lipgloss.Color(P.BgCode)
+	return StyleLabel{
+		Label: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextAccent)),
+		Param: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextToolParam)),
+		Dim:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextMuted)),
+	}
+}
+
+// SkillStyle returns the style for skill tools (yellow label, darker yellow param).
+func SkillStyle() StyleLabel {
+	bg := lipgloss.Color(P.BgCode)
+	return StyleLabel{
+		Label: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("178")),
+		Param: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("180")),
+		Dim:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextMuted)),
+	}
+}

@@ -3,6 +3,8 @@ package ui
 import (
 	"strings"
 
+	"squid-os/internal/style"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -101,8 +103,8 @@ func (cp *CommandPalette) RenderHeight() int {
 }
 
 // palette background colours
-var paletteBg = lipgloss.Color(P.BgFooter)
-var paletteSelectedBg = lipgloss.Color(P.BgSelected)
+var paletteBg = lipgloss.Color(style.P.BgFooter)
+var paletteSelectedBg = lipgloss.Color(style.P.BgSelected)
 
 // Render renders the command palette
 func (cp *CommandPalette) Render(width int) string {
@@ -111,7 +113,7 @@ func (cp *CommandPalette) Render(width int) string {
 		return lipgloss.NewStyle().
 			Background(paletteBg).
 			Width(width).
-			Render(lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(P.TextMuted)).Render("  No matching commands"))
+			Render(lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("  No matching commands"))
 	}
 	// Cap rendered items to match RenderHeight.
 	if len(items) > maxCmdItems {
@@ -122,12 +124,12 @@ func (cp *CommandPalette) Render(width int) string {
 	const nameColWidth = 13
 
 	// Inline styles that carry the background so ANSI resets don't punch holes.
-	normalNameStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(P.TextMuted)).Width(nameColWidth)
-	normalDescStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(P.TextMuted))
+	normalNameStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(style.P.TextMuted)).Width(nameColWidth)
+	normalDescStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(style.P.TextMuted))
 	normalRowStyle := lipgloss.NewStyle().Background(paletteBg).Width(width)
 
-	selNameStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(P.TextAccent)).Bold(true).Width(nameColWidth)
-	selDescStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(P.TextAccent)).Bold(true)
+	selNameStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(style.P.TextAccent)).Bold(true).Width(nameColWidth)
+	selDescStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(style.P.TextAccent)).Bold(true)
 	selRowStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Width(width)
 
 	var rows []string
@@ -220,16 +222,16 @@ func (pl *PickerList) Render(width int) string {
 	items := pl.FilteredItems()
 
 	var b strings.Builder
-	b.WriteString(HeadingStyle.Render("  "+pl.Title) + "\n")
+	b.WriteString(style.HeadingStyle.Render("  "+pl.Title) + "\n")
 
 	if pl.Filter != "" {
-		b.WriteString(CommandDescStyle.Render("  filter: "+pl.Filter) + "\n")
+		b.WriteString(style.CommandDescStyle.Render("  filter: "+pl.Filter) + "\n")
 	}
 
 	if len(items) == 0 {
-		b.WriteString(CommandDescStyle.Render("  No matches"))
+		b.WriteString(style.CommandDescStyle.Render("  No matches"))
 		return lipgloss.NewStyle().
-			Background(lipgloss.Color(P.BgFooter)).
+			Background(lipgloss.Color(style.P.BgFooter)).
 			Width(width).
 			Render(strings.TrimRight(b.String(), "\n"))
 	}
@@ -246,14 +248,14 @@ func (pl *PickerList) Render(width int) string {
 
 	for i := start; i < end; i++ {
 		if i == pl.Selected {
-			b.WriteString(CommandSelectedStyle.Width(width).Render("  "+items[i]) + "\n")
+			b.WriteString(style.CommandSelectedStyle.Width(width).Render("  "+items[i]) + "\n")
 		} else {
-			b.WriteString(CommandDescStyle.Render("  "+items[i]) + "\n")
+			b.WriteString(style.CommandDescStyle.Render("  "+items[i]) + "\n")
 		}
 	}
 
 	return lipgloss.NewStyle().
-		Background(lipgloss.Color(P.BgFooter)).
+		Background(lipgloss.Color(style.P.BgFooter)).
 		Width(width).
 		Render(strings.TrimRight(b.String(), "\n"))
 }
@@ -286,14 +288,14 @@ func (tt *ThinkingToggle) Result() bool {
 
 func (tt *ThinkingToggle) Render(width int) string {
 	var b strings.Builder
-	b.WriteString(HeadingStyle.Render("  Thinking Mode") + "\n")
+	b.WriteString(style.HeadingStyle.Render("  Thinking Mode") + "\n")
 
 	options := []string{"on", "off"}
 	for i, opt := range options {
 		if i == tt.Selected {
-			b.WriteString(CommandSelectedStyle.Width(width).Render("  "+opt) + "\n")
+			b.WriteString(style.CommandSelectedStyle.Width(width).Render("  "+opt) + "\n")
 		} else {
-			b.WriteString(CommandDescStyle.Render("  "+opt) + "\n")
+			b.WriteString(style.CommandDescStyle.Render("  "+opt) + "\n")
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -311,8 +313,8 @@ func NewSavePrompt(lastName string) SavePrompt {
 
 func (sp *SavePrompt) Render(width int) string {
 	var b strings.Builder
-	b.WriteString(HeadingStyle.Render("  Save Session") + "\n")
-	b.WriteString(CommandDescStyle.Render("  Name: "))
-	b.WriteString(CommandStyle.Render(sp.Name + "_"))
+	b.WriteString(style.HeadingStyle.Render("  Save Session") + "\n")
+	b.WriteString(style.CommandDescStyle.Render("  Name: "))
+	b.WriteString(style.CommandStyle.Render(sp.Name + "_"))
 	return b.String()
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"squid-os/internal/config"
+	"squid-os/internal/style"
 	"squid-os/internal/ui"
 )
 
@@ -49,7 +50,7 @@ func (m Model) View() string {
 	if m.mode != ModeHistorySearch {
 		attachChip := ""
 		if m.attachedImage != "" {
-			attachChip = ui.AttachmentStyle.Render("attached: " + m.attachedImage)
+			attachChip = style.AttachmentStyle.Render("attached: " + m.attachedImage)
 		}
 		sections = append(sections, ui.RenderStatusLine(m.notification, attachChip, m.width))
 	}
@@ -86,7 +87,7 @@ func (m *Model) updateViewportContent() {
 	}
 
 	//this is needed to have a black first line before rendering message
-	b.WriteString(ui.StatusLineStyle.Width(m.width).Render(""))
+	b.WriteString(style.StatusLineStyle.Width(m.width).Render(""))
 
 	for i, rendered := range m.session.renderedMessages {
 		msg := m.session.file.Messages[i]
@@ -112,7 +113,7 @@ func (m *Model) updateViewportContent() {
 		if lastNL > m.stream.markdownEnd || (lastNL < 0 && m.stream.markdown != "") {
 			if lastNL >= 0 {
 				m.stream.markdown = strings.TrimRight(
-					ui.RenderMarkdownOnBg(m.stream.text[:lastNL], "233", ui.CanvasContentWidth(m.width)), "\n")
+					ui.RenderMarkdownOnBg(m.stream.text[:lastNL], style.P.BgApp, style.CanvasContentWidth(m.width)), "\n")
 				m.stream.markdownEnd = lastNL
 			} else {
 				m.stream.markdown = ""

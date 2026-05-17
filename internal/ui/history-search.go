@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"squid-os/internal/style"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -103,19 +105,19 @@ func (hs *HistorySearchOverlay) RenderHeight() int {
 }
 
 // historySearchBg is the background colour for the history search overlay
-var historySearchBg = lipgloss.Color(P.BgFooter)
+var historySearchBg = lipgloss.Color(style.P.BgFooter)
 
 // Render renders the history search overlay line (notification-style: white text on dark background)
 func (hs *HistorySearchOverlay) Render(width int) string {
 
-	prefix := lipgloss.NewStyle().Foreground(lipgloss.Color(P.TextPrimary)).Render(" search prompt history: ")
+	prefix := lipgloss.NewStyle().Foreground(lipgloss.Color(style.P.TextPrimary)).Render(" search prompt history: ")
 	const dimColor = "240"
 
 	// Only show match info after at least one character is typed
 	if hs.filterStr == "" {
 		// No filter typed yet - just show prompt, no background bar
-		dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Background(lipgloss.Color(P.BgApp)).Render("(esc to exit)")
-		return StatusLineStyle.Width(width).Render(prefix + dimSuffix)
+		dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Background(lipgloss.Color(style.P.BgApp)).Render("(esc to exit)")
+		return style.StatusLineStyle.Width(width).Render(prefix + dimSuffix)
 
 	}
 
@@ -137,12 +139,12 @@ func (hs *HistorySearchOverlay) Render(width int) string {
 	}
 
 	// Style only the filter text portion with bold white on dark background
-	filterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(P.TextHeading)).Bold(true).Background(lipgloss.Color(P.BgUser))
+	filterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(style.P.TextHeading)).Bold(true).Background(lipgloss.Color(style.P.BgUser))
 	filterStyled := filterStyle.Render(hs.filterStr)
 
 	// Style the suffix as dim
-	dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Background(lipgloss.Color(P.BgApp)).Render(suffix)
+	dimSuffix := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Background(lipgloss.Color(style.P.BgApp)).Render(suffix)
 
 	// Construct: prefix + styled_filter + dim_suffix
-	return StatusLineStyle.Width(width).Render(prefix + filterStyled + dimSuffix)
+	return style.StatusLineStyle.Width(width).Render(prefix + filterStyled + dimSuffix)
 }

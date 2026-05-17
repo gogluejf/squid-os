@@ -3,6 +3,8 @@ package ui
 import (
 	"strings"
 
+	"squid-os/internal/style"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -30,20 +32,20 @@ func RenderStatusLine(n Notification, attachmentChip string, width int) string {
 	case n.Empty():
 		// nothing
 	case n.Level == NotificationError:
-		left = ErrorStyle.Render("✗ " + n.Message)
+		left = style.ErrorStyle.Render("✗ " + n.Message)
 	case n.Level == NotificationWarning:
-		left = WarningStyle.Render("⚠ " + n.Message)
+		left = style.WarningStyle.Render("⚠ " + n.Message)
 	default:
-		left = InfoStyle.Render("· " + n.Message)
+		left = style.InfoStyle.Render("· " + n.Message)
 	}
 
 	if left == "" && attachmentChip == "" {
-		return StatusLineStyle.Render(strings.Repeat(" ", width))
+		return style.StatusLineStyle.Render(strings.Repeat(" ", width))
 	}
 	gap := width - lipgloss.Width(left) - lipgloss.Width(attachmentChip)
 	if gap < 1 {
 		gap = 1
 	}
-	mid := StatusLineStyle.Render(strings.Repeat(" ", gap))
+	mid := style.StatusLineStyle.Render(strings.Repeat(" ", gap))
 	return left + mid + attachmentChip
 }

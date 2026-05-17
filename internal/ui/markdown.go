@@ -3,6 +3,8 @@ package ui
 import (
 	"strings"
 
+	ss "squid-os/internal/style"
+
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/glamour/styles"
@@ -41,10 +43,10 @@ func noIndentStyles() ansi.StyleConfig {
 	cfg.Code.Color = &orange
 
 	// Custom heading styles — H1 has dark blue bg, with # prefix and space
-	h1Color := P.TextSystemLabel
-	h1Bg := P.BgUser
-	h2Color := P.TextInternalLabel
-	h3Color := P.TextAccent
+	h1Color := ss.P.TextSystemLabel
+	h1Bg := ss.P.BgUser
+	h2Color := ss.P.TextInternalLabel
+	h3Color := ss.P.TextAccent
 	cfg.H1 = ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: &h1Color, BackgroundColor: &h1Bg, Bold: boolPtr(true), Prefix: "# ", Suffix: " "}}
 	cfg.H2 = ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: &h2Color, Bold: boolPtr(true), Prefix: "## "}}
 	cfg.H3 = ansi.StyleBlock{StylePrimitive: ansi.StylePrimitive{Color: &h3Color, Bold: boolPtr(true), Prefix: "### "}}

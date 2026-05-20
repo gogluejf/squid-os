@@ -99,9 +99,9 @@ func RenderFooter(data FooterData, width int) string {
 		if data.IsGitRepo {
 			gitStr = " (git)"
 		}
-		workLabel = sep + style.FooterDimStyle.Render(fmt.Sprintf("[%s%s]", wd, gitStr))
+		workLabel = style.FooterValueStyle.Render(fmt.Sprintf("%s%s", wd, gitStr))
 	}
-	left2 := thinkLabel + " " + workLabel
+	left2 := workLabel + sep + thinkLabel
 
 	midSpace := width - lipgloss.Width(left2) - lipgloss.Width(right2)
 	if midSpace < 1 {

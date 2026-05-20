@@ -464,8 +464,7 @@ func FetchModels(ctx context.Context, modelsURL string) ([]string, error) {
 // BuildAPIMessages converts Message to ChatMessages for the API.
 // This function centralizes message building logic used by both headless and TUI modes.
 //
-// System prompt: read from the first role="system" message in the session.
-// If no system message exists, fall back to loading from settings file (backwards compat).
+// System prompt: all RoleSystem messages are concatenated with \n\n into a single system message.
 //
 // TODO: Tools are loaded from current engine config (tools.GetTools()), not from
 // session messages. This means if tools change between sessions, the saved
@@ -474,19 +473,16 @@ func FetchModels(ctx context.Context, modelsURL string) ([]string, error) {
 func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []config.Message) []ChatMessage {
 	var msgs []ChatMessage
 
-	// Find system prompt from session messages (role = "system")
-	systemPrompt := ""
+	// Collect all system messages and concatenate with \n\n
+	var sysParts []string
 	for _, msg := range messages {
 		if msg.Role == config.RoleSystem {
-			systemPrompt = msg.Text
-			break
+			sysParts = append(sysParts, msg.Text)
 		}
 	}
-	// Fallback: load from settings file if no system message (backwards compat)
-	if systemPrompt == "" {
-		systemPrompt = config.LoadSystemPrompt(paths, settings.SystemPromptFile)
+	if len(sysParts) > 0 {
+		msgs = append(msgs, ChatMessage{Role: "system", Content: strings.Join(sysParts, "\n\n")})
 	}
-	msgs = append(msgs, ChatMessage{Role: "system", Content: systemPrompt})
 
 	// Convert display messages to API messages
 	for _, msg := range messages {

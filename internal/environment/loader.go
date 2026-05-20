@@ -11,11 +11,11 @@ import (
 )
 
 // LoadEnvironment assembles all sections and returns a full Environment struct.
-func LoadEnvironment(paths config.Paths, settings config.Settings, homeDir, workingDir string) Environment {
+func LoadEnvironment(paths config.Paths, settings config.Settings, workingDir string) Environment {
 	projectDir := paths.ProjectDir
 
 	env := Environment{
-		OS:     CollectOSInfo(homeDir, workingDir),
+		OS:     CollectOSInfo(workingDir),
 		Skills: loadSkillEntries(),
 		SquidOS: SquidOSInfo{
 			SkillsDir:     paths.Skills,

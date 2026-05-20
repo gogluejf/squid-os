@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
+	"squid-os/internal/environment"
 	"squid-os/internal/tools"
 	"squid-os/internal/util"
 	"strings"
@@ -18,7 +19,7 @@ type chatSession struct {
 	undoStack        [][]config.Message
 }
 
-// clear resets to a fresh session and pushes init messages (system prompt + tools + config).
+// clear resets to a fresh session and pushes init messages (system prompt + env + tools + config).
 func (cs *chatSession) clear(settings config.Settings, paths config.Paths) {
 	cs.file = config.NewSessionFile(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
 	cs.renderedMessages = nil
@@ -36,6 +37,17 @@ func (cs *chatSession) clear(settings config.Settings, paths config.Paths) {
 		InputTokens: countTokensApprox(sysContent),
 	})
 
+	// Push environment message (included in API as second system message, after system prompt)
+	env := environment.LoadEnvironment(paths, settings, "")
+	envContent := environment.FormatEnvironment(env)
+	cs.appendMsg(config.Message{
+		ID:          "env0",
+		Role:        config.RoleSystem,
+		Text:        envContent,
+		Label:       "Environment",
+		InputTokens: countTokensApprox(envContent),
+	})
+
 	// Push current config internal message (collapsed: provider=model · thinking=on/off)
 	cs.appendMsg(buildConfigMsg(settings.Provider, settings.Model, settings.Thinking))
 
@@ -43,6 +55,20 @@ func (cs *chatSession) clear(settings config.Settings, paths config.Paths) {
 	toolsMsg := buildToolsEnabledMsg()
 	if toolsMsg.Text != "" {
 		cs.appendMsg(toolsMsg)
+	}
+}
+
+// updateEnvironment refreshes the existing env0 message with new environment data.
+func (cs *chatSession) updateEnvironment(paths config.Paths, settings config.Settings) {
+	for i := range cs.file.Messages {
+		if cs.file.Messages[i].ID == "env0" {
+			env := environment.LoadEnvironment(paths, settings, "")
+			envContent := environment.FormatEnvironment(env)
+			cs.file.Messages[i].Text = envContent
+			cs.file.Messages[i].Label = "Environment"
+			cs.file.Messages[i].InputTokens = countTokensApprox(envContent)
+			return
+		}
 	}
 }
 

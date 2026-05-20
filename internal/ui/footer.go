@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"squid-os/internal/style"
@@ -19,7 +20,9 @@ type FooterData struct {
 	TokPerSec        float64
 	Streaming        bool
 	ThinkingOn       bool // thinking mode on/off (always visible)
-	ContextWindow    int // model context window in tokens; 0 if unknown
+	ContextWindow    int  // model context window in tokens; 0 if unknown
+	WorkingDir       string
+	IsGitRepo        bool
 }
 
 // RenderFooter renders the fixed 2-line footer bar, always exactly `width` chars wide.
@@ -45,6 +48,7 @@ func RenderFooter(data FooterData, width int) string {
 		style.FooterKeyStyle.Render("ctrl+l") + style.FooterDimStyle.Render(" load") +
 		style.FooterDimStyle.Render("  ") +
 		style.FooterKeyStyle.Render("ctrl+h") + style.FooterDimStyle.Render(" help")
+
 	modelLabel := style.FooterValueStyle.Render(data.Model)
 
 	gap1 := width - lipgloss.Width(left1) - lipgloss.Width(modelLabel)
@@ -82,7 +86,22 @@ func RenderFooter(data FooterData, width int) string {
 	} else {
 		thinkLabel = style.FooterValueStyle.Render("[thinking: off]")
 	}
-	left2 := thinkLabel
+
+	// Working directory indicator
+	var workLabel string
+	if data.WorkingDir != "" {
+		wd := data.WorkingDir
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			wd = strings.Replace(wd, home, "~", 1)
+		}
+		gitStr := ""
+		if data.IsGitRepo {
+			gitStr = " (git)"
+		}
+		workLabel = sep + style.FooterDimStyle.Render(fmt.Sprintf("[%s%s]", wd, gitStr))
+	}
+	left2 := thinkLabel + " " + workLabel
 
 	midSpace := width - lipgloss.Width(left2) - lipgloss.Width(right2)
 	if midSpace < 1 {

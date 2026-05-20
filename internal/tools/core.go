@@ -28,6 +28,7 @@ var ReadFile = Tool{
 		if !ok || path == "" {
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
+		path = resolvePath(path)
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to read file %s: %w", path, err)}
@@ -61,6 +62,7 @@ var WriteFile = Tool{
 		if !ok || path == "" {
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
+		path = resolvePath(path)
 		content, ok := args["content"].(string)
 		if !ok {
 			return ToolResult{Status: ResultStatusError, Error: "content is required and must be a string"}
@@ -106,6 +108,7 @@ var EditFile = Tool{
 		if !ok || path == "" {
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
+		path = resolvePath(path)
 		oldStr, ok := args["old_string"].(string)
 		if !ok {
 			return ToolResult{Status: ResultStatusError, Error: "old_string is required and must be a string"}

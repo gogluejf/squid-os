@@ -50,7 +50,15 @@ var Bash = Tool{
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
 		defer cancel()
 
+		// cd to working dir if set
+		runDir := ""
+		if workingDir != "" {
+			runDir = workingDir
+		}
 		cmd := exec.CommandContext(ctx, "bash", "-c", cmdStr)
+		if runDir != "" {
+			cmd.Dir = runDir
+		}
 
 		// xdg-open blocks the terminal; run it detached via nohup
 		if strings.Contains(cmdStr, "xdg-open") {

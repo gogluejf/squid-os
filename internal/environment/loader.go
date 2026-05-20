@@ -2,8 +2,6 @@ package environment
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"squid-os/internal/config"
@@ -30,9 +28,9 @@ func LoadEnvironment(paths config.Paths, settings config.Settings, workingDir st
 	}
 
 	if workingDir != "" {
-		env.Project = loadProjectInfo(workingDir, projectDir)
+		env.Project = LoadProjectInfo(workingDir, projectDir)
 	}
-	env.Projects = findProjects(projectDir)
+	env.Projects = FindProjects(projectDir)
 
 	return env
 }
@@ -114,58 +112,6 @@ func loadSkillEntries() []SkillInfo {
 			Description: e.Description,
 		})
 	}
-	return entries
-}
-
-func loadProjectInfo(workingDir, projectDir string) *ProjectInfo {
-	info := &ProjectInfo{
-		Path:      workingDir,
-		IsGitRepo: hasGit(workingDir),
-	}
-
-	// Check if workingDir is under projectDir
-	if strings.HasPrefix(workingDir, projectDir) {
-		info.IsUnderProjectDir = true
-	}
-
-	// Generate file tree if it's a git repo or under the projects dir
-	if info.IsGitRepo || info.IsUnderProjectDir {
-		info.FileTree = GenerateTree(workingDir, 3)
-	}
-
-	return info
-}
-
-func hasGit(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, ".git"))
-	return err == nil
-}
-
-func findProjects(projectDir string) []ProjectEntry {
-	var entries []ProjectEntry
-	if projectDir == "" {
-		return entries
-	}
-
-	infos, err := os.ReadDir(projectDir)
-	if err != nil {
-		return entries
-	}
-
-	for _, info := range infos {
-		if !info.IsDir() {
-			continue
-		}
-		path := filepath.Join(projectDir, info.Name())
-		if hasGit(path) {
-			entries = append(entries, ProjectEntry{
-				Name:  info.Name(),
-				Path:  path,
-				IsGit: true,
-			})
-		}
-	}
-
 	return entries
 }
 

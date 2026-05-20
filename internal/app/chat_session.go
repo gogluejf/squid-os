@@ -2,12 +2,13 @@ package app
 
 import (
 	"fmt"
+	"strings"
+
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
 	"squid-os/internal/environment"
 	"squid-os/internal/tools"
 	"squid-os/internal/util"
-	"strings"
 )
 
 // chatSession bundles the active chat: its session file and render cache.
@@ -20,7 +21,7 @@ type chatSession struct {
 }
 
 // clear resets to a fresh session and pushes init messages (system prompt + env + tools + config).
-func (cs *chatSession) clear(settings config.Settings, paths config.Paths) {
+func (cs *chatSession) clear(settings config.Settings, paths config.Paths, workingDir string) {
 	cs.file = config.NewSessionFile(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
 	cs.renderedMessages = nil
 	cs.renderedWidth = 0
@@ -38,7 +39,7 @@ func (cs *chatSession) clear(settings config.Settings, paths config.Paths) {
 	})
 
 	// Push environment message (included in API as second system message, after system prompt)
-	env := environment.LoadEnvironment(paths, settings, "")
+	env := environment.LoadEnvironment(paths, settings, workingDir)
 	envContent := environment.FormatEnvironment(env)
 	cs.appendMsg(config.Message{
 		ID:          "env0",
@@ -55,20 +56,6 @@ func (cs *chatSession) clear(settings config.Settings, paths config.Paths) {
 	toolsMsg := buildToolsEnabledMsg()
 	if toolsMsg.Text != "" {
 		cs.appendMsg(toolsMsg)
-	}
-}
-
-// updateEnvironment refreshes the existing env0 message with new environment data.
-func (cs *chatSession) updateEnvironment(paths config.Paths, settings config.Settings) {
-	for i := range cs.file.Messages {
-		if cs.file.Messages[i].ID == "env0" {
-			env := environment.LoadEnvironment(paths, settings, "")
-			envContent := environment.FormatEnvironment(env)
-			cs.file.Messages[i].Text = envContent
-			cs.file.Messages[i].Label = "Environment"
-			cs.file.Messages[i].InputTokens = countTokensApprox(envContent)
-			return
-		}
 	}
 }
 

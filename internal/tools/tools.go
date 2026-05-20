@@ -52,6 +52,8 @@ func init() {
 		SkillLoad,
 		SkillList,
 		SkillBuild,
+		ListProjects,
+		SetWorkingDir,
 	}
 	for i := range list {
 		if err := validateSchema(list[i]); err != nil {

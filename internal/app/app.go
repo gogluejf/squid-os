@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -53,10 +54,11 @@ type Model struct {
 	toolReg *tools.Registry
 
 	// Config
-	settings  config.Settings
-	endpoints config.EndpointsConfig
-	paths     config.Paths
-	history   config.History
+	settings   config.Settings
+	endpoints  config.EndpointsConfig
+	paths      config.Paths
+	history    config.History
+	workingDir string // current working directory, defaults to home (used for env + tools)
 
 	// Prompt history navigation
 	historyIdx int // -1 = draft, 0..n = browsing history
@@ -75,6 +77,8 @@ type Model struct {
 // New creates a new app Model. Pass a non-nil initialSession to pre-load a session,
 // and incognito=true to start in incognito mode.
 func New(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, history config.History, initialSession *config.SessionFile, incognito bool) Model {
+	wd, _ := os.Getwd()
+
 	ta := textarea.New()
 
 	ta.ShowLineNumbers = false
@@ -102,7 +106,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 			Message: fmt.Sprintf("Auto-load on, last session loaded: %s", config.SessionPath(paths, settings.LastSessionName)),
 		}
 	} else {
-		sess.clear(settings, paths)
+		sess.clear(settings, paths, wd)
 		// Fresh session — clear LastSessionName so auto-save doesn't overwrite the previous session
 		if settings.LastSessionName != "" {
 			settings.LastSessionName = ""
@@ -118,6 +122,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		endpoints:     endpoints,
 		paths:         paths,
 		history:       history,
+		workingDir:    wd, // starts as current working directory
 		session:       sess,
 		historyIdx:    -1,
 		cmdPalette:    ui.NewCommandPalette(),
@@ -136,6 +141,14 @@ func (m *Model) clearNotification() { m.notification = ui.Notification{} }
 // Init starts the cursor blink command and refreshes the context window.
 func (m Model) Init() tea.Cmd {
 	chatMode := (&m).setChatMode()
+
+	// Wire tool callbacks
+	tools.SetProjectDir(m.paths.ProjectDir)
+	tools.SetCurrentWorkingDir(m.workingDir)
+	tools.SetWorkingDirCallback = func(path string) {
+		(&m).workingDir = path
+		tools.SetCurrentWorkingDir(path)
+	}
 
 	// Initialize skill registry
 	var skillCmd tea.Cmd

@@ -2,6 +2,8 @@ package environment
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"squid-os/internal/config"
@@ -31,6 +33,7 @@ func LoadEnvironment(paths config.Paths, settings config.Settings, workingDir st
 		env.Project = LoadProjectInfo(workingDir, projectDir)
 	}
 	env.Projects = FindProjects(projectDir)
+	env.Memory = loadMemoryIndex(paths.MemoryDir)
 
 	return env
 }
@@ -96,7 +99,31 @@ func FormatEnvironment(env Environment) string {
 		b.WriteString("\n")
 	}
 
+	// [MEMORY] section
+	if env.Memory != "" {
+		b.WriteString("## [MEMORY]\n")
+		b.WriteString(env.Memory)
+		b.WriteString("\n\n")
+	}
+
 	return b.String()
+}
+
+func loadMemoryIndex(memoryDir string) string {
+	if memoryDir == "" {
+		return ""
+	}
+	idxPath := filepath.Join(memoryDir, "index.md")
+	data, err := os.ReadFile(idxPath)
+	if err != nil {
+		return ""
+	}
+	content := strings.TrimSpace(string(data))
+	// Cap at 1500 chars to keep token usage reasonable
+	if len(content) > 1500 {
+		content = content[:1500] + "\n... (truncated)"
+	}
+	return content
 }
 
 func loadSkillEntries() []SkillInfo {

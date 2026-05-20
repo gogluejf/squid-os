@@ -7,6 +7,7 @@ type Environment struct {
 	SquidOS  SquidOSInfo
 	Project  *ProjectInfo   // nil if no working dir set
 	Projects []ProjectEntry // all discovered projects under ProjectDir
+	Memory   string         // content of index.md from memory dir
 }
 
 // OSInfo holds OS-level context.

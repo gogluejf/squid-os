@@ -47,7 +47,8 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	cfgDir := home + "/.config/squid-os"
 
-	paths := config.NewPaths(cfgDir)
+	defaultSettings := config.DefaultSettings()
+	paths := config.NewPaths(cfgDir, home, defaultSettings)
 	if err := paths.EnsureDirs(); err != nil {
 		return fmt.Errorf("create config dirs: %w", err)
 	}
@@ -64,6 +65,12 @@ func run(cmd *cobra.Command, args []string) error {
 
 	// Load config (always from files after seeding)
 	settings := config.LoadSettings(paths)
+
+	paths = config.NewPaths(cfgDir, home, settings)
+	if err := paths.EnsureDirs(); err != nil {
+		return fmt.Errorf("create domain dirs: %w", err)
+	}
+
 	endpoints := config.LoadEndpoints(paths)
 	history := config.LoadHistory(paths)
 

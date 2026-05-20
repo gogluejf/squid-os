@@ -16,6 +16,10 @@ type Settings struct {
 	AutoLoadLastSession bool   `json:"auto_load_last_session"`
 	ContextWindow       int    `json:"context_window"`
 	DebugEnabled        bool   `json:"debug_enabled"`
+	// Domain directories — relative to home, resolved by Paths
+	ProjectDir  string `json:"project_dir"`   // default: "src"
+	MemoryDir   string `json:"memory_dir"`    // default: "memory"
+	TempFolder  string `json:"temp_folder"`   // default: "tmp"
 }
 
 func DefaultSettings() Settings {
@@ -24,8 +28,12 @@ func DefaultSettings() Settings {
 		Model:               "",
 		Thinking:            false,
 		MaxHistory:          500,
-		AutoSave:            false,
-		AutoLoadLastSession: false,
+		AutoSave:            true,
+		AutoLoadLastSession: true,
+		DebugEnabled:        true,
+		ProjectDir:          "src",
+		MemoryDir:           "memory",
+		TempFolder:          "tmp",
 	}
 }
 

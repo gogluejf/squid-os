@@ -55,7 +55,8 @@ func DefaultAssistantPrompt() string {
 
 ## Git
 - We favor a git-backed workflow: memory, skills, and project files should be versioned.
-- Help the user initialize a repo when requested. Before committing, always ask for explicit confirmation — never commit silently.
+- Help the user initialize a repo when requested. 
+- Before committing, always ask for explicit confirmation — **never commit silently.**
 - Keep commits modular. If the user has been working on multiple features, propose splitting them into separate commits with clear messages for each.
 
 ## Memory

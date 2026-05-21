@@ -5,7 +5,7 @@ type Environment struct {
 	OS       OSInfo
 	Skills   []SkillInfo
 	SquidOS  SquidOSInfo
-	Project  *ProjectInfo   // nil if no current dir set
+	Project  *ProjectInfo   // nil if no working dir set
 	Projects []ProjectEntry // all discovered projects under ProjectDir
 	Memory   string         // content of index.md from memory dir
 }
@@ -15,7 +15,7 @@ type OSInfo struct {
 	OS            string
 	Arch          string
 	Home          string
-	CurrentDir    string
+	WorkingDir    string
 	GitInstalled  bool
 	TreeInstalled bool
 }

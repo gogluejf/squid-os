@@ -53,7 +53,7 @@ func init() {
 		SkillList,
 		SkillBuild,
 		ListProjects,
-		SetCurrentDir,
+		SetWorkingDirTool,
 	}
 	for i := range list {
 		if err := validateSchema(list[i]); err != nil {

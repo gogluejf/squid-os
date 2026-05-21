@@ -180,8 +180,8 @@ func (m Model) buildFooterData() ui.FooterData {
 		ThinkingOn:       m.settings.Thinking,
 		TokPerSec:        m.stream.metrics.AvgTokenPerSec(),
 		ContextWindow:    m.settings.ContextWindow,
-		CurrentDir:       m.currentDir,
-		IsGitRepo:        hasGit(m.currentDir),
+		WorkingDir:       m.workingDir,
+		IsGitRepo:        hasGit(m.workingDir),
 	}
 }
 

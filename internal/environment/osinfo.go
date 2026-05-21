@@ -18,15 +18,15 @@ func runCommandSilent(cmd string, arg string) bool {
 	return execCheck(cmd, arg) == nil
 }
 
-// CollectOSInfo gathers OS-level context. currentDir is the working directory.
+// CollectOSInfo gathers OS-level context. workingDir is the working directory.
 // Home is resolved internally via os.UserHomeDir().
-func CollectOSInfo(currentDir string) OSInfo {
+func CollectOSInfo(workingDir string) OSInfo {
 	home, _ := os.UserHomeDir()
 	return OSInfo{
 		OS:            runtime.GOOS,
 		Arch:          runtime.GOARCH,
 		Home:          home,
-		CurrentDir:    currentDir,
+		WorkingDir:    workingDir,
 		GitInstalled:  runCommandSilent("git", "--version"),
 		TreeInstalled: runCommandSilent("tree", "--version"),
 	}

@@ -4,11 +4,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"squid-os/internal/config"
 	"squid-os/internal/skills"
 )
+
+// sectionRe matches "## [SectionName]" headings and captures the name inside brackets.
+var sectionRe = regexp.MustCompile(`##\s+\[([^\]]+)\]`)
 
 // LoadEnvironment assembles all sections and returns a full Environment struct.
 func LoadEnvironment(paths config.Paths, settings config.Settings, workingDir string) Environment {
@@ -48,7 +52,7 @@ func FormatEnvironment(env Environment) string {
 	b.WriteString(fmt.Sprintf("- os: %s\n", env.OS.OS))
 	b.WriteString(fmt.Sprintf("- arch: %s\n", env.OS.Arch))
 	b.WriteString(fmt.Sprintf("- home: %s\n", env.OS.Home))
-	b.WriteString(fmt.Sprintf("- current-dir: %s\n", env.OS.CurrentDir))
+	b.WriteString(fmt.Sprintf("- working-dir: %s\n", env.OS.WorkingDir))
 	b.WriteString(fmt.Sprintf("- git: %s\n", boolOrNot(env.OS.GitInstalled)))
 	b.WriteString(fmt.Sprintf("- tree: %s\n", boolOrNot(env.OS.TreeInstalled)))
 	b.WriteString("\n")
@@ -81,7 +85,7 @@ func FormatEnvironment(env Environment) string {
 	// [Current Project] section
 	if env.Project != nil {
 		b.WriteString("## [Current Project]\n")
-		b.WriteString(fmt.Sprintf("- current-dir: %s\n", env.Project.Path))
+		b.WriteString(fmt.Sprintf("- working-dir: %s\n", env.Project.Path))
 		b.WriteString(fmt.Sprintf("- under-project-dir: %s\n", boolOrNot(env.Project.IsUnderProjectDir)))
 		b.WriteString(fmt.Sprintf("- git-init: %s\n", boolOrNot(env.Project.IsGitRepo)))
 		if env.Project.FileTree != "" {
@@ -102,14 +106,25 @@ func FormatEnvironment(env Environment) string {
 		b.WriteString("\n")
 	}
 
-	// [MEMORY] section
+	// [Memory] section
 	if env.Memory != "" {
-		b.WriteString("## [MEMORY]\n")
+		b.WriteString("## [Memory]\n")
 		b.WriteString(env.Memory)
 		b.WriteString("\n\n")
 	}
 
 	return b.String()
+}
+
+// ExtractSectionNames parses the formatted environment content to find all
+// "## [Section]" headings and returns the section names in order.
+func ExtractSectionNames(content string) []string {
+	matches := sectionRe.FindAllStringSubmatch(content, -1)
+	names := make([]string, 0, len(matches))
+	for _, m := range matches {
+		names = append(names, m[1])
+	}
+	return names
 }
 
 func loadMemoryIndex(memoryDir string) string {

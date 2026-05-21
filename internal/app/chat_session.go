@@ -21,7 +21,7 @@ type chatSession struct {
 }
 
 // clear resets to a fresh session and pushes init messages (system prompt + env + tools + config).
-func (cs *chatSession) clear(settings config.Settings, paths config.Paths, currentDir string) {
+func (cs *chatSession) clear(settings config.Settings, paths config.Paths, workingDir string) {
 	cs.file = config.NewSessionFile(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
 	cs.renderedMessages = nil
 	cs.renderedWidth = 0
@@ -39,13 +39,17 @@ func (cs *chatSession) clear(settings config.Settings, paths config.Paths, curre
 	})
 
 	// Push environment message (included in API as second system message, after system prompt)
-	env := environment.LoadEnvironment(paths, settings, currentDir)
+	env := environment.LoadEnvironment(paths, settings, workingDir)
 	envContent := environment.FormatEnvironment(env)
+	envSections := environment.ExtractSectionNames(envContent)
 	cs.appendMsg(config.Message{
 		ID:          "env0",
 		Role:        config.RoleSystem,
 		Text:        envContent,
 		Label:       "Environment",
+		Params: map[string]string{
+			"sections": strings.Join(envSections, ", "),
+		},
 		InputTokens: countTokensApprox(envContent),
 	})
 

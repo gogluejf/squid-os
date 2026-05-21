@@ -10,7 +10,7 @@ import (
 // ReadFile reads a file and returns its contents.
 var ReadFile = Tool{
 	Name:        "read_file",
-	Description: "Read the contents of a file at the given path. Returns the raw text content. Use for reading code, configs, documents, and any text-based files.",
+	Description: "Read the contents of a file at the given path (relative to current directory or absolute). Returns the raw text content. Use for reading code, configs, documents, and any text-based files.",
 	DisplayParam: "path",
 	Style:       style.ToolStyle(),
 	Schema: []byte(`{
@@ -18,7 +18,7 @@ var ReadFile = Tool{
 	"properties": {
 		"path": {
 			"type": "string",
-			"description": "Absolute path to the file to read"
+			"description": "Path to the file to read (relative or absolute)"
 		}
 	},
 	"required": ["path"]
@@ -40,7 +40,7 @@ var ReadFile = Tool{
 // WriteFile creates a new file or overwrites an existing one with the given content.
 var WriteFile = Tool{
 	Name:        "write_file",
-	Description: "Create a new file or completely overwrite an existing file with the given content. Use for new files or full rewrites only. Path must be absolute.",
+	Description: "Create a new file or completely overwrite an existing file with the given content. Use for new files or full rewrites only. Path can be relative to current directory or absolute.",
 	DisplayParam: "path",
 	Style:       style.ToolStyle(),
 	Schema: []byte(`{
@@ -48,7 +48,7 @@ var WriteFile = Tool{
 	"properties": {
 		"path": {
 			"type": "string",
-			"description": "Absolute path to the file to write"
+			"description": "Path to the file to write (relative or absolute)"
 		},
 		"content": {
 			"type": "string",
@@ -78,7 +78,7 @@ var WriteFile = Tool{
 // EditFile performs a precise string replacement in an existing file.
 var EditFile = Tool{
 	Name:        "edit_file",
-	Description: "Perform a precise string replacement in an existing file. old_string must match exactly. replace_all replaces every occurrence. Prefer over write_file for modifications.",
+	Description: "Perform a precise string replacement in an existing file. old_string must match exactly. replace_all replaces every occurrence. Prefer over write_file for modifications. Path can be relative to current directory or absolute.",
 	DisplayParam: "path",
 	Style:       style.ToolStyle(),
 	Schema: []byte(`{
@@ -86,7 +86,7 @@ var EditFile = Tool{
 	"properties": {
 		"path": {
 			"type": "string",
-			"description": "Absolute path to the file to edit"
+			"description": "Path to the file to edit (relative or absolute)"
 		},
 		"old_string": {
 			"type": "string",

@@ -21,7 +21,7 @@ type FooterData struct {
 	Streaming        bool
 	ThinkingOn       bool // thinking mode on/off (always visible)
 	ContextWindow    int  // model context window in tokens; 0 if unknown
-	CurrentDir       string
+	WorkingDir       string
 	IsGitRepo        bool
 }
 
@@ -89,8 +89,8 @@ func RenderFooter(data FooterData, width int) string {
 
 	// current directory indicator
 	var curDirLabel string
-	if data.CurrentDir != "" {
-		wd := data.CurrentDir
+	if data.WorkingDir != "" {
+		wd := data.WorkingDir
 		home, _ := os.UserHomeDir()
 		if home != "" {
 			wd = strings.Replace(wd, home, "~", 1)

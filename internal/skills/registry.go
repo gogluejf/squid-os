@@ -80,7 +80,7 @@ func (r *Registry) Rescan() error {
 
 		entryItem := SkillEntry{
 			Name:        name,
-			Description: fm.Description,
+			Description: strings.TrimSpace(fm.Description),
 			Path:        skillPath,
 		}
 		r.entries = append(r.entries, entryItem)

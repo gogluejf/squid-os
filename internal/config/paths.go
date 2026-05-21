@@ -13,9 +13,10 @@ type Paths struct {
 	Logs       string // config/squid-os/logs
 	Skills     string // config/squid-os/skills
 	// Domain directories — derived from home + Settings
-	ProjectDir string // ~/src
-	MemoryDir  string // ~/memory
-	TempFolder string // ~/tmp
+	ProjectDir   string // ~/src
+	MemoryDir    string // ~/memory
+	TempFolder   string // ~/tmp
+	DocumentsDir string // ~/Documents/squid-os
 }
 
 func NewPaths(configDir string, homeDir string, s Settings) Paths {
@@ -25,15 +26,16 @@ func NewPaths(configDir string, homeDir string, s Settings) Paths {
 		SysPrompts: filepath.Join(configDir, "sys-prompts"),
 		Logs:       filepath.Join(configDir, "logs"),
 		Skills:     filepath.Join(configDir, "skills"),
-		ProjectDir: filepath.Join(homeDir, s.ProjectDir),
-		MemoryDir:  filepath.Join(homeDir, s.MemoryDir),
-		TempFolder: filepath.Join(homeDir, s.TempFolder),
+		ProjectDir:   filepath.Join(homeDir, s.ProjectDir),
+		MemoryDir:    filepath.Join(homeDir, s.MemoryDir),
+		TempFolder:   filepath.Join(homeDir, s.TempFolder),
+		DocumentsDir: filepath.Join(homeDir, s.DocumentsDir),
 	}
 }
 
 // EnsureDirs creates all config directories if they don't exist
 func (p Paths) EnsureDirs() error {
-	dirs := []string{p.Root, p.Sessions, p.SysPrompts, p.Logs, p.Skills, p.ProjectDir, p.MemoryDir, p.TempFolder}
+	dirs := []string{p.Root, p.Sessions, p.SysPrompts, p.Logs, p.Skills, p.ProjectDir, p.MemoryDir, p.TempFolder, p.DocumentsDir}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0755); err != nil {
 			return err

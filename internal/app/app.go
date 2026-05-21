@@ -105,6 +105,10 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 			Level:   ui.NotificationInfo,
 			Message: fmt.Sprintf("Auto-load on, last session loaded: %s", config.SessionPath(paths, settings.LastSessionName)),
 		}
+		// Restore working dir from the loaded session
+		if initialSession.Session.WorkingDir != "" {
+			wd = initialSession.Session.WorkingDir
+		}
 	} else {
 		sess.clear(settings, paths, wd)
 		// Fresh session — clear LastSessionName so auto-save doesn't overwrite the previous session
@@ -137,6 +141,15 @@ func (m *Model) setNotification(level ui.NotificationLevel, msg string) {
 }
 
 func (m *Model) clearNotification() { m.notification = ui.Notification{} }
+
+// applyWorkingDir updates the app model, the tools package, and the session file
+// working directory.  Call from both tool execution (stream.go) and session load
+// so the state stays consistent everywhere.
+func (m *Model) applyWorkingDir(path string) {
+	m.workingDir = path
+	tools.SetWorkingDir(path)
+	m.session.file.Session.WorkingDir = path
+}
 
 // Init starts the cursor blink command and refreshes the context window.
 func (m Model) Init() tea.Cmd {

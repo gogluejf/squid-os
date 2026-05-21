@@ -36,6 +36,7 @@ type Session struct {
 	Model            string `json:"model"`
 	Thinking         bool   `json:"thinking"`
 	SystemPromptFile string `json:"system_prompt_file"`
+	WorkingDir       string `json:"working_dir"`
 }
 
 type ContentMetrics struct {
@@ -167,7 +168,7 @@ type Message struct {
 }
 
 // NewSessionFile creates a new empty session
-func NewSessionFile(provider, model string, thinking bool, systemPrompt string) SessionFile {
+func NewSessionFile(provider, model string, thinking bool, systemPrompt string, workingDir string) SessionFile {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return SessionFile{
 		Version: 1,
@@ -179,6 +180,7 @@ func NewSessionFile(provider, model string, thinking bool, systemPrompt string) 
 			Model:            model,
 			Thinking:         thinking,
 			SystemPromptFile: systemPrompt,
+			WorkingDir:       workingDir,
 		},
 	}
 }

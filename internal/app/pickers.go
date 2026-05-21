@@ -19,6 +19,10 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 		if pickerType == "session" && m.sessionSnapshot != nil {
 			m.session = *m.sessionSnapshot
 			m.sessionSnapshot = nil
+			// Restore working dir from the restored session
+			if m.session.file.Session.WorkingDir != "" {
+				(&m).applyWorkingDir(m.session.file.Session.WorkingDir)
+			}
 			m.updateViewportContent()
 		}
 		return m, m.setChatMode()

@@ -152,6 +152,10 @@ func (m Model) previewSession(name string) Model {
 		return m
 	}
 	m.session.setFrom(sf, false)
+	// Restore working dir from the session
+	if sf.Session.WorkingDir != "" {
+		(&m).applyWorkingDir(sf.Session.WorkingDir)
+	}
 	m.updateViewportContent()
 	return m
 }

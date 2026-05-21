@@ -419,8 +419,7 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 
 		if p.name == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
 			if pathVal, ok := args["path"].(string); ok {
-				m.workingDir = pathVal
-				tools.SetWorkingDir(pathVal)
+				m.applyWorkingDir(pathVal)
 			}
 		}
 	}

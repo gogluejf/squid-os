@@ -22,7 +22,7 @@ type chatSession struct {
 
 // clear resets to a fresh session and pushes init messages (system prompt + env + tools + config).
 func (cs *chatSession) clear(settings config.Settings, paths config.Paths, workingDir string) {
-	cs.file = config.NewSessionFile(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile)
+	cs.file = config.NewSessionFile(settings.Provider, settings.Model, settings.Thinking, settings.SystemPromptFile, workingDir)
 	cs.renderedMessages = nil
 	cs.renderedWidth = 0
 	cs.undoStack = nil

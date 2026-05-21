@@ -157,49 +157,50 @@ func getToolNamesRe() *regexp.Regexp {
 }
 
 // styleToolNamesInLine finds tool names in a raw text line and styles each
-// occurrence with its tool's label foreground + contentStyle's background,
-// wrapping non-tool segments in contentStyle.
-func styleToolNamesInLine(line string, contentStyle lipgloss.Style) string {
+// occurrence with its tool's label foreground + wrapStyle's background,
+// wrapping non-tool segments in wrapStyle.
+func styleToolNamesInLine(line string, wrapStyle lipgloss.Style) string {
 	re := getToolNamesRe()
 	matches := re.FindAllStringSubmatchIndex(line, -1)
 	if len(matches) == 0 {
-		return contentStyle.Render(line)
+		return wrapStyle.Render(line)
 	}
 
 	var b strings.Builder
 	lastEnd := 0
 
-	// Get background from contentStyle
-	bg := contentStyle.GetBackground()
+	bg := wrapStyle.GetBackground()
 
 	for _, groups := range matches {
 		matchStart := groups[0]
 		matchEnd := groups[1]
 		matchText := line[matchStart:matchEnd]
 
-		// Render text before the match
 		if matchStart > lastEnd {
-			b.WriteString(contentStyle.Render(line[lastEnd:matchStart]))
+			b.WriteString(wrapStyle.Render(line[lastEnd:matchStart]))
 		}
 
-		// Render the tool name with its label's foreground but content's background
 		if t := tools.GetRegistry().Get(matchText); t != nil {
 			fg := t.Style.Label.GetForeground()
 			st := lipgloss.NewStyle().Foreground(fg).Background(bg)
 			b.WriteString(st.Render(matchText))
 		} else {
-			b.WriteString(contentStyle.Render(matchText))
+			b.WriteString(wrapStyle.Render(matchText))
 		}
 
 		lastEnd = matchEnd
 	}
 
-	// Render remaining text after last match
 	if lastEnd < len(line) {
-		b.WriteString(contentStyle.Render(line[lastEnd:]))
+		b.WriteString(wrapStyle.Render(line[lastEnd:]))
 	}
 
 	return b.String()
+}
+
+// styleParamValue styles tool names in a param value, wrapping in paramStyle.
+func styleParamValue(value string, paramStyle lipgloss.Style) string {
+	return styleToolNamesInLine(value, paramStyle)
 }
 
 // renderSystemMessage renders a system prompt message (role = system).
@@ -211,7 +212,7 @@ func renderSystemMessage(msg config.Message, width int, expanded bool) string {
 	}
 	if msg.Params != nil {
 		for _, k := range orderedParams(msg) {
-			v := msg.Params[k]
+			v := styleParamValue(msg.Params[k], s.Param)
 			parts = append(parts, s.Param.Render(fmt.Sprintf("%s=%s", k, v)))
 		}
 	}
@@ -233,7 +234,7 @@ func renderInternalMessage(msg config.Message, width int, expanded bool) string 
 	}
 	if msg.Params != nil {
 		for _, k := range orderedParams(msg) {
-			v := msg.Params[k]
+			v := styleParamValue(msg.Params[k], s.Param)
 			parts = append(parts, s.Param.Render(fmt.Sprintf("%s=%s", k, v)))
 		}
 	}
@@ -258,7 +259,7 @@ func renderSyntheticMessage(msg config.Message, width int, expanded bool) string
 
 	if msg.Params != nil {
 		for _, k := range orderedParams(msg) {
-			v := msg.Params[k]
+			v := styleParamValue(msg.Params[k], s.Param)
 			parts = append(parts, s.Param.Render(fmt.Sprintf("%s=%s", k, v)))
 		}
 	}

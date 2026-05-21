@@ -23,10 +23,10 @@ func runCommandSilent(cmd string, arg string) bool {
 func CollectOSInfo(currentDir string) OSInfo {
 	home, _ := os.UserHomeDir()
 	return OSInfo{
-		OS:   runtime.GOOS,
-		Arch: runtime.GOARCH,
-		Home: home,
-		CurrentDir: currentDir,
+		OS:            runtime.GOOS,
+		Arch:          runtime.GOARCH,
+		Home:          home,
+		CurrentDir:    currentDir,
 		GitInstalled:  runCommandSilent("git", "--version"),
 		TreeInstalled: runCommandSilent("tree", "--version"),
 	}
@@ -36,18 +36,13 @@ func CollectOSInfo(currentDir string) OSInfo {
 // falls back to `find` for a flat listing limited to maxDepth levels.
 func GenerateTree(dir string, maxDepth int) string {
 	if runCommandSilent("tree", "--version") {
-		cmd := exec.Command("tree", "-a", "--gitignore", "-I", "node_modules|.git|.vscode|.idea|.cache|.next|.nuxt|.pytest_cache|.dart_tool|.gradle|.terraform|.parcel-cache|.eslintcache", "--dirsfirst", dir)
+		cmd := exec.Command("tree", "-a", "--gitignore", "-I", "data|node_modules|.git|.vscode|.idea|.cache|.next|.nuxt|.pytest_cache|.dart_tool|.gradle|.terraform|.parcel-cache|.eslintcache", "--dirsfirst", dir)
 		data, err := cmd.CombinedOutput()
 		// tree may exit non-zero (e.g., permission errors on some dirs) but still produce output
 		if err == nil || len(data) > 0 {
 			out := strings.TrimSpace(string(data))
 			if out != "" {
-				lines := strings.Split(out, "\n")
-				if len(lines) > 200 {
-					lines = lines[:200]
-					lines = append(lines, "... (truncated)")
-				}
-				return strings.Join(lines, "\n")
+				return out
 			}
 		}
 	}
@@ -66,11 +61,5 @@ func GenerateTree(dir string, maxDepth int) string {
 	if err != nil {
 		return "(directory listing unavailable)"
 	}
-	out := strings.TrimSpace(string(data))
-	lines := strings.Split(out, "\n")
-	if len(lines) > 200 {
-		lines = lines[:200]
-		lines = append(lines, "... (truncated)")
-	}
-	return strings.Join(lines, "\n")
+	return strings.TrimSpace(string(data))
 }

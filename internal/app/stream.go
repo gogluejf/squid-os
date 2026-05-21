@@ -417,11 +417,11 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 		entries[i].Execution.Tokens = countTokensApprox(result.Result)
 		entries[i].Execution.DurationMs = time.Since(resultStart).Milliseconds()
 
-		// PostExecute: set_working_dir updates the live model
-		if p.name == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
+		// PostExecute: set_current_dir updates the live model
+		if p.name == "set_current_dir" && result.Status == tools.ResultStatusSuccess {
 			if pathVal, ok := args["path"].(string); ok {
-				m.workingDir = pathVal
-				tools.SetCurrentWorkingDir(pathVal)
+				m.currentDir = pathVal
+				tools.SetCurrentCurrentDir(pathVal)
 			}
 		}
 	}

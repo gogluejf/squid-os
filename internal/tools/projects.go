@@ -9,33 +9,33 @@ import (
 	"squid-os/internal/style"
 )
 
-// SetWorkingDirCallback is called by the tool to notify the app of a working dir change.
-var SetWorkingDirCallback func(path string)
+// SetCurrentDirCallback is called by the tool to notify the app of a current dir change.
+var SetCurrentDirCallback func(path string)
 
 // projectDir is set by the app at startup via SetProjectDir.
 var projectDir string
 
-// workingDir is the current working directory for all file tools.
-var workingDir string
+// currentDir is the current  directory for all file tools.
+var currentDir string
 
 // SetProjectDir sets the project directory for the list_projects tool.
 func SetProjectDir(dir string) {
 	projectDir = dir
 }
 
-// SetCurrentWorkingDir sets the working directory used by file tools and bash.
-func SetCurrentWorkingDir(dir string) {
-	workingDir = dir
+// SetCurrentCurrentDir sets the current directory used by file tools and bash.
+func SetCurrentCurrentDir(dir string) {
+	currentDir = dir
 }
 
-// resolvePath resolves a relative path against the working directory.
+// resolvePath resolves a relative path against the current directory.
 // If the path is already absolute, returns it unchanged.
 func resolvePath(p string) string {
 	if filepath.IsAbs(p) {
 		return p
 	}
-	if workingDir != "" {
-		return filepath.Join(workingDir, p)
+	if currentDir != "" {
+		return filepath.Join(currentDir, p)
 	}
 	return p
 }
@@ -63,10 +63,10 @@ var ListProjects = Tool{
 	},
 }
 
-// SetWorkingDir sets the current working directory and returns project info.
-var SetWorkingDir = Tool{
-	Name:         "set_working_dir",
-	Description:  "Set the current working directory. Returns project info for the new directory. Use when user request or just switch context to other project",
+// SetCurrentDir sets the current current directory and returns project info.
+var SetCurrentDir = Tool{
+	Name:         "set_current_dir",
+	Description:  "Set the current directory. Make tools calls relative to that dir possible. Use when user request or just switch context to other project",
 	DisplayParam: "path",
 	Style:        style.ToolStyle(),
 	Schema: []byte(`{
@@ -74,7 +74,7 @@ var SetWorkingDir = Tool{
 	"properties": {
 		"path": {
 			"type": "string",
-			"description": "Absolute path to set as the working directory"
+			"description": "Absolute path to set as the directory"
 		}
 	},
 	"required": ["path"]
@@ -87,8 +87,8 @@ var SetWorkingDir = Tool{
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("path does not exist: %s", path)}
 		}
-		if SetWorkingDirCallback != nil {
-			SetWorkingDirCallback(path)
+		if SetCurrentDirCallback != nil {
+			SetCurrentDirCallback(path)
 		}
 		info := environment.LoadProjectInfo(path, projectDir)
 		return ToolResult{Status: ResultStatusSuccess, Result: environment.FormatProjectInfo(info)}

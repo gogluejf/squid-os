@@ -21,7 +21,7 @@ type FooterData struct {
 	Streaming        bool
 	ThinkingOn       bool // thinking mode on/off (always visible)
 	ContextWindow    int  // model context window in tokens; 0 if unknown
-	WorkingDir       string
+	CurrentDir       string
 	IsGitRepo        bool
 }
 
@@ -87,10 +87,10 @@ func RenderFooter(data FooterData, width int) string {
 		thinkLabel = style.FooterValueStyle.Render("[thinking: off]")
 	}
 
-	// Working directory indicator
-	var workLabel string
-	if data.WorkingDir != "" {
-		wd := data.WorkingDir
+	// current directory indicator
+	var curDirLabel string
+	if data.CurrentDir != "" {
+		wd := data.CurrentDir
 		home, _ := os.UserHomeDir()
 		if home != "" {
 			wd = strings.Replace(wd, home, "~", 1)
@@ -99,9 +99,9 @@ func RenderFooter(data FooterData, width int) string {
 		if data.IsGitRepo {
 			gitStr = " (git)"
 		}
-		workLabel = style.FooterValueStyle.Render(fmt.Sprintf("%s%s", wd, gitStr))
+		curDirLabel = style.FooterValueStyle.Render(fmt.Sprintf("%s%s", wd, gitStr))
 	}
-	left2 := thinkLabel + style.FooterValueStyle.Render(" ") + workLabel
+	left2 := thinkLabel + style.FooterValueStyle.Render(" ") + curDirLabel
 
 	midSpace := width - lipgloss.Width(left2) - lipgloss.Width(right2)
 	if midSpace < 1 {

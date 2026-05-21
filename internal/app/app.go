@@ -58,7 +58,7 @@ type Model struct {
 	endpoints  config.EndpointsConfig
 	paths      config.Paths
 	history    config.History
-	workingDir string // current working directory, defaults to home (used for env + tools)
+	currentDir string // current working directory, defaults to home (used for env + tools)
 
 	// Prompt history navigation
 	historyIdx int // -1 = draft, 0..n = browsing history
@@ -122,7 +122,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		endpoints:     endpoints,
 		paths:         paths,
 		history:       history,
-		workingDir:    wd, // starts as current working directory
+		currentDir:    wd, // starts as current working directory
 		session:       sess,
 		historyIdx:    -1,
 		cmdPalette:    ui.NewCommandPalette(),
@@ -144,7 +144,7 @@ func (m Model) Init() tea.Cmd {
 
 	// Wire tool callbacks
 	tools.SetProjectDir(m.paths.ProjectDir)
-	tools.SetCurrentWorkingDir(m.workingDir)
+	tools.SetCurrentCurrentDir(m.currentDir)
 
 	// Initialize skill registry
 	var skillCmd tea.Cmd

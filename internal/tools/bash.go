@@ -52,8 +52,8 @@ var Bash = Tool{
 
 		// cd to working dir if set
 		runDir := ""
-		if workingDir != "" {
-			runDir = workingDir
+		if currentDir != "" {
+			runDir = currentDir
 		}
 		cmd := exec.CommandContext(ctx, "bash", "-c", cmdStr)
 		if runDir != "" {

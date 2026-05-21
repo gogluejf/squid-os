@@ -36,8 +36,8 @@ type Tool struct {
 
 // Registry holds tools by name for O(1) lookup.
 type Registry struct {
-	tools  []Tool
-	index  map[string]*Tool
+	tools []Tool
+	index map[string]*Tool
 }
 
 var registry *Registry
@@ -53,7 +53,7 @@ func init() {
 		SkillList,
 		SkillBuild,
 		ListProjects,
-		SetWorkingDir,
+		SetCurrentDir,
 	}
 	for i := range list {
 		if err := validateSchema(list[i]); err != nil {

@@ -2,8 +2,10 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"squid-os/internal/config"
@@ -109,6 +111,97 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 	}
 }
 
+// renderStyledContent styles plain-text content for system/internal/synthetic messages.
+//   - Lines starting with "## " get the role's label color (heading emphasis).
+//   - Tool names appearing as whole words get their tool's label color with
+//     the content's background preserved so no transparent hole is punched.
+//   - All non-heading lines are wrapped in contentStyle to maintain bg/fg.
+func renderStyledContent(content string, labelStyle lipgloss.Style, contentStyle lipgloss.Style) string {
+	lines := strings.Split(content, "\n")
+	var styled []string
+
+	for _, line := range lines {
+		styledLine := styleContentLine(line, labelStyle, contentStyle)
+		styled = append(styled, styledLine)
+	}
+	return strings.Join(styled, "\n")
+}
+
+// styleContentLine handles a single line: check for heading first, then tool names,
+// and always wrap in contentStyle.
+func styleContentLine(line string, labelStyle lipgloss.Style, contentStyle lipgloss.Style) string {
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(trimmed, "## ") {
+		return labelStyle.Render(line)
+	}
+
+	// Non-heading line: find tool names and style them, wrap rest in contentStyle
+	return styleToolNamesInLine(line, contentStyle)
+}
+
+// toolNamesRe matches tool names as whole words. Built once lazily.
+var (
+	toolNamesReOnce sync.Once
+	toolNamesRe     *regexp.Regexp
+)
+
+func getToolNamesRe() *regexp.Regexp {
+	toolNamesReOnce.Do(func() {
+		var parts []string
+		for _, t := range tools.GetTools() {
+			parts = append(parts, regexp.QuoteMeta(t.Name))
+		}
+		toolNamesRe = regexp.MustCompile(`\b(` + strings.Join(parts, "|") + `)\b`)
+	})
+	return toolNamesRe
+}
+
+// styleToolNamesInLine finds tool names in a raw text line and styles each
+// occurrence with its tool's label foreground + contentStyle's background,
+// wrapping non-tool segments in contentStyle.
+func styleToolNamesInLine(line string, contentStyle lipgloss.Style) string {
+	re := getToolNamesRe()
+	matches := re.FindAllStringSubmatchIndex(line, -1)
+	if len(matches) == 0 {
+		return contentStyle.Render(line)
+	}
+
+	var b strings.Builder
+	lastEnd := 0
+
+	// Get background from contentStyle
+	bg := contentStyle.GetBackground()
+
+	for _, groups := range matches {
+		matchStart := groups[0]
+		matchEnd := groups[1]
+		matchText := line[matchStart:matchEnd]
+
+		// Render text before the match
+		if matchStart > lastEnd {
+			b.WriteString(contentStyle.Render(line[lastEnd:matchStart]))
+		}
+
+		// Render the tool name with its label's foreground but content's background
+		if t := tools.GetRegistry().Get(matchText); t != nil {
+			fg := t.Style.Label.GetForeground()
+			st := lipgloss.NewStyle().Foreground(fg).Background(bg)
+			b.WriteString(st.Render(matchText))
+		} else {
+			b.WriteString(contentStyle.Render(matchText))
+		}
+
+		lastEnd = matchEnd
+	}
+
+	// Render remaining text after last match
+	if lastEnd < len(line) {
+		b.WriteString(contentStyle.Render(line[lastEnd:]))
+	}
+
+	return b.String()
+}
+
 // renderSystemMessage renders a system prompt message (role = system).
 // Expandable like thinking/tool. Label color 141, params muted, content muted.
 func renderSystemMessage(msg config.Message, width int, expanded bool) string {
@@ -126,7 +219,7 @@ func renderSystemMessage(msg config.Message, width int, expanded bool) string {
 
 	var content []string
 	if expanded && msg.Text != "" {
-		content = []string{msg.Text}
+		content = []string{renderStyledContent(msg.Text, s.Param, s.Content)}
 	}
 	return drawCanvasSpan(parts, content, s, width)
 }
@@ -149,7 +242,7 @@ func renderInternalMessage(msg config.Message, width int, expanded bool) string 
 	}
 	var content []string
 	if expanded && msg.Text != "" {
-		content = []string{msg.Text}
+		content = []string{renderStyledContent(msg.Text, s.Param, s.Content)}
 	}
 	return drawCanvasSpan(parts, content, s, width)
 }
@@ -172,7 +265,7 @@ func renderSyntheticMessage(msg config.Message, width int, expanded bool) string
 
 	var content []string
 	if expanded && msg.Text != "" {
-		content = []string{msg.Text}
+		content = []string{renderStyledContent(msg.Text, s.Param, s.Content)}
 	}
 	return drawCanvasSpan(parts, content, s, width)
 }

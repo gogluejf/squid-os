@@ -7,8 +7,11 @@ import (
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
 	"squid-os/internal/environment"
+	"squid-os/internal/style"
 	"squid-os/internal/tools"
 	"squid-os/internal/util"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // chatSession bundles the active chat: its session file and render cache.
@@ -138,12 +141,14 @@ func buildToolsEnabledMsg() config.Message {
 	}
 
 	// Build styled list with dim separators so the bg runs continuous without bleeding into the next name.
+	// Override both label and separator bg to BgApp so they blend with the internal message box.
+	appBg := lipgloss.Color(style.P.BgApp)
 	var styled strings.Builder
 	for i, t := range tl {
 		if i > 0 {
-			styled.WriteString(t.Style.Dim.Render(", "))
+			styled.WriteString(t.Style.Dim.Background(appBg).Render(", "))
 		}
-		styled.WriteString(t.Style.Label.Render(t.Name))
+		styled.WriteString(t.Style.Label.Background(appBg).Render(t.Name))
 	}
 
 	var b strings.Builder

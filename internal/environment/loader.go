@@ -78,23 +78,26 @@ func FormatEnvironment(env Environment) string {
 	}
 	b.WriteString("\n")
 
-	// [Project] section
+	// [Current Project] section
 	if env.Project != nil {
-		b.WriteString("## [Project]\n")
+		b.WriteString("## [Current Project]\n")
 		b.WriteString(fmt.Sprintf("Working Directory: %s\n", env.Project.Path))
 		b.WriteString(fmt.Sprintf("Under Project Dir: %s\n", boolOrNot(env.Project.IsUnderProjectDir)))
 		b.WriteString(fmt.Sprintf("Git Init: %s\n", boolOrNot(env.Project.IsGitRepo)))
-		if len(env.Projects) > 0 {
-			b.WriteString("Projects:\n")
-			for _, p := range env.Projects {
-				b.WriteString(fmt.Sprintf("- %s (%s)\n", p.Name, p.Path))
-			}
-		}
 		if env.Project.FileTree != "" {
 			b.WriteString("File Tree:\n")
 			b.WriteString("```\n")
 			b.WriteString(env.Project.FileTree)
 			b.WriteString("```\n")
+		}
+		b.WriteString("\n")
+	}
+
+	// [Projects] section
+	if len(env.Projects) > 0 {
+		b.WriteString("## [Projects]\n")
+		for _, p := range env.Projects {
+			b.WriteString(fmt.Sprintf("- %s (%s)\n", p.Name, p.Path))
 		}
 		b.WriteString("\n")
 	}

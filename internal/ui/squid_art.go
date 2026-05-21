@@ -44,14 +44,20 @@ const (
 	squidEmpty = " "
 )
 
-// filledStyle is the styled block for a filled pixel (electric blue, transparent bg).
-var filledStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color(style.P.SquidPixel)).
+// bgStyle paints BgApp so empty pixels and padding fill the viewport uniformly.
+var bgStyle = lipgloss.NewStyle().
+	Background(lipgloss.Color(style.P.BgApp)).
 	Width(1)
 
-// emptyStyle is the styled space for an empty pixel (transparent).
-var emptyStyle = lipgloss.NewStyle().
+// filledStyle is the styled block for a filled pixel (electric blue on BgApp).
+var filledStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color(style.P.SquidPixel)).
+	Background(lipgloss.Color(style.P.BgApp)).
 	Width(1)
+
+// emptyStyle is the styled space for an empty pixel — carries BgApp so the
+// whole viewport stays uniform when no messages are present.
+var emptyStyle = bgStyle
 
 // RenderSquidArt renders the squid pixel art horizontally centered,
 // placed below existingContentRows in the viewport.
@@ -98,17 +104,27 @@ func RenderSquidArt(width, viewportHeight, existingContentRows int) string {
 		bottomPad = 0
 	}
 
+	// Pre-rendered full-width BgApp line for padding rows
+	bgLine := bgStyle.Render(strings.Repeat(" ", width))
+
 	var b strings.Builder
 	for i := 0; i < topPad; i++ {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(bgLine)
+	}
+	if topPad > 0 {
 		b.WriteByte('\n')
 	}
 	b.WriteString(strings.Join(lines, "\n"))
 	for i := 0; i < bottomPad; i++ {
 		b.WriteByte('\n')
+		b.WriteString(bgLine)
 	}
 
-	// Two trailing spaces
-	b.WriteString("  ")
+	// Two trailing spaces with BgApp so the cursor area blends
+	b.WriteString(bgStyle.Render("  "))
 
 	return b.String()
 }

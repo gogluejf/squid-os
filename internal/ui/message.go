@@ -58,24 +58,6 @@ func renderStyledContent(content string, labelStyle lipgloss.Style, contentStyle
 	return strings.Join(styled, "\n")
 }
 
-// styleContentLine handles a single line: check for heading first, then tool names,
-// and always wrap in contentStyle. Also colorizes "- key:" patterns with label color.
-func styleContentLine(line string, labelStyle lipgloss.Style, contentStyle lipgloss.Style) string {
-	trimmed := strings.TrimSpace(line)
-	if strings.HasPrefix(trimmed, "## ") {
-		return labelStyle.Render(line)
-	}
-
-	// Colorize "- key:" patterns — if found, wraps all segments (per styled-inline-token pattern)
-	styled := styleKeyLabelsInLine(line, labelStyle, contentStyle)
-	if styled != line {
-		return styled // already fully styled, skip tool-name pass
-	}
-
-	// No key pattern: style tool names, wrap rest in contentStyle
-	return styleToolNamesInLine(line, contentStyle)
-}
-
 // renderSystemMessage renders a system prompt message (role = system).
 // Expandable like thinking/tool. Label color 141, params muted, content muted.
 func renderSystemMessage(msg config.Message, width int, expanded bool) string {

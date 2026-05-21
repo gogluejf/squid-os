@@ -11,13 +11,31 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// styleContentLine handles a single line: check for heading first, then tool names,
+// and always wrap in contentStyle. Also colorizes "- key:" patterns with label color.
+func styleContentLine(line string, labelStyle lipgloss.Style, contentStyle lipgloss.Style) string {
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(trimmed, "## ") {
+		return labelStyle.Render(line)
+	}
+
+	// Colorize "- key:" patterns — if found, wraps all segments (per styled-inline-token pattern)
+	styled := styleKeyLabelsInLine(line, contentStyle)
+	if styled != line {
+		return styled // already fully styled, skip tool-name pass
+	}
+
+	// No key pattern: style tool names, wrap rest in contentStyle
+	return styleToolNamesInLine(line, contentStyle)
+}
+
 // keyValRe matches "- key:" patterns (e.g. "- compounder:", "- sop-entities:", "- appleIIe-engine:").
 var keyValRe = regexp.MustCompile(`(-\s*\b[a-zA-Z][a-zA-Z0-9.\-]*:)`)
 
 // styleKeyLabelsInLine finds "- key:" patterns and colorizes each key with label color,
 // wrapping all other segments in contentStyle (per styled-inline-token pattern).
 // Returns the original line untouched if no pattern is found.
-func styleKeyLabelsInLine(line string, labelStyle lipgloss.Style, contentStyle lipgloss.Style) string {
+func styleKeyLabelsInLine(line string, contentStyle lipgloss.Style) string {
 	matches := keyValRe.FindAllStringSubmatchIndex(line, -1)
 	if len(matches) == 0 {
 		return line
@@ -26,7 +44,6 @@ func styleKeyLabelsInLine(line string, labelStyle lipgloss.Style, contentStyle l
 	var b strings.Builder
 	lastEnd := 0
 	bg := contentStyle.GetBackground()
-	labelFg := labelStyle.GetForeground()
 	valueFg := lipgloss.Color(style.P.TextPrimary)
 
 	for _, groups := range matches {
@@ -37,14 +54,13 @@ func styleKeyLabelsInLine(line string, labelStyle lipgloss.Style, contentStyle l
 			b.WriteString(contentStyle.Render(line[lastEnd:matchStart]))
 		}
 
-		st := lipgloss.NewStyle().Foreground(labelFg).Background(bg)
+		st := lipgloss.NewStyle().Foreground(valueFg).Background(bg)
 		b.WriteString(st.Render(line[matchStart:matchEnd]))
 		lastEnd = matchEnd
 	}
 
 	if lastEnd < len(line) {
-		st := lipgloss.NewStyle().Foreground(valueFg).Background(bg)
-		b.WriteString(st.Render(line[lastEnd:]))
+		b.WriteString(contentStyle.Render(line[lastEnd:]))
 	}
 
 	return b.String()

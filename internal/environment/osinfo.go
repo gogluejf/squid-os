@@ -36,7 +36,7 @@ func CollectOSInfo(currentDir string) OSInfo {
 // falls back to `find` for a flat listing limited to maxDepth levels.
 func GenerateTree(dir string, maxDepth int) string {
 	if runCommandSilent("tree", "--version") {
-		data, err := exec.Command("tree", "-a", "--gitignore", "-I", "node_modules", "--dirsfirst", dir).Output()
+		data, err := exec.Command("tree", "-a", "--gitignore", "-I", "node_modules|.git|.vscode|.idea|.cache|.next|.nuxt|.pytest_cache|.dart_tool|.gradle|.terraform|.parcel-cache|.eslintcache", "--dirsfirst", dir).Output()
 		if err == nil {
 			out := strings.TrimSpace(string(data))
 			lines := strings.Split(out, "\n")
@@ -48,9 +48,15 @@ func GenerateTree(dir string, maxDepth int) string {
 		}
 	}
 
-	// Fallback: find with depth limit, prune node_modules and .git
+	// Fallback: find with depth limit, prune common messy dirs
 	find := exec.Command("find", dir, "-maxdepth", strconv.Itoa(maxDepth),
 		"!", "-path", "*/node_modules/*", "!", "-path", "*/.git/*",
+		"!", "-path", "*/.vscode/*", "!", "-path", "*/.idea/*",
+		"!", "-path", "*/.cache/*", "!", "-path", "*/.next/*",
+		"!", "-path", "*/.nuxt/*", "!", "-path", "*/.pytest_cache/*",
+		"!", "-path", "*/.dart_tool/*", "!", "-path", "*/.gradle/*",
+		"!", "-path", "*/.terraform/*", "!", "-path", "*/.parcel-cache/*",
+		"!", "-path", "*/.eslintcache/*",
 		"-print")
 	data, err := find.Output()
 	if err != nil {

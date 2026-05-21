@@ -151,6 +151,19 @@ func (m *Model) updateViewportContent() {
 		b.WriteString(ui.RenderSquidArt(m.width, m.viewport.Height, existingRows))
 	}
 
+	// Ensure the content fills the entire viewport height with BgApp so
+	// no terminal background bleeds through when there is little content.
+	content := b.String()
+	// Number of lines is newlines+1 (the last line doesn't end with \n)
+	contentLines := strings.Count(content, "\n") + 1
+	bgLine := lipgloss.NewStyle().
+		Background(lipgloss.Color(style.P.BgApp)).
+		Render(strings.Repeat(" ", m.width))
+	for contentLines < m.viewport.Height {
+		b.WriteString("\n" + bgLine)
+		contentLines++
+	}
+
 	m.viewport.SetContent(b.String())
 	m.viewport.GotoBottom()
 }

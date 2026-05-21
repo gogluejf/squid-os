@@ -46,8 +46,7 @@ const (
 
 // bgStyle paints BgApp so empty pixels and padding fill the viewport uniformly.
 var bgStyle = lipgloss.NewStyle().
-	Background(lipgloss.Color(style.P.BgApp)).
-	Width(1)
+	Background(lipgloss.Color(style.P.BgApp))
 
 // filledStyle is the styled block for a filled pixel (electric blue on BgApp).
 var filledStyle = lipgloss.NewStyle().
@@ -84,7 +83,7 @@ func RenderSquidArt(width, viewportHeight, existingContentRows int) string {
 		}
 		leftPad := totalPadding / 2
 		rightPad := totalPadding - leftPad
-		padded := strings.Repeat(" ", leftPad) + line + strings.Repeat(" ", rightPad)
+		padded := bgStyle.Render(strings.Repeat(" ", leftPad)) + line + bgStyle.Render(strings.Repeat(" ", rightPad))
 		lines = append(lines, padded)
 	}
 

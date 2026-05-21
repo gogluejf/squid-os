@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"squid-os/internal/config"
-	"squid-os/internal/tools"
 	"squid-os/internal/style"
+	"squid-os/internal/tools"
 	"squid-os/internal/util"
 
 	"github.com/charmbracelet/lipgloss"

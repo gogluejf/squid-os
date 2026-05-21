@@ -45,18 +45,18 @@ func FormatEnvironment(env Environment) string {
 
 	// [OS] section
 	b.WriteString("## [OS]\n")
-	b.WriteString(fmt.Sprintf("OS: %s\n", env.OS.OS))
-	b.WriteString(fmt.Sprintf("Arch: %s\n", env.OS.Arch))
-	b.WriteString(fmt.Sprintf("Home: %s\n", env.OS.Home))
-	b.WriteString(fmt.Sprintf("Current Dir: %s\n", env.OS.CurrentDir))
-	b.WriteString(fmt.Sprintf("Git: %s\n", boolOrNot(env.OS.GitInstalled)))
-	b.WriteString(fmt.Sprintf("Tree: %s\n", boolOrNot(env.OS.TreeInstalled)))
+	b.WriteString(fmt.Sprintf("- os: %s\n", env.OS.OS))
+	b.WriteString(fmt.Sprintf("- arch: %s\n", env.OS.Arch))
+	b.WriteString(fmt.Sprintf("- home: %s\n", env.OS.Home))
+	b.WriteString(fmt.Sprintf("- current-dir: %s\n", env.OS.CurrentDir))
+	b.WriteString(fmt.Sprintf("- git: %s\n", boolOrNot(env.OS.GitInstalled)))
+	b.WriteString(fmt.Sprintf("- tree: %s\n", boolOrNot(env.OS.TreeInstalled)))
 	b.WriteString("\n")
 
 	// [Skill] section
 	b.WriteString("## [Skill]\n")
 	if len(env.Skills) == 0 {
-		b.WriteString("No skills loaded\n")
+		b.WriteString("- none: \n")
 	} else {
 		for _, s := range env.Skills {
 			b.WriteString(fmt.Sprintf("- %s: %s\n", s.Name, s.Description))
@@ -66,26 +66,26 @@ func FormatEnvironment(env Environment) string {
 
 	// [Squid-OS] section
 	b.WriteString("## [Squid-OS]\n")
-	b.WriteString(fmt.Sprintf("Skills: %s\n", env.SquidOS.SkillsDir))
-	b.WriteString(fmt.Sprintf("Logs: %s\n", env.SquidOS.LogsDir))
-	b.WriteString(fmt.Sprintf("System Prompts: %s\n", env.SquidOS.SysPromptsDir))
-	b.WriteString(fmt.Sprintf("Sessions: %s\n", env.SquidOS.SessionsDir))
-	b.WriteString(fmt.Sprintf("Project Dir: %s\n", env.SquidOS.ProjectDir))
-	b.WriteString(fmt.Sprintf("Memory Dir: %s\n", env.SquidOS.MemoryDir))
-	b.WriteString(fmt.Sprintf("Temp Folder: %s\n", env.SquidOS.TempFolder))
+	b.WriteString(fmt.Sprintf("- skills: %s\n", env.SquidOS.SkillsDir))
+	b.WriteString(fmt.Sprintf("- logs: %s\n", env.SquidOS.LogsDir))
+	b.WriteString(fmt.Sprintf("- sys-prompts: %s\n", env.SquidOS.SysPromptsDir))
+	b.WriteString(fmt.Sprintf("- sessions: %s\n", env.SquidOS.SessionsDir))
+	b.WriteString(fmt.Sprintf("- project-dir: %s\n", env.SquidOS.ProjectDir))
+	b.WriteString(fmt.Sprintf("- memory: %s\n", env.SquidOS.MemoryDir))
+	b.WriteString(fmt.Sprintf("- temp: %s\n", env.SquidOS.TempFolder))
 	if env.SquidOS.DebugEnabled {
-		b.WriteString("Debug: enabled\n")
+		b.WriteString("- debug: enabled\n")
 	}
 	b.WriteString("\n")
 
 	// [Current Project] section
 	if env.Project != nil {
 		b.WriteString("## [Current Project]\n")
-		b.WriteString(fmt.Sprintf("Working Directory: %s\n", env.Project.Path))
-		b.WriteString(fmt.Sprintf("Under Project Dir: %s\n", boolOrNot(env.Project.IsUnderProjectDir)))
-		b.WriteString(fmt.Sprintf("Git Init: %s\n", boolOrNot(env.Project.IsGitRepo)))
+		b.WriteString(fmt.Sprintf("- current-dir: %s\n", env.Project.Path))
+		b.WriteString(fmt.Sprintf("- under-project-dir: %s\n", boolOrNot(env.Project.IsUnderProjectDir)))
+		b.WriteString(fmt.Sprintf("- git-init: %s\n", boolOrNot(env.Project.IsGitRepo)))
 		if env.Project.FileTree != "" {
-			b.WriteString("File Tree:\n")
+			b.WriteString("- file-tree:\n")
 			b.WriteString("```\n")
 			b.WriteString(env.Project.FileTree)
 			b.WriteString("```\n")
@@ -97,7 +97,7 @@ func FormatEnvironment(env Environment) string {
 	if len(env.Projects) > 0 {
 		b.WriteString("## [Projects]\n")
 		for _, p := range env.Projects {
-			b.WriteString(fmt.Sprintf("- %s (%s)\n", p.Name, p.Path))
+			b.WriteString(fmt.Sprintf("- %s: %s\n", p.Name, p.Path))
 		}
 		b.WriteString("\n")
 	}

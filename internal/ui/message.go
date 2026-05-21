@@ -2,10 +2,8 @@ package ui
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"squid-os/internal/config"
@@ -24,73 +22,6 @@ func orderedParams(msg config.Message) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-// DrawCanvas renders a message box with optional title parts and body content.
-//
-//   - parts:  pre-styled title segments rendered as "↳ part0 · part1 · ..."
-//   - content: body blocks joined with "\n\n".  Can be pre-styled or plain text.
-//   - s: StyleLabel with all needed styles.
-//   - topGap:  leading blank rows before the first line.
-//   - width:   total rendered width (includes margins + padding).
-//
-// Trailing spacing: one blank row after content, then MarginBottom (bg-colored).
-func DrawCanvas(parts []string, content []string, s style.StyleLabel, topGap int, width int, marginBottom int) string {
-
-	partStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(s.Fg)).
-		Background(lipgloss.Color(s.Bg))
-
-	st := partStyle.
-		Margin(0, style.BoxMargin, marginBottom, style.BoxMargin).
-		MarginBackground(lipgloss.Color(style.P.BgApp)).
-		Padding(0, 2).
-		Width(width)
-
-	var b strings.Builder
-	for i := 0; i < topGap; i++ {
-		b.WriteByte('\n')
-	}
-
-	if len(parts) > 0 {
-		sep := partStyle.Render(" · ")
-		arrow := partStyle.Render("↳ ")
-
-		b.WriteString(arrow)
-		b.WriteString(parts[0])
-		for i := 1; i < len(parts); i++ {
-			b.WriteString(sep)
-			b.WriteString(parts[i])
-		}
-	}
-
-	if len(content) > 0 {
-		if len(parts) > 0 {
-			b.WriteString("\n\n")
-		} else if topGap < 1 {
-			b.WriteByte('\n')
-		}
-		b.WriteString(strings.Join(content, "\n\n"))
-	}
-
-	b.WriteByte('\n')
-
-	return st.Render(b.String())
-}
-
-// drawCanvasSpan is a convenience for full-canvas blocks (topGap=1, marginBottom=0).
-func drawCanvasSpan(parts []string, content []string, s style.StyleLabel, width int) string {
-	return DrawCanvas(parts, content, s, 1, width, 0)
-}
-
-// drawToolBox is a convenience for tool call blocks (topGap=2, marginBottom=1).
-func drawToolBox(parts []string, content []string, s style.StyleLabel, boxWidth int) string {
-	return DrawCanvas(parts, content, s, 2, boxWidth, 1)
-}
-
-// drawUserBox is a convenience for user message blocks (topGap=1, marginBottom=1).
-func drawUserBox(parts []string, content []string, s style.StyleLabel, boxWidth int) string {
-	return DrawCanvas(parts, content, s, 1, boxWidth, 1)
 }
 
 // RenderMessage dispatches to the correct renderer by role.
@@ -128,79 +59,21 @@ func renderStyledContent(content string, labelStyle lipgloss.Style, contentStyle
 }
 
 // styleContentLine handles a single line: check for heading first, then tool names,
-// and always wrap in contentStyle.
+// and always wrap in contentStyle. Also colorizes "- key:" patterns with label color.
 func styleContentLine(line string, labelStyle lipgloss.Style, contentStyle lipgloss.Style) string {
 	trimmed := strings.TrimSpace(line)
 	if strings.HasPrefix(trimmed, "## ") {
 		return labelStyle.Render(line)
 	}
 
-	// Non-heading line: find tool names and style them, wrap rest in contentStyle
+	// Colorize "- key:" patterns — if found, wraps all segments (per styled-inline-token pattern)
+	styled := styleKeyLabelsInLine(line, labelStyle, contentStyle)
+	if styled != line {
+		return styled // already fully styled, skip tool-name pass
+	}
+
+	// No key pattern: style tool names, wrap rest in contentStyle
 	return styleToolNamesInLine(line, contentStyle)
-}
-
-// toolNamesRe matches tool names as whole words. Built once lazily.
-var (
-	toolNamesReOnce sync.Once
-	toolNamesRe     *regexp.Regexp
-)
-
-func getToolNamesRe() *regexp.Regexp {
-	toolNamesReOnce.Do(func() {
-		var parts []string
-		for _, t := range tools.GetTools() {
-			parts = append(parts, regexp.QuoteMeta(t.Name))
-		}
-		toolNamesRe = regexp.MustCompile(`\b(` + strings.Join(parts, "|") + `)\b`)
-	})
-	return toolNamesRe
-}
-
-// styleToolNamesInLine finds tool names in a raw text line and styles each
-// occurrence with its tool's label foreground + wrapStyle's background,
-// wrapping non-tool segments in wrapStyle.
-func styleToolNamesInLine(line string, wrapStyle lipgloss.Style) string {
-	re := getToolNamesRe()
-	matches := re.FindAllStringSubmatchIndex(line, -1)
-	if len(matches) == 0 {
-		return wrapStyle.Render(line)
-	}
-
-	var b strings.Builder
-	lastEnd := 0
-
-	bg := wrapStyle.GetBackground()
-
-	for _, groups := range matches {
-		matchStart := groups[0]
-		matchEnd := groups[1]
-		matchText := line[matchStart:matchEnd]
-
-		if matchStart > lastEnd {
-			b.WriteString(wrapStyle.Render(line[lastEnd:matchStart]))
-		}
-
-		if t := tools.GetRegistry().Get(matchText); t != nil {
-			fg := t.Style.Label.GetForeground()
-			st := lipgloss.NewStyle().Foreground(fg).Background(bg)
-			b.WriteString(st.Render(matchText))
-		} else {
-			b.WriteString(wrapStyle.Render(matchText))
-		}
-
-		lastEnd = matchEnd
-	}
-
-	if lastEnd < len(line) {
-		b.WriteString(wrapStyle.Render(line[lastEnd:]))
-	}
-
-	return b.String()
-}
-
-// styleParamValue styles tool names in a param value, wrapping in paramStyle.
-func styleParamValue(value string, paramStyle lipgloss.Style) string {
-	return styleToolNamesInLine(value, paramStyle)
 }
 
 // renderSystemMessage renders a system prompt message (role = system).
@@ -529,76 +402,4 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, ex
 		b.WriteString(drawToolBox(parts, content, t.Style, boxWidth))
 	}
 	return b.String()
-}
-
-func tokenChipOutput(n int, durMs *int64) string {
-	s := "↓" + formatTokens(n)
-	if durMs != nil {
-		s += " " + formatDuration(*durMs)
-	}
-	return s
-}
-
-func tokenChipInput(n int, durMs *int64) string {
-	s := "↑" + formatTokens(n)
-	if durMs != nil {
-		s += " " + formatDuration(*durMs)
-	}
-	return s
-}
-
-// tokenChipBoth builds ·↓downN[/↑upN][ downDur[/upDur]]·
-// dur pointers: nil means "don't show", &val means "show val" (including 0).
-func tokenChipBoth(downN, upN int, downDurMs *int64, execDurMs *int64) string {
-	s := ""
-	if downN > 0 {
-		s += "↓" + formatTokens(downN)
-	}
-	if upN > 0 {
-		if downN > 0 {
-			s += ""
-		}
-		s += "↑" + formatTokens(upN)
-	}
-	showDur := downDurMs != nil || execDurMs != nil
-	if showDur {
-		s += " ↓"
-		if downDurMs != nil {
-			s += formatDuration(*downDurMs)
-		}
-		if execDurMs != nil {
-			if downDurMs != nil {
-				s += " ►"
-			}
-			s += formatDuration(*execDurMs)
-		}
-	}
-	return s
-}
-
-// formatTokens formats a token count with k/M suffix above 1000.
-func formatTokens(n int) string {
-	if n >= 1_000_000 {
-		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
-	}
-	if n >= 1000 {
-		return fmt.Sprintf("%.1fk", float64(n)/1000)
-	}
-	return fmt.Sprintf("%d", n)
-}
-
-func formatDuration(ms int64) string {
-	if ms == 0 {
-		return "<1ms"
-	}
-	if ms < 1000 {
-		return fmt.Sprintf("%dms", ms)
-	}
-	d := time.Duration(ms) * time.Millisecond
-	if d < time.Minute {
-		return fmt.Sprintf("%.1fsec", d.Seconds())
-	}
-	minutes := int(d / time.Minute)
-	seconds := int((d % time.Minute) / time.Second)
-	return fmt.Sprintf("%dm%ds", minutes, seconds)
 }

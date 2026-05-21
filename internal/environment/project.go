@@ -28,11 +28,11 @@ func LoadProjectInfo(workingDir, projectDir string) *ProjectInfo {
 // FormatProjectInfo renders ProjectInfo as a readable result string.
 func FormatProjectInfo(info *ProjectInfo) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Path: %s\n", info.Path))
-	b.WriteString(fmt.Sprintf("Git Init: %s\n", boolOrNot(info.IsGitRepo)))
-	b.WriteString(fmt.Sprintf("Under Project Dir: %s\n", boolOrNot(info.IsUnderProjectDir)))
+	b.WriteString(fmt.Sprintf("- current-dir: %s\n", info.Path))
+	b.WriteString(fmt.Sprintf("- git-init: %s\n", boolOrNot(info.IsGitRepo)))
+	b.WriteString(fmt.Sprintf("- under-project-dir: %s\n", boolOrNot(info.IsUnderProjectDir)))
 	if info.FileTree != "" {
-		b.WriteString("File Tree:\n")
+		b.WriteString("- file-tree:\n")
 		b.WriteString("```\n")
 		b.WriteString(info.FileTree)
 		b.WriteString("```\n")

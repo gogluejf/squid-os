@@ -63,7 +63,7 @@ var P = Palette{
 	SquidPixel:        "67",  // electric blue
 	TextToolParam:     "67",  // dark gray-blue for tool param display
 	TextSystemLabel:   "141", // system message label (green)
-	TextSystemParam:   "140", // darker green than label
+	TextSystemParam:   "139", // darker green than label
 	TextInternalLabel: "39",  // internal message label (teal)
 	TextInternalParam: "24",  // darker teal than label
 	TextCode:          "228", // yellow

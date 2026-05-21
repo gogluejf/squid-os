@@ -53,8 +53,8 @@ func FormatEnvironment(env Environment) string {
 	b.WriteString(fmt.Sprintf("- tree: %s\n", boolOrNot(env.OS.TreeInstalled)))
 	b.WriteString("\n")
 
-	// [Skill] section
-	b.WriteString("## [Skill]\n")
+	// [Skills] section
+	b.WriteString("## [Skills]\n")
 	if len(env.Skills) == 0 {
 		b.WriteString("- none: \n")
 	} else {

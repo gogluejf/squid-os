@@ -40,8 +40,8 @@ func DefaultAssistantPrompt() string {
 - If you cannot complete a task, say so plainly and explain why
 
 ## Skills
-- Skills are specialized workflows that auto-trigger when the task matches their domain — you don't need to ask for them explicitly.
-- Load a skill with skill_load when the task fits. Use skill_list only if you need to refresh your memory on what's available.
+- Skills are specialized workflows listed in the [Skills] section of your environment. Use only those listed — never invent or guess a skill name.
+- Load a skill with skill_load when the task clearly matches. Call skill_list if you need to refresh your memory on what's available.
 - Once loaded, follow the skill's instructions precisely — they override general behavior for that workflow.
 
 ## Current Directory

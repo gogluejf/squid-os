@@ -26,6 +26,7 @@ type Palette struct {
 	TextMuted         string // very dim (timestamps, separators)
 	TextHeading       string // markdown headings
 	TextAccent        string // links, keys, bullets (cyan)
+	SquidPixel        string // electric blue squid pixel
 	TextToolParam     string // tool display param value (lighter blue)
 	TextSystemLabel   string // system message label (green)
 	TextSystemParam   string // system message param value (darker green)
@@ -59,6 +60,7 @@ var P = Palette{
 	TextMuted:         "243",
 	TextHeading:       "255",
 	TextAccent:        "110", // cyan
+	SquidPixel:        "67",  // electric blue
 	TextToolParam:     "67",  // dark gray-blue for tool param display
 	TextSystemLabel:   "141", // system message label (green)
 	TextSystemParam:   "140", // darker green than label

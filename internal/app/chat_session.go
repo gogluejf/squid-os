@@ -308,7 +308,15 @@ func (cs *chatSession) invalidateRenderFrom(i int) {
 	}
 }
 
-// invalidateRenderAll clears the entire render cache.
+// hasUserMessage returns true if the session has at least one user message.
+func (cs *chatSession) hasUserMessage() bool {
+	for _, msg := range cs.file.Messages {
+		if msg.Role == "user" {
+			return true
+		}
+	}
+	return false
+}
 func (cs *chatSession) invalidateRenderAll() {
 	cs.renderedMessages = nil
 }

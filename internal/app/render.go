@@ -145,6 +145,12 @@ func (m *Model) updateViewportContent() {
 		}))
 	}
 
+	// Show squid art when no user messages have been sent yet
+	if !m.session.hasUserMessage() && !m.stream.active {
+		existingRows := strings.Count(b.String(), "\n")
+		b.WriteString(ui.RenderSquidArt(m.width, m.viewport.Height, existingRows))
+	}
+
 	m.viewport.SetContent(b.String())
 	m.viewport.GotoBottom()
 }

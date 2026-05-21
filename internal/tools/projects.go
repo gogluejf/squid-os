@@ -40,29 +40,6 @@ func resolvePath(p string) string {
 	return p
 }
 
-// ListProjects returns all git-initialized projects under the configured project directory.
-var ListProjects = Tool{
-	Name:        "list_projects",
-	Description: "List all projects (git repos) under the configured project directory.",
-	Style:       style.ToolStyle(),
-	Schema: []byte(`{
-	"type": "object",
-	"properties": {},
-	"required": []
-}`),
-	Execute: func(args map[string]interface{}) ToolResult {
-		entries := environment.FindProjects(projectDir)
-		if len(entries) == 0 {
-			return ToolResult{Status: ResultStatusSuccess, Result: "No projects found"}
-		}
-		var lines []string
-		for _, e := range entries {
-			lines = append(lines, fmt.Sprintf("  - %s (%s)", e.Name, e.Path))
-		}
-		return ToolResult{Status: ResultStatusSuccess, Result: "Projects:\n" + joinStrs(lines)}
-	},
-}
-
 // SetWorkingDirTool is the tool that sets the working directory and returns project info.
 var SetWorkingDirTool = Tool{
 	Name:         "set_working_dir",
@@ -95,14 +72,4 @@ var SetWorkingDirTool = Tool{
 	},
 }
 
-// joinStrs joins strings with newlines.
-func joinStrs(ss []string) string {
-	result := ""
-	for i, s := range ss {
-		if i > 0 {
-			result += "\n"
-		}
-		result += s
-	}
-	return result
-}
+

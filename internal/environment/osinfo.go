@@ -36,7 +36,7 @@ func CollectOSInfo(workingDir string) OSInfo {
 // falls back to `find` for a flat listing limited to maxDepth levels.
 func GenerateTree(dir string, maxDepth int) string {
 	if runCommandSilent("tree", "--version") {
-		cmd := exec.Command("tree", "-a", "--gitignore", "-I", "data|node_modules|.git|.vscode|.idea|.cache|.next|.nuxt|.pytest_cache|.dart_tool|.gradle|.terraform|.parcel-cache|.eslintcache", "--dirsfirst", dir)
+		cmd := exec.Command("tree", "-d", "-a", "--gitignore", "-I", "data|node_modules|.git|.vscode|.idea|.cache|.next|.nuxt|.pytest_cache|.dart_tool|.gradle|.terraform|.parcel-cache|.eslintcache", "--dirsfirst", dir)
 		data, err := cmd.CombinedOutput()
 		// tree may exit non-zero (e.g., permission errors on some dirs) but still produce output
 		if err == nil || len(data) > 0 {

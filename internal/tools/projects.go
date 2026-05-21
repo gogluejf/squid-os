@@ -42,9 +42,9 @@ func resolvePath(p string) string {
 
 // ListProjects returns all git-initialized projects under the configured project directory.
 var ListProjects = Tool{
-	Name:         "list_projects",
-	Description:  "List all projects (git repos) under the configured project directory.",
-	Style:        style.ToolStyle(),
+	Name:        "list_projects",
+	Description: "List all projects (git repos) under the configured project directory.",
+	Style:       style.ToolStyle(),
 	Schema: []byte(`{
 	"type": "object",
 	"properties": {},
@@ -66,7 +66,7 @@ var ListProjects = Tool{
 // SetWorkingDir sets the current working directory and returns project info.
 var SetWorkingDir = Tool{
 	Name:         "set_working_dir",
-	Description:  "Set the current working directory. Returns project info for the new directory.",
+	Description:  "Set the current working directory. Returns project info for the new directory. Use when user request or just switch context to other project",
 	DisplayParam: "path",
 	Style:        style.ToolStyle(),
 	Schema: []byte(`{

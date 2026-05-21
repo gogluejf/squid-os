@@ -101,7 +101,7 @@ func RenderFooter(data FooterData, width int) string {
 		}
 		workLabel = style.FooterValueStyle.Render(fmt.Sprintf("%s%s", wd, gitStr))
 	}
-	left2 := workLabel + sep + thinkLabel
+	left2 := thinkLabel + style.FooterValueStyle.Render(" ") + workLabel
 
 	midSpace := width - lipgloss.Width(left2) - lipgloss.Width(right2)
 	if midSpace < 1 {

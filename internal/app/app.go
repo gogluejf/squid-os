@@ -145,10 +145,6 @@ func (m Model) Init() tea.Cmd {
 	// Wire tool callbacks
 	tools.SetProjectDir(m.paths.ProjectDir)
 	tools.SetCurrentWorkingDir(m.workingDir)
-	tools.SetWorkingDirCallback = func(path string) {
-		(&m).workingDir = path
-		tools.SetCurrentWorkingDir(path)
-	}
 
 	// Initialize skill registry
 	var skillCmd tea.Cmd

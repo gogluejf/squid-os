@@ -56,7 +56,6 @@ func init() {
 		Open,
 		SkillLoad,
 		SkillList,
-		SkillBuild,
 		SetWorkingDirTool,
 	}
 	for i := range list {

@@ -102,7 +102,7 @@ func (r *Registry) Load(name string) (*Skill, error) {
 
 	data, err := os.ReadFile(entry.Path)
 	if err != nil {
-		return nil, fmt.Errorf("read skill %q: %w", name, err)
+		return nil, fmt.Errorf("read skill %q: %w", err)
 	}
 
 	return ParseSkillFile(entry.Path, data)
@@ -116,79 +116,6 @@ func (r *Registry) List() []SkillEntry {
 	cp := make([]SkillEntry, len(r.entries))
 	copy(cp, r.entries)
 	return cp
-}
-
-// Build creates a new skill with the given parameters.
-func (r *Registry) Build(params BuildParams) (*Skill, error) {
-	if err := ValidateName(params.Name); err != nil {
-		return nil, err
-	}
-	if err := ValidateDescription(params.Description); err != nil {
-		return nil, err
-	}
-
-	// Check for duplicates
-	if _, exists := r.index[params.Name]; exists {
-		return nil, fmt.Errorf("skill %q already exists", params.Name)
-	}
-
-	// Create folder
-	skillDir := filepath.Join(r.baseDir, params.Name)
-	if err := os.MkdirAll(skillDir, 0755); err != nil {
-		return nil, fmt.Errorf("create skill directory: %w", err)
-	}
-
-	// Write SKILL.md
-	skillPath := filepath.Join(skillDir, "SKILL.md")
-	if err := BuildSkillFile(skillPath, params); err != nil {
-		return nil, fmt.Errorf("write SKILL.md: %w", err)
-	}
-
-	// Write scripts if any
-	if len(params.Scripts) > 0 {
-		scriptsDir := filepath.Join(skillDir, "scripts")
-		if err := os.MkdirAll(scriptsDir, 0755); err != nil {
-			return nil, fmt.Errorf("create scripts directory: %w", err)
-		}
-		for fname, content := range params.Scripts {
-			if err := os.WriteFile(filepath.Join(scriptsDir, fname), []byte(content), 0755); err != nil {
-				return nil, fmt.Errorf("write script %s: %w", fname, err)
-			}
-		}
-	}
-
-	// Write references if any
-	if len(params.References) > 0 {
-		refsDir := filepath.Join(skillDir, "references")
-		if err := os.MkdirAll(refsDir, 0755); err != nil {
-			return nil, fmt.Errorf("create references directory: %w", err)
-		}
-		for fname, content := range params.References {
-			if err := os.WriteFile(filepath.Join(refsDir, fname), []byte(content), 0644); err != nil {
-				return nil, fmt.Errorf("write reference %s: %w", fname, err)
-			}
-		}
-	}
-
-	// Write assets if any
-	if len(params.Assets) > 0 {
-		assetsDir := filepath.Join(skillDir, "assets")
-		if err := os.MkdirAll(assetsDir, 0755); err != nil {
-			return nil, fmt.Errorf("create assets directory: %w", err)
-		}
-		for fname, content := range params.Assets {
-			if err := os.WriteFile(filepath.Join(assetsDir, fname), []byte(content), 0644); err != nil {
-				return nil, fmt.Errorf("write asset %s: %w", fname, err)
-			}
-		}
-	}
-
-	// Rebuild index
-	if err := r.Rescan(); err != nil {
-		return nil, err
-	}
-
-	return r.Load(params.Name)
 }
 
 // FormatSkillRegistry returns a compact text representation of the skill registry

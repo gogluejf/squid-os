@@ -41,24 +41,6 @@ type SkillEntry struct {
 	Path        string
 }
 
-// BuildParams holds all parameters for skill_build.
-type BuildParams struct {
-	Name         string
-	Description  string
-	Version      string
-	License      string
-	AllowedTools string // space-separated tool names (e.g. "bash read_file write_file")
-	Metadata     map[string]string
-	Overview     string
-	Instructions string
-	Rules        string
-	OutputFormat string
-	Examples     string
-	References   map[string]string // filename -> content
-	Assets       map[string]string // filename -> content
-	Scripts      map[string]string // filename -> content
-}
-
 // nameRe enforces: 1-64 chars, lowercase letters/digits/hyphens, no leading/trailing/consecutive hyphens.
 var nameRe = regexp.MustCompile(`^[a-z](?:[a-z0-9-]{0,62}[a-z0-9])?$`)
 

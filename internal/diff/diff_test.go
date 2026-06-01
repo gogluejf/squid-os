@@ -17,8 +17,8 @@ func TestDiffAdded(t *testing.T) {
 	if result == "" {
 		t.Fatal("expected non-empty diff")
 	}
-	if !strings.Contains(result, "+ c") {
-		t.Errorf("expected added line '+ c', got: %q", result)
+	if !strings.Contains(result, "+ -|3|c") {
+		t.Errorf("expected added line '+ -|3|c', got: %q", result)
 	}
 }
 
@@ -27,8 +27,8 @@ func TestDiffRemoved(t *testing.T) {
 	if result == "" {
 		t.Fatal("expected non-empty diff")
 	}
-	if !strings.Contains(result, "- c") {
-		t.Errorf("expected removed line '- c', got: %q", result)
+	if !strings.Contains(result, "- 3|-|c") {
+		t.Errorf("expected removed line '- 3|-|c', got: %q", result)
 	}
 }
 
@@ -37,10 +37,10 @@ func TestDiffMixed(t *testing.T) {
 	if result == "" {
 		t.Fatal("expected non-empty diff")
 	}
-	if !strings.Contains(result, "- b") {
-		t.Errorf("expected removed '- b', got: %q", result)
+	if !strings.Contains(result, "- 2|-|b") {
+		t.Errorf("expected removed '- 2|-|b', got: %q", result)
 	}
-	if !strings.Contains(result, "+ x") {
-		t.Errorf("expected added '+ x', got: %q", result)
+	if !strings.Contains(result, "+ -|2|x") {
+		t.Errorf("expected added '+ -|2|x', got: %q", result)
 	}
 }

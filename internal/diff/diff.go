@@ -12,8 +12,13 @@ func Diff(oldContent, newContent string) string {
 	if oldContent == newContent {
 		return ""
 	}
-	oldLines := strings.Split(oldContent, "\n")
-	newLines := strings.Split(newContent, "\n")
+	var oldLines, newLines []string
+	if oldContent != "" {
+		oldLines = strings.Split(oldContent, "\n")
+	}
+	if newContent != "" {
+		newLines = strings.Split(newContent, "\n")
+	}
 	// Strip trailing empty element from Split when content ends with "\n"
 	// (Go gotcha: "a\nb\n".Split("\n") → ["a", "b", ""] → index shift)
 	if len(oldLines) > 0 && oldLines[len(oldLines)-1] == "" && strings.HasSuffix(oldContent, "\n") {

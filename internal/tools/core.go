@@ -61,6 +61,12 @@ func doWriteFile(path, content string, dryRun bool) (ToolResult, error) {
 	}
 
 	if !dryRun {
+		dir := path[:strings.LastIndex(path, "/")]
+		if dir != "" {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return ToolResult{}, fmt.Errorf("failed to create directory %s: %w", dir, err)
+			}
+		}
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 			return ToolResult{}, fmt.Errorf("failed to write file %s: %w", path, err)
 		}
@@ -266,6 +272,8 @@ func BuildFileEntry(path string, trace string, oldData, newData []byte) config.F
 		checksum = util.ComputeChecksum(newData)
 		if oldData != nil {
 			diffText = diff.Diff(string(oldData), string(newData))
+		} else {
+			diffText = diff.Diff("", string(newData))
 		}
 	} else if oldData != nil {
 		// Read-only

@@ -16,11 +16,27 @@ var (
 	metricsLogger *log.Logger
 )
 
+// maxLogSize is the threshold (in bytes) for truncating log files on boot.
+const maxLogSize = 50 * 1024 * 1024 // 100 MB
+
+// truncateIfOverLimit wipes a file to zero if it exceeds maxLogSize.
+func truncateIfOverLimit(path string) {
+	info, err := os.Stat(path)
+	if err == nil && info.Size() > maxLogSize {
+		os.Truncate(path, 0)
+	}
+}
+
 // Init opens the SSE and stream metrics log files at the given paths.
+// Truncates logs on boot if they exceed the size limit (100MB).
 // Call once early in startup after paths.EnsureDirs().
 func Init(paths config.Paths) {
 	ssePath := paths.Logs + "/sse_chunks.log"
 	metricsPath := paths.Logs + "/stream_metrics.log"
+
+	// Cleanup massive logs on boot (if > 100MB)
+	truncateIfOverLimit(ssePath)
+	truncateIfOverLimit(metricsPath)
 
 	sseF, err := os.OpenFile(ssePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err == nil {

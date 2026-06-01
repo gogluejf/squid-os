@@ -41,12 +41,7 @@ var ReadFile = Tool{
 		if err != nil {
 			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to read file %s: %w", path, err)}
 		}
-		fe := config.FileEntry{
-			Path:     path,
-			Trace:    config.TraceRead,
-			Checksum: util.ComputeChecksum(data),
-			Time:     time.Now(),
-		}
+		fe := BuildFileEntry(path, config.TraceRead, data, nil)
 		return ToolResult{
 			Status: ResultStatusSuccess,
 			Result: string(data),
@@ -56,6 +51,33 @@ var ReadFile = Tool{
 }
 
 // ─── write_file ──────────────────────────────────────────────
+
+func doWriteFile(path, content string, dryRun bool) (ToolResult, error) {
+	var oldData []byte
+	existed := false
+	if _, statErr := os.Stat(path); statErr == nil {
+		existed = true
+		oldData, _ = os.ReadFile(path)
+	}
+
+	if !dryRun {
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			return ToolResult{}, fmt.Errorf("failed to write file %s: %w", path, err)
+		}
+	}
+
+	trace := config.TraceCreate
+	if existed {
+		trace = config.TraceWrite
+	}
+
+	fe := BuildFileEntry(path, trace, oldData, []byte(content))
+	return ToolResult{
+		Status: ResultStatusSuccess,
+		Result: fmt.Sprintf("file written: %s (%d bytes)", path, len(content)),
+		Files:  []config.FileEntry{fe},
+	}, nil
+}
 
 var WriteFile = Tool{
 	Name:         "write_file",
@@ -86,42 +108,76 @@ var WriteFile = Tool{
 		if !ok {
 			return ToolResult{Status: ResultStatusError, Error: "content is required and must be a string"}
 		}
-
-		existed := false
-		var diffText string
-		if _, statErr := os.Stat(path); statErr == nil {
-			existed = true
-			oldData, readErr := os.ReadFile(path)
-			if readErr == nil {
-				diffText = diff.Diff(string(oldData), content)
-			}
+		res, err := doWriteFile(path, content, false)
+		if err != nil {
+			return ToolResult{Status: ResultStatusError, Error: err.Error()}
 		}
-
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to write file %s: %w", path, err)}
+		return res
+	},
+	Preview: func(args map[string]interface{}) ToolResult {
+		path, ok := args["path"].(string)
+		if !ok || path == "" {
+			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
-
-		trace := config.TraceCreate
-		if existed {
-			trace = config.TraceWrite
+		path = resolvePath(path)
+		content, ok := args["content"].(string)
+		if !ok {
+			return ToolResult{Status: ResultStatusError, Error: "content is required and must be a string"}
 		}
-
-		fe := config.FileEntry{
-			Path:     path,
-			Trace:    trace,
-			Checksum: util.ComputeChecksum([]byte(content)),
-			Time:     time.Now(),
-			Diff:     diffText,
+		res, err := doWriteFile(path, content, true)
+		if err != nil {
+			return ToolResult{Status: ResultStatusError, Error: err.Error()}
 		}
-		return ToolResult{
-			Status: ResultStatusSuccess,
-			Result: fmt.Sprintf("file written: %s (%d bytes)", path, len(content)),
-			Files:  []config.FileEntry{fe},
-		}
+		return res
 	},
 }
 
 // ─── edit_file ───────────────────────────────────────────────
+
+func doEditFile(path, oldStr, newStr string, replaceAll bool, dryRun bool) (ToolResult, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ToolResult{}, fmt.Errorf("failed to read file %s: %w", path, err)
+	}
+	oldContent := string(data)
+
+	var newContent string
+	if replaceAll {
+		newContent, _ = replaceAllOccurrences(oldContent, oldStr, newStr)
+	} else {
+		idx := indexStr(oldContent, oldStr)
+		if idx == -1 {
+			return ToolResult{
+				Status: ResultStatusSuccess,
+				Result: "old_string not found, no changes made",
+				Files:  []config.FileEntry{BuildFileEntry(path, config.TraceRead, data, nil)},
+			}, nil
+		}
+		newContent = oldContent[:idx] + newStr + oldContent[idx+len(oldStr):]
+	}
+
+	// If nothing changed, return read-only entry
+	if oldContent == newContent {
+		return ToolResult{
+			Status: ResultStatusSuccess,
+			Result: "no changes made",
+			Files:  []config.FileEntry{BuildFileEntry(path, config.TraceRead, data, nil)},
+		}, nil
+	}
+
+	if !dryRun {
+		if err := os.WriteFile(path, []byte(newContent), 0644); err != nil {
+			return ToolResult{}, fmt.Errorf("failed to write file %s: %w", path, err)
+		}
+	}
+
+	fe := BuildFileEntry(path, config.TraceEdit, data, []byte(newContent))
+	return ToolResult{
+		Status: ResultStatusSuccess,
+		Result: fmt.Sprintf("replaced in %s", path),
+		Files:  []config.FileEntry{fe},
+	}, nil
+}
 
 var EditFile = Tool{
 	Name:         "edit_file",
@@ -166,79 +222,64 @@ var EditFile = Tool{
 		}
 		replaceAll, _ := args["replace_all"].(bool)
 
-		data, err := os.ReadFile(path)
+		res, err := doEditFile(path, oldStr, newStr, replaceAll, false)
 		if err != nil {
-			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to read file %s: %w", path, err)}
+			return ToolResult{Status: ResultStatusError, Error: err.Error()}
 		}
-		oldContent := string(data)
+		return res
+	},
+	Preview: func(args map[string]interface{}) ToolResult {
+		path, ok := args["path"].(string)
+		if !ok || path == "" {
+			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
+		}
+		path = resolvePath(path)
+		oldStr, ok := args["old_string"].(string)
+		if !ok {
+			return ToolResult{Status: ResultStatusError, Error: "old_string is required and must be a string"}
+		}
+		newStr, ok := args["new_string"].(string)
+		if !ok {
+			return ToolResult{Status: ResultStatusError, Error: "new_string is required and must be a string"}
+		}
+		replaceAll, _ := args["replace_all"].(bool)
 
-		if replaceAll {
-			newContent, count := replaceAllOccurrences(oldContent, oldStr, newStr)
-			if count == 0 {
-				fe := config.FileEntry{
-					Path:     path,
-					Trace:    config.TraceRead,
-					Checksum: util.ComputeChecksum(data),
-					Time:     time.Now(),
-				}
-				return ToolResult{
-					Status: ResultStatusSuccess,
-					Result: "old_string not found, no changes made",
-					Files:  []config.FileEntry{fe},
-				}
-			}
-			if err := os.WriteFile(path, []byte(newContent), 0644); err != nil {
-				return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to write file %s: %w", path, err)}
-			}
-			fe := config.FileEntry{
-				Path:     path,
-				Trace:    config.TraceEdit,
-				Checksum: util.ComputeChecksum([]byte(newContent)),
-				Time:     time.Now(),
-				Diff:     diff.Diff(oldContent, newContent),
-			}
-			return ToolResult{
-				Status: ResultStatusSuccess,
-				Result: fmt.Sprintf("replaced %d occurrences in %s", count, path),
-				Files:  []config.FileEntry{fe},
-			}
+		res, err := doEditFile(path, oldStr, newStr, replaceAll, true)
+		if err != nil {
+			return ToolResult{Status: ResultStatusError, Error: err.Error()}
 		}
-
-		idx := indexStr(oldContent, oldStr)
-		if idx == -1 {
-			fe := config.FileEntry{
-				Path:     path,
-				Trace:    "read",
-				Checksum: util.ComputeChecksum(data),
-				Time:     time.Now(),
-			}
-			return ToolResult{
-				Status: ResultStatusSuccess,
-				Result: "old_string not found, no changes made",
-				Files:  []config.FileEntry{fe},
-			}
-		}
-
-		newContent := oldContent[:idx] + newStr + oldContent[idx+len(oldStr):]
-		if err := os.WriteFile(path, []byte(newContent), 0644); err != nil {
-			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to write file %s: %w", path, err)}
-		}
-		fe := config.FileEntry{
-			Path:     path,
-			Trace:    "edit",
-			Checksum: util.ComputeChecksum([]byte(newContent)),
-			Time:     time.Now(),
-			Diff:     diff.Diff(oldContent, newContent),
-		}
-		return ToolResult{
-			Status: ResultStatusSuccess,
-			Result: fmt.Sprintf("replaced 1 occurrence in %s", path),
-			Files:  []config.FileEntry{fe},
-		}
+		return res
 	},
 }
 
 // ─── helpers ─────────────────────────────────────────────────
+
+// BuildFileEntry constructs a FileEntry based on old and new data.
+// If newData is nil, it's a read-only operation.
+// If oldData is nil and newData is present, it's a create operation.
+// If both are present, it computes a diff.
+func BuildFileEntry(path string, trace string, oldData, newData []byte) config.FileEntry {
+	var checksum string
+	var diffText string
+
+	if newData != nil {
+		checksum = util.ComputeChecksum(newData)
+		if oldData != nil {
+			diffText = diff.Diff(string(oldData), string(newData))
+		}
+	} else if oldData != nil {
+		// Read-only
+		checksum = util.ComputeChecksum(oldData)
+	}
+
+	return config.FileEntry{
+		Path:     path,
+		Trace:    trace,
+		Checksum: checksum,
+		Time:     time.Now(),
+		Diff:     diffText,
+	}
+}
 
 func indexStr(s, substr string) int {
 	return strings.Index(s, substr)

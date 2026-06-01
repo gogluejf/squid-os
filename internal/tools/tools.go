@@ -33,7 +33,10 @@ type Tool struct {
 	DisplayParam string
 	Style        style.StyleLabel
 	Schema       []byte
-	Execute      func(args map[string]interface{}) ToolResult
+	Execute func(args map[string]interface{}) ToolResult
+	// Preview is optional. If present, it returns the expected ToolResult (Files, Diff)
+	// without performing side-effects (writes). Used for authorization checks.
+	Preview func(args map[string]interface{}) ToolResult
 }
 
 // Registry holds tools by name for O(1) lookup.

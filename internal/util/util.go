@@ -1,6 +1,8 @@
 package util
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -49,4 +51,10 @@ func FriendlyModDate(t time.Time) string {
 // StripNewlines replaces newlines with spaces for clean single-line display.
 func StripNewlines(s string) string {
 	return strings.ReplaceAll(s, "\n", " ")
+}
+
+// ComputeChecksum returns the hex-encoded SHA256 hash of data.
+func ComputeChecksum(data []byte) string {
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])
 }

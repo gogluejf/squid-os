@@ -201,7 +201,8 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 
 // renderToolCallsInline renders one ToolBox per tool call. When expanded,
 // the box contains the label line plus arguments and result/error stacked
-// inside the same box (separated by "\n").
+// inside the same box (separated by "\n"). File tracking renders as a
+// separate green canvas span after each tool box.
 func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expanded bool, reg *tools.Registry) string {
 	var b strings.Builder
 	for _, tc := range toolCalls {
@@ -225,6 +226,12 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 			parts = append(parts, t.Style.Dim.Render(stats))
 		}
 
+		// File tracking renders as a separate green canvas span after the tool box.
+		if len(tc.Execution.Files) > 0 {
+			chip := fmt.Sprintf("%d file(s)", len(tc.Execution.Files))
+			parts = append(parts, t.Style.Dim.Render(chip))
+		}
+
 		var content []string
 		if expanded {
 			if tc.Instruction.Arguments != "" {
@@ -246,8 +253,307 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 		}
 
 		b.WriteString(drawToolBox(parts, content, t.Style, boxWidth))
+
+		// File tracking renders as a separate green canvas span after the tool box.
+		if len(tc.Execution.Files) > 0 {
+			b.WriteString(renderFilesBox(tc.Execution.Files, boxWidth))
+		}
 	}
 	return b.String()
+}
+
+// filesStyle returns a green-tinted style label for file tracking display.
+var filesStyle = func() style.StyleLabel {
+	bg := lipgloss.Color(style.P.BgApp)
+	return style.StyleLabel{
+		Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextSuccess)),
+		Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextSuccess)),
+		Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextDim)),
+		Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextSuccess)),
+		Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextError)),
+		Bg:      style.P.BgApp,
+		Fg:      style.P.TextSuccess,
+	}
+}()
+
+// renderFilesBox renders a green-tinted box showing affected files and their diffs.
+func renderFilesBox(files []config.FileEntry, boxWidth int) string {
+	s := filesStyle
+
+	var parts []string
+	parts = append(parts, s.Label.Render("files"))
+	parts = append(parts, s.Dim.Render(fmt.Sprintf("%d file(s)", len(files))))
+	header := drawCanvasSpan(parts, nil, s, boxWidth)
+
+	var b strings.Builder
+	b.WriteString(header)
+	b.WriteString("\n")
+
+	for i, f := range files {
+		checksum := f.Checksum
+		if len(checksum) > 12 {
+			checksum = checksum[:12] + "…"
+		}
+		line := fmt.Sprintf("  %s (%s) %s", f.Path, f.Trace, checksum)
+		// Apply arch pattern: style with full background width so no transparency after checksum
+		fullLineW := boxWidth + 2*style.BoxMargin
+		lineStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(style.P.TextSuccess)).
+			Background(lipgloss.Color(style.P.BgApp)).
+			Width(fullLineW).Align(lipgloss.Left)
+		b.WriteString(lineStyle.Render(line) + "\n")
+
+		if f.Diff != "" {
+			diffLines := parseDiffLines(f.Diff)
+			for _, sbLine := range renderSideBySideDiff(diffLines, boxWidth, s) {
+				b.WriteString(sbLine + "\n")
+			}
+		}
+
+		if i < len(files)-1 {
+			fullLineW := boxWidth + 2*style.BoxMargin
+			sepStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(style.P.TextDim)).
+				Background(lipgloss.Color(style.P.BgApp)).
+				Width(fullLineW).Align(lipgloss.Left)
+			b.WriteString(sepStyle.Render("────────") + "\n")
+		}
+	}
+
+	return b.String()
+}
+
+// diffLineType represents a single diff line category.
+type diffLineType int
+
+const (
+	diffContext diffLineType = iota
+	diffRemove
+	diffAdd
+)
+
+// diffLine holds a parsed diff line with real source line numbers (1-based).
+type diffLine struct {
+	typ   diffLineType
+	text  string
+	oldLn int // 1-based line number in old file (0 if not applicable)
+	newLn int // 1-based line number in new file (0 if not applicable)
+}
+
+// parseDiffLines parses unified diff text into structured diffLine objects.
+// Diff lines embed real line numbers as "OLD|NEW|text" (context), "OLD|-|text" (remove),
+// or "-|NEW|text" (add). Line numbers are 1-based.
+func parseDiffLines(diffText string) []diffLine {
+	rawLines := strings.Split(diffText, "\n")
+	var result []diffLine
+	for _, raw := range rawLines {
+		if raw == "" && len(result) > 0 {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(raw, "  - "):
+			after := strings.TrimPrefix(raw, "  - ")
+			parts := strings.SplitN(after, "|", 3)
+			if len(parts) == 3 {
+				oldNum := 0
+				fmt.Sscanf(parts[0], "%d", &oldNum)
+				result = append(result, diffLine{diffRemove, parts[2], oldNum, 0})
+			} else {
+				result = append(result, diffLine{diffRemove, after, 0, 0})
+			}
+		case strings.HasPrefix(raw, "  + "):
+			after := strings.TrimPrefix(raw, "  + ")
+			parts := strings.SplitN(after, "|", 3)
+			if len(parts) == 3 {
+				newNum := 0
+				fmt.Sscanf(parts[1], "%d", &newNum)
+				result = append(result, diffLine{diffAdd, parts[2], 0, newNum})
+			} else {
+				result = append(result, diffLine{diffAdd, after, 0, 0})
+			}
+		default:
+			text := raw
+			for i := 0; i < 4 && i < len(text) && text[i] == ' '; i++ {
+				text = text[1:]
+			}
+			parts := strings.SplitN(text, "|", 3)
+			if len(parts) == 3 {
+				oldNum, newNum := 0, 0
+				fmt.Sscanf(parts[0], "%d", &oldNum)
+				fmt.Sscanf(parts[1], "%d", &newNum)
+				result = append(result, diffLine{diffContext, parts[2], oldNum, newNum})
+			} else {
+				result = append(result, diffLine{diffContext, text, 0, 0})
+			}
+		}
+	}
+	return result
+}
+
+// sideBySidePair holds a matched left/right line for side-by-side rendering.
+// oldLn and newLn are the real 1-based source line numbers.
+type sideBySidePair struct {
+	left   string
+	leftT  diffLineType
+	right  string
+	rightT diffLineType
+	oldLn  int // 1-based line number in old file (left column)
+	newLn  int // 1-based line number in new file (right column)
+}
+
+// pairDiffLines groups diff lines into left/right pairs for side-by-side display.
+// Context lines appear on both sides. Consecutive removes and adds are paired.
+// Real source line numbers (1-based) are preserved from the diff text.
+func pairDiffLines(lines []diffLine) []sideBySidePair {
+	var pairs []sideBySidePair
+	i := 0
+	for i < len(lines) {
+		l := lines[i]
+		switch l.typ {
+		case diffContext:
+			pairs = append(pairs, sideBySidePair{l.text, diffContext, l.text, diffContext, l.oldLn, l.newLn})
+			i++
+		case diffRemove, diffAdd:
+			var removes []diffLine
+			var adds []diffLine
+			for i < len(lines) {
+				ll := lines[i]
+				if ll.typ == diffRemove {
+					removes = append(removes, ll)
+					i++
+				} else if ll.typ == diffAdd {
+					adds = append(adds, ll)
+					i++
+				} else {
+					break
+				}
+			}
+			maxLen := len(removes)
+			if len(adds) > maxLen {
+				maxLen = len(adds)
+			}
+			for j := 0; j < maxLen; j++ {
+				p := sideBySidePair{}
+				if j < len(removes) {
+					p.left = removes[j].text
+					p.leftT = diffRemove
+					p.oldLn = removes[j].oldLn
+				}
+				if j < len(adds) {
+					p.right = adds[j].text
+					p.rightT = diffAdd
+					p.newLn = adds[j].newLn
+				}
+				pairs = append(pairs, p)
+			}
+		}
+	}
+	return pairs
+}
+
+// renderSideBySideDiff renders diff lines as two columns (left=red, right=green) with a gray divider.
+// Returns one styled string per pair, without newlines.
+func renderSideBySideDiff(lines []diffLine, boxWidth int, s style.StyleLabel) []string {
+	if len(lines) == 0 {
+		return nil
+	}
+	pairs := pairDiffLines(lines)
+
+	// Match the header's full rendered width: DrawCanvas adds Margin(BoxMargin) outside Width
+	fullLineW := boxWidth + 2*style.BoxMargin - 2
+
+	// Determine line number column width based on max real line numbers
+	maxLn := 0
+	for _, p := range pairs {
+		if p.oldLn > maxLn {
+			maxLn = p.oldLn
+		}
+		if p.newLn > maxLn {
+			maxLn = p.newLn
+		}
+	}
+	numWidth := 2
+	if maxLn >= 100 {
+		numWidth = 3
+	}
+	if maxLn >= 1000 {
+		numWidth = 4
+	}
+
+	// fullLineW = numL + leftText + divider(1) + numR + rightText
+	textTotal := fullLineW - 2*numWidth - 1
+	if textTotal < 4 {
+		textTotal = 4
+	}
+	leftW := textTotal / 2
+	rightW := textTotal - leftW
+	if leftW < 2 {
+		leftW = 2
+		rightW = 2
+	}
+
+	// Styles — colors the user set
+	removeStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("174")).Background(lipgloss.Color("52")).
+		Width(leftW).Align(lipgloss.Left)
+	addStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("144")).Background(lipgloss.Color("22")).
+		Width(rightW).Align(lipgloss.Left)
+	contextStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(style.P.TextDim)).Background(lipgloss.Color(style.P.BgApp)).
+		Width(leftW).Align(lipgloss.Left)
+	contextRightStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(style.P.TextDim)).Background(lipgloss.Color(style.P.BgApp)).
+		Width(rightW).Align(lipgloss.Left)
+
+	// Line number style — right-aligned, visible bg/fg
+	numStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(style.P.TextMuted)).Background(lipgloss.Color(style.P.BgApp)).
+		Width(numWidth).Align(lipgloss.Right)
+
+	// Divider always uses context bg
+	dividerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(style.P.TextDim)).Background(lipgloss.Color(style.P.BgApp))
+
+	var result []string
+	for _, p := range pairs {
+		lText := util.Truncate(p.left, leftW-numWidth-6)
+		rText := util.Truncate(p.right, rightW-numWidth-6)
+
+		oldStr := "-"
+		if p.oldLn > 0 {
+			oldStr = fmt.Sprintf("%d", p.oldLn)
+		}
+		newStr := "-"
+		if p.newLn > 0 {
+			newStr = fmt.Sprintf("%d", p.newLn)
+		}
+		oldNum := numStyle.Render(oldStr)
+		newNum := numStyle.Render(newStr)
+
+		var leftStr string
+		switch p.leftT {
+		case diffRemove:
+			leftStr = removeStyle.Render(lText)
+		default:
+			leftStr = contextStyle.Render(lText)
+		}
+
+		var rightStr string
+		switch p.rightT {
+		case diffAdd:
+			rightStr = addStyle.Render(rText)
+		default:
+			rightStr = contextRightStyle.Render(rText)
+		}
+
+		// numL + leftText + divider + numR + rightText
+		// Wrap in bg-only style with full width so trailing space gets background (arch pattern)
+		fullLineW := boxWidth + 2*style.BoxMargin
+		bgWrapper := lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgApp)).Width(fullLineW)
+		result = append(result, bgWrapper.Render(oldNum+leftStr+dividerStyle.Render("│")+newNum+rightStr))
+	}
+	return result
 }
 
 // StreamingViewData holds all data needed to render a streaming message.

@@ -147,7 +147,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 
 	userMsg := config.Message{
 		ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-		Role:        "user",
+		Role:        config.RoleUser,
 		CreatedAt:   time.Now(),
 		Text:        text,
 		ImagePath:   m.attachedImage,
@@ -226,7 +226,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				text := "Stream aborted by user"
 				m.session.appendMsg(config.Message{
 					ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-					Role:        "synthetic",
+					Role:        config.RoleSynthetic,
 					CreatedAt:   time.Now(),
 					Text:        text,
 					Label:       "aborted",
@@ -283,7 +283,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			toolEntries := (&m).executeTools(m.stream.partialTools)
 			(&m).appendAssistantMsg(config.Message{
 				ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-				Role:               "assistant",
+				Role:               config.RoleAssistant,
 				CreatedAt:          m.stream.metrics.Start,
 				ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
 				ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
@@ -309,7 +309,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		// Normal completion: save assistant message
 		(&m).appendAssistantMsg(config.Message{
 			ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-			Role:               "assistant",
+			Role:               config.RoleAssistant,
 			CreatedAt:          m.stream.metrics.Start,
 			ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
 			ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
@@ -381,9 +381,16 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 }
 
 // executeTools runs all pending tool calls and returns ToolCallEntry slice
-// with both Instruction and Execution populated.
+// with both Instruction and Execution populated. Validates against session-level
+// file state before each write/edit, and accumulates results into session state.
 func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 	entries := make([]config.ToolCallEntry, len(partials))
+
+	if m.session.file.FileState == nil {
+		m.session.file.FileState = make(map[string]config.FileStateEntry)
+	}
+	sessionState := m.session.file.FileState
+
 	for i, p := range partials {
 		dur := p.doneAt.Sub(p.firstAt).Milliseconds()
 		entries[i] = config.ToolCallEntry{
@@ -409,13 +416,42 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 			_ = json.Unmarshal([]byte(p.args), &args)
 		}
 
+		// Validate against session-level file state for all tools except read_file.
+		// We skip read_file because if the checksum is stale, reading it is exactly how
+		// the model refreshes its understanding of the file.
+		if p.name != "read_file" {
+			if pathVal, ok := args["path"].(string); ok {
+				if err := tools.Validate(pathVal, sessionState); err != nil {
+					entries[i].Execution.Status = tools.ResultStatusError
+					entries[i].Execution.Error = fmt.Sprintf("file changed externally: %s (call read_file again before editing)", pathVal)
+					// Cancel remaining tools in this batch: they likely depend on stale state
+					for j := i + 1; j < len(partials); j++ {
+						entries[j].Execution.Status = tools.ResultStatusError
+						entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"
+					}
+					break
+				}
+			}
+		}
+
 		resultStart := time.Now()
 		result := tool.Execute(args)
 		entries[i].Execution.Status = result.Status
 		entries[i].Execution.Result = result.Result
 		entries[i].Execution.Error = result.Error
-		entries[i].Execution.Tokens = countTokensApprox(result.Result)
+
+		content := result.Result
+		if result.Status == tools.ResultStatusError {
+			content = result.Error
+		}
+
+		entries[i].Execution.Tokens = countTokensApprox(content)
+
 		entries[i].Execution.DurationMs = time.Since(resultStart).Milliseconds()
+		entries[i].Execution.Files = result.Files
+
+		// Accumulate into session state immediately
+		tools.MergeEntries(result.Files, sessionState)
 
 		if p.name == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
 			if pathVal, ok := args["path"].(string); ok {
@@ -452,22 +488,37 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 func (m *Model) appendAssistantMsg(msg config.Message) {
 	seqIdx := config.FindSequenceHeadIdx(m.session.file.Messages)
 	if seqIdx == -1 {
-		// First of sequence — init SequenceStat
+		// First of sequence — init SequenceStat + FileState
 		stat := &config.SequenceStat{
 			OutputTokens:         msg.OutputTokens,
 			DurationMs:           msg.DurationTimeMs,
 			InferenceDuractionMs: msg.TextMetrics.InferenceDuractionMs + msg.ThinkingMetrics.InferenceDuractionMs + msg.ToolCallMetrics.InferenceDuractionMs,
 			AvgTokensPerSec:      msg.TokensPerSecond,
 			InputTokens:          msg.InputTokens,
+			FileState:            make(map[string]config.FileStateEntry),
 		}
 		for _, tc := range msg.ToolCalls {
 			stat.ExecDurMs += tc.Execution.DurationMs
+			for _, fe := range tc.Execution.Files {
+				stat.FileState[fe.Path] = config.FileStateEntry{
+					Checksum:  fe.Checksum,
+					Trace:     fe.Trace,
+					UpdatedAt: fe.Time,
+				}
+			}
 		}
 		msg.SequenceStat = stat
 		m.session.appendMsg(msg)
 	} else {
-		// Subsequent message — accumulate into sequence head
+		// Subsequent message — accumulate into sequence head + merge file state
 		m.session.appendMsg(msg)
-		m.session.file.Messages[seqIdx].SequenceStat.Accumulate(msg)
+		head := m.session.file.Messages[seqIdx].SequenceStat
+		head.Accumulate(msg)
+		if head.FileState == nil {
+			head.FileState = make(map[string]config.FileStateEntry)
+		}
+		for _, tc := range msg.ToolCalls {
+			tools.MergeEntries(tc.Execution.Files, head.FileState)
+		}
 	}
 }

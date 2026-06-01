@@ -21,10 +21,11 @@ const (
 )
 
 type SessionFile struct {
-	Version     int       `json:"version"`
-	Session     Session   `json:"session"`
-	Messages    []Message `json:"messages"`
-	TotalTokens int       `json:"total_tokens"`
+	Version     int                      `json:"version"`
+	Session     Session                  `json:"session"`
+	Messages    []Message                `json:"messages"`
+	TotalTokens int                      `json:"total_tokens"`
+	FileState   map[string]FileStateEntry `json:"file_state,omitempty"`
 }
 
 type Session struct {
@@ -46,12 +47,13 @@ type ContentMetrics struct {
 }
 
 type SequenceStat struct {
-	AvgTokensPerSec      float64 `json:"avg_tok_per_sec,omitempty"`
-	OutputTokens         int     `json:"output_tokens,omitempty"`
-	DurationMs           int64   `json:"duration_ms,omitempty"`
-	InferenceDuractionMs int64   `json:"inference_duration_ms,omitempty"`
-	InputTokens          int     `json:"input_tokens,omitempty"`
-	ExecDurMs            int64   `json:"exec_dur_ms,omitempty"`
+	AvgTokensPerSec      float64              `json:"avg_tok_per_sec,omitempty"`
+	OutputTokens         int                  `json:"output_tokens,omitempty"`
+	DurationMs           int64                `json:"duration_ms,omitempty"`
+	InferenceDuractionMs int64                `json:"inference_duration_ms,omitempty"`
+	InputTokens          int                  `json:"input_tokens,omitempty"`
+	ExecDurMs            int64                `json:"exec_dur_ms,omitempty"`
+	FileState            map[string]FileStateEntry `json:"file_state,omitempty"`
 }
 
 // Add sums another SequenceStat into this one and recomputes AvgTokensPerSec.
@@ -87,9 +89,9 @@ func (ss *SequenceStat) Accumulate(msg Message) {
 // or -1 if none exists yet.
 func FindSequenceHeadIdx(msgs []Message) int {
 	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == "user" {
+		if msgs[i].Role == RoleUser {
 			for j := i + 1; j < len(msgs); j++ {
-				if msgs[j].Role == "assistant" {
+				if msgs[j].Role == RoleAssistant {
 					return j
 				}
 			}
@@ -97,6 +99,31 @@ func FindSequenceHeadIdx(msgs []Message) int {
 		}
 	}
 	return -1
+}
+
+// File tracking constants
+const (
+	TraceRead   = "read"
+	TraceWrite  = "write"
+	TraceCreate = "create"
+	TraceEdit   = "edit"
+	TraceDelete = "delete"
+)
+
+// FileEntry tracks a single file affected by a tool call.
+type FileEntry struct {
+	Path     string    `json:"path"`
+	Trace    string    `json:"trace"`
+	Checksum string    `json:"checksum"`
+	Time     time.Time `json:"time"`
+	Diff     string    `json:"diff,omitempty"`
+}
+
+// FileStateEntry tracks the last known state of a file in a session/turn.
+type FileStateEntry struct {
+	Checksum  string    `json:"checksum"`
+	Trace     string    `json:"trace"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type ToolCallEntry struct {
@@ -113,11 +140,12 @@ type ToolCallEntry struct {
 
 	// Execution: result of running the tool (empty if not yet executed)
 	Execution struct {
-		Status     string `json:"status,omitempty"`
-		Result     string `json:"result,omitempty"`
-		Error      string `json:"error,omitempty"`
-		Tokens     int    `json:"tokens,omitempty"`
-		DurationMs int64  `json:"duration_ms"`
+		Status     string      `json:"status,omitempty"`
+		Result     string      `json:"result,omitempty"`
+		Error      string      `json:"error,omitempty"`
+		Tokens     int         `json:"tokens,omitempty"`
+		DurationMs int64       `json:"duration_ms"`
+		Files      []FileEntry `json:"files,omitempty"`
 	} `json:"execution,omitempty"`
 }
 

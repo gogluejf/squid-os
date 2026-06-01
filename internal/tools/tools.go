@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"squid-os/internal/config"
 	"squid-os/internal/style"
 )
 
@@ -15,9 +16,10 @@ const (
 
 // ToolResult is returned by Execute instead of (string, error).
 type ToolResult struct {
-	Status string // ResultStatusSuccess or ResultStatusError
-	Result string // output on success
-	Error  string // error message on failure
+	Status string             // ResultStatusSuccess or ResultStatusError
+	Result string             // output on success
+	Error  string             // error message on failure
+	Files  []config.FileEntry // files touched by this tool
 }
 
 // Tool defines the contract for a callable tool.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -47,6 +48,24 @@ var Bash = Tool{
 			}
 		}
 
+		// Auto-inject sudo -S for TUI safety.
+		// In a TUI, sudo blocks indefinitely waiting for a TTY password.
+		// -S forces it to read from stdin (which we redirect to /dev/null below),
+		// causing it to fail fast rather than freeze the app.
+		if words := strings.Fields(cmdStr); len(words) > 0 && words[0] == "sudo" {
+			hasS := false
+			for _, w := range words[1:] {
+				if w == "-S" {
+					hasS = true
+					break
+				}
+			}
+			if !hasS {
+				words = append([]string{"sudo", "-S"}, words[1:]...)
+				cmdStr = strings.Join(words, " ")
+			}
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
 		defer cancel()
 
@@ -76,7 +95,15 @@ var Bash = Tool{
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
+		// Redirect stdin from /dev/null to prevent child from reading TUI PTY
+		// (blocks on sudo password, interactive prompts, etc.)
+		if null, err := os.OpenFile("/dev/null", os.O_RDONLY, 0); err == nil {
+			cmd.Stdin = null
+			defer null.Close()
+		}
+
 		err := cmd.Run()
+
 		var result strings.Builder
 		if stdout.Len() > 0 {
 			result.WriteString(stdout.String())

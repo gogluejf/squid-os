@@ -488,37 +488,23 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 func (m *Model) appendAssistantMsg(msg config.Message) {
 	seqIdx := config.FindSequenceHeadIdx(m.session.file.Messages)
 	if seqIdx == -1 {
-		// First of sequence — init SequenceStat + FileState
+		// First of sequence — init SequenceStat
 		stat := &config.SequenceStat{
 			OutputTokens:         msg.OutputTokens,
 			DurationMs:           msg.DurationTimeMs,
 			InferenceDuractionMs: msg.TextMetrics.InferenceDuractionMs + msg.ThinkingMetrics.InferenceDuractionMs + msg.ToolCallMetrics.InferenceDuractionMs,
 			AvgTokensPerSec:      msg.TokensPerSecond,
 			InputTokens:          msg.InputTokens,
-			FileState:            make(map[string]config.FileStateEntry),
 		}
 		for _, tc := range msg.ToolCalls {
 			stat.ExecDurMs += tc.Execution.DurationMs
-			for _, fe := range tc.Execution.Files {
-				stat.FileState[fe.Path] = config.FileStateEntry{
-					Checksum:  fe.Checksum,
-					Trace:     fe.Trace,
-					UpdatedAt: fe.Time,
-				}
-			}
 		}
 		msg.SequenceStat = stat
 		m.session.appendMsg(msg)
 	} else {
-		// Subsequent message — accumulate into sequence head + merge file state
+		// Subsequent message — accumulate into sequence head
 		m.session.appendMsg(msg)
 		head := m.session.file.Messages[seqIdx].SequenceStat
 		head.Accumulate(msg)
-		if head.FileState == nil {
-			head.FileState = make(map[string]config.FileStateEntry)
-		}
-		for _, tc := range msg.ToolCalls {
-			tools.MergeEntries(tc.Execution.Files, head.FileState)
-		}
 	}
 }

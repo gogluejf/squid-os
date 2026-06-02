@@ -47,13 +47,12 @@ type ContentMetrics struct {
 }
 
 type SequenceStat struct {
-	AvgTokensPerSec      float64              `json:"avg_tok_per_sec,omitempty"`
-	OutputTokens         int                  `json:"output_tokens,omitempty"`
-	DurationMs           int64                `json:"duration_ms,omitempty"`
-	InferenceDuractionMs int64                `json:"inference_duration_ms,omitempty"`
-	InputTokens          int                  `json:"input_tokens,omitempty"`
-	ExecDurMs            int64                `json:"exec_dur_ms,omitempty"`
-	FileState            map[string]FileStateEntry `json:"file_state,omitempty"`
+	AvgTokensPerSec      float64 `json:"avg_tok_per_sec,omitempty"`
+	OutputTokens         int     `json:"output_tokens,omitempty"`
+	DurationMs           int64   `json:"duration_ms,omitempty"`
+	InferenceDuractionMs int64   `json:"inference_duration_ms,omitempty"`
+	InputTokens          int     `json:"input_tokens,omitempty"`
+	ExecDurMs            int64   `json:"exec_dur_ms,omitempty"`
 }
 
 // Add sums another SequenceStat into this one and recomputes AvgTokensPerSec.

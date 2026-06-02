@@ -77,6 +77,11 @@ type Model struct {
 // New creates a new app Model. Pass a non-nil initialSession to pre-load a session,
 // and incognito=true to start in incognito mode.
 func New(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, history config.History, initialSession *config.SessionFile, incognito bool) Model {
+	// Initialize skill registry early so LoadEnvironment() picks up skills.
+	if err := skills.InitRegistry(paths.Skills); err != nil {
+		// Non-fatal: log but don't crash
+	}
+
 	wd, _ := os.Getwd()
 
 	ta := textarea.New()
@@ -159,14 +164,7 @@ func (m Model) Init() tea.Cmd {
 	tools.SetProjectDir(m.paths.ProjectDir)
 	tools.SetWorkingDir(m.workingDir)
 
-	// Initialize skill registry
-	var skillCmd tea.Cmd
-	if err := skills.InitRegistry(m.paths.Skills); err != nil {
-		// Non-fatal: log but don't crash
-		skillCmd = func() tea.Msg { return nil }
-	}
-
-	return tea.Batch(chatMode, (&m).refreshContextCmd(), skillCmd)
+	return tea.Batch(chatMode, (&m).refreshContextCmd())
 }
 
 // refreshContextCmd scans models in the background and updates the context

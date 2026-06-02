@@ -200,9 +200,8 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 }
 
 // renderToolCallsInline renders one ToolBox per tool call. When expanded,
-// the box contains the label line plus arguments and result/error stacked
-// inside the same box (separated by "\n"). File tracking renders as a
-// separate green canvas span after each tool box.
+// the box contains the label line plus arguments, result/error, and any file diffs stacked
+// inside the same box (separated by "\n").
 func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expanded bool, reg *tools.Registry) string {
 	var b strings.Builder
 	for _, tc := range toolCalls {
@@ -226,12 +225,6 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 			parts = append(parts, t.Style.Dim.Render(stats))
 		}
 
-		// File tracking renders as a separate green canvas span after the tool box.
-		if len(tc.Execution.Files) > 0 {
-			chip := fmt.Sprintf("%d file(s)", len(tc.Execution.Files))
-			parts = append(parts, t.Style.Dim.Render(chip))
-		}
-
 		var content []string
 		if expanded {
 			if tc.Instruction.Arguments != "" {
@@ -252,74 +245,40 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 			}
 		}
 
-		b.WriteString(drawToolBox(parts, content, t.Style, boxWidth))
-
-		// File tracking renders as a separate green canvas span after the tool box.
-		if len(tc.Execution.Files) > 0 {
-			b.WriteString(renderFilesBox(tc.Execution.Files, boxWidth))
+		// Diff is always visible — file name header + side-by-side diff canvas
+		if tc.Execution.Status == "success" && len(tc.Execution.Files) > 0 {
+			if d := renderToolFilesDiff(tc.Execution.Files, boxWidth, t.Style); d != "" {
+				content = append(content, d)
+			}
 		}
+
+		b.WriteString(drawToolBox(parts, content, t.Style, boxWidth))
 	}
 	return b.String()
 }
 
-// filesStyle returns a green-tinted style label for file tracking display.
-var filesStyle = func() style.StyleLabel {
-	bg := lipgloss.Color(style.P.BgApp)
-	return style.StyleLabel{
-		Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextSuccess)),
-		Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextSuccess)),
-		Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextDim)),
-		Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextSuccess)),
-		Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextError)),
-		Bg:      style.P.BgApp,
-		Fg:      style.P.TextSuccess,
-	}
-}()
-
-// renderFilesBox renders a green-tinted box showing affected files and their diffs.
-func renderFilesBox(files []config.FileEntry, boxWidth int) string {
-	s := filesStyle
-
-	var parts []string
-	parts = append(parts, s.Label.Render("files"))
-	parts = append(parts, s.Dim.Render(fmt.Sprintf("%d file(s)", len(files))))
-	header := drawCanvasSpan(parts, nil, s, boxWidth)
+// renderToolFilesDiff renders file diffs inside a tool box.
+// Just the diff directly — no file name header.
+func renderToolFilesDiff(files []config.FileEntry, boxWidth int, s style.StyleLabel) string {
+	contentW := boxWidth - 4
 
 	var b strings.Builder
-	b.WriteString(header)
-	b.WriteString("\n")
-
 	for i, f := range files {
-		checksum := f.Checksum
-		if len(checksum) > 12 {
-			checksum = checksum[:12] + "…"
-		}
-		line := fmt.Sprintf("  %s (%s) %s", f.Path, f.Trace, checksum)
-		// Apply arch pattern: style with full background width so no transparency after checksum
-		fullLineW := boxWidth + 2*style.BoxMargin
-		lineStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(style.P.TextSuccess)).
-			Background(lipgloss.Color(style.P.BgApp)).
-			Width(fullLineW).Align(lipgloss.Left)
-		b.WriteString(lineStyle.Render(line) + "\n")
-
 		if f.Diff != "" {
 			diffLines := parseDiffLines(f.Diff)
-			for _, sbLine := range renderSideBySideDiff(diffLines, boxWidth, s) {
+			for _, sbLine := range renderSideBySideDiffContent(diffLines, contentW, s) {
 				b.WriteString(sbLine + "\n")
 			}
 		}
 
 		if i < len(files)-1 {
-			fullLineW := boxWidth + 2*style.BoxMargin
 			sepStyle := lipgloss.NewStyle().
 				Foreground(lipgloss.Color(style.P.TextDim)).
-				Background(lipgloss.Color(style.P.BgApp)).
-				Width(fullLineW).Align(lipgloss.Left)
+				Background(lipgloss.Color(s.Bg)).
+				Width(contentW).Align(lipgloss.Left)
 			b.WriteString(sepStyle.Render("────────") + "\n")
 		}
 	}
-
 	return b.String()
 }
 
@@ -336,13 +295,11 @@ const (
 type diffLine struct {
 	typ   diffLineType
 	text  string
-	oldLn int // 1-based line number in old file (0 if not applicable)
-	newLn int // 1-based line number in new file (0 if not applicable)
+	oldLn int
+	newLn int
 }
 
 // parseDiffLines parses unified diff text into structured diffLine objects.
-// Diff lines embed real line numbers as "OLD|NEW|text" (context), "OLD|-|text" (remove),
-// or "-|NEW|text" (add). Line numbers are 1-based.
 func parseDiffLines(diffText string) []diffLine {
 	rawLines := strings.Split(diffText, "\n")
 	var result []diffLine
@@ -390,20 +347,15 @@ func parseDiffLines(diffText string) []diffLine {
 	return result
 }
 
-// sideBySidePair holds a matched left/right line for side-by-side rendering.
-// oldLn and newLn are the real 1-based source line numbers.
 type sideBySidePair struct {
 	left   string
 	leftT  diffLineType
 	right  string
 	rightT diffLineType
-	oldLn  int // 1-based line number in old file (left column)
-	newLn  int // 1-based line number in new file (right column)
+	oldLn  int
+	newLn  int
 }
 
-// pairDiffLines groups diff lines into left/right pairs for side-by-side display.
-// Context lines appear on both sides. Consecutive removes and adds are paired.
-// Real source line numbers (1-based) are preserved from the diff text.
 func pairDiffLines(lines []diffLine) []sideBySidePair {
 	var pairs []sideBySidePair
 	i := 0
@@ -451,16 +403,13 @@ func pairDiffLines(lines []diffLine) []sideBySidePair {
 	return pairs
 }
 
-// renderSideBySideDiff renders diff lines as two columns (left=red, right=green) with a gray divider.
-// Returns one styled string per pair, without newlines.
-func renderSideBySideDiff(lines []diffLine, boxWidth int, s style.StyleLabel) []string {
+// renderSideBySideDiffContent renders diff lines with a given content width (no margin offsets).
+// Returns one styled string per pair, without newlines. bg overrides context background.
+func renderSideBySideDiffContent(lines []diffLine, contentW int, s style.StyleLabel) []string {
 	if len(lines) == 0 {
 		return nil
 	}
 	pairs := pairDiffLines(lines)
-
-	// Match the header's full rendered width: DrawCanvas adds Margin(BoxMargin) outside Width
-	fullLineW := boxWidth + 2*style.BoxMargin - 2
 
 	// Determine line number column width based on max real line numbers
 	maxLn := 0
@@ -480,8 +429,8 @@ func renderSideBySideDiff(lines []diffLine, boxWidth int, s style.StyleLabel) []
 		numWidth = 4
 	}
 
-	// fullLineW = numL + leftText + divider(1) + numR + rightText
-	textTotal := fullLineW - 2*numWidth - 1
+	// contentW = numL + leftText + divider(1) + numR + rightText
+	textTotal := contentW - 2*numWidth - 1
 	if textTotal < 4 {
 		textTotal = 4
 	}
@@ -492,7 +441,6 @@ func renderSideBySideDiff(lines []diffLine, boxWidth int, s style.StyleLabel) []
 		rightW = 2
 	}
 
-	// Styles — colors the user set
 	removeStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("174")).Background(lipgloss.Color("52")).
 		Width(leftW).Align(lipgloss.Left)
@@ -500,20 +448,18 @@ func renderSideBySideDiff(lines []diffLine, boxWidth int, s style.StyleLabel) []
 		Foreground(lipgloss.Color("144")).Background(lipgloss.Color("22")).
 		Width(rightW).Align(lipgloss.Left)
 	contextStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(style.P.TextDim)).Background(lipgloss.Color(style.P.BgApp)).
+		Foreground(lipgloss.Color(style.P.TextDim)).Background(lipgloss.Color(s.Bg)).
 		Width(leftW).Align(lipgloss.Left)
 	contextRightStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(style.P.TextDim)).Background(lipgloss.Color(style.P.BgApp)).
+		Foreground(lipgloss.Color(style.P.TextDim)).Background(lipgloss.Color(s.Bg)).
 		Width(rightW).Align(lipgloss.Left)
 
-	// Line number style — right-aligned, visible bg/fg
 	numStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(style.P.TextMuted)).Background(lipgloss.Color(style.P.BgApp)).
+		Foreground(lipgloss.Color(style.P.TextMuted)).Background(lipgloss.Color(s.Bg)).
 		Width(numWidth).Align(lipgloss.Right)
 
-	// Divider always uses context bg
 	dividerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(style.P.TextDim)).Background(lipgloss.Color(style.P.BgApp))
+		Foreground(lipgloss.Color(style.P.TextDim)).Background(lipgloss.Color(s.Bg))
 
 	var result []string
 	for _, p := range pairs {
@@ -547,13 +493,87 @@ func renderSideBySideDiff(lines []diffLine, boxWidth int, s style.StyleLabel) []
 			rightStr = contextRightStyle.Render(rText)
 		}
 
-		// numL + leftText + divider + numR + rightText
-		// Wrap in bg-only style with full width so trailing space gets background (arch pattern)
-		fullLineW := boxWidth + 2*style.BoxMargin
-		bgWrapper := lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgApp)).Width(fullLineW)
+		// Wrap in bg-only style with full content width so trailing space gets background
+		bgWrapper := lipgloss.NewStyle().Background(lipgloss.Color(s.Bg)).Width(contentW)
 		result = append(result, bgWrapper.Render(oldNum+leftStr+dividerStyle.Render("│")+newNum+rightStr))
 	}
 	return result
+}
+
+// RenderTurnFiles renders the file summary for a completed turn (sequence).
+// Collapsed: "files · create=N · edit=N" — only non-zero trace types shown.
+// Expanded: header + file list with path + date + checksum.
+// Returns empty string if no files were modified.
+func RenderTurnFiles(stat *config.SequenceStat, width int, expanded bool) string {
+	if stat == nil || len(stat.FileState) == 0 {
+		return ""
+	}
+
+	type fe struct {
+		path  string
+		entry config.FileStateEntry
+	}
+	var entries []fe
+	counts := map[string]int{}
+	for path, e := range stat.FileState {
+		entries = append(entries, fe{path, e})
+		counts[e.Trace]++
+	}
+
+	// Order: create, write, edit, delete, read — only show non-zero
+	traceOrder := []string{config.TraceCreate, config.TraceWrite, config.TraceEdit, config.TraceDelete, config.TraceRead}
+	var nonZero []string
+	for _, t := range traceOrder {
+		if counts[t] > 0 {
+			nonZero = append(nonZero, fmt.Sprintf("%s=%d", t, counts[t]))
+		}
+	}
+	if len(nonZero) == 0 {
+		return ""
+	}
+
+	s := style.FilesStyleLabel()
+
+	// Collapsed header: "files · create=N · edit=N"
+	var parts []string
+	parts = append(parts, s.Label.Render("files touched"))
+	for _, v := range nonZero {
+		parts = append(parts, s.Param.Render(v))
+	}
+	header := drawCanvasSpan(parts, nil, s, width)
+
+	if !expanded {
+		return header
+	}
+
+	// Expanded: header + sorted file list
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].entry.UpdatedAt.Before(entries[j].entry.UpdatedAt)
+	})
+
+	var b strings.Builder
+	b.WriteString(header)
+
+	pad := style.CanvasContentWidth(width)
+	for _, e := range entries {
+		checksum := e.entry.Checksum
+		if len(checksum) > 12 {
+			checksum = checksum[:12] + "…"
+		}
+		dateStr := e.entry.UpdatedAt.Format("15:04")
+		line := fmt.Sprintf("    %s  %s  (%s)  %s", e.path, dateStr, e.entry.Trace, checksum)
+		lineStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(style.P.TextSuccess)).
+			Background(lipgloss.Color(style.P.BgApp)).
+			Width(pad).
+			Align(lipgloss.Left)
+		b.WriteString("\n" + lineStyle.Render(line))
+	}
+
+	// Closing blank line with bg
+	b.WriteString("\n" + style.StatusLineStyle.Width(width).Render(""))
+
+	return b.String()
 }
 
 // StreamingViewData holds all data needed to render a streaming message.

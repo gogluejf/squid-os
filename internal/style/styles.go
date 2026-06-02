@@ -420,3 +420,21 @@ func SkillStyle() StyleLabel {
 		}
 	})
 }
+
+var _filesLabel cachedBuilder
+
+// FilesStyleLabel returns the style for file tracking summary (green-tinted, app bg).
+func FilesStyleLabel() StyleLabel {
+	return _filesLabel.Get(func() StyleLabel {
+		bg := lipgloss.Color(P.BgApp)
+		return StyleLabel{
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSuccess)),
+			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSuccess)),
+			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSuccess)),
+			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+			Bg:      P.BgApp,
+			Fg:      P.TextSuccess,
+		}
+	})
+}

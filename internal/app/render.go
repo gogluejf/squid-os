@@ -93,6 +93,7 @@ func (m *Model) updateViewportContent() {
 
 	for i, rendered := range m.session.renderedMessages {
 		msg := m.session.file.Messages[i]
+		// Render header line + files summary for sequence heads
 		if msg.Role == "assistant" && msg.SequenceStat != nil {
 			stat := msg.SequenceStat
 			if msg.ID == liveSeqStatID {
@@ -101,8 +102,51 @@ func (m *Model) updateViewportContent() {
 				liveSeqStatID = ""
 			}
 			b.WriteString(ui.RenderAssistantHeader(msg.CreatedAt, stat, m.width))
+			b.WriteString(rendered)
+			// Check if this is the last assistant in its sequence
+			isLast := true
+			for j := i + 1; j < len(m.session.renderedMessages); j++ {
+				if m.session.file.Messages[j].Role == "assistant" {
+					isLast = false
+					break
+				}
+				if m.session.file.Messages[j].Role != "synthetic" {
+					break
+				}
+			}
+			if isLast {
+				if files := ui.RenderTurnFiles(stat, m.width, m.expanded); files != "" {
+					b.WriteString(files)
+				}
+			}
+			continue
 		}
 		b.WriteString(rendered)
+
+		// Non-head assistant messages: render them, and check if they're the last in sequence
+		if msg.Role == "assistant" {
+			isLast := true
+			for j := i + 1; j < len(m.session.renderedMessages); j++ {
+				if m.session.file.Messages[j].Role == "assistant" {
+					isLast = false
+					break
+				}
+				if m.session.file.Messages[j].Role != "synthetic" {
+					break
+				}
+			}
+			if isLast {
+				seqStat := findSequenceStat(i, m.session.file.Messages, liveSeqStatID, liveSeqStat)
+				if seqStat != nil {
+					if files := ui.RenderTurnFiles(seqStat, m.width, m.expanded); files != "" {
+						b.WriteString(files)
+					}
+				}
+				if liveSeqStat != nil && liveSeqStatID == "" {
+					liveSeqStat = nil
+				}
+			}
+		}
 	}
 
 	if m.stream.active {
@@ -217,4 +261,23 @@ func hasGit(dir string) bool {
 	}
 	_, err := os.Stat(filepath.Join(dir, ".git"))
 	return err == nil
+}
+
+// findSequenceStat returns the SequenceStat for the turn that message index `idx` belongs to.
+// Walks backward from idx to find the sequence head (first assistant msg after a user msg).
+func findSequenceStat(idx int, msgs []config.Message, liveID string, liveStat *config.SequenceStat) *config.SequenceStat {
+	for i := idx; i >= 0; i-- {
+		if msgs[i].Role == config.RoleAssistant {
+			if msgs[i].ID == liveID {
+				return liveStat
+			}
+			if msgs[i].SequenceStat != nil {
+				return msgs[i].SequenceStat
+			}
+		}
+		if msgs[i].Role == config.RoleUser {
+			break
+		}
+	}
+	return nil
 }

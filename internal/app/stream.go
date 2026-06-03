@@ -448,9 +448,13 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 		entries[i].Execution.Tokens = countTokensApprox(content)
 
 		entries[i].Execution.DurationMs = time.Since(resultStart).Milliseconds()
+		// Tag each file entry with this tool call's ID for future dedup in API context
+		for j := range result.Files {
+			result.Files[j].ToolCallID = p.id
+		}
 		entries[i].Execution.Files = result.Files
 
-		// Accumulate into session state immediately
+		// Accumulate into session state immediately (copies ToolCallID too)
 		tools.MergeEntries(result.Files, sessionState)
 
 		if p.name == "set_working_dir" && result.Status == tools.ResultStatusSuccess {

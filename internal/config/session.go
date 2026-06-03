@@ -111,18 +111,20 @@ const (
 
 // FileEntry tracks a single file affected by a tool call.
 type FileEntry struct {
-	Path     string    `json:"path"`
-	Trace    string    `json:"trace"`
-	Checksum string    `json:"checksum"`
-	Time     time.Time `json:"time"`
-	Diff     string    `json:"diff,omitempty"`
+	Path       string    `json:"path"`
+	Trace      string    `json:"trace"`
+	Checksum   string    `json:"checksum"`
+	ToolCallID string    `json:"tool_call_id,omitempty"`
+	Time       time.Time `json:"time"`
+	Diff       string    `json:"diff,omitempty"`
 }
 
 // FileStateEntry tracks the last known state of a file in a session/turn.
 type FileStateEntry struct {
-	Checksum  string    `json:"checksum"`
-	Trace     string    `json:"trace"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Checksum   string    `json:"checksum"`
+	Trace      string    `json:"trace"`
+	ToolCallID string    `json:"tool_call_id,omitempty"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 type ToolCallEntry struct {

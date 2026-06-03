@@ -39,9 +39,10 @@ func MergeEntries(entries []config.FileEntry, state map[string]config.FileStateE
 	}
 	for _, e := range entries {
 		state[e.Path] = config.FileStateEntry{
-			Checksum:  e.Checksum,
-			Trace:     e.Trace,
-			UpdatedAt: e.Time,
+			Checksum:   e.Checksum,
+			Trace:      e.Trace,
+			ToolCallID: e.ToolCallID,
+			UpdatedAt:  e.Time,
 		}
 	}
 }

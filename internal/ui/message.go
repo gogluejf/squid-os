@@ -42,6 +42,18 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 	}
 }
 
+// renderPerLine applies a lipgloss style to each line independently, joining with \n.
+// Passing multi-line input to Style.Render triggers alignTextHorizontal's pad-to-widest
+// behavior, which inflates short lines to thousands of trailing spaces when the block
+// contains one disproportionately long line; per-line rendering avoids that.
+func renderPerLine(s string, st lipgloss.Style) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = st.Render(l)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // renderStyledContent styles plain-text content for system/internal/synthetic messages.
 //   - Lines starting with "## " get the role's label color (heading emphasis).
 //   - Tool names appearing as whole words get their tool's label color with
@@ -233,14 +245,14 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 			switch tc.Execution.Status {
 			case "error":
 				if tc.Execution.Error != "" {
-					content = append(content, t.Style.Error.Render(tc.Execution.Error))
+					content = append(content, renderPerLine(tc.Execution.Error, t.Style.Error))
 				}
 				if tc.Execution.Result != "" {
 					content = append(content, "Result:\n"+tc.Execution.Result)
 				}
 			case "success":
 				if tc.Execution.Result != "" {
-					content = append(content, t.Style.Content.Render(tc.Execution.Result))
+					content = append(content, tc.Execution.Result)
 				}
 			}
 		}
@@ -628,7 +640,7 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, ex
 
 		var content []string
 		if expanded && tc.Arguments != "" {
-			content = []string{t.Style.Content.Render(tc.Arguments)}
+			content = []string{tc.Arguments}
 		}
 
 		b.WriteString(drawToolBox(parts, content, t.Style, boxWidth))

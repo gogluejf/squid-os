@@ -1,6 +1,6 @@
 # Trademark Notice
 
-"Squid OS" and the Squid OS logo are trademarks of Jean-Francois Rene.
+"Squid", "Squid OS" and the Squid OS logo are trademarks of Jean-Francois Rene.
 
 The source code in this repository is licensed under the MIT License. The MIT License does not grant permission to use the project name, logo, or branding for derivative works, products, or services without prior written permission.
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"squid-os/internal/environment"
 	"squid-os/internal/style"
@@ -31,6 +32,10 @@ func SetWorkingDir(dir string) {
 // resolvePath resolves a relative path against the working directory.
 // If the path is already absolute, returns it unchanged.
 func resolvePath(p string) string {
+	if strings.HasPrefix(p, "~") {
+		home, _ := os.UserHomeDir()
+		p = strings.Replace(p, "~", home, 1)
+	}
 	if filepath.IsAbs(p) {
 		return p
 	}

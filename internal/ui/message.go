@@ -246,7 +246,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 		var content []string
 		if expanded {
 			if tc.Instruction.Arguments != "" {
-				content = append(content, util.StripNewlines(tc.Instruction.Arguments))
+				content = append(content, formatArgs(tc.Instruction.Arguments, t.Style.Bg, boxWidth))
 			}
 			switch tc.Execution.Status {
 			case "error":

@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -75,4 +77,24 @@ func formatDuration(ms int64) string {
 	minutes := int(d / time.Minute)
 	seconds := int((d % time.Minute) / time.Second)
 	return fmt.Sprintf("%dm%ds", minutes, seconds)
+}
+
+// formatArgs renders tool arguments as formatted JSON inside a markdown code
+// block, using the markdown renderer for syntax highlighting. Falls back to
+// plain text if the arguments aren't valid JSON.
+func formatArgs(args string, bg256 string, boxWidth int) string {
+	contentW := boxWidth - 4
+
+	var parsed interface{}
+	if json.Unmarshal([]byte(args), &parsed) == nil {
+		pretty, err := json.MarshalIndent(parsed, "", "  ")
+		if err == nil {
+			trimmed := strings.TrimSpace(string(pretty))
+			mdBlock := "```json\n" + trimmed + "\n```"
+			return strings.TrimLeft(RenderMarkdownOnBg(mdBlock, bg256, contentW), "\n")
+		}
+	}
+
+	result := RenderMarkdownOnBg(args, bg256, contentW)
+	return strings.TrimLeft(result, "\n")
 }

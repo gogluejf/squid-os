@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -60,4 +61,20 @@ func StripNewlines(s string) string {
 func ComputeChecksum(data []byte) string {
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
+}
+
+// FriendlyPath replaces the user's home directory prefix with "~".
+// Idempotent — calling it on an already-shrunk path is a no-op.
+func FriendlyPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	if strings.HasPrefix(path, home) {
+		return "~" + path[len(home):]
+	}
+	return path
 }

@@ -2,11 +2,11 @@ package ui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"squid-os/internal/git"
 	"squid-os/internal/style"
+	"squid-os/internal/util"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -90,13 +90,8 @@ func RenderFooter(data FooterData, width int) string {
 	// current directory indicator
 	var curDirLabel string
 	if data.WorkingDir != "" {
-		wd := data.WorkingDir
-		home, _ := os.UserHomeDir()
-		if home != "" {
-			wd = strings.Replace(wd, home, "~", 1)
-		}
-		gitStr := git.Label(wd)
-		curDirLabel = style.FooterValueStyle.Render(fmt.Sprintf("%s%s", wd, gitStr))
+		wd := util.FriendlyPath(data.WorkingDir)
+		curDirLabel = style.FooterValueStyle.Render(fmt.Sprintf("%s%s", wd, git.Label(data.WorkingDir)))
 	}
 	left2 := thinkLabel + style.FooterValueStyle.Render(" ") + curDirLabel
 

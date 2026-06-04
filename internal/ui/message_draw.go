@@ -74,3 +74,21 @@ func drawToolBox(parts []string, content []string, s style.StyleLabel, boxWidth 
 func drawUserBox(parts []string, content []string, s style.StyleLabel, boxWidth int) string {
 	return DrawCanvas(parts, content, s, 1, boxWidth, 1)
 }
+
+// availablePartWidth returns the remaining printable width for a single header
+// line part, given the box width and the sibling parts that will render beside it.
+// It accounts for: box padding (4), the "↳ " prefix (2), and " · " separators (3 each).
+// Minimum returned value is 4 to avoid degenerate truncation.
+func availablePartWidth(boxWidth int, otherParts []string) int {
+	innerW := boxWidth - 4
+	used := 2 // ↳
+	for _, p := range otherParts {
+		used += lipgloss.Width(p)
+	}
+	used += len(otherParts) * 3 // " · " between each adjacent pair
+	avail := innerW - used
+	if avail < 4 {
+		avail = 4
+	}
+	return avail
+}

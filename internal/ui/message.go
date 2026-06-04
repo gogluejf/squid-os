@@ -221,21 +221,27 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 
 		var parts []string
 		parts = append(parts, t.Style.Label.Render(tc.Instruction.Name))
-		if display := t.DisplayValue(tc.Instruction.Arguments); display != "" {
-			parts = append(parts, t.Style.Param.Render(util.Truncate(display, 60)))
-		}
 
+		var fixedParts []string
 		switch tc.Execution.Status {
 		case "error":
-			parts = append(parts, style.CheckError.Render("[✗]"))
+			fixedParts = append(fixedParts, style.CheckError.Render("[✗]"))
 		case "success":
-			parts = append(parts, style.CheckSuccess.Render("[✓]"))
+			fixedParts = append(fixedParts, style.CheckSuccess.Render("[✓]"))
 		}
-
 		stats := tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs)
 		if stats != "" {
-			parts = append(parts, t.Style.Dim.Render(stats))
+			fixedParts = append(fixedParts, t.Style.Dim.Render(stats))
 		}
+
+		if display := t.DisplayValue(tc.Instruction.Arguments); display != "" {
+			if idx := strings.Index(display, "\n"); idx >= 0 {
+				display = display[:idx]
+			}
+			allOthers := append([]string{parts[0]}, fixedParts...)
+			parts = append(parts, t.Style.Param.Render(util.Truncate(display, availablePartWidth(boxWidth, allOthers))))
+		}
+		parts = append(parts, fixedParts...)
 
 		var content []string
 		if expanded {
@@ -630,13 +636,21 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, ex
 
 		var parts []string
 		parts = append(parts, t.Style.Label.Render(tc.Name))
-		if display := t.DisplayValue(tc.Arguments); display != "" {
-			parts = append(parts, t.Style.Param.Render(util.Truncate(display, 60)))
-		}
+
+		var fixedParts []string
 		if tc.Tokens > 0 || tc.Duration > 0 {
 			dur := tc.Duration.Milliseconds()
-			parts = append(parts, t.Style.Dim.Render(tokenChipOutput(tc.Tokens, &dur)))
+			fixedParts = append(fixedParts, t.Style.Dim.Render(tokenChipOutput(tc.Tokens, &dur)))
 		}
+
+		if display := t.DisplayValue(tc.Arguments); display != "" {
+			if idx := strings.Index(display, "\n"); idx >= 0 {
+				display = display[:idx]
+			}
+			allOthers := append([]string{parts[0]}, fixedParts...)
+			parts = append(parts, t.Style.Param.Render(util.Truncate(display, availablePartWidth(boxWidth, allOthers))))
+		}
+		parts = append(parts, fixedParts...)
 
 		var content []string
 		if expanded && tc.Arguments != "" {

@@ -10,6 +10,9 @@ import (
 
 // Truncate shortens s to maxLen characters, appending "..." if truncated.
 func Truncate(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
 	if len(s) <= maxLen {
 		return s
 	}

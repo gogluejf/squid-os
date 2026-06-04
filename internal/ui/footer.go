@@ -87,10 +87,10 @@ func RenderFooter(data FooterData, width int) string {
 		thinkLabel = style.FooterValueStyle.Render("[thinking: off]")
 	}
 
-	// current directory indicator
+	// current directory indicator with cached git shortstat
 	var curDirLabel string
 	if data.WorkingDir != "" {
-		curDirLabel = style.FooterValueStyle.Render(util.FriendlyPath(git.Decorate(data.WorkingDir)))
+		curDirLabel = style.FooterValueStyle.Render(util.FriendlyPath(git.CachedShortStat(data.WorkingDir)))
 	}
 	left2 := thinkLabel + style.FooterValueStyle.Render(" ") + curDirLabel
 

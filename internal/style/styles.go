@@ -67,8 +67,8 @@ var P = Palette{
 	TextInternalLabel: "39",  // internal message label (teal)
 	TextInternalParam: "24",  // darker teal than label
 	TextCode:          "228", // yellow
-	TextSuccess:       "22",  // dark green
-	TextError:         "124", // red
+	TextSuccess:       "114", // light green
+	TextError:         "203", // light red
 	TextWarning:       "214", // orange/yellow
 	TextInfo:          "243",
 	TextSpinner:       "205", // pink

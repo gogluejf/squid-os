@@ -1,10 +1,8 @@
 package tools
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -305,51 +303,4 @@ func replaceAllOccurrences(content, oldStr, newStr string) (string, int) {
 		count++
 	}
 	return result, count
-}
-
-// computeChecksumIfReadable attempts to read and hash a file. Returns "" on error.
-func computeChecksumIfReadable(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return util.ComputeChecksum(data)
-}
-
-// parseStraceOutput parses the output of a strace run and extracts file entries.
-func parseStraceOutput(straceFile string) []config.FileEntry {
-	data, err := os.ReadFile(straceFile)
-	if err != nil {
-		return nil
-	}
-
-	var files []config.FileEntry
-	seen := make(map[string]bool)
-
-	scanner := bufio.NewScanner(strings.NewReader(string(data)))
-	for scanner.Scan() {
-		line := scanner.Text()
-		syscall, fpath, ok := parseStraceLine(line)
-		if !ok || fpath == "" || seen[fpath] {
-			continue
-		}
-		seen[fpath] = true
-		checksum := computeChecksumIfReadable(fpath)
-		files = append(files, config.FileEntry{
-			Path:     fpath,
-			Trace:    syscall,
-			Checksum: checksum,
-			Time:     time.Now(),
-		})
-	}
-	return files
-}
-
-func parseStraceLine(line string) (syscall, path string, ok bool) {
-	re := regexp.MustCompile(`^(openat|creat|unlink|rmdir|mkdir|rename)\([^,]+,\s*"([^"]+)"`)
-	m := re.FindStringSubmatch(line)
-	if m == nil {
-		return "", "", false
-	}
-	return m[1], m[2], true
 }

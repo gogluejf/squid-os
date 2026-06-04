@@ -90,8 +90,7 @@ func RenderFooter(data FooterData, width int) string {
 	// current directory indicator
 	var curDirLabel string
 	if data.WorkingDir != "" {
-		wd := util.FriendlyPath(data.WorkingDir)
-		curDirLabel = style.FooterValueStyle.Render(fmt.Sprintf("%s%s", wd, git.Label(data.WorkingDir)))
+		curDirLabel = style.FooterValueStyle.Render(util.FriendlyPath(git.Decorate(data.WorkingDir)))
 	}
 	left2 := thinkLabel + style.FooterValueStyle.Render(" ") + curDirLabel
 

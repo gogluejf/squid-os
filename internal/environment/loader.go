@@ -73,14 +73,14 @@ func FormatEnvironment(env Environment) string {
 
 	// [Squid-OS] section
 	b.WriteString("## [Squid-OS]\n")
-	b.WriteString("- skills: " + util.FriendlyPath(env.SquidOS.SkillsDir) + git.Label(env.SquidOS.SkillsDir) + "\n")
-	b.WriteString("- logs: " + util.FriendlyPath(env.SquidOS.LogsDir) + git.Label(env.SquidOS.LogsDir) + "\n")
-	b.WriteString("- sys-prompts: " + util.FriendlyPath(env.SquidOS.SysPromptsDir) + git.Label(env.SquidOS.SysPromptsDir) + "\n")
-	b.WriteString("- sessions: " + util.FriendlyPath(env.SquidOS.SessionsDir) + git.Label(env.SquidOS.SessionsDir) + "\n")
-	b.WriteString("- project-dir: " + util.FriendlyPath(env.SquidOS.ProjectDir) + git.Label(env.SquidOS.ProjectDir) + "\n")
-	b.WriteString("- memory: " + util.FriendlyPath(env.SquidOS.MemoryDir) + git.Label(env.SquidOS.MemoryDir) + "\n")
-	b.WriteString("- temp: " + util.FriendlyPath(env.SquidOS.TempFolder) + git.Label(env.SquidOS.TempFolder) + "\n")
-	b.WriteString("- documents: " + util.FriendlyPath(env.SquidOS.DocumentsDir) + git.Label(env.SquidOS.DocumentsDir) + "\n")
+	b.WriteString("- skills: " + util.FriendlyPath(git.Decorate(env.SquidOS.SkillsDir)) + "\n")
+	b.WriteString("- logs: " + util.FriendlyPath(git.Decorate(env.SquidOS.LogsDir)) + "\n")
+	b.WriteString("- sys-prompts: " + util.FriendlyPath(git.Decorate(env.SquidOS.SysPromptsDir)) + "\n")
+	b.WriteString("- sessions: " + util.FriendlyPath(git.Decorate(env.SquidOS.SessionsDir)) + "\n")
+	b.WriteString("- project-dir: " + util.FriendlyPath(git.Decorate(env.SquidOS.ProjectDir)) + "\n")
+	b.WriteString("- memory: " + util.FriendlyPath(git.Decorate(env.SquidOS.MemoryDir)) + "\n")
+	b.WriteString("- temp: " + util.FriendlyPath(git.Decorate(env.SquidOS.TempFolder)) + "\n")
+	b.WriteString("- documents: " + util.FriendlyPath(git.Decorate(env.SquidOS.DocumentsDir)) + "\n")
 	if env.SquidOS.DebugEnabled {
 		b.WriteString("- debug: enabled\n")
 	}
@@ -89,7 +89,7 @@ func FormatEnvironment(env Environment) string {
 	// [Working Directory] section
 	if env.Project != nil {
 		b.WriteString("## [Working Directory]\n")
-		b.WriteString(fmt.Sprintf("- working-dir: %s%s\n", util.FriendlyPath(env.Project.Path), git.Label(env.Project.Path)))
+		b.WriteString(fmt.Sprintf("- working-dir: %s\n", util.FriendlyPath(git.Decorate(env.Project.Path))))
 		b.WriteString(fmt.Sprintf("- under-project-dir: %s\n", boolOrNot(env.Project.IsUnderProjectDir)))
 		if env.Project.FileTree != "" {
 			b.WriteString("- file-tree:\n")
@@ -104,7 +104,7 @@ func FormatEnvironment(env Environment) string {
 	if len(env.Projects) > 0 {
 		b.WriteString("## [Projects]\n")
 		for _, p := range env.Projects {
-			b.WriteString(fmt.Sprintf("- %s: %s%s\n", p.Name, util.FriendlyPath(p.Path), git.Label(p.Path)))
+			b.WriteString(fmt.Sprintf("- %s: %s\n", p.Name, util.FriendlyPath(git.Decorate(p.Path))))
 		}
 		b.WriteString("\n")
 	}
@@ -113,7 +113,7 @@ func FormatEnvironment(env Environment) string {
 	if len(env.Documents) > 0 {
 		b.WriteString("## [Documents]\n")
 		for _, d := range env.Documents {
-			b.WriteString(fmt.Sprintf("- %s: %s%s\n", d.Name, util.FriendlyPath(d.Path), git.Label(d.Path)))
+			b.WriteString(fmt.Sprintf("- %s: %s\n", d.Name, util.FriendlyPath(git.Decorate(d.Path))))
 		}
 		b.WriteString("\n")
 	}

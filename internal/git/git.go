@@ -14,11 +14,11 @@ func HasGit(dir string) bool {
 	return err == nil
 }
 
-// Label returns a display suffix for a directory — "(git)" if it's a repo, empty otherwise.
-// Extend this later to show "+XX -XX" diff stats, branch name, etc.
-func Label(dir string) string {
+// Decorate returns the path decorated with git info — e.g. "/path (git)" if it's a repo,
+// or the original path unchanged. Extend this later to show "+XX -XX" diff stats, branch name, etc.
+func Decorate(dir string) string {
 	if HasGit(dir) {
-		return " (git)"
+		return dir + " (git)"
 	}
-	return ""
+	return dir
 }

@@ -421,9 +421,10 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 		// the model refreshes its understanding of the file.
 		if p.name != "read_file" {
 			if pathVal, ok := args["path"].(string); ok {
-				if err := tools.Validate(pathVal, sessionState); err != nil {
+				resolvedPath := tools.ResolvePath(pathVal)
+				if err := tools.Validate(resolvedPath, sessionState); err != nil {
 					entries[i].Execution.Status = tools.ResultStatusError
-					entries[i].Execution.Error = fmt.Sprintf("file changed externally: %s (call read_file again before editing)", pathVal)
+					entries[i].Execution.Error = fmt.Sprintf("file changed externally: %s (call read_file again before editing)", resolvedPath)
 					// Cancel remaining tools in this batch: they likely depend on stale state
 					for j := i + 1; j < len(partials); j++ {
 						entries[j].Execution.Status = tools.ResultStatusError

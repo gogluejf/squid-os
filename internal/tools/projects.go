@@ -29,6 +29,12 @@ func SetWorkingDir(dir string) {
 	workingDir = dir
 }
 
+// ResolvePath resolves a relative path against the working directory.
+// Exported so callers outside the tools package can normalize paths for validation.
+func ResolvePath(p string) string {
+	return resolvePath(p)
+}
+
 // resolvePath resolves a relative path against the working directory.
 // If the path is already absolute, returns it unchanged.
 func resolvePath(p string) string {

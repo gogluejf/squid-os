@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"squid-os/internal/git"
 	"squid-os/internal/style"
 
 	"github.com/charmbracelet/lipgloss"
@@ -22,7 +23,6 @@ type FooterData struct {
 	ThinkingOn       bool // thinking mode on/off (always visible)
 	ContextWindow    int  // model context window in tokens; 0 if unknown
 	WorkingDir       string
-	IsGitRepo        bool
 }
 
 // RenderFooter renders the fixed 2-line footer bar, always exactly `width` chars wide.
@@ -95,10 +95,7 @@ func RenderFooter(data FooterData, width int) string {
 		if home != "" {
 			wd = strings.Replace(wd, home, "~", 1)
 		}
-		gitStr := ""
-		if data.IsGitRepo {
-			gitStr = " (git)"
-		}
+		gitStr := git.Label(wd)
 		curDirLabel = style.FooterValueStyle.Render(fmt.Sprintf("%s%s", wd, gitStr))
 	}
 	left2 := thinkLabel + style.FooterValueStyle.Render(" ") + curDirLabel

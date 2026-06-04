@@ -1,8 +1,6 @@
 package app
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -181,7 +179,6 @@ func (m Model) buildFooterData() ui.FooterData {
 		TokPerSec:        m.stream.metrics.AvgTokenPerSec(),
 		ContextWindow:    m.settings.ContextWindow,
 		WorkingDir:       m.workingDir,
-		IsGitRepo:        hasGit(m.workingDir),
 	}
 }
 
@@ -211,10 +208,4 @@ func (m *Model) buildLiveSeqStat() (*config.SequenceStat, string) {
 	return &base, m.session.file.Messages[seqIdx].ID
 }
 
-func hasGit(dir string) bool {
-	if dir == "" {
-		return false
-	}
-	_, err := os.Stat(filepath.Join(dir, ".git"))
-	return err == nil
-}
+

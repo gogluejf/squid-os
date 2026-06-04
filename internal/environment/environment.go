@@ -1,14 +1,20 @@
 package environment
 
+// FolderEntry represents a discovered folder with optional git info.
+type FolderEntry struct {
+	Name string
+	Path string
+}
+
 // Environment holds all sections of the sys1 environment message.
 type Environment struct {
-	OS         OSInfo
-	Skills     []SkillInfo
-	SquidOS    SquidOSInfo
-	Project    *ProjectInfo    // nil if no working dir set
-	Projects   []ProjectEntry  // all discovered projects under ProjectDir
-	Documents   []DocEntry      // all discovered document folders under DocumentsDir
-	Memory     string          // content of index.md from memory dir
+	OS        OSInfo
+	Skills    []SkillInfo
+	SquidOS   SquidOSInfo
+	Project   *ProjectInfo // nil if no working dir set
+	Projects  []FolderEntry
+	Documents []FolderEntry
+	Memory    string // content of index.md from memory dir
 }
 
 // OSInfo holds OS-level context.
@@ -44,20 +50,5 @@ type SquidOSInfo struct {
 type ProjectInfo struct {
 	Path              string // absolute path to working directory
 	IsUnderProjectDir bool   // is it under the configured ProjectDir
-	IsGitRepo         bool   // has .git
 	FileTree          string // tree output if git or under projects dir
-}
-
-// ProjectEntry represents a single discovered project.
-type ProjectEntry struct {
-	Name  string
-	Path  string
-	IsGit bool
-}
-
-// DocEntry represents a single discovered document folder.
-type DocEntry struct {
-	Name  string
-	Path  string
-	IsGit bool
 }

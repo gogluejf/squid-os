@@ -5,6 +5,13 @@ import (
 	"os"
 )
 
+// Authorization modes
+const (
+	AuthorizationAuto        = "auto"
+	AuthorizationAskOnWrite  = "ask-on-write"
+	AuthorizationAskForAll   = "ask-for-all"
+)
+
 type Settings struct {
 	Provider            string `json:"provider"`
 	Model               string `json:"model"`
@@ -16,6 +23,7 @@ type Settings struct {
 	AutoLoadLastSession bool   `json:"auto_load_last_session"`
 	ContextWindow       int    `json:"context_window"`
 	DebugEnabled        bool   `json:"debug_enabled"`
+	Authorization       string `json:"authorization"` // auto | ask-on-write | ask-for-all
 	// Domain directories — relative to home, resolved by Paths
 	ProjectDir   string `json:"project_dir"`    // default: "src"
 	MemoryDir    string `json:"memory_dir"`     // default: "memory"
@@ -32,10 +40,21 @@ func DefaultSettings() Settings {
 		AutoSave:            true,
 		AutoLoadLastSession: true,
 		DebugEnabled:        true,
-		ProjectDir:   "src",
-		MemoryDir:    "memory",
-		TempFolder:   "tmp",
-		DocumentsDir: "Documents/squid-os",
+		Authorization:       AuthorizationAuto,
+		ProjectDir:          "src",
+		MemoryDir:           "memory",
+		TempFolder:          "tmp",
+		DocumentsDir:        "Documents/squid-os",
+	}
+}
+
+// ValidateAuthorization returns the normalized authorization mode, falling back to auto.
+func (s Settings) ValidateAuthorization() string {
+	switch s.Authorization {
+	case AuthorizationAuto, AuthorizationAskOnWrite, AuthorizationAskForAll:
+		return s.Authorization
+	default:
+		return AuthorizationAuto
 	}
 }
 

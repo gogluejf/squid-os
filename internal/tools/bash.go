@@ -18,6 +18,10 @@ var Bash = Tool{
 	Description:  "Execute a shell command and return stdout/stderr. Use for git, find, grep, curl, and other CLI tools. Does not modify files. Timeout: 120 seconds.",
 	DisplayParam: "command",
 	Style:        style.ToolStyle(),
+	IsDestructive: func(args map[string]interface{}) bool {
+		d, ok := args["destructive"].(bool)
+		return ok && d
+	},
 	Schema: []byte(`{
 	"type": "object",
 	"properties": {

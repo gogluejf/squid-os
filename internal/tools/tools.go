@@ -37,6 +37,10 @@ type Tool struct {
 	// Preview is optional. If present, it returns the expected ToolResult (Files, Diff)
 	// without performing side-effects (writes). Used for authorization checks.
 	Preview func(args map[string]interface{}) ToolResult
+	// IsDestructive is optional. If present, it returns true if the tool call modifies
+	// disk state. nil means the tool is never destructive. Used by the authorization
+	// gate to determine whether user confirmation is needed.
+	IsDestructive func(args map[string]interface{}) bool
 }
 
 // Registry holds tools by name for O(1) lookup.

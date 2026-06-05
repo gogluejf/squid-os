@@ -419,7 +419,7 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 		// Validate against session-level file state for all tools except read_file.
 		// We skip read_file because if the checksum is stale, reading it is exactly how
 		// the model refreshes its understanding of the file.
-		if p.name != "read_file" {
+		if p.name != "read_file" && p.name != "open" {
 			if pathVal, ok := args["path"].(string); ok {
 				resolvedPath := tools.ResolvePath(pathVal)
 				if err := tools.Validate(resolvedPath, sessionState); err != nil {

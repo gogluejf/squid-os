@@ -424,7 +424,7 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 				resolvedPath := tools.ResolvePath(pathVal)
 				if err := tools.Validate(resolvedPath, sessionState); err != nil {
 					entries[i].Execution.Status = tools.ResultStatusError
-					entries[i].Execution.Error = fmt.Sprintf("file changed externally: %s (call read_file again before editing)", resolvedPath)
+					entries[i].Execution.Error = fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again with read_file and retry your command.", resolvedPath)
 					// Cancel remaining tools in this batch: they likely depend on stale state
 					for j := i + 1; j < len(partials); j++ {
 						entries[j].Execution.Status = tools.ResultStatusError

@@ -28,14 +28,23 @@ var Bash = Tool{
 		"timeout": {
 			"type": "number",
 			"description": "Timeout in milliseconds (default 120000)"
+		},
+		"destructive": {
+			"type": "boolean",
+			"description": "Must be true if the command modifies files, deletes data, or changes system state (rm, mv, cp, mkdir, chmod, sed -i, apt-get, pip install, git commit). Must be false for read-only commands (cat, ls, grep, find, git status, git diff, wc, head, tail, df, ps, curl GET). This field is required."
 		}
 	},
-	"required": ["command"]
+	"required": ["command", "destructive"]
 }`),
 	Execute: func(args map[string]interface{}) ToolResult {
 		cmdStr, ok := args["command"].(string)
 		if !ok || cmdStr == "" {
 			return ToolResult{Status: ResultStatusError, Error: "command is required and must be a string"}
+		}
+
+		_, ok = args["destructive"].(bool)
+		if !ok {
+			return ToolResult{Status: ResultStatusError, Error: "destructive is required and must be a boolean"}
 		}
 
 		timeoutMs := 120000

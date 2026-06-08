@@ -7,9 +7,10 @@ import (
 
 // Authorization modes
 const (
-	AuthorizationAuto        = "auto"
-	AuthorizationAskOnWrite  = "ask-on-write"
-	AuthorizationAskForAll   = "ask-for-all"
+	AuthorizationAuto         = "auto"
+	AuthorizationAskOnWrite   = "ask-on-write"
+	AuthorizationAskForAll    = "ask-for-all"
+	AuthorizationPending      = "pending" // execution status marker for tools awaiting user authorization
 )
 
 type Settings struct {

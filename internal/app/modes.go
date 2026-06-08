@@ -12,6 +12,7 @@ const (
 	ModeSessionPicker             // Session list for /load
 	ModeSavePrompt                // Save session name input
 	ModeHistorySearch             // Reverse search through prompt history
+	ModeAuthorize                 // Awaiting user authorization for tool execution
 )
 
 func (m Mode) String() string {
@@ -32,6 +33,8 @@ func (m Mode) String() string {
 		return "save-prompt"
 	case ModeHistorySearch:
 		return "history-search"
+	case ModeAuthorize:
+		return "authorize"
 	default:
 		return "unknown"
 	}

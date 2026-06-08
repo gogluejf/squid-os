@@ -53,19 +53,22 @@ func (ss *streamState) toStreamingToolCalls() []ui.StreamingToolCall {
 
 // streamState bundles all transient fields for an active inference stream.
 type streamState struct {
-	text          string
-	thinking      string
-	inThinking    bool
-	active        bool
-	markdown      string // glamour cache for completed lines
-	markdownEnd   int
-	metrics       StreamMetrics
-	cancelFn      context.CancelFunc
-	ch            <-chan chat.StreamEvent
-	userCancelled bool
-	partialTools  []partialTool // live state during arg streaming, indexed by tool call index
-	lastToolIdx   int           // index of the last tool that received a delta (-1 if none)
-	tokenCount    int           // counter for throttling viewport updates
+	text             string
+	thinking         string
+	inThinking       bool
+	active           bool
+	markdown         string // glamour cache for completed lines
+	markdownEnd      int
+	metrics          StreamMetrics
+	cancelFn         context.CancelFunc
+	ch               <-chan chat.StreamEvent
+	userCancelled    bool
+	partialTools     []partialTool          // live state during arg streaming, indexed by tool call index
+	lastToolIdx      int                    // index of the last tool that received a delta (-1 if none)
+	tokenCount       int                    // counter for throttling viewport updates
+	authorizationCtx *AuthorizationContext  // non-nil when paused awaiting auth
+	pendingToolIndex int                    // index into partialTools being authorized
+	pendingEntries   []config.ToolCallEntry // entries being worked on during auth
 }
 
 // AddTextChunk appends text and updates metrics.
@@ -100,6 +103,22 @@ func (ss *streamState) reset() {
 	ss.partialTools = nil
 	ss.lastToolIdx = -1
 	ss.tokenCount = 0
+	ss.authorizationCtx = nil
+	ss.pendingToolIndex = -1
+	ss.pendingEntries = nil
+}
+
+// needsAuthorization checks the current authorization mode and tool destructiveness
+// to determine if user confirmation is required before execution.
+func (m Model) needsAuthorization(tool *tools.Tool, args map[string]interface{}) bool {
+	switch m.settings.ValidateAuthorization() {
+	case config.AuthorizationAskForAll:
+		return true
+	case config.AuthorizationAskOnWrite:
+		return tool != nil && tool.IsDestructive != nil && tool.IsDestructive(args)
+	default: // auto
+		return false
+	}
 }
 
 // setStreamMode initializes the stream state for a new request.
@@ -109,6 +128,34 @@ func (m *Model) setStreamMode() {
 	m.stream.metrics.Start = time.Now()
 	m.mode = ModeStreaming
 	m.textarea.Placeholder = "ctrl+c to cancel..."
+}
+
+// setAuthMode transitions to ModeAuthorize, pausing the stream and populating the auth prompt.
+func (m *Model) setAuthMode() {
+	m.mode = ModeAuthorize
+	m.stream.active = false
+	ctx := m.stream.authorizationCtx
+
+	// Get diff preview if tool supports it
+	var previewDiff string
+	if ctx != nil {
+		tool := m.toolReg.Get(ctx.ToolName)
+		if tool != nil && tool.Preview != nil {
+			result := tool.Preview(ctx.Args)
+			if result.Status == tools.ResultStatusSuccess && len(result.Files) > 0 {
+				previewDiff = result.Files[0].Diff // Assuming the function only change one file, so we take the first diff available
+			}
+		}
+	}
+
+	m.authPrompt = ui.AuthorizationPrompt{
+		ToolName:      ctx.ToolName,
+		DisplayValue:  ctx.DisplayValue,
+		IsDestructive: ctx.IsDestructive,
+		PreviewDiff:   previewDiff,
+		Selection:     0,
+		Width:         m.width,
+	}
 }
 
 // setChatMode sets mode to ModeChat, resets the textarea placeholder, and recomputes layout.
@@ -221,8 +268,6 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 					m.attachedImage = image
 				}
 			} else {
-				// Push a synthetic message only if the user message was NOT truncated
-				// (i.e., we cancelled mid-tool-loop, user message is still in history).
 				text := "Stream aborted by user"
 				m.session.appendMsg(config.Message{
 					ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
@@ -244,8 +289,6 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		}
 
 		// Detect silent failure: stream ended with no content and no stop reason.
-		// This happens when the server drops the connection (VRAM OOM, etc.) without
-		// sending an error or proper finish_reason. Treat it as an error.
 		hasContent := m.stream.text != "" || m.stream.thinking != "" || len(m.stream.partialTools) > 0
 		if !hasContent && event.StopReason == "" {
 			(&m).setNotification(ui.NotificationError, "stream ended unexpectedly — server may be overloaded")
@@ -275,35 +318,12 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmd, autoSaveCmd)
 		}
 
-		//need to be processed before execution of tools, because tool calls can update the stream state (e.g. end thinking)
 		avgTokenPerSec := m.stream.metrics.AvgTokenPerSec()
 
-		// Tool calls: save assistant msg, execute tools synchronously, resume streaming
+		// Tool calls: start the single execution loop
 		if event.StopReason == "tool_calls" && len(m.stream.partialTools) > 0 {
-			toolEntries := (&m).executeTools(m.stream.partialTools)
-			(&m).appendAssistantMsg(config.Message{
-				ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-				Role:               config.RoleAssistant,
-				CreatedAt:          m.stream.metrics.Start,
-				ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
-				ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
-				Text:               strings.TrimLeft(m.stream.text, "\n"),
-				TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
-				ToolCalls:          toolEntries,
-				ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), InferenceDuractionMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
-				TokensPerSecond:    avgTokenPerSec,
-				OutputTokens:       m.stream.metrics.TotalOutputTokens(),
-				InputTokens:        config.TotalExecutionTokens(toolEntries),
-				DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
-				TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
-				StopReason:         event.StopReason,
-			})
-
-			m.stream.reset()
-			m.updateViewportContent()
-
-			// Resume streaming with tool results in history
-			return (&m).startStream()
+			_ = avgTokenPerSec
+			return (&m).resumeToolExecution(nil, 0)
 		}
 
 		// Normal completion: save assistant message
@@ -362,7 +382,6 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 				m.stream.partialTools[i].typeStr = tc.Type
 			}
 		}
-
 	}
 	if event.Text != "" {
 		m.stream.AddTextChunk(event.Text)
@@ -372,7 +391,6 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	}
 
 	m.stream.inThinking = event.InThinking
-	// Throttle viewport updates: render every 5 tokens to avoid SetContent() spam
 	m.stream.tokenCount++
 	if m.stream.tokenCount%3 == 0 {
 		m.updateViewportContent()
@@ -380,29 +398,54 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	return m, waitForStreamEvent(m.stream.ch)
 }
 
-// executeTools runs all pending tool calls and returns ToolCallEntry slice
-// with both Instruction and Execution populated. Validates against session-level
-// file state before each write/edit, and accumulates results into session state.
-func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
-	entries := make([]config.ToolCallEntry, len(partials))
+// buildInstructionEntry creates a ToolCallEntry with Instruction populated, Execution empty.
+func buildInstructionEntry(p partialTool) config.ToolCallEntry {
+	dur := p.doneAt.Sub(p.firstAt).Milliseconds()
+	return config.ToolCallEntry{
+		ID:   p.id,
+		Type: p.typeStr,
+		Instruction: struct {
+			Name       string `json:"name"`
+			Arguments  string `json:"arguments"`
+			Tokens     int    `json:"tokens,omitempty"`
+			DurationMs int64  `json:"duration_ms,omitempty"`
+		}{Name: p.name, Arguments: p.args, Tokens: countTokensApprox(p.args), DurationMs: dur},
+	}
+}
+
+// resumeToolExecution runs the single tool-execution loop from startIndex.
+// On first call from handleStreamEvent, entries is nil (will be built).
+// On resume after auth response, entries is pendingEntries and startIndex is pendingToolIndex.
+//
+// Single loop, three gates:
+//  1. Apply collected auth result (from resume after user response)
+//  2. Auth gate — pause and yield if confirmation needed
+//  3. File change gate — cancel remaining if file was modified externally
+//
+// Then execute. After the loop: append assistant message, optionally append user message, start stream.
+func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex int) (tea.Model, tea.Cmd) {
+	partials := m.stream.partialTools
 
 	if m.session.file.FileState == nil {
 		m.session.file.FileState = make(map[string]config.FileStateEntry)
 	}
 	sessionState := m.session.file.FileState
 
-	for i, p := range partials {
-		dur := p.doneAt.Sub(p.firstAt).Milliseconds()
-		entries[i] = config.ToolCallEntry{
-			ID:   p.id,
-			Type: p.typeStr,
-			Instruction: struct {
-				Name       string `json:"name"`
-				Arguments  string `json:"arguments"`
-				Tokens     int    `json:"tokens,omitempty"`
-				DurationMs int64  `json:"duration_ms,omitempty"`
-			}{Name: p.name, Arguments: p.args, Tokens: countTokensApprox(p.args), DurationMs: dur},
+	// First call: build all instruction entries.
+	if entries == nil {
+		entries = make([]config.ToolCallEntry, len(partials))
+		for i, p := range partials {
+			entries[i] = buildInstructionEntry(p)
 		}
+		startIndex = 0
+	}
+
+	// Captured from auth result if the user provided instructions (approved + instructions).
+	// After the loop we decide: inject if non-empty, saveAndResume otherwise.
+	var capturedInstructions string
+
+	for i := startIndex; i < len(partials); i++ {
+		p := partials[i]
 
 		tool := m.toolReg.Get(p.name)
 		if tool == nil {
@@ -416,16 +459,61 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 			_ = json.Unmarshal([]byte(p.args), &args)
 		}
 
-		// Validate against session-level file state for all tools except read_file.
-		// We skip read_file because if the checksum is stale, reading it is exactly how
-		// the model refreshes its understanding of the file.
+		// --- Apply previously collected auth result (from resume after user response) ---
+		if m.stream.authorizationCtx != nil && m.stream.pendingToolIndex == i {
+			result := m.stream.authorizationCtx.Result
+			m.stream.authorizationCtx = nil
+
+			if result.Instructions != "" {
+				capturedInstructions = result.Instructions
+			}
+
+			if !result.Approved {
+				// Rejected — cancel this tool and all remaining, break.
+				entries[i].Execution.Status = tools.ResultStatusError
+				entries[i].Execution.Error = "rejected by user — tool was not executed"
+				for j := i + 1; j < len(entries); j++ {
+					entries[j].Execution.Status = tools.ResultStatusError
+					entries[j].Execution.Error = "cancelled: previous tool was not approved"
+				}
+				break
+			}
+			// Approved (with or without instructions) — skip the auth gate, fall through to execute.
+			goto doExecute
+		}
+
+		// --- Gate 1: Authorization ---
+		if m.needsAuthorization(tool, args) {
+			entries[i].Execution.Status = config.AuthorizationPending
+			for j := i + 1; j < len(partials); j++ {
+				entries[j].Execution.Status = tools.ResultStatusError
+				entries[j].Execution.Error = "waiting: prior tool requires authorization"
+			}
+			isDestructive := false
+			if tool.IsDestructive != nil {
+				isDestructive = tool.IsDestructive(args)
+			}
+			m.stream.authorizationCtx = &AuthorizationContext{
+				ToolName:      p.name,
+				Args:          args,
+				ArgsJSON:      p.args,
+				DisplayValue:  tool.DisplayValue(p.args),
+				IsDestructive: isDestructive,
+			}
+			m.stream.pendingToolIndex = i
+			m.stream.pendingEntries = entries
+			m.setAuthMode()
+			m.updateViewportContent()
+			return m, nil
+		}
+
+		// --- Gate 2: File change validation ---
 		if p.name != "read_file" && p.name != "open" {
 			if pathVal, ok := args["path"].(string); ok {
 				resolvedPath := tools.ResolvePath(pathVal)
 				if err := tools.Validate(resolvedPath, sessionState); err != nil {
 					entries[i].Execution.Status = tools.ResultStatusError
 					entries[i].Execution.Error = fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again with read_file and retry your command.", resolvedPath)
-					// Cancel remaining tools in this batch: they likely depend on stale state
 					for j := i + 1; j < len(partials); j++ {
 						entries[j].Execution.Status = tools.ResultStatusError
 						entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"
@@ -434,6 +522,9 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 				}
 			}
 		}
+
+		// --- Execute the tool ---
+	doExecute:
 
 		resultStart := time.Now()
 		result := tool.Execute(args)
@@ -445,17 +536,14 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 		if result.Status == tools.ResultStatusError {
 			content = result.Error
 		}
-
 		entries[i].Execution.Tokens = countTokensApprox(content)
-
 		entries[i].Execution.DurationMs = time.Since(resultStart).Milliseconds()
-		// Tag each file entry with this tool call's ID for future dedup in API context
+
 		for j := range result.Files {
 			result.Files[j].ToolCallID = p.id
 		}
 		entries[i].Execution.Files = result.Files
 
-		// Accumulate into session state immediately (copies ToolCallID too)
 		tools.MergeEntries(result.Files, sessionState)
 
 		if p.name == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
@@ -463,8 +551,53 @@ func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {
 				m.applyWorkingDir(pathVal)
 			}
 		}
+
+		// After execution: if user provided instructions, cancel remaining and stop.
+		if capturedInstructions != "" {
+			for j := i + 1; j < len(entries); j++ {
+				entries[j].Execution.Status = tools.ResultStatusError
+				entries[j].Execution.Error = "cancelled: user provided instructions before this tool could execute"
+			}
+			break
+		}
 	}
-	return entries
+
+	// --- Loop done ---
+	m.stream.authorizationCtx = nil
+	m.stream.pendingEntries = nil
+
+	avgTokenPerSec := m.stream.metrics.AvgTokenPerSec()
+	m.appendAssistantMsg(config.Message{
+		ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+		Role:               config.RoleAssistant,
+		CreatedAt:          m.stream.metrics.Start,
+		ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
+		ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
+		Text:               strings.TrimLeft(m.stream.text, "\n"),
+		TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
+		ToolCalls:          entries,
+		ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), InferenceDuractionMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
+		TokensPerSecond:    avgTokenPerSec,
+		OutputTokens:       m.stream.metrics.TotalOutputTokens(),
+		InputTokens:        config.TotalExecutionTokens(entries),
+		DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
+		TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
+		StopReason:         "tool_calls",
+	})
+
+	if capturedInstructions != "" {
+		userMsg := config.Message{
+			ID:        fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+			Role:      config.RoleUser,
+			CreatedAt: time.Now(),
+			Text:      capturedInstructions,
+		}
+		m.session.appendMsg(userMsg)
+	}
+
+	m.stream.reset()
+	m.updateViewportContent()
+	return m.startStream()
 }
 
 // startStream builds API messages from current session state and starts a new stream.
@@ -489,11 +622,9 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 
 // appendAssistantMsg saves an assistant message and maintains SequenceStat on the
 // sequence head (first assistant message after the last user message).
-// InputTokens accumulates tool execution result tokens (fed back to the model).
 func (m *Model) appendAssistantMsg(msg config.Message) {
 	seqIdx := config.FindSequenceHeadIdx(m.session.file.Messages)
 	if seqIdx == -1 {
-		// First of sequence — init SequenceStat
 		stat := &config.SequenceStat{
 			OutputTokens:         msg.OutputTokens,
 			DurationMs:           msg.DurationTimeMs,
@@ -507,7 +638,6 @@ func (m *Model) appendAssistantMsg(msg config.Message) {
 		msg.SequenceStat = stat
 		m.session.appendMsg(msg)
 	} else {
-		// Subsequent message — accumulate into sequence head
 		m.session.appendMsg(msg)
 		head := m.session.file.Messages[seqIdx].SequenceStat
 		head.Accumulate(msg)

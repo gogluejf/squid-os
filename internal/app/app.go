@@ -50,6 +50,9 @@ type Model struct {
 	// Stream state (bundled)
 	stream streamState
 
+	// Authorization prompt (populated during ModeAuthorize)
+	authPrompt ui.AuthorizationPrompt
+
 	// Tools registry (survives across stream resets)
 	toolReg *tools.Registry
 

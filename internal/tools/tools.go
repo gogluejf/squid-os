@@ -38,7 +38,8 @@ type Tool struct {
 	// without performing side-effects (writes). Used for authorization checks.
 	Preview func(args map[string]interface{}) ToolResult
 	// IsDestructive is optional. If present, it returns true if the tool call modifies
-	// disk state. nil means the tool is never destructive. Used by the authorization
+	// disk state, makes network calls, or otherwise has security implications.
+	// nil means the tool is never destructive. Used by the authorization
 	// gate to determine whether user confirmation is needed.
 	IsDestructive func(args map[string]interface{}) bool
 }

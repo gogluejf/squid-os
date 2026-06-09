@@ -14,6 +14,7 @@ type keyMap struct {
 	Model          key.Binding
 	NewSession     key.Binding
 	Incognito      key.Binding
+	Thinking       key.Binding
 	Quit           key.Binding
 	Up             key.Binding
 	Down           key.Binding
@@ -72,6 +73,10 @@ var keys = keyMap{
 	Incognito: key.NewBinding(
 		key.WithKeys("alt+i"),
 		key.WithHelp("alt+i", "toggle incognito"),
+	),
+	Thinking: key.NewBinding(
+		key.WithKeys("alt+t"),
+		key.WithHelp("alt+t", "toggle thinking"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c"),

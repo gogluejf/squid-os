@@ -13,6 +13,8 @@ import (
 	"squid-os/internal/tools"
 	"strings"
 	"time"
+
+	jsonrepair "github.com/kaptinlin/jsonrepair"
 )
 
 // StreamEvent is sent for each SSE chunk during inference
@@ -403,6 +405,28 @@ type toolCallBuffer struct {
 	ArgsBuf strings.Builder
 }
 
+// repairArgs attempts to fix malformed JSON from the model's streamed arguments.
+// Returns the repaired string and whether it is now valid JSON.
+func repairArgs(args string) (string, bool) {
+	if args == "" {
+		return args, false
+	}
+	// Fast path: already valid
+	var check map[string]interface{}
+	if json.Unmarshal([]byte(args), &check) == nil {
+		return args, true
+	}
+	// Try repair
+	repaired, err := jsonrepair.Repair(args)
+	if err != nil {
+		return args, false
+	}
+	if json.Unmarshal([]byte(repaired), &check) == nil {
+		return repaired, true
+	}
+	return args, false
+}
+
 // flushToolCalls converts buffered tool call deltas into ToolCall structs.
 func flushToolCalls(buffers map[int]*toolCallBuffer) []ToolCall {
 	result := make([]ToolCall, 0, len(buffers))
@@ -413,6 +437,10 @@ func flushToolCalls(buffers map[int]*toolCallBuffer) []ToolCall {
 		}
 		name := buf.NameBuf.String()
 		args := buf.ArgsBuf.String()
+
+		// Repair potentially malformed JSON from the model
+		args, _ = repairArgs(args)
+
 		result = append(result, ToolCall{
 			ID:   buf.ID,
 			Type: buf.Type,
@@ -509,15 +537,18 @@ func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []c
 			if len(msg.ToolCalls) > 0 {
 				cm.ToolCalls = make([]ToolCall, len(msg.ToolCalls))
 				for i, tc := range msg.ToolCalls {
+					args := tc.Instruction.Arguments
+					// Repair malformed arguments stored from previous turns
+					args, _ = repairArgs(args)
 					cm.ToolCalls[i] = ToolCall{
 						ID:   tc.ID,
 						Type: tc.Type,
 						Function: struct {
 							Name string `json:"name"`
 							Args string `json:"arguments"`
-						}{Name: tc.Instruction.Name, Args: tc.Instruction.Arguments},
+						}{Name: tc.Instruction.Name, Args: args},
 						Name:     tc.Instruction.Name,
-						ArgsJSON: tc.Instruction.Arguments,
+						ArgsJSON: args,
 					}
 				}
 				if msg.Text == "" {

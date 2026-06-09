@@ -456,7 +456,15 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 
 		var args map[string]interface{}
 		if p.args != "" {
-			_ = json.Unmarshal([]byte(p.args), &args)
+			if err := json.Unmarshal([]byte(p.args), &args); err != nil {
+				entries[i].Execution.Status = tools.ResultStatusError
+				entries[i].Execution.Error = fmt.Sprintf("malformed tool arguments from model: %v", err)
+				for j := i + 1; j < len(entries); j++ {
+					entries[j].Execution.Status = tools.ResultStatusError
+					entries[j].Execution.Error = "cancelled: prior tool had malformed arguments"
+				}
+				break
+			}
 		}
 
 		// --- Apply previously collected auth result (from resume after user response) ---

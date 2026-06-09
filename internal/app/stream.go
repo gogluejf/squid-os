@@ -492,7 +492,7 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 
 		// --- Gate 1: Authorization ---
 		if m.needsAuthorization(tool, args) {
-			entries[i].Execution.Status = config.AuthorizationPending
+			entries[i].Execution.Status = tools.ResultStatusPending
 			for j := i + 1; j < len(partials); j++ {
 				entries[j].Execution.Status = tools.ResultStatusError
 				entries[j].Execution.Error = "waiting: prior tool requires authorization"

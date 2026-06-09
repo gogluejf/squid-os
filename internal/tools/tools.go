@@ -10,8 +10,9 @@ import (
 
 // Tool execution result
 const (
-	ResultStatusSuccess = "success"
-	ResultStatusError   = "error"
+	ResultStatusSuccess  = "success"
+	ResultStatusError    = "error"
+	ResultStatusPending  = "pending" // awaiting user authorization
 )
 
 // ToolResult is returned by Execute instead of (string, error).

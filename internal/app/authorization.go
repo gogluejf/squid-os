@@ -41,11 +41,11 @@ func (m Model) cycleAuthorization() (Model, tea.Cmd) {
 	m.settings.Authorization = next
 	_ = config.SaveSettings(m.paths, m.settings)
 	labels := map[string]string{
-		config.AuthorizationAuto:       "auto",
-		config.AuthorizationAskOnWrite: "ask-on-write",
-		config.AuthorizationAskForAll:  "ask-for-all",
+		config.AuthorizationAuto:       "auto — execute all tools without asking",
+		config.AuthorizationAskOnWrite: "ask-on-write — confirm before destructive commands",
+		config.AuthorizationAskForAll:  "ask-for-all — confirm every tool call",
 	}
-	(&m).setNotification(ui.NotificationInfo, "auth: "+labels[next])
+	(&m).setNotification(ui.NotificationInfo, "authorization: "+labels[next])
 	m.updateViewportContent()
 	return m, nil
 }

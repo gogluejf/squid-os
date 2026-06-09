@@ -13,16 +13,17 @@ import (
 
 // FooterData holds dynamic footer information
 type FooterData struct {
-	Model            string
-	Provider         string
-	TotalTokens      int
-	TotalInputTokens int
-	TotalOutTokens   int
-	TokPerSec        float64
-	Streaming        bool
-	ThinkingOn       bool // thinking mode on/off (always visible)
-	ContextWindow    int  // model context window in tokens; 0 if unknown
-	WorkingDir       string
+	Model             string
+	Provider          string
+	TotalTokens       int
+	TotalInputTokens  int
+	TotalOutTokens    int
+	TokPerSec         float64
+	Streaming         bool
+	ThinkingOn        bool   // thinking mode on/off (always visible)
+	AuthorizationMode string // "auto", "ask-on-write", "ask-for-all"
+	ContextWindow     int    // model context window in tokens; 0 if unknown
+	WorkingDir        string
 }
 
 // RenderFooter renders the fixed 2-line footer bar, always exactly `width` chars wide.
@@ -87,12 +88,21 @@ func RenderFooter(data FooterData, width int) string {
 		thinkLabel = style.FooterValueStyle.Render("[thinking: off]")
 	}
 
+	// Authorization mode indicator — only the mode name is colored, brackets stay default
+	var authLabel string
+	authColor := data.getAuthColor()
+	modeStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(style.P.BgFooter)).
+		Foreground(lipgloss.Color(authColor))
+	bracketStyle := style.FooterValueStyle
+	authLabel = bracketStyle.Render("[") + modeStyle.Render(data.AuthorizationMode) + bracketStyle.Render("]")
+
 	// current directory indicator with cached git shortstat
 	var curDirLabel string
 	if data.WorkingDir != "" {
 		curDirLabel = style.FooterValueStyle.Render(util.FriendlyPath(git.CachedShortStat(data.WorkingDir)))
 	}
-	left2 := thinkLabel + style.FooterValueStyle.Render(" ") + curDirLabel
+	left2 := thinkLabel + authLabel + style.FooterValueStyle.Render(" ") + curDirLabel
 
 	midSpace := width - lipgloss.Width(left2) - lipgloss.Width(right2)
 	if midSpace < 1 {
@@ -141,4 +151,17 @@ func renderContextBar(totalTokens, contextWindow int) string {
 		lightStyle.Render(strings.Repeat(" ", lightChars))
 
 	return style.FooterValueStyle.Render(pctStr+" ") + bar
+}
+
+// getAuthColor returns the ANSI color code for the authorization mode.
+// auto = red (dangerous, no guard), ask-on-write = yellow/warning, ask-for-all = green (safest).
+func (data FooterData) getAuthColor() string {
+	switch data.AuthorizationMode {
+	case "ask-for-all":
+		return style.P.TextSuccess // green
+	case "ask-on-write":
+		return style.P.TextWarning // yellow/orange
+	default: // auto
+		return style.P.TextError // red
+	}
 }

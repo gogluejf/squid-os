@@ -25,6 +25,8 @@ func RenderHelp(width, height int) string {
 	 ` + style.FooterKeyStyle.Render("left alt+m") + `       Select model
 	 ` + style.FooterKeyStyle.Render("ctrl+n") + `           New session / clear chat
 	 ` + style.FooterKeyStyle.Render("left alt+i") + `       Toggle incognito mode
+	 ` + style.FooterKeyStyle.Render("left alt+t") + `       Toggle thinking mode
+	 ` + style.FooterKeyStyle.Render("shift+tab") + `         Cycle authorization mode
 	 ` + style.FooterKeyStyle.Render("up/down") + `          Browse prompt history
 	 ` + style.FooterKeyStyle.Render("shift+↑/↓") + `        Scroll chat (3 lines)
 	 ` + style.FooterKeyStyle.Render("pgup/pgdn") + `        Scroll chat (full page)

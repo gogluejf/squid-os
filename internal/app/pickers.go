@@ -239,18 +239,11 @@ func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
 		return m, m.scanModelsCmd()
 
 	case "thinking":
-		m.thinkingToggle = ui.NewThinkingToggle(m.settings.Thinking)
-		m.settings.Thinking = !m.settings.Thinking
-		_ = config.SaveSettings(m.paths, m.settings)
-		(&m).session.updateConfigMsg(m.settings.Provider, m.settings.Model, m.settings.Thinking)
-		(&m).session.invalidateRenderAll()
-		(&m).updateViewportContent()
-		if m.settings.Thinking {
-			(&m).setNotification(ui.NotificationInfo, "thinking is now on")
-		} else {
-			(&m).setNotification(ui.NotificationInfo, "thinking is now off")
-		}
-		return m, m.setChatMode()
+		return m.toggleThinking()
+
+	case "auth-mode":
+		_, cmd := m.cycleAuthorization()
+		return m, cmd
 
 	case "image":
 		// List image files — for now just let user type a path

@@ -177,16 +177,17 @@ func (m Model) buildFooterData() ui.FooterData {
 	streamOut := m.stream.metrics.TotalOutputTokens()
 
 	return ui.FooterData{
-		Model:            modelBasename(m.settings.Model),
-		Provider:         m.settings.Provider,
-		TotalTokens:      sessionIn + sessionOut + streamOut,
-		TotalInputTokens: sessionIn,
-		TotalOutTokens:   sessionOut + streamOut,
-		Streaming:        m.stream.active,
-		ThinkingOn:       m.settings.Thinking,
-		TokPerSec:        m.stream.metrics.AvgTokenPerSec(),
-		ContextWindow:    m.settings.ContextWindow,
-		WorkingDir:       m.workingDir,
+		Model:             modelBasename(m.settings.Model),
+		Provider:          m.settings.Provider,
+		TotalTokens:       sessionIn + sessionOut + streamOut,
+		TotalInputTokens:  sessionIn,
+		TotalOutTokens:    sessionOut + streamOut,
+		Streaming:         m.stream.active,
+		ThinkingOn:        m.settings.Thinking,
+		AuthorizationMode: m.settings.Authorization,
+		TokPerSec:         m.stream.metrics.AvgTokenPerSec(),
+		ContextWindow:     m.settings.ContextWindow,
+		WorkingDir:        m.workingDir,
 	}
 }
 

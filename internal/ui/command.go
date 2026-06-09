@@ -18,6 +18,7 @@ type CommandInfo struct {
 var AllCommands = []CommandInfo{
 	{Name: "model", Description: "Select inference model"},
 	{Name: "thinking", Description: "Toggle thinking mode (on/off)"},
+	{Name: "auth-mode", Description: "Cycle authorization mode (auto/ask-on-write/ask-for-all)"},
 	{Name: "image", Description: "Attach image to next message"},
 	{Name: "save", Description: "Save current session"},
 	{Name: "load", Description: "Load a saved session"},

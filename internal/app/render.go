@@ -188,6 +188,7 @@ func (m Model) buildFooterData() ui.FooterData {
 		TokPerSec:         m.stream.metrics.AvgTokenPerSec(),
 		ContextWindow:     m.settings.ContextWindow,
 		WorkingDir:        m.workingDir,
+		Skill:             m.session.file.Session.Skill,
 	}
 }
 

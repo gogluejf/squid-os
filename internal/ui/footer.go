@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"squid-os/internal/config"
 	"squid-os/internal/git"
 	"squid-os/internal/style"
 	"squid-os/internal/util"
@@ -24,6 +25,7 @@ type FooterData struct {
 	AuthorizationMode string // "auto", "ask-on-write", "ask-for-all"
 	ContextWindow     int    // model context window in tokens; 0 if unknown
 	WorkingDir        string
+	Skill             config.SessionSkill
 }
 
 // RenderFooter renders the fixed 2-line footer bar, always exactly `width` chars wide.
@@ -97,12 +99,25 @@ func RenderFooter(data FooterData, width int) string {
 	bracketStyle := style.FooterValueStyle
 	authLabel = bracketStyle.Render("[") + modeStyle.Render(data.AuthorizationMode) + bracketStyle.Render("]")
 
+	// Skill indicator — always shown; value colored with skill color
+	var skillLabel string
+	skillStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color(style.P.BgFooter)).
+		Foreground(lipgloss.Color(style.P.TextSkill))
+	if data.Skill.Next != "" {
+		skillLabel = style.FooterValueStyle.Render("[skill: ") + skillStyle.Render(data.Skill.Next) + style.FooterValueStyle.Render("]")
+	} else if data.Skill.Current != "" {
+		skillLabel = style.FooterValueStyle.Render("[skill: ") + skillStyle.Render(data.Skill.Current) + style.FooterValueStyle.Render("]")
+	} else {
+		skillLabel = style.FooterValueStyle.Render("[skill: none]")
+	}
+
 	// current directory indicator with cached git shortstat
 	var curDirLabel string
 	if data.WorkingDir != "" {
 		curDirLabel = style.FooterValueStyle.Render(util.FriendlyPath(git.CachedShortStat(data.WorkingDir)))
 	}
-	left2 := thinkLabel + authLabel + style.FooterValueStyle.Render(" ") + curDirLabel
+	left2 := thinkLabel + authLabel + skillLabel + style.FooterValueStyle.Render(" ") + curDirLabel
 
 	midSpace := width - lipgloss.Width(left2) - lipgloss.Width(right2)
 	if midSpace < 1 {

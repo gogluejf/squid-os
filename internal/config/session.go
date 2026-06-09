@@ -28,16 +28,22 @@ type SessionFile struct {
 	FileState   map[string]FileStateEntry `json:"file_state,omitempty"`
 }
 
+type SessionSkill struct {
+	Current string `json:"current"`
+	Next    string `json:"next"`
+}
+
 type Session struct {
-	ID               string `json:"id"`
-	Title            string `json:"title"`
-	CreatedAt        string `json:"created_at"`
-	UpdatedAt        string `json:"updated_at"`
-	Provider         string `json:"provider"`
-	Model            string `json:"model"`
-	Thinking         bool   `json:"thinking"`
-	SystemPromptFile string `json:"system_prompt_file"`
-	WorkingDir       string `json:"working_dir"`
+	ID               string        `json:"id"`
+	Title            string        `json:"title"`
+	CreatedAt        string        `json:"created_at"`
+	UpdatedAt        string        `json:"updated_at"`
+	Provider         string        `json:"provider"`
+	Model            string        `json:"model"`
+	Thinking         bool          `json:"thinking"`
+	SystemPromptFile string        `json:"system_prompt_file"`
+	WorkingDir       string        `json:"working_dir"`
+	Skill            SessionSkill  `json:"skill"`
 }
 
 type ContentMetrics struct {

@@ -37,6 +37,7 @@ type Palette struct {
 	TextError         string // error indicators (red)
 	TextWarning       string // warning indicators (yellow/orange)
 	TextInfo          string // info/notice (muted)
+	TextSkill         string // skill label (yellow, matches SkillStyle)
 	TextSpinner       string // spinner / active indicator (pink)
 	TextAttachment    string // image attachment chip (orange)
 
@@ -71,6 +72,7 @@ var P = Palette{
 	TextError:         "203", // light red
 	TextWarning:       "214", // orange/yellow
 	TextInfo:          "243",
+	TextSkill:         "178", // matches SkillStyle label color
 	TextSpinner:       "205", // pink
 	TextAttachment:    "214", // orange
 

@@ -185,6 +185,13 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Check for skill change from Tab cycling (Next set by user, Current set by skill_load)
+	if m.session.file.Session.Skill.Next != "" && m.session.file.Session.Skill.Next != m.session.file.Session.Skill.Current {
+		(&m).injectSkillChangeSynthetic(m.session.file.Session.Skill.Current, m.session.file.Session.Skill.Next)
+		m.session.file.Session.Skill.Current = m.session.file.Session.Skill.Next
+		m.session.file.Session.Skill.Next = ""
+	}
+
 	if !m.incognito {
 		config.AddHistoryEntry(&m.history, text, m.settings.MaxHistory)
 		_ = config.SaveHistory(m.paths, m.history)
@@ -557,6 +564,13 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 		if p.name == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
 			if pathVal, ok := args["path"].(string); ok {
 				m.applyWorkingDir(pathVal)
+			}
+		}
+
+		if p.name == "skill_load" && result.Status == tools.ResultStatusSuccess {
+			if name, ok := args["name"].(string); ok {
+				m.session.file.Session.Skill.Current = name
+				m.session.file.Session.Skill.Next = ""
 			}
 		}
 

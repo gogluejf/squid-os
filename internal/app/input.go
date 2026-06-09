@@ -259,6 +259,12 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.updateViewportContent()
 		return m, nil
 
+	case key.Matches(msg, keys.Thinking):
+		return m.toggleThinking()
+
+	case msg.Type == tea.KeyShiftTab:
+		return m.cycleAuthorization()
+
 	case key.Matches(msg, keys.ScrollUp):
 		m.viewport.ScrollUp(3)
 		return m, nil

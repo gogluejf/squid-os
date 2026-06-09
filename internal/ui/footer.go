@@ -158,10 +158,10 @@ func renderContextBar(totalTokens, contextWindow int) string {
 func (data FooterData) getAuthColor() string {
 	switch data.AuthorizationMode {
 	case "ask-for-all":
-		return style.P.TextSuccess // green
+		return style.P.TextError // green
 	case "ask-on-write":
 		return style.P.TextWarning // yellow/orange
 	default: // auto
-		return style.P.TextError // red
+		return style.P.TextSuccess // red
 	}
 }

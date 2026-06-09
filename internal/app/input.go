@@ -116,12 +116,18 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Incognito):
 		return m.toggleIncognito()
 
+	case key.Matches(msg, keys.Thinking):
+		return m.toggleThinking()
+
 	case key.Matches(msg, keys.HistorySearch):
 		return m.startHistorySearch()
 
 	case msg.Alt && msg.Type == tea.KeyEnter:
 		m.textarea.InsertRune('\n')
 		return m, nil
+
+	case msg.Type == tea.KeyShiftTab:
+		return m.cycleAuthorization()
 
 	case key.Matches(msg, keys.Send):
 		if m.cmdPalette.Visible && m.cmdPalette.SelectedCommand() != "" {
@@ -198,7 +204,7 @@ func (m Model) handleAuthorizeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.Type == tea.KeyTab && !msg.Alt:
 		m.authPrompt.TextMode = true
 		return m, nil
-	case msg.Alt && msg.Type == tea.KeyTab:
+	case msg.Type == tea.KeyShiftTab:
 		m.authPrompt.TextMode = false
 		return m, nil
 	case key.Matches(msg, keys.Send):

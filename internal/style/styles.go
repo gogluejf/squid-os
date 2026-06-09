@@ -208,7 +208,7 @@ var (
 				Bold(true).
 				Padding(0, 1)
 
-	// Generic status indicators — used on tool boxes for success/error badges
+	// Generic status indicators — used on tool boxes for success/error/pending badges
 	CheckSuccess = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgCode)).
 			Foreground(lipgloss.Color(P.TextSuccess))
@@ -216,6 +216,8 @@ var (
 	CheckError = lipgloss.NewStyle().
 			Background(lipgloss.Color(P.BgCode)).
 			Foreground(lipgloss.Color(P.TextError))
+
+
 
 	// Command palette
 	CommandStyle = lipgloss.NewStyle().

@@ -220,15 +220,20 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 		t := reg.Get(tc.Instruction.Name)
 
 		var parts []string
-		parts = append(parts, t.Style.Label.Render(tc.Instruction.Name))
 
-		var fixedParts []string
+		// Status indicator + tool name as first part, no separator between them
+		var prefix string
 		switch tc.Execution.Status {
 		case "error":
-			fixedParts = append(fixedParts, style.CheckError.Render("[✗]"))
+			prefix = style.CheckError.Render("[✗] ")
 		case "success":
-			fixedParts = append(fixedParts, style.CheckSuccess.Render("[✓]"))
+			prefix = style.CheckSuccess.Render("[✓] ")
+		case "pending":
+			prefix = t.Style.Dim.Render("[ ] ")
 		}
+		parts = append(parts, prefix+t.Style.Label.Render(tc.Instruction.Name))
+
+		var fixedParts []string
 		stats := tokenChipBoth(tc.Instruction.Tokens, tc.Execution.Tokens, &tc.Instruction.DurationMs, &tc.Execution.DurationMs)
 		if stats != "" {
 			fixedParts = append(fixedParts, t.Style.Dim.Render(stats))
@@ -238,7 +243,8 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 			if idx := strings.Index(display, "\n"); idx >= 0 {
 				display = display[:idx]
 			}
-			allOthers := append([]string{parts[0]}, fixedParts...)
+			allOthers := append([]string{}, parts...)
+			allOthers = append(allOthers, fixedParts...)
 			parts = append(parts, t.Style.Param.Render(util.Truncate(display, availablePartWidth(boxWidth, allOthers))))
 		}
 		parts = append(parts, fixedParts...)
@@ -635,7 +641,9 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, ex
 		t := reg.Get(tc.Name)
 
 		var parts []string
-		parts = append(parts, t.Style.Label.Render(tc.Name))
+
+		// Streaming indicator + tool name as first part, no separator
+		parts = append(parts, t.Style.Dim.Render("[ ] ")+t.Style.Label.Render(tc.Name))
 
 		var fixedParts []string
 		if tc.Tokens > 0 || tc.Duration > 0 {
@@ -647,7 +655,8 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, ex
 			if idx := strings.Index(display, "\n"); idx >= 0 {
 				display = display[:idx]
 			}
-			allOthers := append([]string{parts[0]}, fixedParts...)
+			allOthers := append([]string{}, parts...)
+			allOthers = append(allOthers, fixedParts...)
 			parts = append(parts, t.Style.Param.Render(util.Truncate(display, availablePartWidth(boxWidth, allOthers))))
 		}
 		parts = append(parts, fixedParts...)

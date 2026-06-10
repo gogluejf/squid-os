@@ -117,10 +117,17 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 		}
 	}
 
+	// Pre-select current skill if any
+	current := m.session.file.Session.Skill.Current
+	if m.session.file.Session.Skill.Next != nil {
+		current = *m.session.file.Session.Skill.Next
+	}
+
 	m.activePicker = ui.Picker{
 		Title:       "Select Skill",
 		Items:       items,
 		DisplayMode: ui.ModeLabelDesc,
+		DefaultValue: current,
 		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			*m = m.confirmSkillPicker(item)
@@ -131,15 +138,6 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 			m := ctx.(*Model)
 			return m.setChatMode()
 		},
-	}
-
-	// Pre-select current skill if any
-	current := m.session.file.Session.Skill.Current
-	if m.session.file.Session.Skill.Next != nil {
-		current = *m.session.file.Session.Skill.Next
-	}
-	if current != "" {
-		m.activePicker.SetDefaultSelected(current)
 	}
 
 	m.pickerContext = "skill"

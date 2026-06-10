@@ -171,6 +171,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 		Title:       "Load Session",
 		Items:       items,
 		DisplayMode: ui.ModeLabelMeta,
+		DefaultValue: m.settings.LastSessionName,
 		OnSelectionChange: func(idx int, item ui.PickerItem, ctx any) {
 			m := ctx.(*Model)
 			*m = (*m).previewSession(item.Value)
@@ -195,20 +196,11 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 		},
 	}
 
-	// Pre-select LastSessionName if it exists in the list
-	if m.settings.LastSessionName != "" {
-		m.activePicker.SetDefaultSelected(m.settings.LastSessionName)
-	}
-
 	m.pickerContext = "session"
 	m.pickerPayload = sessions
 	m.mode = ModeSessionPicker
 	(&m).recalcLayout()
 
-	// Preview the initially selected session immediately
-	if m.activePicker.SelectedItem().Value != "" {
-		m = m.previewSession(m.activePicker.SelectedItem().Value)
-	}
 	return m, nil
 }
 

@@ -22,6 +22,7 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 		Title:       "System Prompt",
 		Items:       items,
 		DisplayMode: ui.ModeSingleCol,
+		DefaultValue: m.settings.SystemPromptFile,
 		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			*m = m.confirmSystemPicker(item)

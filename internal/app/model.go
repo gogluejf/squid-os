@@ -57,6 +57,7 @@ func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
 		Title:       "Select Model",
 		Items:       items,
 		DisplayMode: ui.ModeLabelValue,
+		DefaultValue: m.settings.Model,
 		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			*m = m.confirmModelPicker(item)

@@ -70,17 +70,19 @@ type PickerItem struct {
 // Picker is a reusable, self-contained picker component with typed items,
 // key handling, filtering, configurable display modes, and optional callbacks.
 // Callbacks receive ctx (typically *Model) so callers can mutate live state.
+// Set DefaultValue to pre-select an item; call Init(ctx) after construction to
+// resolve the default and fire OnSelectionChange.
 type Picker struct {
 	Title             string
 	Items             []PickerItem
 	Filter            string
 	Selected          int
-	DefaultMatch      string
+	DefaultValue      string                    // declarative default: match by Value or Label
 	DisplayMode       PickerDisplayMode
 	MatchMode         PickerMatchMode
-	OnSelectionChange func(int, PickerItem, any)       // optional: fires on navigation/filter
-	OnConfirm         func(PickerItem, any) tea.Cmd    // optional: fires on Enter
-	OnCancel          func(any) tea.Cmd                // optional: fires on Esc
+	OnSelectionChange func(int, PickerItem, any) // optional: fires on navigation/filter
+	OnConfirm         func(PickerItem, any) tea.Cmd // optional: fires on Enter
+	OnCancel          func(any) tea.Cmd         // optional: fires on Esc
 }
 
 // FilteredItems returns items matching the current filter (case-insensitive on Label, Meta, and Value).
@@ -223,18 +225,28 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 	return nil
 }
 
-// SetDefaultSelected scans items by Value or Label (case-insensitive) and sets Selected index.
-func (p *Picker) SetDefaultSelected(match string) {
-	if match == "" {
+// Init resolves the DefaultValue, sets Selected, and fires OnSelectionChange
+// for the initial selection. Call after constructing the Picker and before
+// the first key event. Idempotent — safe to call multiple times.
+func (p *Picker) Init(ctx any) {
+	if p.DefaultValue == "" {
 		return
 	}
-	m := strings.ToLower(match)
+	m := strings.ToLower(p.DefaultValue)
 	for i, item := range p.Items {
 		if strings.ToLower(item.Value) == m || strings.ToLower(item.Label) == m {
 			p.Selected = i
+			p.DefaultValue = "" // consume so it only fires once
+			if p.OnSelectionChange != nil {
+				items := p.FilteredItems()
+				if p.Selected < len(items) {
+					p.OnSelectionChange(p.Selected, items[p.Selected], ctx)
+				}
+			}
 			return
 		}
 	}
+	p.DefaultValue = "" // consumed even if not found
 }
 
 // Render renders the picker with the configured display mode.

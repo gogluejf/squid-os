@@ -41,12 +41,24 @@ type Picker struct {
 	OnCancel          func(any) tea.Cmd
 
 	// Cached column widths — computed once in Init() from ALL items, never changes.
-	labelWidth   int
-	metaWidths   []int
+	labelWidth    int
+	metaWidths    []int
 	widthsComputed bool
+	// lastNotified tracks the previously reported item to avoid redundant callbacks.
+	lastNotified PickerItem
 }
 
-// FilteredItems returns items matching the current filter.
+// fireSelectionChange calls OnSelectionChange only if the selected item actually changed.
+func (p *Picker) fireSelectionChange(idx int, item PickerItem, ctx any) {
+	if p.OnSelectionChange == nil {
+		return
+	}
+	if item.Value == p.lastNotified.Value && idx == p.Selected {
+		return
+	}
+	p.lastNotified = item
+	p.OnSelectionChange(idx, item, ctx)
+}
 func (p *Picker) FilteredItems() []PickerItem {
 	if p.Filter == "" {
 		return p.Items
@@ -120,11 +132,8 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 	if s == "up" {
 		if p.Selected > 0 {
 			p.Selected--
-			if p.OnSelectionChange != nil {
-				items := p.FilteredItems()
-				if p.Selected < len(items) {
-					p.OnSelectionChange(p.Selected, items[p.Selected], ctx)
-				}
+			if p.Selected < len(p.FilteredItems()) {
+				p.fireSelectionChange(p.Selected, p.FilteredItems()[p.Selected], ctx)
 			}
 		}
 		return nil
@@ -142,11 +151,9 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 			if completion != p.Filter {
 				p.Filter = completion
 				p.Selected = 0
-				if p.OnSelectionChange != nil {
-					items := p.FilteredItems()
-					if len(items) > 0 {
-						p.OnSelectionChange(0, items[0], ctx)
-					}
+				items := p.FilteredItems()
+				if len(items) > 0 {
+					p.fireSelectionChange(0, items[0], ctx)
 				}
 			}
 			return nil
@@ -154,8 +161,8 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		// No filter: just cycle selection down.
 		if p.Selected < len(items)-1 {
 			p.Selected++
-			if p.OnSelectionChange != nil && p.Selected < len(items) {
-				p.OnSelectionChange(p.Selected, items[p.Selected], ctx)
+			if p.Selected < len(items) {
+				p.fireSelectionChange(p.Selected, items[p.Selected], ctx)
 			}
 		}
 		return nil
@@ -165,8 +172,8 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		items := p.FilteredItems()
 		if p.Selected < len(items)-1 {
 			p.Selected++
-			if p.OnSelectionChange != nil && p.Selected < len(items) {
-				p.OnSelectionChange(p.Selected, items[p.Selected], ctx)
+			if p.Selected < len(items) {
+				p.fireSelectionChange(p.Selected, items[p.Selected], ctx)
 			}
 		}
 		return nil
@@ -189,11 +196,9 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 	if len(s) == 1 && isPrintable(s) {
 		p.Filter += s
 		p.Selected = 0
-		if p.OnSelectionChange != nil {
-			items := p.FilteredItems()
-			if len(items) > 0 {
-				p.OnSelectionChange(0, items[0], ctx)
-			}
+		items := p.FilteredItems()
+		if len(items) > 0 {
+			p.fireSelectionChange(0, items[0], ctx)
 		}
 		return nil
 	}
@@ -202,11 +207,9 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		if len(p.Filter) > 0 {
 			p.Filter = p.Filter[:len(p.Filter)-1]
 			p.Selected = 0
-			if p.OnSelectionChange != nil {
-				items := p.FilteredItems()
-				if len(items) > 0 {
-					p.OnSelectionChange(0, items[0], ctx)
-				}
+			items := p.FilteredItems()
+			if len(items) > 0 {
+				p.fireSelectionChange(0, items[0], ctx)
 			}
 		} else {
 			if p.OnCancel != nil {
@@ -235,11 +238,9 @@ func (p *Picker) Init(ctx any) {
 		if strings.ToLower(item.Value) == m || strings.ToLower(item.Label) == m {
 			p.Selected = i
 			p.DefaultValue = ""
-			if p.OnSelectionChange != nil {
-				items := p.FilteredItems()
-				if p.Selected < len(items) {
-					p.OnSelectionChange(p.Selected, items[p.Selected], ctx)
-				}
+			items := p.FilteredItems()
+			if p.Selected < len(items) {
+				p.fireSelectionChange(p.Selected, items[p.Selected], ctx)
 			}
 			return
 		}

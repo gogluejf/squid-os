@@ -29,8 +29,8 @@ var AllCommands = []commandEntry{
 	{Name: "help", Description: "Show help"},
 }
 
-// NewCommandPicker builds a Picker pre-populated with AllCommands using prefix matching.
-func NewCommandPicker() Picker {
+// AllPickerCommands builds the standard command list as PickerItems for the command palette.
+func AllPickerCommands() []PickerItem {
 	items := make([]PickerItem, len(AllCommands))
 	for i, c := range AllCommands {
 		items[i] = PickerItem{
@@ -39,12 +39,7 @@ func NewCommandPicker() Picker {
 			Value:       c.Name,
 		}
 	}
-	return Picker{
-		Title:       "Commands",
-		Items:       items,
-		DisplayMode: ModeLabelDesc,
-		MatchMode:   MatchPrefix,
-	}
+	return items
 }
 
 // PickerAction represents the result of a key interaction with the Picker.

@@ -28,9 +28,8 @@ type Model struct {
 	width    int
 	height   int
 
-	// Command palette
-	cmdPicker       ui.Picker
-	cmdPickerVisible bool
+	// Commands
+	allCommands []ui.PickerItem
 
 	// History search overlay
 	historySearch ui.HistorySearchOverlay
@@ -135,7 +134,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		workingDir:    wd, // starts as current working directory
 		session:       sess,
 		historyIdx:    -1,
-		cmdPicker:       ui.NewCommandPicker(),
+		allCommands:   ui.AllPickerCommands(),
 		historySearch: ui.NewHistorySearchOverlay(nil),
 		incognito:     incognito,
 		notification:  notification,

@@ -26,10 +26,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.setChatMode()
 		}
 
-	case ModeModelPicker, ModeSkillPicker, ModeSessionPicker:
-		return m.handleActivePicker(msg)
-
-	case ModeFilePicker:
+	case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker, ModeCommandPicker:
 		return m.handleActivePicker(msg)
 
 	case ModeSavePrompt:
@@ -82,12 +79,6 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.Escape):
-		if m.cmdPickerVisible {
-			m.cmdPickerVisible = false
-			m.cmdPicker.Filter = ""
-			m.cmdPicker.Selected = 0
-			m.recalcLayout()
-		}
 		return m, nil
 
 	case key.Matches(msg, keys.Help):
@@ -132,12 +123,6 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.cycleAuthorization()
 
 	case key.Matches(msg, keys.Send):
-		if m.cmdPickerVisible {
-			item := m.cmdPicker.SelectedItem()
-			if item.Value != "" {
-				return m.executeCommand(item.Value)
-			}
-		}
 		return m.sendMessage()
 
 	case key.Matches(msg, keys.ScrollUp):
@@ -157,10 +142,6 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.Up):
-		if m.cmdPickerVisible {
-			m.cmdPicker.HandleKey(msg)
-			return m, nil
-		}
 		// Only browse history if cursor is on the first line of the textarea
 		if m.textarea.Line() > 0 {
 			// Not on first line: let textarea handle it (move cursor up)
@@ -171,10 +152,6 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.historyUp()
 
 	case key.Matches(msg, keys.Down):
-		if m.cmdPickerVisible {
-			m.cmdPicker.HandleKey(msg)
-			return m, nil
-		}
 		// Only browse history if cursor is on the last line of the textarea
 		if m.textarea.Line() < m.textarea.LineCount()-1 {
 			// Not on last line: let textarea handle it (move cursor down)
@@ -298,17 +275,21 @@ func (m *Model) updateCommandPalette() {
 	val := m.textarea.Value()
 	if strings.HasPrefix(val, "/") {
 		filter := val[1:]
-		if filter != m.cmdPicker.Filter {
-			m.cmdPicker.Filter = filter
-			m.cmdPicker.Selected = 0
+		m.activePicker = ui.Picker{
+			Title:       "Commands",
+			Items:       m.allCommands,
+			Filter:      filter,
+			DisplayMode: ui.ModeLabelDesc,
+			MatchMode:   ui.MatchPrefix,
 		}
-		if len(m.cmdPicker.FilteredItems()) > 0 {
-			m.cmdPickerVisible = true
+		m.pickerContext = "command"
+		if len(m.activePicker.FilteredItems()) > 0 {
+			m.mode = ModeCommandPicker
 		} else {
-			m.cmdPickerVisible = false
+			m.mode = ModeChat
 		}
 	} else {
-		m.cmdPickerVisible = false
+		m.mode = ModeChat
 	}
 	m.recalcLayout()
 }

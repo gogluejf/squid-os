@@ -53,6 +53,11 @@ func (m Model) handleActivePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.confirmActivePicker()
 	}
 
+	// For command picker, keep textarea in sync with the filter
+	if m.pickerContext == "command" {
+		m.textarea.SetValue("/" + m.activePicker.Filter)
+	}
+
 	// Filter changes may alter render height.
 	(&m).recalcLayout()
 	return m, nil
@@ -63,6 +68,11 @@ func (m Model) confirmActivePicker() (tea.Model, tea.Cmd) {
 	selected := m.activePicker.SelectedItem()
 
 	switch m.pickerContext {
+	case "command":
+		// Command palette executes directly and may return a cmd
+		m.textarea.SetValue("")
+		return m.executeCommand(selected.Value)
+
 	case "model":
 		m = m.confirmModelPicker(selected)
 
@@ -212,10 +222,6 @@ func (m Model) handleSavePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // executeCommand runs a slash command selected from the command palette.
 func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
-	m.cmdPickerVisible = false
-	m.cmdPicker.Filter = ""
-	m.cmdPicker.Selected = 0
-	m.textarea.SetValue("")
 
 	switch name {
 	case "exit":

@@ -28,18 +28,14 @@ func (m Model) View() string {
 	sections = append(sections, m.viewport.View())
 
 	// Command palette overlay (between viewport and input)
-	if m.cmdPickerVisible {
-		sections = append(sections, m.cmdPicker.Render(m.width))
-	} else {
-		switch m.mode {
-		case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker:
+	switch m.mode {
+		case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker, ModeCommandPicker:
 			sections = append(sections, m.activePicker.Render(m.width))
 		case ModeSavePrompt:
 			sections = append(sections, m.savePrompt.Render(m.width))
 		case ModeHistorySearch:
 			sections = append(sections, m.historySearch.Render(m.width))
 		}
-	}
 
 	// Status line: notification (left) + attachment chip (right)
 	// Skip notification when in history search mode (the search overlay replaces it)

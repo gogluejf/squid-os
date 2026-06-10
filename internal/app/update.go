@@ -96,17 +96,13 @@ func (m *Model) recalcLayout() {
 	const footerHeight = 2
 
 	overlayHeight := 0
-	if m.cmdPickerVisible {
-		overlayHeight = m.cmdPicker.RenderHeight()
-	} else {
-		switch m.mode {
-		case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker:
-			overlayHeight = m.activePicker.RenderHeight()
-		case ModeSavePrompt:
-			overlayHeight = 2 // heading + name input line
-		case ModeHistorySearch:
-			overlayHeight = m.historySearch.RenderHeight()
-		}
+	switch m.mode {
+	case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker, ModeCommandPicker:
+		overlayHeight = m.activePicker.RenderHeight()
+	case ModeSavePrompt:
+		overlayHeight = 2 // heading + name input line
+	case ModeHistorySearch:
+		overlayHeight = m.historySearch.RenderHeight()
 	}
 
 	const statusLineHeight = 1

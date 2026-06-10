@@ -162,7 +162,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 	for i, s := range sessions {
 		items[i] = ui.PickerItem{
 			Label: s.Name,
-			Meta:  util.FriendlyModDate(s.ModTime),
+			Meta:  []string{util.FriendlyModDate(s.ModTime)},
 			Value: s.Name,
 		}
 	}

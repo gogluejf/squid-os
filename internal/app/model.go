@@ -47,7 +47,7 @@ func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
 		}
 		items[i] = ui.PickerItem{
 			Label: name,
-			Meta:  ctxLabel,
+			Meta:  []string{e.Provider, ctxLabel},
 			Value: e.ID,
 		}
 	}
@@ -56,7 +56,7 @@ func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
 	m.activePicker = ui.Picker{
 		Title:       "Select Model",
 		Items:       items,
-		DisplayMode: ui.ModeLabelValue,
+		DisplayMode: ui.ModeMultiCol,
 		DefaultValue: m.settings.Model,
 		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)

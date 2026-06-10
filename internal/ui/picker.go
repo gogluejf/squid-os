@@ -14,46 +14,50 @@ type PickerDisplayMode int
 
 const (
 	ModeSingleCol  PickerDisplayMode = iota // just Label (file picker)
-	ModeLabelMeta                           // Label + Meta (session: name + date)
+	ModeLabelMeta                           // Label + Meta[0] (session: name + date)
 	ModeLabelDesc                           // Label + Description (skill: name + description)
-	ModeLabelValue                          // Label + Value (model: name + model ID)
+	ModeLabelValue                          // Label + Meta[0] or Value (legacy)
+	ModeMultiCol                            // Label + Meta[0] + Meta[1] + ... (fixed cols, last truncates)
 )
 
 // PickerMatchMode controls how filtering matches items.
 type PickerMatchMode int
 
 const (
-	MatchSubstring PickerMatchMode = iota // substring match (default, used by data pickers)
-	MatchPrefix                           // prefix match (used by command palette)
+	MatchSubstring PickerMatchMode = iota
+	MatchPrefix
 )
 
-// PickerItem is a typed row in a Picker, carrying all fields needed for display and selection.
+// PickerItem is a typed row in a Picker.
+// Meta is an array of secondary display fields — each becomes a column in MultiCol.
 type PickerItem struct {
-	Label       string // left column / primary text
-	Meta        string // right column short (date, context length, etc.)
-	Description string // extended description (truncated in display)
-	Value       string // internal value used for matching and default selection
+	Label       string   // primary text (always shown)
+	Meta        []string // secondary fields (each becomes a column)
+	Description string   // extended description (used by ModeLabelDesc)
+	Value       string   // internal value for matching and selection
 }
 
-// Picker is a reusable, self-contained picker component with typed items,
-// key handling, filtering, configurable display modes, and optional callbacks.
-// Callbacks receive ctx (typically *Model) so callers can mutate live state.
-// Set DefaultValue to pre-select an item; call Init(ctx) after construction to
-// resolve the default and fire OnSelectionChange.
+// Picker is a reusable, self-contained picker component.
+// Call Init(ctx) after construction to compute column widths and resolve defaults.
 type Picker struct {
 	Title             string
 	Items             []PickerItem
 	Filter            string
 	Selected          int
-	DefaultValue      string // declarative default: match by Value or Label
+	DefaultValue      string
 	DisplayMode       PickerDisplayMode
 	MatchMode         PickerMatchMode
-	OnSelectionChange func(int, PickerItem, any)    // optional: fires on navigation/filter
-	OnConfirm         func(PickerItem, any) tea.Cmd // optional: fires on Enter
-	OnCancel          func(any) tea.Cmd             // optional: fires on Esc
+	OnSelectionChange func(int, PickerItem, any)
+	OnConfirm         func(PickerItem, any) tea.Cmd
+	OnCancel          func(any) tea.Cmd
+
+	// Cached column widths — computed once in Init() from ALL items, never changes.
+	labelWidth     int
+	metaWidths     []int
+	widthsComputed bool
 }
 
-// FilteredItems returns items matching the current filter (case-insensitive on Label, Meta, and Value).
+// FilteredItems returns items matching the current filter.
 func (p *Picker) FilteredItems() []PickerItem {
 	if p.Filter == "" {
 		return p.Items
@@ -61,21 +65,30 @@ func (p *Picker) FilteredItems() []PickerItem {
 	f := strings.ToLower(p.Filter)
 	var result []PickerItem
 	for _, item := range p.Items {
-		labelLower := strings.ToLower(item.Label)
-		metaLower := strings.ToLower(item.Meta)
-		valueLower := strings.ToLower(item.Value)
-		switch p.MatchMode {
-		case MatchPrefix:
-			if strings.HasPrefix(labelLower, f) || strings.HasPrefix(metaLower, f) || strings.HasPrefix(valueLower, f) {
-				result = append(result, item)
-			}
-		default:
-			if strings.Contains(labelLower, f) || strings.Contains(metaLower, f) || strings.Contains(valueLower, f) {
-				result = append(result, item)
-			}
+		if matchItem(item, f, p.MatchMode) {
+			result = append(result, item)
 		}
 	}
 	return result
+}
+
+func matchItem(item PickerItem, f string, mode PickerMatchMode) bool {
+	check := func(s string) bool {
+		lower := strings.ToLower(s)
+		if mode == MatchPrefix {
+			return strings.HasPrefix(lower, f)
+		}
+		return strings.Contains(lower, f)
+	}
+	if check(item.Label) || check(item.Value) || check(item.Description) {
+		return true
+	}
+	for _, m := range item.Meta {
+		if check(m) {
+			return true
+		}
+	}
+	return false
 }
 
 // SelectedItem returns the currently selected PickerItem, or a zero value if out of range.
@@ -87,18 +100,17 @@ func (p *Picker) SelectedItem() PickerItem {
 	return PickerItem{}
 }
 
-// PickerMaxItems is the maximum number of rows rendered.
 const PickerMaxItems = 15
 
 // RenderHeight returns the exact number of terminal lines that Render() will output.
 func (p *Picker) RenderHeight() int {
-	h := 1 // heading line
+	h := 1
 	if p.Filter != "" {
-		h++ // filter hint line
+		h++
 	}
 	items := p.FilteredItems()
 	if len(items) == 0 {
-		h++ // "No matches" line
+		h++
 	} else {
 		count := len(items)
 		if count > PickerMaxItems {
@@ -110,13 +122,9 @@ func (p *Picker) RenderHeight() int {
 }
 
 // HandleKey processes a key message and returns a tea.Cmd if a callback fires.
-// Navigation, filtering, Enter (OnConfirm), and Esc (OnCancel) are all handled.
-// OnCancel/backspace-empty cancel fires the OnCancel callback; Enter fires OnConfirm.
-// Both callbacks receive ctx for live state mutation.
 func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 	s := msg.String()
 
-	// Navigation
 	if s == "up" {
 		if p.Selected > 0 {
 			p.Selected--
@@ -141,7 +149,6 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		return nil
 	}
 
-	// Confirm
 	if s == "enter" {
 		if p.OnConfirm != nil {
 			return p.OnConfirm(p.SelectedItem(), ctx)
@@ -149,7 +156,6 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		return nil
 	}
 
-	// Cancel
 	if s == "esc" {
 		if p.OnCancel != nil {
 			return p.OnCancel(ctx)
@@ -157,7 +163,6 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		return nil
 	}
 
-	// Filter: single character
 	if len(s) == 1 && isPrintable(s) {
 		p.Filter += s
 		p.Selected = 0
@@ -170,7 +175,6 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		return nil
 	}
 
-	// Backspace
 	if s == "backspace" {
 		if len(p.Filter) > 0 {
 			p.Filter = p.Filter[:len(p.Filter)-1]
@@ -182,7 +186,6 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 				}
 			}
 		} else {
-			// Backspace with empty filter = cancel
 			if p.OnCancel != nil {
 				return p.OnCancel(ctx)
 			}
@@ -193,10 +196,14 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 	return nil
 }
 
-// Init resolves the DefaultValue, sets Selected, and fires OnSelectionChange
-// for the initial selection. Call after constructing the Picker and before
-// the first key event. Idempotent — safe to call multiple times.
+// Init computes fixed column widths from ALL items and resolves DefaultValue.
+// Column widths are computed ONCE here and never change during scroll/filter.
 func (p *Picker) Init(ctx any) {
+	if !p.widthsComputed {
+		p.computeWidths()
+		p.widthsComputed = true
+	}
+
 	if p.DefaultValue == "" {
 		return
 	}
@@ -204,7 +211,7 @@ func (p *Picker) Init(ctx any) {
 	for i, item := range p.Items {
 		if strings.ToLower(item.Value) == m || strings.ToLower(item.Label) == m {
 			p.Selected = i
-			p.DefaultValue = "" // consume so it only fires once
+			p.DefaultValue = ""
 			if p.OnSelectionChange != nil {
 				items := p.FilteredItems()
 				if p.Selected < len(items) {
@@ -214,14 +221,49 @@ func (p *Picker) Init(ctx any) {
 			return
 		}
 	}
-	p.DefaultValue = "" // consumed even if not found
+	p.DefaultValue = ""
+}
+
+// computeWidths scans ALL items and sets fixed column widths (max value + 2 padding).
+func (p *Picker) computeWidths() {
+	labelMax := 0
+	maxMeta := 0
+	metaMax := []int{}
+
+	for _, item := range p.Items {
+		if l := len(item.Label); l > labelMax {
+			labelMax = l
+		}
+		if len(item.Meta) > maxMeta {
+			for len(metaMax) < len(item.Meta) {
+				metaMax = append(metaMax, 0)
+			}
+			for j, m := range item.Meta {
+				if l := len(m); l > metaMax[j] {
+					metaMax[j] = l
+				}
+			}
+		}
+	}
+
+	p.labelWidth = labelMax + 4
+	if p.labelWidth < 12 {
+		p.labelWidth = 12
+	}
+
+	p.metaWidths = make([]int, maxMeta)
+	for i := range p.metaWidths {
+		p.metaWidths[i] = metaMax[i] + 4
+		if p.metaWidths[i] < 4 {
+			p.metaWidths[i] = 4
+		}
+	}
 }
 
 // Render renders the picker with the configured display mode.
 func (p *Picker) Render(width int) string {
 	items := p.FilteredItems()
 
-	// Determine visible window around selection (max PickerMaxItems rows).
 	var visible []PickerItem
 	if len(items) > PickerMaxItems {
 		start := p.Selected - 7
@@ -232,7 +274,6 @@ func (p *Picker) Render(width int) string {
 		if end > len(items) {
 			end = len(items)
 		}
-		// Also map global indices to a local offset within the visible slice.
 		visible = items[start:end]
 	} else {
 		visible = items
@@ -253,33 +294,6 @@ func (p *Picker) Render(width int) string {
 			Render(strings.TrimRight(b.String(), "\n"))
 	}
 
-	// Calculate label column width from visible items.
-	maxLabel := 0
-	for _, item := range visible {
-		if l := len(item.Label); l > maxLabel {
-			maxLabel = l
-		}
-	}
-	// Minimum label width of 8 to avoid crushing on very short labels.
-	if maxLabel < 8 {
-		maxLabel = 8
-	}
-	// Reserve at least 2 chars gap between columns.
-	labelWidth := maxLabel + 2
-
-	// Styles
-	bgFooter := lipgloss.Color(style.P.BgFooter)
-	bgSelected := lipgloss.Color(style.P.BgSelected)
-
-	normalLabel := lipgloss.NewStyle().Background(bgFooter).Foreground(lipgloss.Color(style.P.TextMuted)).Width(labelWidth)
-	normalRight := lipgloss.NewStyle().Background(bgFooter).Foreground(lipgloss.Color(style.P.TextMuted))
-	normalRow := lipgloss.NewStyle().Background(bgFooter).Width(width)
-
-	selLabel := lipgloss.NewStyle().Background(bgSelected).Foreground(lipgloss.Color(style.P.TextAccent)).Bold(true).Width(labelWidth)
-	selRight := lipgloss.NewStyle().Background(bgSelected).Foreground(lipgloss.Color(style.P.TextAccent)).Bold(true)
-	selRow := lipgloss.NewStyle().Background(bgSelected).Width(width)
-
-	// Map from visible-index to global index for selection check.
 	var globalStart int
 	if len(items) > PickerMaxItems {
 		globalStart = p.Selected - 7
@@ -289,59 +303,8 @@ func (p *Picker) Render(width int) string {
 	}
 
 	for i, item := range visible {
-		globalIdx := globalStart + i
-		isSelected := globalIdx == p.Selected
-
-		var rendered string
-
-		switch p.DisplayMode {
-		case ModeSingleCol:
-			content := "  " + item.Label
-			if isSelected {
-				rendered = selRow.Render(content)
-			} else {
-				rendered = normalRow.Render(content)
-			}
-
-		default:
-			leftStyle := normalLabel
-			rightStyle := normalRight
-			rowStyle := normalRow
-			if isSelected {
-				leftStyle = selLabel
-				rightStyle = selRight
-				rowStyle = selRow
-			}
-
-			switch p.DisplayMode {
-			case ModeLabelMeta:
-				right := item.Meta
-				rendered = rowStyle.Render(leftStyle.Render("  "+padRight(item.Label, maxLabel)) + rightStyle.Render(right))
-
-			case ModeLabelDesc:
-				// Truncate description to remaining width.
-				avail := width - maxLabel - 4 // "  " + label + gap
-				if avail < 4 {
-					avail = 4
-				}
-				desc := truncateRight(item.Description, avail)
-				rendered = rowStyle.Render(leftStyle.Render("  "+padRight(item.Label, maxLabel)) + rightStyle.Render(desc))
-
-			case ModeLabelValue:
-				right := item.Meta
-				if right == "" {
-					right = item.Value
-				}
-				rendered = rowStyle.Render(leftStyle.Render("  "+padRight(item.Label, maxLabel)) + rightStyle.Render(right))
-
-			default:
-				// Fallback to single col.
-				content := "  " + item.Label
-				rendered = rowStyle.Render(content)
-			}
-		}
-
-		b.WriteString(rendered + "\n")
+		isSelected := (globalStart+i) == p.Selected
+		b.WriteString(p.renderRow(item, isSelected, width) + "\n")
 	}
 
 	return lipgloss.NewStyle().
@@ -350,7 +313,124 @@ func (p *Picker) Render(width int) string {
 		Render(strings.TrimRight(b.String(), "\n"))
 }
 
-// padRight pads s to the given width with spaces, or truncates if longer.
+func (p *Picker) renderRow(item PickerItem, sel bool, width int) string {
+	bgFooter := lipgloss.Color(style.P.BgFooter)
+	bgSelected := lipgloss.Color(style.P.BgSelected)
+
+	st := func() lipgloss.Style {
+		bg := bgFooter
+		fg := lipgloss.Color(style.P.TextMuted)
+		if sel {
+			bg = bgSelected
+			fg = lipgloss.Color(style.P.TextAccent)
+		}
+		s := lipgloss.NewStyle().Background(bg).Foreground(fg)
+		if sel {
+			s = s.Bold(true)
+		}
+		return s
+	}
+
+	rowWrap := lipgloss.NewStyle().Background(bgFooter).Width(width)
+
+	switch p.DisplayMode {
+	case ModeSingleCol:
+		return st().Width(width).Render("  " + item.Label)
+
+	case ModeMultiCol:
+		return p.renderMultiCol(item, sel, width)
+
+	case ModeLabelMeta:
+		right := ""
+		if len(item.Meta) > 0 {
+			right = item.Meta[0]
+		}
+		return rowWrap.Render(st().Width(p.labelWidth).Render("  "+padRight(item.Label, p.labelWidth-2)) + st().Render(right))
+
+	case ModeLabelDesc:
+		avail := width - p.labelWidth - 4
+		if avail < 4 {
+			avail = 4
+		}
+		return rowWrap.Render(st().Width(p.labelWidth).Render("  "+padRight(item.Label, p.labelWidth-2)) + st().Render(truncateRight(item.Description, avail)))
+
+	case ModeLabelValue:
+		right := ""
+		if len(item.Meta) > 0 {
+			right = item.Meta[0]
+		} else {
+			right = item.Value
+		}
+		return rowWrap.Render(st().Width(p.labelWidth).Render("  "+padRight(item.Label, p.labelWidth-2)) + st().Render(right))
+
+	default:
+		return st().Width(width).Render("  " + item.Label)
+	}
+}
+
+// renderMultiCol: Label (fixed) + Meta[0] (fixed) + Meta[1] (fixed) + ... + last Meta (remaining, truncates)
+func (p *Picker) renderMultiCol(item PickerItem, sel bool, width int) string {
+	bgFooter := lipgloss.Color(style.P.BgFooter)
+
+	base := func() lipgloss.Style {
+		bg := lipgloss.Color(style.P.BgFooter)
+		fg := lipgloss.Color(style.P.TextMuted)
+		if sel {
+			bg = lipgloss.Color(style.P.BgSelected)
+			fg = lipgloss.Color(style.P.TextAccent)
+		}
+		s := lipgloss.NewStyle().Background(bg).Foreground(fg)
+		if sel {
+			s = s.Bold(true)
+		}
+		return s
+	}
+
+	parts := []string{item.Label}
+	for _, m := range item.Meta {
+		parts = append(parts, m)
+	}
+
+	rowWrap := lipgloss.NewStyle().Background(bgFooter).Width(width)
+
+	// Total fixed width: label + all meta columns except the last
+	fixed := p.labelWidth
+	for i := 1; i < len(parts)-1; i++ {
+		if i-1 < len(p.metaWidths) {
+			fixed += p.metaWidths[i-1]
+		} else {
+			fixed += 2
+		}
+	}
+	lastWidth := width - fixed
+	if lastWidth < 2 {
+		lastWidth = 2
+	}
+
+	var b strings.Builder
+	b.WriteString("  ")
+
+	for j, part := range parts {
+		st := base()
+		if j == 0 {
+			// Label — fixed
+			b.WriteString(st.Width(p.labelWidth).Render(padRight(part, p.labelWidth)))
+		} else if j < len(parts)-1 {
+			// Middle meta — fixed
+			w := 2
+			if j-1 < len(p.metaWidths) {
+				w = p.metaWidths[j-1]
+			}
+			b.WriteString(st.Width(w).Render(padRight(part, w)))
+		} else {
+			// Last — remaining space, truncate
+			b.WriteString(st.Width(lastWidth).Render(truncateRight(part, lastWidth)))
+		}
+	}
+
+	return rowWrap.Render(b.String())
+}
+
 func padRight(s string, n int) string {
 	if len(s) >= n {
 		return s[:n]
@@ -358,7 +438,6 @@ func padRight(s string, n int) string {
 	return s + strings.Repeat(" ", n-len(s))
 }
 
-// truncateRight truncates s to maxLen by replacing the end with "…".
 func truncateRight(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
@@ -369,7 +448,6 @@ func truncateRight(s string, maxLen int) string {
 	return s[:maxLen-1] + "…"
 }
 
-// isPrintable returns true if the string is a single printable ASCII character.
 func isPrintable(s string) bool {
 	if len(s) != 1 {
 		return false

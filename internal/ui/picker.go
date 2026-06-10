@@ -145,7 +145,7 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		return nil
 	}
 
-	if s == "esc" {
+	if s == "esc" || s == "ctrl+c" {
 		if p.OnCancel != nil {
 			return p.OnCancel(ctx)
 		}

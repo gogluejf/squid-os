@@ -30,7 +30,7 @@ func (m Model) handleActivePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	cmd := m.activePicker.HandleKey(msg, &m)
 
 	// For command picker, keep textarea in sync with the filter
-	if m.pickerContext == "command" {
+	if m.pickerContext == "command" && cmd == nil {
 		m.textarea.SetValue("/" + m.activePicker.Filter)
 	}
 

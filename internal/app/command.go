@@ -52,6 +52,7 @@ func (m *Model) openCommandPicker() {
 		},
 		OnCancel: func(ctx any) tea.Cmd {
 			m := ctx.(*Model)
+			m.textarea.SetValue("")
 			return m.setChatMode()
 		},
 	}

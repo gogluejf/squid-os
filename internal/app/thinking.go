@@ -9,7 +9,6 @@ import (
 
 // toggleThinking toggles thinking mode on/off and persists the setting.
 func (m Model) toggleThinking() (Model, tea.Cmd) {
-	m.thinkingToggle = ui.NewThinkingToggle(m.settings.Thinking)
 	m.settings.Thinking = !m.settings.Thinking
 	_ = config.SaveSettings(m.paths, m.settings)
 	(&m).session.updateConfigMsg(m.settings.Provider, m.settings.Model, m.settings.Thinking)

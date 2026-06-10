@@ -41,7 +41,6 @@ type Model struct {
 	sessionPicker    ui.PickerList
 	sessionPickerRaw []config.SessionInfo // parallel raw names for session picker selection
 	filePicker       ui.PickerList
-	thinkingToggle   ui.ThinkingToggle
 	savePrompt       ui.SavePrompt
 	filePickerFor    string // "image" or "system"
 

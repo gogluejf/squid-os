@@ -262,47 +262,6 @@ func (pl *PickerList) Render(width int) string {
 		Render(strings.TrimRight(b.String(), "\n"))
 }
 
-// ThinkingToggle for the /thinking command
-type ThinkingToggle struct {
-	Value    bool
-	Selected int // 0 = on, 1 = off
-}
-
-func NewThinkingToggle(current bool) ThinkingToggle {
-	sel := 1
-	if current {
-		sel = 0
-	}
-	return ThinkingToggle{Value: current, Selected: sel}
-}
-
-func (tt *ThinkingToggle) Toggle() {
-	if tt.Selected == 0 {
-		tt.Selected = 1
-	} else {
-		tt.Selected = 0
-	}
-}
-
-func (tt *ThinkingToggle) Result() bool {
-	return tt.Selected == 0
-}
-
-func (tt *ThinkingToggle) Render(width int) string {
-	var b strings.Builder
-	b.WriteString(style.HeadingStyle.Render("  Thinking Mode") + "\n")
-
-	options := []string{"on", "off"}
-	for i, opt := range options {
-		if i == tt.Selected {
-			b.WriteString(style.CommandSelectedStyle.Width(width).Render("  "+opt) + "\n")
-		} else {
-			b.WriteString(style.CommandDescStyle.Render("  "+opt) + "\n")
-		}
-	}
-	return strings.TrimRight(b.String(), "\n")
-}
-
 // SavePrompt for the /save command
 type SavePrompt struct {
 	Name    string

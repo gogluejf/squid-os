@@ -108,7 +108,7 @@ const PickerMaxItems = 15
 
 // RenderHeight returns the exact number of terminal lines that Render() will output.
 func (p *Picker) RenderHeight() int {
-	h := 1
+	h := 3 // leading blank + title + separator blank
 	if p.Filter != "" {
 		h++
 	}
@@ -120,7 +120,7 @@ func (p *Picker) RenderHeight() int {
 		if count > PickerMaxItems {
 			count = PickerMaxItems
 		}
-		h += count
+		h += count + 1 // trailing blank
 	}
 	return h
 }
@@ -305,20 +305,31 @@ func (p *Picker) Render(width int) string {
 		visible = items
 	}
 
-	var b strings.Builder
-	b.WriteString(style.HeadingStyle.Render("  "+p.Title) + "\n")
+	var lines []string
 
+	// Leading blank line
+	lines = append(lines, "")
+
+	// Title
+	lines = append(lines, style.HeadingStyle.Render("  "+p.Title))
+
+	// Filter line (if any)
 	if p.Filter != "" {
-		b.WriteString(style.CommandDescStyle.Render("  filter: "+p.Filter) + "\n")
+		lines = append(lines, style.CommandDescStyle.Render("  filter: "+p.Filter))
 	}
 
 	if len(items) == 0 {
-		b.WriteString(style.CommandDescStyle.Render("  No matches"))
+		// Separator blank line
+		lines = append(lines, "")
+		lines = append(lines, style.CommandDescStyle.Render("  No matches"))
 		return lipgloss.NewStyle().
 			Background(lipgloss.Color(style.P.BgFooter)).
 			Width(width).
-			Render(strings.TrimRight(b.String(), "\n"))
+			Render(strings.Join(lines, "\n"))
 	}
+
+	// Separator blank line after title/filter
+	lines = append(lines, "")
 
 	var globalStart int
 	if len(items) > PickerMaxItems {
@@ -330,13 +341,16 @@ func (p *Picker) Render(width int) string {
 
 	for i, item := range visible {
 		isSelected := (globalStart+i) == p.Selected
-		b.WriteString(p.renderRow(item, isSelected, width) + "\n")
+		lines = append(lines, p.renderRow(item, isSelected, width))
 	}
+
+	// Trailing blank line
+	lines = append(lines, "")
 
 	return lipgloss.NewStyle().
 		Background(lipgloss.Color(style.P.BgFooter)).
 		Width(width).
-		Render(strings.TrimRight(b.String(), "\n"))
+		Render(strings.Join(lines, "\n"))
 }
 
 // renderRow renders a single picker row.

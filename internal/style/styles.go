@@ -20,26 +20,29 @@ type Palette struct {
 	BgSelected  string // picker/command selected row bg
 
 	// Foreground / Text
-	TextPrimary       string // main text (white)
-	TextSecondary     string // secondary text (light gray)
-	TextDim           string // dim text (headers, labels)
-	TextMuted         string // very dim (timestamps, separators)
-	TextHeading       string // markdown headings
-	TextAccent        string // links, keys, bullets (cyan)
-	SquidPixel        string // electric blue squid pixel
-	TextToolParam     string // tool display param value (lighter blue)
-	TextSystemLabel   string // system message label (green)
-	TextSystemParam   string // system message param value (darker green)
-	TextInternalLabel string // internal message label (teal)
-	TextInternalParam string // internal message param value (darker teal)
-	TextCode          string // inline code / code block text
-	TextSuccess       string // success indicators (green)
-	TextError         string // error indicators (red)
-	TextWarning       string // warning indicators (yellow/orange)
-	TextInfo          string // info/notice (muted)
-	TextSkill         string // skill label (yellow, matches SkillStyle)
-	TextSpinner       string // spinner / active indicator (pink)
-	TextAttachment    string // image attachment chip (orange)
+	TextPrimary        string // main text (white)
+	TextSecondary      string // secondary text (light gray)
+	TextDim            string // dim text (headers, labels)
+	TextMuted          string // very dim (timestamps, separators)
+	TextHeading        string // markdown headings
+	TextAccent         string // links, keys, bullets (cyan)
+	SquidPixel         string // electric blue squid pixel
+	TextToolParam      string // tool display param value (lighter blue)
+	TextSystemLabel    string // system message label (green)
+	TextSystemParam    string // system message param value (darker green)
+	TextInternalLabel  string // internal message label (teal)
+	TextInternalParam  string // internal message param value (darker teal)
+	TextCode           string // inline code / code block text
+	TextSuccess        string // success indicators (green)
+	TextError          string // error indicators (red)
+	TextWarning        string // warning indicators (yellow/orange)
+	TextSyntheticLabel string // synthetic message label
+	TextSyntheticParam string // synthetic message param (darker variant of label)
+	TextInfo           string // info/notice (muted)
+	TextSkill          string // skill label (yellow, matches SkillStyle)
+	TextSkillParam     string
+	TextSpinner        string // spinner / active indicator (pink)
+	TextAttachment     string // image attachment chip (orange)
 
 	// Context bar
 	CtxBarUsed  string // context bar: used portion bg (darker)
@@ -55,26 +58,29 @@ var P = Palette{
 	BgIncognito: "54",
 	BgSelected:  "237",
 
-	TextPrimary:       "252",
-	TextSecondary:     "245",
-	TextDim:           "240",
-	TextMuted:         "243",
-	TextHeading:       "255",
-	TextAccent:        "110", // cyan
-	SquidPixel:        "67",  // electric blue
-	TextToolParam:     "67",  // dark gray-blue for tool param display
-	TextSystemLabel:   "141", // system message label (green)
-	TextSystemParam:   "139", // darker green than label
-	TextInternalLabel: "39",  // internal message label (teal)
-	TextInternalParam: "24",  // darker teal than label
-	TextCode:          "228", // yellow
-	TextSuccess:       "114", // light green
-	TextError:         "203", // light red
-	TextWarning:       "214", // orange/yellow
-	TextInfo:          "243",
-	TextSkill:         "178", // matches SkillStyle label color
-	TextSpinner:       "205", // pink
-	TextAttachment:    "214", // orange
+	TextPrimary:        "252",
+	TextSecondary:      "245",
+	TextDim:            "240",
+	TextMuted:          "243",
+	TextHeading:        "255",
+	TextAccent:         "110", // cyan
+	SquidPixel:         "67",  // electric blue
+	TextToolParam:      "67",  // dark gray-blue for tool param display
+	TextSystemLabel:    "141", // system message label (green)
+	TextSystemParam:    "139", // darker green than label
+	TextInternalLabel:  "39",  // internal message label (teal)
+	TextInternalParam:  "24",  // darker teal than label
+	TextCode:           "228", // yellow
+	TextSuccess:        "114", // light green
+	TextError:          "203", // light red
+	TextWarning:        "214", // orange/yellow
+	TextSyntheticLabel: "214", // same as warning
+	TextSyntheticParam: "215", // darker orange variant
+	TextInfo:           "243",
+	TextSkill:          "178", // matches SkillStyle label color
+	TextSkillParam:     "180",
+	TextSpinner:        "205", // pink
+	TextAttachment:     "214", // orange
 
 	CtxBarUsed:  "255",
 	CtxBarEmpty: "237",
@@ -219,8 +225,6 @@ var (
 			Background(lipgloss.Color(P.BgCode)).
 			Foreground(lipgloss.Color(P.TextError))
 
-
-
 	// Command palette
 	CommandStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(P.TextAccent)).
@@ -317,8 +321,8 @@ func SyntheticStyleLabel() StyleLabel {
 	return _syntheticLabel.Get(func() StyleLabel {
 		bg := lipgloss.Color(P.BgApp)
 		return StyleLabel{
-			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextWarning)),
-			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextInternalParam)),
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSyntheticLabel)),
+			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSyntheticParam)),
 			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
 			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextMuted)),
 			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
@@ -414,8 +418,8 @@ func SkillStyle() StyleLabel {
 	return _skillLabel.Get(func() StyleLabel {
 		bg := lipgloss.Color(P.BgCode)
 		return StyleLabel{
-			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("178")),
-			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("180")),
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSkill)),
+			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSkillParam)),
 			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
 			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
 			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
@@ -424,5 +428,3 @@ func SkillStyle() StyleLabel {
 		}
 	})
 }
-
-

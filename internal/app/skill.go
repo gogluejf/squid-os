@@ -121,6 +121,16 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 		Title:       "Select Skill",
 		Items:       items,
 		DisplayMode: ui.ModeLabelDesc,
+		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			*m = m.confirmSkillPicker(item)
+			m.updateViewportContent()
+			return m.setChatMode()
+		},
+		OnCancel: func(ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			return m.setChatMode()
+		},
 	}
 
 	// Pre-select current skill if any

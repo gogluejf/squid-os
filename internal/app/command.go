@@ -14,6 +14,17 @@ func (m *Model) openCommandPicker() {
 		Items:       m.allCommands,
 		DisplayMode: ui.ModeLabelDesc,
 		MatchMode:   ui.MatchPrefix,
+		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			m.textarea.SetValue("")
+			mm, cmd := m.executeCommand(item.Value)
+			*m = mm.(Model)
+			return cmd
+		},
+		OnCancel: func(ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			return m.setChatMode()
+		},
 	}
 	m.pickerContext = "command"
 	m.mode = ModeCommandPicker

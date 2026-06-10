@@ -20,7 +20,6 @@ var AllCommands = []commandEntry{
 	{Name: "skill", Description: "Select active skill"},
 	{Name: "thinking", Description: "Toggle thinking mode (on/off)"},
 	{Name: "auth-mode", Description: "Cycle authorization mode (auto/ask-on-write/ask-for-all)"},
-	{Name: "image", Description: "Attach image to next message"},
 	{Name: "save", Description: "Save current session"},
 	{Name: "load", Description: "Load a saved session"},
 	{Name: "clear", Description: "Clear chat and start fresh"},
@@ -41,15 +40,6 @@ func AllPickerCommands() []PickerItem {
 	}
 	return items
 }
-
-// PickerAction represents the result of a key interaction with the Picker.
-type PickerAction int
-
-const (
-	ActionNone   PickerAction = iota // no action
-	ActionSelect                     // user pressed Enter to confirm
-	ActionCancel                     // user pressed Esc to cancel
-)
 
 // PickerDisplayMode controls how picker items are rendered.
 type PickerDisplayMode int
@@ -78,7 +68,8 @@ type PickerItem struct {
 }
 
 // Picker is a reusable, self-contained picker component with typed items,
-// key handling, filtering, configurable display modes, and selection callbacks.
+// key handling, filtering, configurable display modes, and optional callbacks.
+// Callbacks receive ctx (typically *Model) so callers can mutate live state.
 type Picker struct {
 	Title             string
 	Items             []PickerItem
@@ -87,7 +78,9 @@ type Picker struct {
 	DefaultMatch      string
 	DisplayMode       PickerDisplayMode
 	MatchMode         PickerMatchMode
-	OnSelectionChange func(int, PickerItem, any)
+	OnSelectionChange func(int, PickerItem, any)       // optional: fires on navigation/filter
+	OnConfirm         func(PickerItem, any) tea.Cmd    // optional: fires on Enter
+	OnCancel          func(any) tea.Cmd                // optional: fires on Esc
 }
 
 // FilteredItems returns items matching the current filter (case-insensitive on Label, Meta, and Value).
@@ -146,10 +139,11 @@ func (p *Picker) RenderHeight() int {
 	return h
 }
 
-// HandleKey processes a key message and returns the resulting action.
-// Handles navigation (Up/Down/Tab), filtering (single-char input, backspace),
-// Enter for selection, and Esc for cancellation.
-func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) PickerAction {
+// HandleKey processes a key message and returns a tea.Cmd if a callback fires.
+// Navigation, filtering, Enter (OnConfirm), and Esc (OnCancel) are all handled.
+// OnCancel/backspace-empty cancel fires the OnCancel callback; Enter fires OnConfirm.
+// Both callbacks receive ctx for live state mutation.
+func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 	s := msg.String()
 
 	// Navigation
@@ -163,7 +157,7 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) PickerAction {
 				}
 			}
 		}
-		return ActionNone
+		return nil
 	}
 
 	if s == "down" || s == "tab" {
@@ -174,18 +168,26 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) PickerAction {
 				p.OnSelectionChange(p.Selected, items[p.Selected], ctx)
 			}
 		}
-		return ActionNone
+		return nil
 	}
 
-	// Confirm / Cancel
+	// Confirm
 	if s == "enter" {
-		return ActionSelect
-	}
-	if s == "esc" {
-		return ActionCancel
+		if p.OnConfirm != nil {
+			return p.OnConfirm(p.SelectedItem(), ctx)
+		}
+		return nil
 	}
 
-	// Filter: single character or backspace
+	// Cancel
+	if s == "esc" {
+		if p.OnCancel != nil {
+			return p.OnCancel(ctx)
+		}
+		return nil
+	}
+
+	// Filter: single character
 	if len(s) == 1 && isPrintable(s) {
 		p.Filter += s
 		p.Selected = 0
@@ -195,8 +197,10 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) PickerAction {
 				p.OnSelectionChange(0, items[0], ctx)
 			}
 		}
-		return ActionNone
+		return nil
 	}
+
+	// Backspace
 	if s == "backspace" {
 		if len(p.Filter) > 0 {
 			p.Filter = p.Filter[:len(p.Filter)-1]
@@ -208,12 +212,15 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) PickerAction {
 				}
 			}
 		} else {
-			return ActionCancel
+			// Backspace with empty filter = cancel
+			if p.OnCancel != nil {
+				return p.OnCancel(ctx)
+			}
 		}
-		return ActionNone
+		return nil
 	}
 
-	return ActionNone
+	return nil
 }
 
 // SetDefaultSelected scans items by Value or Label (case-insensitive) and sets Selected index.

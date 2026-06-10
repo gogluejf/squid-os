@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
 	"squid-os/internal/ui"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // modelsLoadedMsg signals that model scanning completed.
@@ -57,6 +57,16 @@ func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
 		Title:       "Select Model",
 		Items:       items,
 		DisplayMode: ui.ModeLabelValue,
+		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			*m = m.confirmModelPicker(item)
+			m.updateViewportContent()
+			return m.setChatMode()
+		},
+		OnCancel: func(ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			return m.setChatMode()
+		},
 	}
 	m.pickerContext = "model"
 	m.pickerPayload = entries

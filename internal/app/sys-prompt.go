@@ -22,6 +22,16 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 		Title:       "System Prompt",
 		Items:       items,
 		DisplayMode: ui.ModeSingleCol,
+		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			*m = m.confirmSystemPicker(item)
+			m.updateViewportContent()
+			return m.setChatMode()
+		},
+		OnCancel: func(ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			return m.setChatMode()
+		},
 	}
 	m.pickerContext = "system"
 	m.mode = ModeFilePicker

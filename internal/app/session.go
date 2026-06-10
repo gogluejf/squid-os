@@ -127,6 +127,24 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			m := ctx.(*Model)
 			*m = (*m).previewSession(item.Value)
 		},
+		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			*m = m.confirmSessionPicker(item)
+			m.updateViewportContent()
+			return m.setChatMode()
+		},
+		OnCancel: func(ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			if m.sessionSnapshot != nil {
+				m.session = *m.sessionSnapshot
+				m.sessionSnapshot = nil
+				if m.session.file.Session.WorkingDir != "" {
+					m.applyWorkingDir(m.session.file.Session.WorkingDir)
+				}
+				m.updateViewportContent()
+			}
+			return m.setChatMode()
+		},
 	}
 
 	// Pre-select LastSessionName if it exists in the list

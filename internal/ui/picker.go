@@ -398,21 +398,3 @@ func isPrintable(s string) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
 		(c >= '!' && c <= '/') || (c >= ':' && c <= '@') || (c >= '[' && c <= '`') || (c >= '{' && c <= '~') || c == ' '
 }
-
-// SavePrompt for the /save command
-type SavePrompt struct {
-	Name    string
-	Editing bool
-}
-
-func NewSavePrompt(lastName string) SavePrompt {
-	return SavePrompt{Name: lastName, Editing: true}
-}
-
-func (sp *SavePrompt) Render(width int) string {
-	var b strings.Builder
-	b.WriteString(style.HeadingStyle.Render("  Save Session") + "\n")
-	b.WriteString(style.CommandDescStyle.Render("  Name: "))
-	b.WriteString(style.CommandStyle.Render(sp.Name + "_"))
-	return b.String()
-}

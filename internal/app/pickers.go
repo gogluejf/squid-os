@@ -38,26 +38,3 @@ func (m Model) handleActivePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	(&m).recalcLayout()
 	return m, cmd
 }
-
-// handleSavePromptKey handles key input while the save-name prompt overlay is active.
-func (m Model) handleSavePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keys.Escape), key.Matches(msg, keys.Cancel):
-		return m, m.setChatMode()
-
-	case key.Matches(msg, keys.Send):
-		nm, _ := m.saveAs(m.savePrompt.Name, false)
-		return nm, nm.setChatMode()
-
-	default:
-		s := msg.String()
-		if s == "backspace" {
-			if len(m.savePrompt.Name) > 0 {
-				m.savePrompt.Name = m.savePrompt.Name[:len(m.savePrompt.Name)-1]
-			}
-		} else if len(s) == 1 {
-			m.savePrompt.Name += s
-		}
-		return m, nil
-	}
-}

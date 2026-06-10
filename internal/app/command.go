@@ -57,7 +57,7 @@ func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case "save":
-		return m.startManualSave()
+		return m.openSaveSessionPrompt()
 
 	case "load":
 		return m.openSessionPicker()

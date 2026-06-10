@@ -74,7 +74,7 @@ func (m *Model) recalcLayout() {
 	switch m.mode {
 	case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker, ModeCommandPicker:
 		overlayHeight = m.activePicker.RenderHeight()
-	case ModeSavePrompt:
+	case ModeSessionSave:
 		overlayHeight = 2 // heading + name input line
 	case ModeHistorySearch:
 		overlayHeight = m.historySearch.RenderHeight()

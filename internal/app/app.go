@@ -39,7 +39,7 @@ type Model struct {
 	activePicker ui.Picker
 	pickerContext   string // "model", "skill", "session", "image", "system"
 	pickerPayload   interface{} // additional context (e.g. modelEntries for model picker)
-	savePrompt      ui.SavePrompt
+	sessionSave     sessionSavePrompt
 
 	// Session + messages (bundled)
 	session chatSession

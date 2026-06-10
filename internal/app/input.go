@@ -28,8 +28,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker, ModeCommandPicker:
 		return m.handleActivePicker(msg)
 
-	case ModeSavePrompt:
-		return m.handleSavePromptKey(msg)
+	case ModeSessionSave:
+		return m.handleSessionSaveKey(msg)
 
 	case ModeHistorySearch:
 		return m.handleHistorySearchKey(msg)
@@ -91,7 +91,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.Save):
-		return m.startManualSave()
+		return m.openSaveSessionPrompt()
 
 	case key.Matches(msg, keys.Load):
 		return m.openSessionPicker()

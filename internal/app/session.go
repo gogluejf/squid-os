@@ -1,18 +1,43 @@
 package app
 
 import (
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/config"
 	"squid-os/internal/log"
+	"squid-os/internal/style"
 	"squid-os/internal/ui"
 	"squid-os/internal/util"
+
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/lipgloss"
 )
 
-// startManualSave opens the save prompt so the user can confirm or edit the session name.
-func (m Model) startManualSave() (Model, tea.Cmd) {
+// sessionSavePrompt holds the save-name input state for the session save overlay.
+type sessionSavePrompt struct {
+	Name string
+}
+
+func newSessionSavePrompt(lastName string) sessionSavePrompt {
+	return sessionSavePrompt{Name: lastName}
+}
+
+func (s sessionSavePrompt) Render(width int) string {
+	var b strings.Builder
+	b.WriteString(style.HeadingStyle.Render("  Save Session") + "\n")
+	b.WriteString(style.CommandDescStyle.Render("  Name: "))
+	b.WriteString(style.CommandStyle.Render(s.Name + "_"))
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(style.P.BgFooter)).
+		Width(width).
+		Render(b.String())
+}
+
+// openSaveSessionPrompt opens the save prompt so the user can confirm or edit the session name.
+func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 	if m.incognito {
 		return m, nil // no saving in incognito
 	}
@@ -20,8 +45,8 @@ func (m Model) startManualSave() (Model, tea.Cmd) {
 	if name == "" {
 		name = time.Now().Format("2006-01-02_15-04")
 	}
-	m.savePrompt = ui.NewSavePrompt(name)
-	m.mode = ModeSavePrompt
+	m.sessionSave = newSessionSavePrompt(name)
+	m.mode = ModeSessionSave
 	m.textarea.Blur()
 	(&m).recalcLayout()
 	return m, nil
@@ -75,6 +100,29 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 	}
 	m.updateViewportContent()
 	return m, m.setChatMode()
+}
+
+// handleSessionSaveKey handles key input while the save-name prompt overlay is active.
+func (m Model) handleSessionSaveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keys.Escape), key.Matches(msg, keys.Cancel):
+		return m, m.setChatMode()
+
+	case key.Matches(msg, keys.Send):
+		nm, _ := m.saveAs(m.sessionSave.Name, false)
+		return nm, nm.setChatMode()
+
+	default:
+		s := msg.String()
+		if s == "backspace" {
+			if len(m.sessionSave.Name) > 0 {
+				m.sessionSave.Name = m.sessionSave.Name[:len(m.sessionSave.Name)-1]
+			}
+		} else if len(s) == 1 {
+			m.sessionSave.Name += s
+		}
+		return m, nil
+	}
 }
 
 // toggleIncognito switches incognito mode on/off and resets the chat either way.

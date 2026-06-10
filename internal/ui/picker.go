@@ -114,7 +114,7 @@ func (p *Picker) RenderHeight() int {
 	}
 	items := p.FilteredItems()
 	if len(items) == 0 {
-		h++
+		h += 2 // "No matches" + trailing blank
 	} else {
 		count := len(items)
 		if count > PickerMaxItems {
@@ -322,6 +322,7 @@ func (p *Picker) Render(width int) string {
 		// Separator blank line
 		lines = append(lines, "")
 		lines = append(lines, style.CommandDescStyle.Render("  No matches"))
+		lines = append(lines, "")
 		return lipgloss.NewStyle().
 			Background(lipgloss.Color(style.P.BgFooter)).
 			Width(width).

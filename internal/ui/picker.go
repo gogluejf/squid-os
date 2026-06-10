@@ -224,7 +224,7 @@ func (p *Picker) Init(ctx any) {
 	p.DefaultValue = ""
 }
 
-// computeWidths scans ALL items and sets fixed column widths (max value + 2 padding).
+// computeWidths scans ALL items and sets fixed column widths (max value + 4 padding).
 func (p *Picker) computeWidths() {
 	labelMax := 0
 	maxMeta := 0
@@ -234,14 +234,18 @@ func (p *Picker) computeWidths() {
 		if l := len(item.Label); l > labelMax {
 			labelMax = l
 		}
-		if len(item.Meta) > maxMeta {
-			for len(metaMax) < len(item.Meta) {
-				metaMax = append(metaMax, 0)
-			}
-			for j, m := range item.Meta {
-				if l := len(m); l > metaMax[j] {
-					metaMax[j] = l
-				}
+		mlen := len(item.Meta)
+		if mlen > maxMeta {
+			maxMeta = mlen
+		}
+		// Extend metaMax to accommodate this item's meta count
+		for len(metaMax) < mlen {
+			metaMax = append(metaMax, 0)
+		}
+		// Check all meta fields (not just when count increases)
+		for j, m := range item.Meta {
+			if l := len(m); l > metaMax[j] {
+				metaMax[j] = l
 			}
 		}
 	}
@@ -314,28 +318,10 @@ func (p *Picker) Render(width int) string {
 }
 
 func (p *Picker) renderRow(item PickerItem, sel bool, width int) string {
-	bgFooter := lipgloss.Color(style.P.BgFooter)
-	bgSelected := lipgloss.Color(style.P.BgSelected)
-
-	st := func() lipgloss.Style {
-		bg := bgFooter
-		fg := lipgloss.Color(style.P.TextMuted)
-		if sel {
-			bg = bgSelected
-			fg = lipgloss.Color(style.P.TextAccent)
-		}
-		s := lipgloss.NewStyle().Background(bg).Foreground(fg)
-		if sel {
-			s = s.Bold(true)
-		}
-		return s
-	}
-
-	rowWrap := lipgloss.NewStyle().Background(bgFooter).Width(width)
-
 	switch p.DisplayMode {
 	case ModeSingleCol:
-		return st().Width(width).Render("  " + item.Label)
+		content := "  " + item.Label
+		return p.applyRowStyle(content, sel, width)
 
 	case ModeMultiCol:
 		return p.renderMultiCol(item, sel, width)
@@ -345,14 +331,16 @@ func (p *Picker) renderRow(item PickerItem, sel bool, width int) string {
 		if len(item.Meta) > 0 {
 			right = item.Meta[0]
 		}
-		return rowWrap.Render(st().Width(p.labelWidth).Render("  "+padRight(item.Label, p.labelWidth-2)) + st().Render(right))
+		content := "  " + padRight(item.Label, p.labelWidth-2) + right
+		return p.applyRowStyle(content, sel, width)
 
 	case ModeLabelDesc:
 		avail := width - p.labelWidth - 4
 		if avail < 4 {
 			avail = 4
 		}
-		return rowWrap.Render(st().Width(p.labelWidth).Render("  "+padRight(item.Label, p.labelWidth-2)) + st().Render(truncateRight(item.Description, avail)))
+		content := "  " + padRight(item.Label, p.labelWidth-2) + truncateRight(item.Description, avail)
+		return p.applyRowStyle(content, sel, width)
 
 	case ModeLabelValue:
 		right := ""
@@ -361,37 +349,37 @@ func (p *Picker) renderRow(item PickerItem, sel bool, width int) string {
 		} else {
 			right = item.Value
 		}
-		return rowWrap.Render(st().Width(p.labelWidth).Render("  "+padRight(item.Label, p.labelWidth-2)) + st().Render(right))
+		content := "  " + padRight(item.Label, p.labelWidth-2) + right
+		return p.applyRowStyle(content, sel, width)
 
 	default:
-		return st().Width(width).Render("  " + item.Label)
+		content := "  " + item.Label
+		return p.applyRowStyle(content, sel, width)
 	}
 }
 
-// renderMultiCol: Label (fixed) + Meta[0] (fixed) + Meta[1] (fixed) + ... + last Meta (remaining, truncates)
-func (p *Picker) renderMultiCol(item PickerItem, sel bool, width int) string {
-	bgFooter := lipgloss.Color(style.P.BgFooter)
-
-	base := func() lipgloss.Style {
-		bg := lipgloss.Color(style.P.BgFooter)
-		fg := lipgloss.Color(style.P.TextMuted)
-		if sel {
-			bg = lipgloss.Color(style.P.BgSelected)
-			fg = lipgloss.Color(style.P.TextAccent)
-		}
-		s := lipgloss.NewStyle().Background(bg).Foreground(fg)
-		if sel {
-			s = s.Bold(true)
-		}
-		return s
+// applyRowStyle applies background/foreground/bold + width constraint to plain text.
+func (p *Picker) applyRowStyle(text string, sel bool, width int) string {
+	bg := lipgloss.Color(style.P.BgFooter)
+	fg := lipgloss.Color(style.P.TextMuted)
+	if sel {
+		bg = lipgloss.Color(style.P.BgSelected)
+		fg = lipgloss.Color(style.P.TextAccent)
 	}
+	s := lipgloss.NewStyle().Background(bg).Foreground(fg).Width(width)
+	if sel {
+		s = s.Bold(true)
+	}
+	return s.Render(text)
+}
 
+// renderMultiCol: Label (fixed) + Meta[0] (fixed) + Meta[1] (fixed) + ... + last Meta (remaining, truncates)
+// Builds the row as plain text first, then applies a single lipgloss style at the end.
+func (p *Picker) renderMultiCol(item PickerItem, sel bool, width int) string {
 	parts := []string{item.Label}
 	for _, m := range item.Meta {
 		parts = append(parts, m)
 	}
-
-	rowWrap := lipgloss.NewStyle().Background(bgFooter).Width(width)
 
 	// Total fixed width: label + all meta columns except the last
 	fixed := p.labelWidth
@@ -402,33 +390,42 @@ func (p *Picker) renderMultiCol(item PickerItem, sel bool, width int) string {
 			fixed += 2
 		}
 	}
-	lastWidth := width - fixed
+	// lastWidth is the remaining space for the last column, minus the 2-char row indent
+	lastWidth := width - fixed - 2
 	if lastWidth < 2 {
 		lastWidth = 2
 	}
 
+	// Build row as plain text
 	var b strings.Builder
 	b.WriteString("  ")
 
 	for j, part := range parts {
-		st := base()
 		if j == 0 {
-			// Label — fixed
-			b.WriteString(st.Width(p.labelWidth).Render(padRight(part, p.labelWidth)))
+			b.WriteString(padRight(part, p.labelWidth))
 		} else if j < len(parts)-1 {
-			// Middle meta — fixed
 			w := 2
 			if j-1 < len(p.metaWidths) {
 				w = p.metaWidths[j-1]
 			}
-			b.WriteString(st.Width(w).Render(padRight(part, w)))
+			b.WriteString(padRight(part, w))
 		} else {
-			// Last — remaining space, truncate
-			b.WriteString(st.Width(lastWidth).Render(truncateRight(part, lastWidth)))
+			b.WriteString(truncateRight(part, lastWidth))
 		}
 	}
 
-	return rowWrap.Render(b.String())
+	// Apply single style at the end
+	bg := lipgloss.Color(style.P.BgFooter)
+	fg := lipgloss.Color(style.P.TextMuted)
+	if sel {
+		bg = lipgloss.Color(style.P.BgSelected)
+		fg = lipgloss.Color(style.P.TextAccent)
+	}
+	s := lipgloss.NewStyle().Background(bg).Foreground(fg).Width(width)
+	if sel {
+		s = s.Bold(true)
+	}
+	return s.Render(b.String())
 }
 
 func padRight(s string, n int) string {

@@ -72,9 +72,12 @@ func matchItem(item PickerItem, f string, mode PickerMatchMode) bool {
 	if check(item.Label) || check(item.Value) {
 		return true
 	}
-	for _, m := range item.Meta {
-		if check(m) {
-			return true
+	// Meta only matches in substring mode — prefix matching on descriptions is too noisy
+	if mode != MatchPrefix {
+		for _, m := range item.Meta {
+			if strings.Contains(strings.ToLower(m), f) {
+				return true
+			}
 		}
 	}
 	return false
@@ -127,7 +130,38 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		return nil
 	}
 
-	if s == "down" || s == "tab" {
+	if s == "tab" {
+		items := p.FilteredItems()
+		if len(items) == 0 {
+			return nil
+		}
+		if p.Filter != "" {
+			// Shell-style completion: extend filter by finding common prefix
+			// across all matched item labels.
+			completion := completeFilter(items, p.Filter)
+			if completion != p.Filter {
+				p.Filter = completion
+				p.Selected = 0
+				if p.OnSelectionChange != nil {
+					items := p.FilteredItems()
+					if len(items) > 0 {
+						p.OnSelectionChange(0, items[0], ctx)
+					}
+				}
+			}
+			return nil
+		}
+		// No filter: just cycle selection down.
+		if p.Selected < len(items)-1 {
+			p.Selected++
+			if p.OnSelectionChange != nil && p.Selected < len(items) {
+				p.OnSelectionChange(p.Selected, items[p.Selected], ctx)
+			}
+		}
+		return nil
+	}
+
+	if s == "down" {
 		items := p.FilteredItems()
 		if p.Selected < len(items)-1 {
 			p.Selected++
@@ -411,4 +445,64 @@ func isPrintable(s string) bool {
 	c := s[0]
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
 		(c >= '!' && c <= '/') || (c >= ':' && c <= '@') || (c >= '[' && c <= '`') || (c >= '{' && c <= '~') || c == ' '
+}
+
+// completeFilter finds how far the filter can be extended by finding the
+// common continuation across all matched items' labels. Returns the new filter
+// (at least as long as the original), or the original filter unchanged if
+// no extension is possible.
+func completeFilter(items []PickerItem, filter string) string {
+	if len(items) <= 1 {
+		if len(items) == 1 {
+			// Single match: complete to the portion of the label that contains/extends the filter
+			labelLower := strings.ToLower(items[0].Label)
+			idx := strings.Index(labelLower, strings.ToLower(filter))
+			if idx >= 0 {
+				return items[0].Label[idx:]
+			}
+			return filter
+		}
+		return filter
+	}
+
+	filterLower := strings.ToLower(filter)
+
+	// For each item, find where the filter matches in the label, then take
+	// the full remaining text from that point as the candidate string.
+	var candidates []string
+	for _, item := range items {
+		labelLower := strings.ToLower(item.Label)
+		idx := strings.Index(labelLower, filterLower)
+		if idx < 0 {
+			return filter
+		}
+		// Candidate: everything from the match start to end of label
+		candidates = append(candidates, item.Label[idx:])
+	}
+
+	// Find the common prefix among all candidates.
+	minLen := len(candidates[0])
+	for _, c := range candidates {
+		if l := len(c); l < minLen {
+			minLen = l
+		}
+	}
+	common := minLen
+	for i := 0; i < minLen; i++ {
+		c := candidates[0][i]
+		for j := 1; j < len(candidates); j++ {
+			if candidates[j][i] != c {
+				common = i
+				break
+			}
+		}
+		if common < minLen {
+			break
+		}
+	}
+	// Only return a longer string than the current filter
+	if common <= len(filter) {
+		return filter
+	}
+	return candidates[0][:common]
 }

@@ -103,16 +103,16 @@ func (m *Model) getSkillText(name string) string {
 func (m Model) openSkillPicker() (Model, tea.Cmd) {
 	items := make([]ui.PickerItem, 0, 16)
 	items = append(items, ui.PickerItem{
-		Label:       "(none)",
-		Description: "No skill active",
-		Value:       "(none)",
+		Label: "(none)",
+		Meta:  []string{"No skill active"},
+		Value: "(none)",
 	})
 	if reg := skills.GetRegistry(); reg != nil {
 		for _, e := range reg.List() {
 			items = append(items, ui.PickerItem{
-				Label:       e.Name,
-				Description: e.Description,
-				Value:       e.Name,
+				Label: e.Name,
+				Meta:  []string{e.Description},
+				Value: e.Name,
 			})
 		}
 	}
@@ -124,9 +124,8 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 	}
 
 	m.activePicker = ui.Picker{
-		Title:       "Select Skill",
-		Items:       items,
-		DisplayMode: ui.ModeLabelDesc,
+		Title:        "Select Skill",
+		Items:        items,
 		DefaultValue: current,
 		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)

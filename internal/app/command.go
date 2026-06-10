@@ -29,9 +29,9 @@ func buildCommandPickerItems() []ui.PickerItem {
 	items := make([]ui.PickerItem, len(AllCommands))
 	for i, c := range AllCommands {
 		items[i] = ui.PickerItem{
-			Label:       "/" + c.Name,
-			Description: c.Description,
-			Value:       c.Name,
+			Label: "/" + c.Name,
+			Meta:  []string{c.Description},
+			Value: c.Name,
 		}
 	}
 	return items
@@ -40,10 +40,9 @@ func buildCommandPickerItems() []ui.PickerItem {
 // openCommandPicker opens the slash command palette.
 func (m *Model) openCommandPicker() {
 	m.activePicker = ui.Picker{
-		Title:       "Commands",
-		Items:       m.allCommands,
-		DisplayMode: ui.ModeLabelDesc,
-		MatchMode:   ui.MatchPrefix,
+		Title:     "Commands",
+		Items:     m.allCommands,
+		MatchMode: ui.MatchPrefix,
 		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			m.textarea.SetValue("")

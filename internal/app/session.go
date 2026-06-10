@@ -168,9 +168,8 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 	}
 
 	m.activePicker = ui.Picker{
-		Title:       "Load Session",
-		Items:       items,
-		DisplayMode: ui.ModeLabelMeta,
+		Title:        "Load Session",
+		Items:        items,
 		DefaultValue: m.settings.LastSessionName,
 		OnSelectionChange: func(idx int, item ui.PickerItem, ctx any) {
 			m := ctx.(*Model)

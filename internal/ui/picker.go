@@ -9,17 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// PickerDisplayMode controls how picker items are rendered.
-type PickerDisplayMode int
-
-const (
-	ModeSingleCol  PickerDisplayMode = iota // just Label (file picker)
-	ModeLabelMeta                           // Label + Meta[0] (session: name + date)
-	ModeLabelDesc                           // Label + Description (skill: name + description)
-	ModeLabelValue                          // Label + Meta[0] or Value (legacy)
-	ModeMultiCol                            // Label + Meta[0] + Meta[1] + ... (fixed cols, last truncates)
-)
-
 // PickerMatchMode controls how filtering matches items.
 type PickerMatchMode int
 
@@ -28,13 +17,14 @@ const (
 	MatchPrefix
 )
 
-// PickerItem is a typed row in a Picker.
-// Meta is an array of secondary display fields — each becomes a column in MultiCol.
+// PickerItem is a row in a Picker.
+// Label is the primary column (always rendered in TextPrimary).
+// Meta holds optional secondary columns (rendered in TextMuted; the last one takes remaining width).
+// If Meta is empty, the Label alone fills the row.
 type PickerItem struct {
-	Label       string   // primary text (always shown)
-	Meta        []string // secondary fields (each becomes a column)
-	Description string   // extended description (used by ModeLabelDesc)
-	Value       string   // internal value for matching and selection
+	Label string   // primary text (always shown, white)
+	Meta  []string // optional secondary fields (each becomes a dimmed column)
+	Value string   // internal value for matching and selection
 }
 
 // Picker is a reusable, self-contained picker component.
@@ -45,15 +35,14 @@ type Picker struct {
 	Filter            string
 	Selected          int
 	DefaultValue      string
-	DisplayMode       PickerDisplayMode
 	MatchMode         PickerMatchMode
 	OnSelectionChange func(int, PickerItem, any)
 	OnConfirm         func(PickerItem, any) tea.Cmd
 	OnCancel          func(any) tea.Cmd
 
 	// Cached column widths — computed once in Init() from ALL items, never changes.
-	labelWidth     int
-	metaWidths     []int
+	labelWidth   int
+	metaWidths   []int
 	widthsComputed bool
 }
 
@@ -80,7 +69,7 @@ func matchItem(item PickerItem, f string, mode PickerMatchMode) bool {
 		}
 		return strings.Contains(lower, f)
 	}
-	if check(item.Label) || check(item.Value) || check(item.Description) {
+	if check(item.Label) || check(item.Value) {
 		return true
 	}
 	for _, m := range item.Meta {
@@ -238,11 +227,9 @@ func (p *Picker) computeWidths() {
 		if mlen > maxMeta {
 			maxMeta = mlen
 		}
-		// Extend metaMax to accommodate this item's meta count
 		for len(metaMax) < mlen {
 			metaMax = append(metaMax, 0)
 		}
-		// Check all meta fields (not just when count increases)
 		for j, m := range item.Meta {
 			if l := len(m); l > metaMax[j] {
 				metaMax[j] = l
@@ -264,7 +251,7 @@ func (p *Picker) computeWidths() {
 	}
 }
 
-// Render renders the picker with the configured display mode.
+// Render renders the picker.
 func (p *Picker) Render(width int) string {
 	items := p.FilteredItems()
 
@@ -317,115 +304,87 @@ func (p *Picker) Render(width int) string {
 		Render(strings.TrimRight(b.String(), "\n"))
 }
 
+// renderRow renders a single picker row.
+// Label is always TextPrimary (white), Meta columns are TextMuted (dimmed).
+// The last Meta column takes remaining width and truncates if needed.
+// If no Meta columns exist, the Label fills the row.
+// Every segment carries background to prevent ANSI reset gaps (lipgloss-style-concatenation-reset).
 func (p *Picker) renderRow(item PickerItem, sel bool, width int) string {
-	switch p.DisplayMode {
-	case ModeSingleCol:
-		content := "  " + item.Label
-		return p.applyRowStyle(content, sel, width)
-
-	case ModeMultiCol:
-		return p.renderMultiCol(item, sel, width)
-
-	case ModeLabelMeta:
-		right := ""
-		if len(item.Meta) > 0 {
-			right = item.Meta[0]
-		}
-		content := "  " + padRight(item.Label, p.labelWidth-2) + right
-		return p.applyRowStyle(content, sel, width)
-
-	case ModeLabelDesc:
-		avail := width - p.labelWidth - 4
-		if avail < 4 {
-			avail = 4
-		}
-		content := "  " + padRight(item.Label, p.labelWidth-2) + truncateRight(item.Description, avail)
-		return p.applyRowStyle(content, sel, width)
-
-	case ModeLabelValue:
-		right := ""
-		if len(item.Meta) > 0 {
-			right = item.Meta[0]
-		} else {
-			right = item.Value
-		}
-		content := "  " + padRight(item.Label, p.labelWidth-2) + right
-		return p.applyRowStyle(content, sel, width)
-
-	default:
-		content := "  " + item.Label
-		return p.applyRowStyle(content, sel, width)
-	}
-}
-
-// applyRowStyle applies background/foreground/bold + width constraint to plain text.
-func (p *Picker) applyRowStyle(text string, sel bool, width int) string {
 	bg := lipgloss.Color(style.P.BgFooter)
-	fg := lipgloss.Color(style.P.TextMuted)
+	labelFg := lipgloss.Color(style.P.TextPrimary)
+	metaFg := lipgloss.Color(style.P.TextMuted)
 	if sel {
 		bg = lipgloss.Color(style.P.BgSelected)
-		fg = lipgloss.Color(style.P.TextAccent)
+		labelFg = lipgloss.Color(style.P.TextAccent)
+		metaFg = lipgloss.Color(style.P.TextAccent)
 	}
-	s := lipgloss.NewStyle().Background(bg).Foreground(fg).Width(width)
+	base := lipgloss.NewStyle().Background(bg)
 	if sel {
-		s = s.Bold(true)
-	}
-	return s.Render(text)
-}
-
-// renderMultiCol: Label (fixed) + Meta[0] (fixed) + Meta[1] (fixed) + ... + last Meta (remaining, truncates)
-// Builds the row as plain text first, then applies a single lipgloss style at the end.
-func (p *Picker) renderMultiCol(item PickerItem, sel bool, width int) string {
-	parts := []string{item.Label}
-	for _, m := range item.Meta {
-		parts = append(parts, m)
+		base = base.Bold(true)
 	}
 
-	// Total fixed width: label + all meta columns except the last
+	// No meta columns: label fills the row
+	if len(item.Meta) == 0 {
+		// Outer width style ensures the background fills the entire line
+		s := lipgloss.NewStyle().Background(bg).Width(width)
+		if sel {
+			s = s.Bold(true)
+		}
+		inner := base.Foreground(labelFg).Render("  " + item.Label)
+		return s.Render(inner)
+	}
+
+	// Multi-column: every segment styled independently with background
+	var b strings.Builder
+	b.WriteString(base.Render("  "))
+
+	b.WriteString(base.Foreground(labelFg).Render(padRight(item.Label, p.labelWidth)))
+
+	// Meta columns: fixed width for intermediate, remaining width for last
 	fixed := p.labelWidth
-	for i := 1; i < len(parts)-1; i++ {
+	for i := 1; i < len(item.Meta); i++ {
 		if i-1 < len(p.metaWidths) {
 			fixed += p.metaWidths[i-1]
 		} else {
 			fixed += 2
 		}
 	}
-	// lastWidth is the remaining space for the last column, minus the 2-char row indent
 	lastWidth := width - fixed - 2
 	if lastWidth < 2 {
 		lastWidth = 2
 	}
 
-	// Build row as plain text
-	var b strings.Builder
-	b.WriteString("  ")
-
-	for j, part := range parts {
-		if j == 0 {
-			b.WriteString(padRight(part, p.labelWidth))
-		} else if j < len(parts)-1 {
+	for j, m := range item.Meta {
+		if j < len(item.Meta)-1 {
 			w := 2
-			if j-1 < len(p.metaWidths) {
-				w = p.metaWidths[j-1]
+			if j < len(p.metaWidths) {
+				w = p.metaWidths[j]
 			}
-			b.WriteString(padRight(part, w))
+			b.WriteString(base.Foreground(metaFg).Render(padRight(m, w)))
 		} else {
-			b.WriteString(truncateRight(part, lastWidth))
+			b.WriteString(base.Foreground(metaFg).Render(padRight(truncateRight(m, lastWidth), lastWidth)))
 		}
 	}
 
-	// Apply single style at the end
-	bg := lipgloss.Color(style.P.BgFooter)
-	fg := lipgloss.Color(style.P.TextMuted)
-	if sel {
-		bg = lipgloss.Color(style.P.BgSelected)
-		fg = lipgloss.Color(style.P.TextAccent)
+	// Trailing background fill so the entire line has consistent bg
+	// (padRight/truncateRight already account for width, but add trailing spaces just in case)
+	totalWritten := 2 + p.labelWidth
+	for j := range item.Meta {
+		if j < len(item.Meta)-1 {
+			w := 2
+			if j < len(p.metaWidths) {
+				w = p.metaWidths[j]
+			}
+			totalWritten += w
+		} else {
+			totalWritten += lastWidth
+		}
 	}
-	s := lipgloss.NewStyle().Background(bg).Foreground(fg).Width(width)
-	if sel {
-		s = s.Bold(true)
+	if totalWritten < width {
+		b.WriteString(base.Render(strings.Repeat(" ", width-totalWritten)))
 	}
-	return s.Render(b.String())
+
+	return b.String()
 }
 
 func padRight(s string, n int) string {

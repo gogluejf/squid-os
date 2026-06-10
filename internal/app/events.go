@@ -24,11 +24,6 @@ func streamTickCmd() tea.Cmd {
 	})
 }
 
-// modelsLoadedMsg signals that model scanning completed
-type modelsLoadedMsg struct {
-	models []chat.ModelEntry
-}
-
 // contextRefreshMsg silently updates the context window from a background scan
 type contextRefreshMsg struct {
 	models []chat.ModelEntry

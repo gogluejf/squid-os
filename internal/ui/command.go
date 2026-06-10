@@ -87,7 +87,7 @@ type Picker struct {
 	DefaultMatch      string
 	DisplayMode       PickerDisplayMode
 	MatchMode         PickerMatchMode
-	OnSelectionChange func(int, PickerItem)
+	OnSelectionChange func(int, PickerItem, any)
 }
 
 // FilteredItems returns items matching the current filter (case-insensitive on Label, Meta, and Value).
@@ -149,7 +149,7 @@ func (p *Picker) RenderHeight() int {
 // HandleKey processes a key message and returns the resulting action.
 // Handles navigation (Up/Down/Tab), filtering (single-char input, backspace),
 // Enter for selection, and Esc for cancellation.
-func (p *Picker) HandleKey(msg tea.KeyMsg) PickerAction {
+func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) PickerAction {
 	s := msg.String()
 
 	// Navigation
@@ -159,7 +159,7 @@ func (p *Picker) HandleKey(msg tea.KeyMsg) PickerAction {
 			if p.OnSelectionChange != nil {
 				items := p.FilteredItems()
 				if p.Selected < len(items) {
-					p.OnSelectionChange(p.Selected, items[p.Selected])
+					p.OnSelectionChange(p.Selected, items[p.Selected], ctx)
 				}
 			}
 		}
@@ -171,7 +171,7 @@ func (p *Picker) HandleKey(msg tea.KeyMsg) PickerAction {
 		if p.Selected < len(items)-1 {
 			p.Selected++
 			if p.OnSelectionChange != nil && p.Selected < len(items) {
-				p.OnSelectionChange(p.Selected, items[p.Selected])
+				p.OnSelectionChange(p.Selected, items[p.Selected], ctx)
 			}
 		}
 		return ActionNone
@@ -192,7 +192,7 @@ func (p *Picker) HandleKey(msg tea.KeyMsg) PickerAction {
 		if p.OnSelectionChange != nil {
 			items := p.FilteredItems()
 			if len(items) > 0 {
-				p.OnSelectionChange(0, items[0])
+				p.OnSelectionChange(0, items[0], ctx)
 			}
 		}
 		return ActionNone
@@ -204,7 +204,7 @@ func (p *Picker) HandleKey(msg tea.KeyMsg) PickerAction {
 			if p.OnSelectionChange != nil {
 				items := p.FilteredItems()
 				if len(items) > 0 {
-					p.OnSelectionChange(0, items[0])
+					p.OnSelectionChange(0, items[0], ctx)
 				}
 			}
 		} else {

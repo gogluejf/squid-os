@@ -94,10 +94,10 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.startManualSave()
 
 	case key.Matches(msg, keys.Load):
-		return m.startLoad()
+		return m.openSessionPicker()
 
 	case key.Matches(msg, keys.Model):
-		return m, m.scanModelsCmd()
+		return m.openModelPicker()
 
 	case key.Matches(msg, keys.NewSession):
 		return m.clearSession()
@@ -168,9 +168,9 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.draft = ""
 			m.historyIdx = -1
 		}
-		// Only trigger command palette on the first "/" keypress when textarea was empty.
-		if m.mode == ModeChat && msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == '/' {
-			m.updateCommandPalette()
+		// Only trigger command palette when "/" is the very first character (textarea was empty).
+		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == '/' && m.textarea.Value() == "/" {
+			m.openCommandPicker()
 		}
 		return m, cmd
 	}
@@ -269,20 +269,6 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
-}
-
-// updateCommandPalette initializes the command picker when user first types "/".
-// Only called once on the triggering keypress — subsequent input is handled by handleActivePicker.
-func (m *Model) updateCommandPalette() {
-	m.activePicker = ui.Picker{
-		Title:       "Commands",
-		Items:       m.allCommands,
-		DisplayMode: ui.ModeLabelDesc,
-		MatchMode:   ui.MatchPrefix,
-	}
-	m.pickerContext = "command"
-	m.mode = ModeCommandPicker
-	m.recalcLayout()
 }
 
 // startHistorySearch enters history search mode and populates the overlay with prompt history.

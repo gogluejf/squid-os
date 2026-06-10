@@ -167,16 +167,6 @@ func (m *Model) setChatMode() tea.Cmd {
 	return textarea.Blink
 }
 
-// scanModelsCmd launches an async model scan and returns the result as a modelsLoadedMsg.
-func (m Model) scanModelsCmd() tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		models := chat.ScanModels(ctx, m.endpoints)
-		return modelsLoadedMsg{models: models}
-	}
-}
-
 // sendMessage reads the textarea, adds the user turn, and starts streaming
 // the assistant reply via the configured provider.
 func (m Model) sendMessage() (tea.Model, tea.Cmd) {
@@ -529,7 +519,7 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 				if err := tools.Validate(resolvedPath, sessionState); err != nil {
 					entries[i].Execution.Status = tools.ResultStatusError
 					entries[i].Execution.Error = fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again with read_file and retry your command.", resolvedPath)
-					for j := i + 1; j < len(partials); j++ {
+					for j := i + 1; j < len(entries); j++ {
 						entries[j].Execution.Status = tools.ResultStatusError
 						entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"
 					}

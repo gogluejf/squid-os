@@ -4,7 +4,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/chat"
-	"squid-os/internal/ui"
 )
 
 // Update is the top-level Bubble Tea update function — routes every incoming
@@ -44,31 +43,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleStreamEvent(chat.StreamEvent(msg))
 
 	case modelsLoadedMsg:
-		m.modelEntries = msg.models
-		items := make([]ui.PickerItem, len(msg.models))
-		for i, e := range msg.models {
-			name := modelBasename(e.ID)
-			ctxLabel := ""
-			if e.ContextLength > 0 {
-				ctxLabel = formatContextLength(e.ContextLength)
-			}
-			items[i] = ui.PickerItem{
-				Label: name,
-				Meta:  ctxLabel,
-				Value: e.ID,
-			}
-		}
-		m.activePicker = ui.Picker{
-			Title:       "Select Model",
-			Items:       items,
-			DisplayMode: ui.ModeLabelValue,
-		}
-		m.pickerContext = "model"
-		m.pickerPayload = msg.models
-		// Update context window for current model
-		(&m).refreshContextWindow(msg.models)
-		m.mode = ModeModelPicker
-		m.recalcLayout()
+		m = m.onModelsLoaded(msg)
 		return m, nil
 
 	case contextRefreshMsg:

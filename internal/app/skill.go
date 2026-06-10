@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -135,4 +136,20 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 	m.mode = ModeSkillPicker
 	(&m).recalcLayout()
 	return m, nil
+}
+
+// confirmSkillPicker applies a skill selection from PickerItem.Label.
+func (m Model) confirmSkillPicker(item ui.PickerItem) Model {
+	skillName := strings.TrimSpace(item.Label)
+	if skillName == "(none)" {
+		skillName = ""
+	}
+	current := m.session.file.Session.Skill.Current
+	if m.session.file.Session.Skill.Next != nil {
+		current = *m.session.file.Session.Skill.Next
+	}
+	if skillName != current {
+		(&m).setSkill(skillName)
+	}
+	return m
 }

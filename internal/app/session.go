@@ -98,9 +98,9 @@ func (m Model) toggleIncognito() (Model, tea.Cmd) {
 	return m, m.setChatMode()
 }
 
-// startLoad opens the session picker, snapshots current state so Esc can restore it,
+// openSessionPicker opens the session picker, snapshots current state so Esc can restore it,
 // and immediately previews the first (or last-used) session.
-func (m Model) startLoad() (Model, tea.Cmd) {
+func (m Model) openSessionPicker() (Model, tea.Cmd) {
 	sessions := config.ListSessions(m.paths)
 	if len(sessions) == 0 {
 		return m, nil
@@ -123,8 +123,9 @@ func (m Model) startLoad() (Model, tea.Cmd) {
 		Title:       "Load Session",
 		Items:       items,
 		DisplayMode: ui.ModeLabelMeta,
-		OnSelectionChange: func(idx int, item ui.PickerItem) {
-			m = m.previewSession(item.Value)
+		OnSelectionChange: func(idx int, item ui.PickerItem, ctx any) {
+			m := ctx.(*Model)
+			*m = (*m).previewSession(item.Value)
 		},
 	}
 
@@ -160,5 +161,25 @@ func (m Model) previewSession(name string) Model {
 		(&m).applyWorkingDir(sf.Session.WorkingDir)
 	}
 	m.updateViewportContent()
+	return m
+}
+
+// confirmSessionPicker commits the selected session by loading it from disk.
+func (m Model) confirmSessionPicker(item ui.PickerItem) Model {
+	selected := item.Value
+	if selected == "" {
+		return m
+	}
+	if !m.incognito {
+		m.settings.LastSessionName = selected
+		_ = config.SaveSettings(m.paths, m.settings)
+	}
+	sf, err := config.LoadSession(m.paths, selected)
+	if err != nil {
+		return m
+	}
+	m.session.setFrom(sf)
+	m.sessionSnapshot = nil
+	(&m).setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
 	return m
 }

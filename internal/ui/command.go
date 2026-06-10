@@ -149,123 +149,6 @@ func (cp *CommandPalette) Render(width int) string {
 	return strings.Join(rows, "\n")
 }
 
-// PickerList is a generic filtered list for model picker, session picker, etc.
-// Deprecated: Use Picker instead.
-type PickerList struct {
-	Title    string
-	Items    []string
-	Filter   string
-	Selected int
-}
-
-func NewPickerList(title string, items []string) PickerList {
-	return PickerList{
-		Title: title,
-		Items: items,
-	}
-}
-
-func (pl *PickerList) FilteredItems() []string {
-	if pl.Filter == "" {
-		return pl.Items
-	}
-	f := strings.ToLower(pl.Filter)
-	var result []string
-	for _, item := range pl.Items {
-		if strings.Contains(strings.ToLower(item), f) {
-			result = append(result, item)
-		}
-	}
-	return result
-}
-
-func (pl *PickerList) MoveUp() {
-	if pl.Selected > 0 {
-		pl.Selected--
-	}
-}
-
-func (pl *PickerList) MoveDown() {
-	items := pl.FilteredItems()
-	if pl.Selected < len(items)-1 {
-		pl.Selected++
-	}
-}
-
-func (pl *PickerList) SelectedItem() string {
-	items := pl.FilteredItems()
-	if pl.Selected >= 0 && pl.Selected < len(items) {
-		return items[pl.Selected]
-	}
-	return ""
-}
-
-// maxPickerItems is the maximum number of list rows ever rendered (excluding heading/filter).
-const maxPickerItems = 15
-
-// RenderHeight returns the exact number of terminal lines that Render() will output.
-func (pl *PickerList) RenderHeight() int {
-	h := 1 // heading line
-	if pl.Filter != "" {
-		h++ // filter hint line
-	}
-	items := pl.FilteredItems()
-	if len(items) == 0 {
-		h++ // "No matches" line
-	} else {
-		count := len(items)
-		if count > maxPickerItems {
-			count = maxPickerItems
-		}
-		h += count
-	}
-	return h
-}
-
-func (pl *PickerList) Render(width int) string {
-	items := pl.FilteredItems()
-
-	var b strings.Builder
-	b.WriteString(style.HeadingStyle.Render("  "+pl.Title) + "\n")
-
-	if pl.Filter != "" {
-		b.WriteString(style.CommandDescStyle.Render("  filter: "+pl.Filter) + "\n")
-	}
-
-	if len(items) == 0 {
-		b.WriteString(style.CommandDescStyle.Render("  No matches"))
-		return lipgloss.NewStyle().
-			Background(lipgloss.Color(style.P.BgFooter)).
-			Width(width).
-			Render(strings.TrimRight(b.String(), "\n"))
-	}
-
-	// Show max maxPickerItems items around selection (must match RenderHeight).
-	start := pl.Selected - 7
-	if start < 0 {
-		start = 0
-	}
-	end := start + maxPickerItems
-	if end > len(items) {
-		end = len(items)
-	}
-
-	for i := start; i < end; i++ {
-		if i == pl.Selected {
-			b.WriteString(style.CommandSelectedStyle.Width(width).Render("  "+items[i]) + "\n")
-		} else {
-			b.WriteString(style.CommandDescStyle.Render("  "+items[i]) + "\n")
-		}
-	}
-
-	return lipgloss.NewStyle().
-		Background(lipgloss.Color(style.P.BgFooter)).
-		Width(width).
-		Render(strings.TrimRight(b.String(), "\n"))
-}
-
-// --- Picker Component (replaces PickerList) ---
-
 // PickerAction represents the result of a key interaction with the Picker.
 type PickerAction int
 
@@ -279,10 +162,10 @@ const (
 type PickerDisplayMode int
 
 const (
-	ModeSingleCol   PickerDisplayMode = iota // just Label (file picker)
-	ModeLabelMeta                            // Label + Meta (session: name + date)
-	ModeLabelDesc                            // Label + Description (skill: name + description)
-	ModeLabelValue                           // Label + Value (model: name + model ID)
+	ModeSingleCol  PickerDisplayMode = iota // just Label (file picker)
+	ModeLabelMeta                           // Label + Meta (session: name + date)
+	ModeLabelDesc                           // Label + Description (skill: name + description)
+	ModeLabelValue                          // Label + Value (model: name + model ID)
 )
 
 // PickerItem is a typed row in a Picker, carrying all fields needed for display and selection.
@@ -330,7 +213,7 @@ func (p *Picker) SelectedItem() PickerItem {
 	return PickerItem{}
 }
 
-// PickerMaxItems is the maximum number of rows rendered (matches old maxPickerItems).
+// PickerMaxItems is the maximum number of rows rendered.
 const PickerMaxItems = 15
 
 // RenderHeight returns the exact number of terminal lines that Render() will output.
@@ -454,7 +337,7 @@ func (p *Picker) Render(width int) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(style.HeadingStyle.Render("  " + p.Title) + "\n")
+	b.WriteString(style.HeadingStyle.Render("  "+p.Title) + "\n")
 
 	if p.Filter != "" {
 		b.WriteString(style.CommandDescStyle.Render("  filter: "+p.Filter) + "\n")
@@ -531,7 +414,7 @@ func (p *Picker) Render(width int) string {
 			switch p.DisplayMode {
 			case ModeLabelMeta:
 				right := item.Meta
-				rendered = rowStyle.Render(leftStyle.Render("  "+padRight(item.Label, maxLabel))+rightStyle.Render(right))
+				rendered = rowStyle.Render(leftStyle.Render("  "+padRight(item.Label, maxLabel)) + rightStyle.Render(right))
 
 			case ModeLabelDesc:
 				// Truncate description to remaining width.
@@ -540,14 +423,14 @@ func (p *Picker) Render(width int) string {
 					avail = 4
 				}
 				desc := truncateRight(item.Description, avail)
-				rendered = rowStyle.Render(leftStyle.Render("  "+padRight(item.Label, maxLabel))+rightStyle.Render(desc))
+				rendered = rowStyle.Render(leftStyle.Render("  "+padRight(item.Label, maxLabel)) + rightStyle.Render(desc))
 
 			case ModeLabelValue:
 				right := item.Meta
 				if right == "" {
 					right = item.Value
 				}
-				rendered = rowStyle.Render(leftStyle.Render("  "+padRight(item.Label, maxLabel))+rightStyle.Render(right))
+				rendered = rowStyle.Render(leftStyle.Render("  "+padRight(item.Label, maxLabel)) + rightStyle.Render(right))
 
 			default:
 				// Fallback to single col.

@@ -9,7 +9,6 @@ import (
 	"squid-os/internal/config"
 	"squid-os/internal/skills"
 	"squid-os/internal/ui"
-	"squid-os/internal/util"
 )
 
 func (m Model) cycleSkill() (Model, tea.Cmd) {
@@ -101,50 +100,27 @@ func (m *Model) getSkillText(name string) string {
 
 // openSkillPicker opens the skill picker overlay, building items from the registry.
 func (m Model) openSkillPicker() (Model, tea.Cmd) {
-	// Collect entries for column width calculation
-	type skillItem struct {
-		name        string
-		description string
-	}
-	var entries []skillItem
-	entries = append(entries, skillItem{name: "(none)", description: "No skill active"})
+	items := make([]ui.PickerItem, 0, 16)
+	items = append(items, ui.PickerItem{
+		Label:       "(none)",
+		Description: "No skill active",
+		Value:       "(none)",
+	})
 	if reg := skills.GetRegistry(); reg != nil {
 		for _, e := range reg.List() {
-			entries = append(entries, skillItem{name: e.Name, description: e.Description})
+			items = append(items, ui.PickerItem{
+				Label:       e.Name,
+				Description: e.Description,
+				Value:       e.Name,
+			})
 		}
 	}
 
-	// Find longest name for column alignment
-	maxName := 0
-	for _, e := range entries {
-		if len(e.name) > maxName {
-			maxName = len(e.name)
-		}
+	m.activePicker = ui.Picker{
+		Title:       "Select Skill",
+		Items:       items,
+		DisplayMode: ui.ModeLabelDesc,
 	}
-	if maxName < 8 {
-		maxName = 8
-	}
-
-	// Description gets remaining width (name col + 2-space gap + truncation "..." margin)
-	descMax := m.width - maxName - 2
-	if descMax > 5 {
-		descMax -= 3 // leave room for "..."
-	}
-	if descMax < 1 {
-		descMax = 1
-	}
-
-	fmtStr := fmt.Sprintf("%%-%ds  %%s", maxName)
-	items := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.description != "" {
-			items = append(items, fmt.Sprintf(fmtStr, e.name, util.Truncate(e.description, descMax)))
-		} else {
-			items = append(items, e.name)
-		}
-	}
-
-	m.skillPicker = ui.NewPickerList("Select Skill", items)
 
 	// Pre-select current skill if any
 	current := m.session.file.Session.Skill.Current
@@ -152,14 +128,10 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 		current = *m.session.file.Session.Skill.Next
 	}
 	if current != "" {
-		for i, e := range entries {
-			if e.name == current {
-				m.skillPicker.Selected = i
-				break
-			}
-		}
+		m.activePicker.SetDefaultSelected(current)
 	}
 
+	m.pickerContext = "skill"
 	m.mode = ModeSkillPicker
 	(&m).recalcLayout()
 	return m, nil

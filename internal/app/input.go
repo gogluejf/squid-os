@@ -26,17 +26,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.setChatMode()
 		}
 
-	case ModeModelPicker:
-		return m.handlePickerKey(msg, "model")
-
-	case ModeSkillPicker:
-		return m.handlePickerKey(msg, "skill")
-
-	case ModeSessionPicker:
-		return m.handlePickerKey(msg, "session")
+	case ModeModelPicker, ModeSkillPicker, ModeSessionPicker:
+		return m.handleActivePicker(msg)
 
 	case ModeFilePicker:
-		return m.handlePickerKey(msg, m.filePickerFor)
+		return m.handleActivePicker(msg)
 
 	case ModeSavePrompt:
 		return m.handleSavePromptKey(msg)

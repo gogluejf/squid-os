@@ -35,14 +35,11 @@ type Model struct {
 	historySearch ui.HistorySearchOverlay
 
 	// Pickers
-	modelEntries     []chat.ModelEntry
-	modelPicker      ui.PickerList
-	skillPicker      ui.PickerList
-	sessionPicker    ui.PickerList
-	sessionPickerRaw []config.SessionInfo // parallel raw names for session picker selection
-	filePicker       ui.PickerList
-	savePrompt       ui.SavePrompt
-	filePickerFor    string // "image" or "system"
+	modelEntries []chat.ModelEntry
+	activePicker ui.Picker
+	pickerContext   string // "model", "skill", "session", "image", "system"
+	pickerPayload   interface{} // additional context (e.g. modelEntries for model picker)
+	savePrompt      ui.SavePrompt
 
 	// Session + messages (bundled)
 	session chatSession

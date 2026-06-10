@@ -1,33 +1,23 @@
 package app
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"squid-os/internal/chat"
 	"squid-os/internal/config"
 	"squid-os/internal/ui"
 )
 
-// handlePickerKey handles key input while any picker overlay is visible
-// (model, session, file, or system prompt).
-func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, tea.Cmd) {
+// handleActivePicker handles key input for any active picker using the unified
+// Picker component.  Delegates navigation/filtering to activePicker.HandleKey
+// and dispatches Select/Cancel actions.
+func (m Model) handleActivePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle viewport scroll keys first (these bypass the picker).
 	switch {
-	case key.Matches(msg, keys.Escape), key.Matches(msg, keys.Cancel):
-		if pickerType == "session" && m.sessionSnapshot != nil {
-			m.session = *m.sessionSnapshot
-			m.sessionSnapshot = nil
-			// Restore working dir from the restored session
-			if m.session.file.Session.WorkingDir != "" {
-				(&m).applyWorkingDir(m.session.file.Session.WorkingDir)
-			}
-			m.updateViewportContent()
-		}
-		return m, m.setChatMode()
-
 	case key.Matches(msg, keys.ScrollUp):
 		m.viewport.ScrollUp(3)
 		return m, nil
@@ -43,194 +33,158 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 	case key.Matches(msg, keys.PageDown):
 		m.viewport.PageDown()
 		return m, nil
-
-	case key.Matches(msg, keys.Up):
-		switch pickerType {
-		case "model":
-			m.modelPicker.MoveUp()
-		case "skill":
-			m.skillPicker.MoveUp()
-		case "session":
-			m.sessionPicker.MoveUp()
-			m = m.previewSession(m.sessionPickerSelectedRaw())
-		case "image", "system":
-			m.filePicker.MoveUp()
-		}
-		return m, nil
-
-	case key.Matches(msg, keys.Down):
-		switch pickerType {
-		case "model":
-			m.modelPicker.MoveDown()
-		case "skill":
-			m.skillPicker.MoveDown()
-		case "session":
-			m.sessionPicker.MoveDown()
-			m = m.previewSession(m.sessionPickerSelectedRaw())
-		case "image", "system":
-			m.filePicker.MoveDown()
-		}
-		return m, nil
-
-	case key.Matches(msg, keys.Send):
-		return m.confirmPicker(pickerType)
-
-	case key.Matches(msg, keys.Tab):
-		switch pickerType {
-		case "model":
-			m.modelPicker.MoveDown()
-		case "skill":
-			m.skillPicker.MoveDown()
-		case "session":
-			m.sessionPicker.MoveDown()
-			m = m.previewSession(m.sessionPickerSelectedRaw())
-		case "image", "system":
-			m.filePicker.MoveDown()
-		}
-		return m, nil
-
-	default:
-		// Type to filter
-		s := msg.String()
-		switch pickerType {
-		case "model":
-			if len(s) == 1 {
-				m.modelPicker.Filter += s
-				m.modelPicker.Selected = 0
-			} else if s == "backspace" && len(m.modelPicker.Filter) > 0 {
-				m.modelPicker.Filter = m.modelPicker.Filter[:len(m.modelPicker.Filter)-1]
-				m.modelPicker.Selected = 0
-			}
-		case "skill":
-			if len(s) == 1 {
-				m.skillPicker.Filter += s
-				m.skillPicker.Selected = 0
-			} else if s == "backspace" && len(m.skillPicker.Filter) > 0 {
-				m.skillPicker.Filter = m.skillPicker.Filter[:len(m.skillPicker.Filter)-1]
-				m.skillPicker.Selected = 0
-			}
-		case "session":
-			if len(s) == 1 {
-				m.sessionPicker.Filter += s
-				m.sessionPicker.Selected = 0
-				m = m.previewSession(m.sessionPickerSelectedRaw())
-			} else if s == "backspace" && len(m.sessionPicker.Filter) > 0 {
-				m.sessionPicker.Filter = m.sessionPicker.Filter[:len(m.sessionPicker.Filter)-1]
-				m.sessionPicker.Selected = 0
-				m = m.previewSession(m.sessionPickerSelectedRaw())
-			}
-		case "image", "system":
-			if len(s) == 1 {
-				m.filePicker.Filter += s
-				m.filePicker.Selected = 0
-			} else if s == "backspace" && len(m.filePicker.Filter) > 0 {
-				m.filePicker.Filter = m.filePicker.Filter[:len(m.filePicker.Filter)-1]
-				m.filePicker.Selected = 0
-			}
-		}
-		(&m).recalcLayout()
-		return m, nil
 	}
+
+	action := m.activePicker.HandleKey(msg)
+
+	switch action {
+	case ui.ActionCancel:
+		if m.pickerContext == "session" && m.sessionSnapshot != nil {
+			m.session = *m.sessionSnapshot
+			m.sessionSnapshot = nil
+			if m.session.file.Session.WorkingDir != "" {
+				(&m).applyWorkingDir(m.session.file.Session.WorkingDir)
+			}
+			m.updateViewportContent()
+		}
+		return m, m.setChatMode()
+
+	case ui.ActionSelect:
+		return m.confirmActivePicker()
+	}
+
+	// Filter changes may alter render height.
+	(&m).recalcLayout()
+	return m, nil
 }
 
-// confirmPicker applies the selected picker item for the given picker type.
-func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
-	switch pickerType {
+// confirmActivePicker applies the selected picker item based on pickerContext.
+func (m Model) confirmActivePicker() (tea.Model, tea.Cmd) {
+	selected := m.activePicker.SelectedItem()
+
+	switch m.pickerContext {
 	case "model":
-		selected := m.modelPicker.SelectedItem()
-		if selected != "" {
-			for _, e := range m.modelEntries {
-				name := modelBasename(e.ID)
-				label := fmt.Sprintf("%-12s  %s", e.Provider, name)
-				if e.ContextLength > 0 {
-					label += "  " + formatContextLength(e.ContextLength)
-				}
-				if label == selected {
-					if m.settings.Model != e.ID {
-						oldModel := modelBasename(m.settings.Model)
-						(&m).session.pushModelSwitchMsg(oldModel, name)
-					}
-					(&m).session.updateConfigMsg(e.Provider, e.ID, m.settings.Thinking)
-					m.settings.Model = e.ID
-					m.settings.Provider = e.Provider
-					m.settings.ContextWindow = e.ContextLength
-					break
-				}
-			}
-			(&m).session.invalidateRenderAll()
-			_ = config.SaveSettings(m.paths, m.settings)
-			(&m).setNotification(ui.NotificationInfo, "switched to model: "+modelBasename(m.settings.Model))
-		}
+		m = m.confirmModelPicker(selected)
 
 	case "skill":
-		selected := m.skillPicker.SelectedItem()
-		if selected != "" {
-			current := m.session.file.Session.Skill.Current
-			if m.session.file.Session.Skill.Next != nil {
-				current = *m.session.file.Session.Skill.Next
-			}
-			skillName := ""
-			if idx := strings.Index(selected, "  "); idx > 0 {
-				skillName = strings.TrimSpace(selected[:idx])
-			} else {
-				skillName = strings.TrimSpace(selected)
-			}
-			if skillName == "(none)" {
-				skillName = ""
-			}
-			if skillName != current {
-				(&m).setSkill(skillName)
-			}
-		}
+		m = m.confirmSkillPicker(selected)
 
 	case "session":
-		selected := m.sessionPickerSelectedRaw()
-		if selected != "" && !m.incognito {
-			m.settings.LastSessionName = selected
-			_ = config.SaveSettings(m.paths, m.settings)
-		}
-		m.session.setFrom(m.session.file)
-		m.sessionSnapshot = nil
-		if selected != "" {
-			(&m).setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
-		}
+		m = m.confirmSessionPicker(selected)
 
 	case "image":
-		selected := m.filePicker.SelectedItem()
-		if selected != "" {
-			m.attachedImage = selected
-			m.recalcLayout()
-		}
+		m = m.confirmImagePicker(selected)
 
 	case "system":
-		selected := m.filePicker.SelectedItem()
-		if selected != "" {
-			changed := false
-			if m.settings.SystemPromptFile != "" && m.settings.SystemPromptFile != selected {
-				(&m).session.updateSystemPromptMsg(m.settings.SystemPromptFile, selected, m.paths)
-				changed = true
-			} else {
-				// First set — update sys0 directly
-				for i := range m.session.file.Messages {
-					if m.session.file.Messages[i].ID == "sys0" {
-						newContent := config.LoadSystemPrompt(m.paths, selected)
-						m.session.file.Messages[i].Text = newContent
-						m.session.file.Messages[i].InputTokens = countTokensApprox(newContent)
-						changed = true
-						break
-					}
-				}
-			}
-			if changed {
-				(&m).session.invalidateRenderAll()
-			}
-			m.settings.SystemPromptFile = selected
-			_ = config.SaveSettings(m.paths, m.settings)
-		}
+		m = m.confirmSystemPicker(selected)
 	}
 
 	(&m).updateViewportContent()
 	return m, m.setChatMode()
+}
+
+// confirmModelPicker applies a model selection using the PickerItem.Value as the model ID.
+func (m Model) confirmModelPicker(item ui.PickerItem) Model {
+	modelID := item.Value
+	if modelID == "" {
+		return m
+	}
+	entries := m.pickerPayload.([]chat.ModelEntry)
+	var entry *chat.ModelEntry
+	for i := range entries {
+		if entries[i].ID == modelID {
+			entry = &entries[i]
+			break
+		}
+	}
+	if entry == nil {
+		return m
+	}
+	name := modelBasename(entry.ID)
+	if m.settings.Model != entry.ID {
+		oldModel := modelBasename(m.settings.Model)
+		(&m).session.pushModelSwitchMsg(oldModel, name)
+	}
+	(&m).session.updateConfigMsg(entry.Provider, entry.ID, m.settings.Thinking)
+	m.settings.Model = entry.ID
+	m.settings.Provider = entry.Provider
+	m.settings.ContextWindow = entry.ContextLength
+	(&m).session.invalidateRenderAll()
+	_ = config.SaveSettings(m.paths, m.settings)
+	(&m).setNotification(ui.NotificationInfo, "switched to model: "+modelBasename(m.settings.Model))
+	return m
+}
+
+// confirmSkillPicker applies a skill selection from PickerItem.Label.
+func (m Model) confirmSkillPicker(item ui.PickerItem) Model {
+	skillName := strings.TrimSpace(item.Label)
+	if skillName == "(none)" {
+		skillName = ""
+	}
+	current := m.session.file.Session.Skill.Current
+	if m.session.file.Session.Skill.Next != nil {
+		current = *m.session.file.Session.Skill.Next
+	}
+	if skillName != current {
+		(&m).setSkill(skillName)
+	}
+	return m
+}
+
+// confirmSessionPicker loads the selected session by name from PickerItem.Value.
+func (m Model) confirmSessionPicker(item ui.PickerItem) Model {
+	selected := item.Value
+	if selected != "" && !m.incognito {
+		m.settings.LastSessionName = selected
+		_ = config.SaveSettings(m.paths, m.settings)
+	}
+	m.session.setFrom(m.session.file)
+	m.sessionSnapshot = nil
+	if selected != "" {
+		(&m).setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
+	}
+	return m
+}
+
+// confirmImagePicker sets the attached image path.
+func (m Model) confirmImagePicker(item ui.PickerItem) Model {
+	selected := item.Label
+	if selected != "" {
+		m.attachedImage = selected
+		m.recalcLayout()
+	}
+	return m
+}
+
+// confirmSystemPicker loads a system prompt file.
+func (m Model) confirmSystemPicker(item ui.PickerItem) Model {
+	selected := item.Value
+	if selected == "" {
+		selected = item.Label
+	}
+	if selected != "" {
+		changed := false
+		if m.settings.SystemPromptFile != "" && m.settings.SystemPromptFile != selected {
+			(&m).session.updateSystemPromptMsg(m.settings.SystemPromptFile, selected, m.paths)
+			changed = true
+		} else {
+			for i := range m.session.file.Messages {
+				if m.session.file.Messages[i].ID == "sys0" {
+					newContent := config.LoadSystemPrompt(m.paths, selected)
+					m.session.file.Messages[i].Text = newContent
+					m.session.file.Messages[i].InputTokens = countTokensApprox(newContent)
+					changed = true
+					break
+				}
+			}
+		}
+		if changed {
+			(&m).session.invalidateRenderAll()
+		}
+		m.settings.SystemPromptFile = selected
+		_ = config.SaveSettings(m.paths, m.settings)
+	}
+	return m
 }
 
 // handleSavePromptKey handles key input while the save-name prompt overlay is active.
@@ -286,8 +240,12 @@ func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
 
 	case "image":
 		// List image files — for now just let user type a path
-		m.filePicker = ui.NewPickerList("Attach Image (type path)", []string{})
-		m.filePickerFor = "image"
+		m.activePicker = ui.Picker{
+			Title:       "Attach Image (type path)",
+			Items:       []ui.PickerItem{},
+			DisplayMode: ui.ModeSingleCol,
+		}
+		m.pickerContext = "image"
 		m.mode = ModeFilePicker
 		(&m).recalcLayout()
 		return m, nil
@@ -303,8 +261,19 @@ func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
 
 	case "system":
 		prompts := config.ListSystemPrompts(m.paths)
-		m.filePicker = ui.NewPickerList("System Prompt", prompts)
-		m.filePickerFor = "system"
+		items := make([]ui.PickerItem, len(prompts))
+		for i, p := range prompts {
+			items[i] = ui.PickerItem{
+				Label: p,
+				Value: p,
+			}
+		}
+		m.activePicker = ui.Picker{
+			Title:       "System Prompt",
+			Items:       items,
+			DisplayMode: ui.ModeSingleCol,
+		}
+		m.pickerContext = "system"
 		m.mode = ModeFilePicker
 		(&m).recalcLayout()
 		return m, nil

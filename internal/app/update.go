@@ -1,8 +1,6 @@
 package app
 
 import (
-	"fmt"
-
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/chat"
@@ -47,16 +45,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case modelsLoadedMsg:
 		m.modelEntries = msg.models
-		labels := make([]string, len(msg.models))
+		items := make([]ui.PickerItem, len(msg.models))
 		for i, e := range msg.models {
 			name := modelBasename(e.ID)
 			ctxLabel := ""
 			if e.ContextLength > 0 {
-				ctxLabel = "  " + formatContextLength(e.ContextLength)
+				ctxLabel = formatContextLength(e.ContextLength)
 			}
-			labels[i] = fmt.Sprintf("%-12s  %s%s", e.Provider, name, ctxLabel)
+			items[i] = ui.PickerItem{
+				Label: name,
+				Meta:  ctxLabel,
+				Value: e.ID,
+			}
 		}
-		m.modelPicker = ui.NewPickerList("Select Model", labels)
+		m.activePicker = ui.Picker{
+			Title:       "Select Model",
+			Items:       items,
+			DisplayMode: ui.ModeLabelValue,
+		}
+		m.pickerContext = "model"
+		m.pickerPayload = msg.models
 		// Update context window for current model
 		(&m).refreshContextWindow(msg.models)
 		m.mode = ModeModelPicker
@@ -92,14 +100,8 @@ func (m *Model) recalcLayout() {
 		overlayHeight = m.cmdPalette.RenderHeight()
 	} else {
 		switch m.mode {
-		case ModeModelPicker:
-			overlayHeight = m.modelPicker.RenderHeight()
-		case ModeSkillPicker:
-			overlayHeight = m.skillPicker.RenderHeight()
-		case ModeSessionPicker:
-			overlayHeight = m.sessionPicker.RenderHeight()
-		case ModeFilePicker:
-			overlayHeight = m.filePicker.RenderHeight()
+		case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker:
+			overlayHeight = m.activePicker.RenderHeight()
 		case ModeSavePrompt:
 			overlayHeight = 2 // heading + name input line
 		case ModeHistorySearch:

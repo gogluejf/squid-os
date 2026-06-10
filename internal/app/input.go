@@ -265,6 +265,9 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Thinking):
 		return m.toggleThinking()
 
+	case msg.Type == tea.KeyTab && !msg.Alt:
+		return m.cycleSkill()
+
 	case msg.Type == tea.KeyShiftTab:
 		return m.cycleAuthorization()
 

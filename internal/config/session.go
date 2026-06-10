@@ -28,9 +28,15 @@ type SessionFile struct {
 	FileState   map[string]FileStateEntry `json:"file_state,omitempty"`
 }
 
+// SessionSkill tracks the loaded skill on a session.
+// Current is the committed skill (loaded in context).
+// Next is a pending change from Tab cycling:
+//   - nil       → no pending change (stable state)
+//   - ptr to "" → user explicitly unloaded skill via Tab
+//   - ptr to "name" → user selected a skill via Tab
 type SessionSkill struct {
-	Current string `json:"current"`
-	Next    string `json:"next"`
+	Current string  `json:"current"`
+	Next    *string `json:"next"`
 }
 
 type Session struct {

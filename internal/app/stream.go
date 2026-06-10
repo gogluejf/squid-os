@@ -185,11 +185,11 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Check for skill change from Tab cycling (Next set by user, Current set by skill_load)
-	if m.session.file.Session.Skill.Next != "" && m.session.file.Session.Skill.Next != m.session.file.Session.Skill.Current {
-		(&m).injectSkillChangeSynthetic(m.session.file.Session.Skill.Current, m.session.file.Session.Skill.Next)
-		m.session.file.Session.Skill.Current = m.session.file.Session.Skill.Next
-		m.session.file.Session.Skill.Next = ""
+	// Check for pending skill change (Next is a pointer: nil = no pending change)
+	if m.session.file.Session.Skill.Next != nil && *m.session.file.Session.Skill.Next != m.session.file.Session.Skill.Current {
+		(&m).injectSkillChangeSynthetic(m.session.file.Session.Skill.Current, *m.session.file.Session.Skill.Next)
+		m.session.file.Session.Skill.Current = *m.session.file.Session.Skill.Next
+		m.session.file.Session.Skill.Next = nil
 	}
 
 	if !m.incognito {
@@ -570,7 +570,7 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 		if p.name == "skill_load" && result.Status == tools.ResultStatusSuccess {
 			if name, ok := args["name"].(string); ok {
 				m.session.file.Session.Skill.Current = name
-				m.session.file.Session.Skill.Next = ""
+				m.session.file.Session.Skill.Next = nil
 			}
 		}
 

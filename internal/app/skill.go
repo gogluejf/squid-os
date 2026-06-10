@@ -19,9 +19,10 @@ func (m Model) cycleSkill() (Model, tea.Cmd) {
 		}
 	}
 
-	current := m.session.file.Session.Skill.Next
-	if current == "" {
-		current = m.session.file.Session.Skill.Current
+	// Determine current position: prefer Next if set (pending), else Current
+	current := m.session.file.Session.Skill.Current
+	if m.session.file.Session.Skill.Next != nil {
+		current = *m.session.file.Session.Skill.Next
 	}
 
 	idx := 0
@@ -33,37 +34,47 @@ func (m Model) cycleSkill() (Model, tea.Cmd) {
 	}
 
 	next := options[(idx+1)%len(options)]
-	m.session.file.Session.Skill.Next = next
+	m.session.file.Session.Skill.Next = &next
 
-	label := next
 	if next == "" {
-		label = "[no skill]"
+		m.setNotification(ui.NotificationInfo, "skill: (will unload at next user turn)")
+	} else {
+		m.setNotification(ui.NotificationInfo, "skill: "+next+" (will inject at next user turn)")
 	}
 
-	m.setNotification(ui.NotificationInfo, "skill: "+label+" (will inject at next user turn)")
 	m.updateViewportContent()
 	return m.autoSave()
 }
 
 func (m *Model) injectSkillChangeSynthetic(old string, nxt string) {
 	var text string
+	var label string
+	var params map[string]string
+
 	if nxt == "" {
 		text = fmt.Sprintf("Skill %q has been unloaded by the user. Don't use the previously loaded skill anymore.", old)
+		label = "skill-unload"
+		params = nil
 	} else if old == "" {
-		text = m.getSkillText(nxt)
-	} else {
-		text = fmt.Sprintf("Skill changed from %q to %q. Stop using the previous skill and use the new one instead.\n\n", old, nxt)
+		text = fmt.Sprintf("Skill %q has been loaded by the user.\n\n", nxt)
 		text += m.getSkillText(nxt)
+		label = "skill-load"
+		params = map[string]string{"name": nxt}
+	} else {
+		text = fmt.Sprintf("Skill changed from %q to %q by the user. Stop using the previous skill and use the new one instead.\n\n", old, nxt)
+		text += m.getSkillText(nxt)
+		label = "skill-load"
+		params = map[string]string{"name": nxt}
 	}
 
 	m.session.appendMsg(config.Message{
-		ID:        fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-		Role:      config.RoleSynthetic,
-		CreatedAt: time.Now(),
-		Text:      text,
-		Label:     "skill-load",
-		Params:    map[string]string{"name": nxt},
-		TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(text)},
+		ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+		Role:        config.RoleSynthetic,
+		CreatedAt:   time.Now(),
+		Text:        text,
+		Label:       label,
+		Params:      params,
+		InputTokens: countTokensApprox(text),
 	})
 }
 

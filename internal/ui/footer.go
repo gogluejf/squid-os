@@ -104,8 +104,12 @@ func RenderFooter(data FooterData, width int) string {
 	skillStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(style.P.BgFooter)).
 		Foreground(lipgloss.Color(style.P.TextSkill))
-	if data.Skill.Next != "" {
-		skillLabel = style.FooterValueStyle.Render("[skill: ") + skillStyle.Render(data.Skill.Next) + style.FooterValueStyle.Render("]")
+	if data.Skill.Next != nil {
+		if *data.Skill.Next != "" {
+			skillLabel = style.FooterValueStyle.Render("[skill: ") + skillStyle.Render(*data.Skill.Next) + style.FooterValueStyle.Render("]")
+		} else {
+			skillLabel = style.FooterValueStyle.Render("[skill: none]")
+		}
 	} else if data.Skill.Current != "" {
 		skillLabel = style.FooterValueStyle.Render("[skill: ") + skillStyle.Render(data.Skill.Current) + style.FooterValueStyle.Render("]")
 	} else {

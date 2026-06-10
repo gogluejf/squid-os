@@ -108,6 +108,9 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Thinking):
 		return m.toggleThinking()
 
+	case key.Matches(msg, keys.Skill):
+		return m.openSkillPicker()
+
 	case key.Matches(msg, keys.HistorySearch):
 		return m.startHistorySearch()
 

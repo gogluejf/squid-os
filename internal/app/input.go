@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -169,7 +168,10 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.draft = ""
 			m.historyIdx = -1
 		}
-		m.updateCommandPalette()
+		// Only trigger command palette on the first "/" keypress when textarea was empty.
+		if m.mode == ModeChat && msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == '/' {
+			m.updateCommandPalette()
+		}
 		return m, cmd
 	}
 }
@@ -269,28 +271,17 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// updateCommandPalette re-evaluates whether the command palette should be
-// shown based on the current textarea content.
+// updateCommandPalette initializes the command picker when user first types "/".
+// Only called once on the triggering keypress — subsequent input is handled by handleActivePicker.
 func (m *Model) updateCommandPalette() {
-	val := m.textarea.Value()
-	if strings.HasPrefix(val, "/") {
-		filter := val[1:]
-		m.activePicker = ui.Picker{
-			Title:       "Commands",
-			Items:       m.allCommands,
-			Filter:      filter,
-			DisplayMode: ui.ModeLabelDesc,
-			MatchMode:   ui.MatchPrefix,
-		}
-		m.pickerContext = "command"
-		if len(m.activePicker.FilteredItems()) > 0 {
-			m.mode = ModeCommandPicker
-		} else {
-			m.mode = ModeChat
-		}
-	} else {
-		m.mode = ModeChat
+	m.activePicker = ui.Picker{
+		Title:       "Commands",
+		Items:       m.allCommands,
+		DisplayMode: ui.ModeLabelDesc,
+		MatchMode:   ui.MatchPrefix,
 	}
+	m.pickerContext = "command"
+	m.mode = ModeCommandPicker
 	m.recalcLayout()
 }
 

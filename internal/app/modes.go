@@ -7,6 +7,7 @@ const (
 	ModeChat          Mode = iota // Default: textarea focused
 	ModeStreaming                 // Inference active, input disabled
 	ModeModelPicker               // Model selection
+	ModeSkillPicker               // Skill selection
 	ModeHelp                      // Help overlay
 	ModeFilePicker                // File path completion for /image, /system
 	ModeSessionPicker             // Session list for /load
@@ -23,6 +24,8 @@ func (m Mode) String() string {
 		return "streaming"
 	case ModeModelPicker:
 		return "model-picker"
+	case ModeSkillPicker:
+		return "skill-picker"
 	case ModeHelp:
 		return "help"
 	case ModeFilePicker:

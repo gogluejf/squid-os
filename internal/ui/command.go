@@ -17,6 +17,7 @@ type CommandInfo struct {
 // AllCommands is the full command list
 var AllCommands = []CommandInfo{
 	{Name: "model", Description: "Select inference model"},
+	{Name: "skill", Description: "Select active skill"},
 	{Name: "thinking", Description: "Toggle thinking mode (on/off)"},
 	{Name: "auth-mode", Description: "Cycle authorization mode (auto/ask-on-write/ask-for-all)"},
 	{Name: "image", Description: "Attach image to next message"},

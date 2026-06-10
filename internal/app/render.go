@@ -34,6 +34,8 @@ func (m Model) View() string {
 		switch m.mode {
 		case ModeModelPicker:
 			sections = append(sections, m.modelPicker.Render(m.width))
+		case ModeSkillPicker:
+			sections = append(sections, m.skillPicker.Render(m.width))
 		case ModeSessionPicker:
 			sections = append(sections, m.sessionPicker.Render(m.width))
 		case ModeFilePicker:

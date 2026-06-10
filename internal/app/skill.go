@@ -9,6 +9,7 @@ import (
 	"squid-os/internal/config"
 	"squid-os/internal/skills"
 	"squid-os/internal/ui"
+	"squid-os/internal/util"
 )
 
 func (m Model) cycleSkill() (Model, tea.Cmd) {
@@ -34,16 +35,20 @@ func (m Model) cycleSkill() (Model, tea.Cmd) {
 	}
 
 	next := options[(idx+1)%len(options)]
-	m.session.file.Session.Skill.Next = &next
-
-	if next == "" {
-		m.setNotification(ui.NotificationInfo, "skill: (will unload at next user turn)")
-	} else {
-		m.setNotification(ui.NotificationInfo, "skill: "+next+" (will inject at next user turn)")
-	}
+	(&m).setSkill(next)
 
 	m.updateViewportContent()
 	return m.autoSave()
+}
+
+// setSkill sets the pending skill change and shows a notification.
+func (m *Model) setSkill(name string) {
+	m.session.file.Session.Skill.Next = &name
+	if name == "" {
+		m.setNotification(ui.NotificationInfo, "skill: (will unload at next user turn)")
+	} else {
+		m.setNotification(ui.NotificationInfo, "skill: "+name+" (will inject at next user turn)")
+	}
 }
 
 func (m *Model) injectSkillChangeSynthetic(old string, nxt string) {
@@ -92,4 +97,70 @@ func (m *Model) getSkillText(name string) string {
 		text += sk.Body
 	}
 	return text
+}
+
+// openSkillPicker opens the skill picker overlay, building items from the registry.
+func (m Model) openSkillPicker() (Model, tea.Cmd) {
+	// Collect entries for column width calculation
+	type skillItem struct {
+		name        string
+		description string
+	}
+	var entries []skillItem
+	entries = append(entries, skillItem{name: "(none)", description: "No skill active"})
+	if reg := skills.GetRegistry(); reg != nil {
+		for _, e := range reg.List() {
+			entries = append(entries, skillItem{name: e.Name, description: e.Description})
+		}
+	}
+
+	// Find longest name for column alignment
+	maxName := 0
+	for _, e := range entries {
+		if len(e.name) > maxName {
+			maxName = len(e.name)
+		}
+	}
+	if maxName < 8 {
+		maxName = 8
+	}
+
+	// Description gets remaining width (name col + 2-space gap + truncation "..." margin)
+	descMax := m.width - maxName - 2
+	if descMax > 5 {
+		descMax -= 3 // leave room for "..."
+	}
+	if descMax < 1 {
+		descMax = 1
+	}
+
+	fmtStr := fmt.Sprintf("%%-%ds  %%s", maxName)
+	items := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.description != "" {
+			items = append(items, fmt.Sprintf(fmtStr, e.name, util.Truncate(e.description, descMax)))
+		} else {
+			items = append(items, e.name)
+		}
+	}
+
+	m.skillPicker = ui.NewPickerList("Select Skill", items)
+
+	// Pre-select current skill if any
+	current := m.session.file.Session.Skill.Current
+	if m.session.file.Session.Skill.Next != nil {
+		current = *m.session.file.Session.Skill.Next
+	}
+	if current != "" {
+		for i, e := range entries {
+			if e.name == current {
+				m.skillPicker.Selected = i
+				break
+			}
+		}
+	}
+
+	m.mode = ModeSkillPicker
+	(&m).recalcLayout()
+	return m, nil
 }

@@ -29,6 +29,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case ModeModelPicker:
 		return m.handlePickerKey(msg, "model")
 
+	case ModeSkillPicker:
+		return m.handlePickerKey(msg, "skill")
+
 	case ModeSessionPicker:
 		return m.handlePickerKey(msg, "session")
 

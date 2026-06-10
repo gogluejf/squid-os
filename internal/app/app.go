@@ -37,6 +37,7 @@ type Model struct {
 	// Pickers
 	modelEntries     []chat.ModelEntry
 	modelPicker      ui.PickerList
+	skillPicker      ui.PickerList
 	sessionPicker    ui.PickerList
 	sessionPickerRaw []config.SessionInfo // parallel raw names for session picker selection
 	filePicker       ui.PickerList

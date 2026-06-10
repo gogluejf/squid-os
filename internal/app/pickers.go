@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -47,6 +48,8 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 		switch pickerType {
 		case "model":
 			m.modelPicker.MoveUp()
+		case "skill":
+			m.skillPicker.MoveUp()
 		case "session":
 			m.sessionPicker.MoveUp()
 			m = m.previewSession(m.sessionPickerSelectedRaw())
@@ -59,6 +62,8 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 		switch pickerType {
 		case "model":
 			m.modelPicker.MoveDown()
+		case "skill":
+			m.skillPicker.MoveDown()
 		case "session":
 			m.sessionPicker.MoveDown()
 			m = m.previewSession(m.sessionPickerSelectedRaw())
@@ -74,6 +79,8 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 		switch pickerType {
 		case "model":
 			m.modelPicker.MoveDown()
+		case "skill":
+			m.skillPicker.MoveDown()
 		case "session":
 			m.sessionPicker.MoveDown()
 			m = m.previewSession(m.sessionPickerSelectedRaw())
@@ -93,6 +100,14 @@ func (m Model) handlePickerKey(msg tea.KeyMsg, pickerType string) (tea.Model, te
 			} else if s == "backspace" && len(m.modelPicker.Filter) > 0 {
 				m.modelPicker.Filter = m.modelPicker.Filter[:len(m.modelPicker.Filter)-1]
 				m.modelPicker.Selected = 0
+			}
+		case "skill":
+			if len(s) == 1 {
+				m.skillPicker.Filter += s
+				m.skillPicker.Selected = 0
+			} else if s == "backspace" && len(m.skillPicker.Filter) > 0 {
+				m.skillPicker.Filter = m.skillPicker.Filter[:len(m.skillPicker.Filter)-1]
+				m.skillPicker.Selected = 0
 			}
 		case "session":
 			if len(s) == 1 {
@@ -145,6 +160,27 @@ func (m Model) confirmPicker(pickerType string) (tea.Model, tea.Cmd) {
 			(&m).session.invalidateRenderAll()
 			_ = config.SaveSettings(m.paths, m.settings)
 			(&m).setNotification(ui.NotificationInfo, "switched to model: "+modelBasename(m.settings.Model))
+		}
+
+	case "skill":
+		selected := m.skillPicker.SelectedItem()
+		if selected != "" {
+			current := m.session.file.Session.Skill.Current
+			if m.session.file.Session.Skill.Next != nil {
+				current = *m.session.file.Session.Skill.Next
+			}
+			skillName := ""
+			if idx := strings.Index(selected, "  "); idx > 0 {
+				skillName = strings.TrimSpace(selected[:idx])
+			} else {
+				skillName = strings.TrimSpace(selected)
+			}
+			if skillName == "(none)" {
+				skillName = ""
+			}
+			if skillName != current {
+				(&m).setSkill(skillName)
+			}
 		}
 
 	case "session":
@@ -237,6 +273,9 @@ func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
 	case "model":
 		// Scan models asynchronously
 		return m, m.scanModelsCmd()
+
+	case "skill":
+		return m.openSkillPicker()
 
 	case "thinking":
 		return m.toggleThinking()

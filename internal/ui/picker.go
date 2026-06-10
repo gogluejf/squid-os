@@ -9,38 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// AllCommands is the full command list
-type commandEntry struct {
-	Name        string
-	Description string
-}
-
-var AllCommands = []commandEntry{
-	{Name: "model", Description: "Select inference model"},
-	{Name: "skill", Description: "Select active skill"},
-	{Name: "thinking", Description: "Toggle thinking mode (on/off)"},
-	{Name: "auth-mode", Description: "Cycle authorization mode (auto/ask-on-write/ask-for-all)"},
-	{Name: "save", Description: "Save current session"},
-	{Name: "load", Description: "Load a saved session"},
-	{Name: "clear", Description: "Clear chat and start fresh"},
-	{Name: "system", Description: "Load system prompt"},
-	{Name: "exit", Description: "Exit squid-os"},
-	{Name: "help", Description: "Show help"},
-}
-
-// AllPickerCommands builds the standard command list as PickerItems for the command palette.
-func AllPickerCommands() []PickerItem {
-	items := make([]PickerItem, len(AllCommands))
-	for i, c := range AllCommands {
-		items[i] = PickerItem{
-			Label:       "/" + c.Name,
-			Description: c.Description,
-			Value:       c.Name,
-		}
-	}
-	return items
-}
-
 // PickerDisplayMode controls how picker items are rendered.
 type PickerDisplayMode int
 
@@ -77,12 +45,12 @@ type Picker struct {
 	Items             []PickerItem
 	Filter            string
 	Selected          int
-	DefaultValue      string                    // declarative default: match by Value or Label
+	DefaultValue      string // declarative default: match by Value or Label
 	DisplayMode       PickerDisplayMode
 	MatchMode         PickerMatchMode
-	OnSelectionChange func(int, PickerItem, any) // optional: fires on navigation/filter
+	OnSelectionChange func(int, PickerItem, any)    // optional: fires on navigation/filter
 	OnConfirm         func(PickerItem, any) tea.Cmd // optional: fires on Enter
-	OnCancel          func(any) tea.Cmd         // optional: fires on Esc
+	OnCancel          func(any) tea.Cmd             // optional: fires on Esc
 }
 
 // FilteredItems returns items matching the current filter (case-insensitive on Label, Meta, and Value).

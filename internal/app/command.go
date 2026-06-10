@@ -7,6 +7,36 @@ import (
 	"squid-os/internal/ui"
 )
 
+// AllCommands is the full slash command list
+var AllCommands = []struct {
+	Name        string
+	Description string
+}{
+	{Name: "model", Description: "Select inference model"},
+	{Name: "skill", Description: "Select active skill"},
+	{Name: "thinking", Description: "Toggle thinking mode (on/off)"},
+	{Name: "auth-mode", Description: "Cycle authorization mode (auto/ask-on-write/ask-for-all)"},
+	{Name: "save", Description: "Save current session"},
+	{Name: "load", Description: "Load a saved session"},
+	{Name: "clear", Description: "Clear chat and start fresh"},
+	{Name: "system", Description: "Load system prompt"},
+	{Name: "exit", Description: "Exit squid-os"},
+	{Name: "help", Description: "Show help"},
+}
+
+// buildCommandPickerItems builds the standard command list as PickerItems for the command palette.
+func buildCommandPickerItems() []ui.PickerItem {
+	items := make([]ui.PickerItem, len(AllCommands))
+	for i, c := range AllCommands {
+		items[i] = ui.PickerItem{
+			Label:       "/" + c.Name,
+			Description: c.Description,
+			Value:       c.Name,
+		}
+	}
+	return items
+}
+
 // openCommandPicker opens the slash command palette.
 func (m *Model) openCommandPicker() {
 	m.activePicker = ui.Picker{

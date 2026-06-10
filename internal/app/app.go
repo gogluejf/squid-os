@@ -134,7 +134,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		workingDir:    wd, // starts as current working directory
 		session:       sess,
 		historyIdx:    -1,
-		allCommands:   ui.AllPickerCommands(),
+		allCommands:   buildCommandPickerItems(),
 		historySearch: ui.NewHistorySearchOverlay(nil),
 		incognito:     incognito,
 		notification:  notification,

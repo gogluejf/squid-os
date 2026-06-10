@@ -9,14 +9,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// CommandInfo describes a slash command for the palette
-type CommandInfo struct {
+// AllCommands is the full command list
+type commandEntry struct {
 	Name        string
 	Description string
 }
 
-// AllCommands is the full command list
-var AllCommands = []CommandInfo{
+var AllCommands = []commandEntry{
 	{Name: "model", Description: "Select inference model"},
 	{Name: "skill", Description: "Select active skill"},
 	{Name: "thinking", Description: "Toggle thinking mode (on/off)"},
@@ -30,123 +29,22 @@ var AllCommands = []CommandInfo{
 	{Name: "help", Description: "Show help"},
 }
 
-// CommandPalette holds the state for the slash command overlay
-type CommandPalette struct {
-	Filter   string
-	Selected int
-	Visible  bool
-	Items    []CommandInfo
-}
-
-func NewCommandPalette() CommandPalette {
-	return CommandPalette{
-		Items: AllCommands,
-	}
-}
-
-// FilteredItems returns commands matching the current filter
-func (cp *CommandPalette) FilteredItems() []CommandInfo {
-	if cp.Filter == "" {
-		return cp.Items
-	}
-	f := strings.ToLower(cp.Filter)
-	var result []CommandInfo
-	for _, item := range cp.Items {
-		if strings.HasPrefix(strings.ToLower(item.Name), f) {
-			result = append(result, item)
+// NewCommandPicker builds a Picker pre-populated with AllCommands using prefix matching.
+func NewCommandPicker() Picker {
+	items := make([]PickerItem, len(AllCommands))
+	for i, c := range AllCommands {
+		items[i] = PickerItem{
+			Label:       "/" + c.Name,
+			Description: c.Description,
+			Value:       c.Name,
 		}
 	}
-	return result
-}
-
-// MoveUp moves selection up
-func (cp *CommandPalette) MoveUp() {
-	if cp.Selected > 0 {
-		cp.Selected--
+	return Picker{
+		Title:       "Commands",
+		Items:       items,
+		DisplayMode: ModeLabelDesc,
+		MatchMode:   MatchPrefix,
 	}
-}
-
-// MoveDown moves selection down
-func (cp *CommandPalette) MoveDown() {
-	items := cp.FilteredItems()
-	if cp.Selected < len(items)-1 {
-		cp.Selected++
-	}
-}
-
-// SelectedCommand returns the currently selected command name, or empty
-func (cp *CommandPalette) SelectedCommand() string {
-	items := cp.FilteredItems()
-	if cp.Selected >= 0 && cp.Selected < len(items) {
-		return items[cp.Selected].Name
-	}
-	return ""
-}
-
-// Reset clears the palette state
-func (cp *CommandPalette) Reset() {
-	cp.Filter = ""
-	cp.Selected = 0
-	cp.Visible = false
-}
-
-// maxCmdItems is the maximum number of command palette rows ever rendered.
-const maxCmdItems = 10
-
-// RenderHeight returns the exact number of terminal lines that Render() will output.
-func (cp *CommandPalette) RenderHeight() int {
-	n := len(cp.FilteredItems())
-	if n == 0 {
-		return 1 // "No matching commands" line
-	}
-	if n > maxCmdItems {
-		n = maxCmdItems
-	}
-	return n
-}
-
-// palette background colours
-var paletteBg = lipgloss.Color(style.P.BgFooter)
-var paletteSelectedBg = lipgloss.Color(style.P.BgSelected)
-
-// Render renders the command palette
-func (cp *CommandPalette) Render(width int) string {
-	items := cp.FilteredItems()
-	if len(items) == 0 {
-		return lipgloss.NewStyle().
-			Background(paletteBg).
-			Width(width).
-			Render(lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("  No matching commands"))
-	}
-	// Cap rendered items to match RenderHeight.
-	if len(items) > maxCmdItems {
-		items = items[:maxCmdItems]
-	}
-
-	// Fixed name column width: longest command "/thinking" = 11 chars + 2 gap = 13.
-	const nameColWidth = 13
-
-	// Inline styles that carry the background so ANSI resets don't punch holes.
-	normalNameStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(style.P.TextMuted)).Width(nameColWidth)
-	normalDescStyle := lipgloss.NewStyle().Background(paletteBg).Foreground(lipgloss.Color(style.P.TextMuted))
-	normalRowStyle := lipgloss.NewStyle().Background(paletteBg).Width(width)
-
-	selNameStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(style.P.TextAccent)).Bold(true).Width(nameColWidth)
-	selDescStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Foreground(lipgloss.Color(style.P.TextAccent)).Bold(true)
-	selRowStyle := lipgloss.NewStyle().Background(paletteSelectedBg).Width(width)
-
-	var rows []string
-	for i, item := range items {
-		name := "  /" + item.Name
-		desc := item.Description
-		if i == cp.Selected {
-			rows = append(rows, selRowStyle.Render(selNameStyle.Render(name)+selDescStyle.Render(desc)))
-		} else {
-			rows = append(rows, normalRowStyle.Render(normalNameStyle.Render(name)+normalDescStyle.Render(desc)))
-		}
-	}
-
-	return strings.Join(rows, "\n")
 }
 
 // PickerAction represents the result of a key interaction with the Picker.
@@ -168,6 +66,14 @@ const (
 	ModeLabelValue                          // Label + Value (model: name + model ID)
 )
 
+// PickerMatchMode controls how filtering matches items.
+type PickerMatchMode int
+
+const (
+	MatchSubstring PickerMatchMode = iota // substring match (default, used by data pickers)
+	MatchPrefix                           // prefix match (used by command palette)
+)
+
 // PickerItem is a typed row in a Picker, carrying all fields needed for display and selection.
 type PickerItem struct {
 	Label       string // left column / primary text
@@ -185,10 +91,11 @@ type Picker struct {
 	Selected          int
 	DefaultMatch      string
 	DisplayMode       PickerDisplayMode
+	MatchMode         PickerMatchMode
 	OnSelectionChange func(int, PickerItem)
 }
 
-// FilteredItems returns items matching the current filter (case-insensitive on Label and Meta).
+// FilteredItems returns items matching the current filter (case-insensitive on Label, Meta, and Value).
 func (p *Picker) FilteredItems() []PickerItem {
 	if p.Filter == "" {
 		return p.Items
@@ -196,9 +103,18 @@ func (p *Picker) FilteredItems() []PickerItem {
 	f := strings.ToLower(p.Filter)
 	var result []PickerItem
 	for _, item := range p.Items {
-		if strings.Contains(strings.ToLower(item.Label), f) ||
-			strings.Contains(strings.ToLower(item.Meta), f) {
-			result = append(result, item)
+		labelLower := strings.ToLower(item.Label)
+		metaLower := strings.ToLower(item.Meta)
+		valueLower := strings.ToLower(item.Value)
+		switch p.MatchMode {
+		case MatchPrefix:
+			if strings.HasPrefix(labelLower, f) || strings.HasPrefix(metaLower, f) || strings.HasPrefix(valueLower, f) {
+				result = append(result, item)
+			}
+		default:
+			if strings.Contains(labelLower, f) || strings.Contains(metaLower, f) || strings.Contains(valueLower, f) {
+				result = append(result, item)
+			}
 		}
 	}
 	return result

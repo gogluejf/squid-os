@@ -96,8 +96,8 @@ func (m *Model) recalcLayout() {
 	const footerHeight = 2
 
 	overlayHeight := 0
-	if m.cmdPalette.Visible {
-		overlayHeight = m.cmdPalette.RenderHeight()
+	if m.cmdPickerVisible {
+		overlayHeight = m.cmdPicker.RenderHeight()
 	} else {
 		switch m.mode {
 		case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker:

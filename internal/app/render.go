@@ -28,8 +28,8 @@ func (m Model) View() string {
 	sections = append(sections, m.viewport.View())
 
 	// Command palette overlay (between viewport and input)
-	if m.cmdPalette.Visible {
-		sections = append(sections, m.cmdPalette.Render(m.width))
+	if m.cmdPickerVisible {
+		sections = append(sections, m.cmdPicker.Render(m.width))
 	} else {
 		switch m.mode {
 		case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker:

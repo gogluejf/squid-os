@@ -212,7 +212,9 @@ func (m Model) handleSavePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // executeCommand runs a slash command selected from the command palette.
 func (m Model) executeCommand(name string) (tea.Model, tea.Cmd) {
-	m.cmdPalette.Reset()
+	m.cmdPickerVisible = false
+	m.cmdPicker.Filter = ""
+	m.cmdPicker.Selected = 0
 	m.textarea.SetValue("")
 
 	switch name {

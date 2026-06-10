@@ -29,7 +29,8 @@ type Model struct {
 	height   int
 
 	// Command palette
-	cmdPalette ui.CommandPalette
+	cmdPicker       ui.Picker
+	cmdPickerVisible bool
 
 	// History search overlay
 	historySearch ui.HistorySearchOverlay
@@ -134,7 +135,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		workingDir:    wd, // starts as current working directory
 		session:       sess,
 		historyIdx:    -1,
-		cmdPalette:    ui.NewCommandPalette(),
+		cmdPicker:       ui.NewCommandPicker(),
 		historySearch: ui.NewHistorySearchOverlay(nil),
 		incognito:     incognito,
 		notification:  notification,

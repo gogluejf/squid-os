@@ -197,14 +197,18 @@ func (p *Picker) HandleKey(msg tea.KeyMsg) PickerAction {
 		}
 		return ActionNone
 	}
-	if s == "backspace" && len(p.Filter) > 0 {
-		p.Filter = p.Filter[:len(p.Filter)-1]
-		p.Selected = 0
-		if p.OnSelectionChange != nil {
-			items := p.FilteredItems()
-			if len(items) > 0 {
-				p.OnSelectionChange(0, items[0])
+	if s == "backspace" {
+		if len(p.Filter) > 0 {
+			p.Filter = p.Filter[:len(p.Filter)-1]
+			p.Selected = 0
+			if p.OnSelectionChange != nil {
+				items := p.FilteredItems()
+				if len(items) > 0 {
+					p.OnSelectionChange(0, items[0])
+				}
 			}
+		} else {
+			return ActionCancel
 		}
 		return ActionNone
 	}

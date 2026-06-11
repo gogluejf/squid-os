@@ -25,13 +25,37 @@ func newSessionSavePrompt(lastName string) sessionSavePrompt {
 	return sessionSavePrompt{Name: lastName}
 }
 
+// RenderHeight returns the same height as the picker so viewport layout stays stable.
+func (s sessionSavePrompt) RenderHeight() int {
+	return ui.PickerMaxItems + 4 // matches Picker.RenderHeight: 3 + PickerMaxItems + 1
+}
+
 func (s sessionSavePrompt) Render(width int) string {
 	var b strings.Builder
-	b.WriteString(style.HeadingStyle.Render("  Save Session") + "\n")
-	b.WriteString(style.CommandDescStyle.Render("  Name: "))
-	b.WriteString(style.CommandStyle.Render(s.Name + "_"))
+	bg := lipgloss.Color(style.P.BgFooter)
+
+	// Leading blank line
+	b.WriteString(" \n")
+
+	// Title
+	b.WriteString(lipgloss.NewStyle().Background(bg).Render(style.HeadingStyle.Render("   Save Session")) + "\n")
+
+	// Separator blank line
+	b.WriteString(" \n")
+
+	// Name prompt — each segment carries bg to prevent ANSI reset holes
+	var nameB strings.Builder
+	nameB.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("   Name: "))
+	nameB.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextAccent)).Bold(true).Render(s.Name + "_"))
+	b.WriteString(nameB.String() + "\n")
+
+	// Pad remaining slots to match picker height (PickerMaxItems - 1 padding lines after name)
+	for i := 0; i < ui.PickerMaxItems-1; i++ {
+		b.WriteString(" \n")
+	}
+
 	return lipgloss.NewStyle().
-		Background(lipgloss.Color(style.P.BgFooter)).
+		Background(bg).
 		Width(width).
 		Render(b.String())
 }

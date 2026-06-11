@@ -41,8 +41,8 @@ type Picker struct {
 	OnCancel          func(any) tea.Cmd
 
 	// Cached column widths — computed once in Init() from ALL items, never changes.
-	labelWidth    int
-	metaWidths    []int
+	labelWidth     int
+	metaWidths     []int
 	widthsComputed bool
 	// lastNotified tracks the previously reported item to avoid redundant callbacks.
 	lastNotified PickerItem
@@ -59,6 +59,7 @@ func (p *Picker) fireSelectionChange(idx int, item PickerItem, ctx any) {
 	p.lastNotified = item
 	p.OnSelectionChange(idx, item, ctx)
 }
+
 func (p *Picker) FilteredItems() []PickerItem {
 	if p.Filter == "" {
 		return p.Items
@@ -116,11 +117,7 @@ func (p *Picker) RenderHeight() int {
 	if len(items) == 0 {
 		h += 2 // "No matches" + trailing blank
 	} else {
-		count := len(items)
-		if count > PickerMaxItems {
-			count = PickerMaxItems
-		}
-		h += count + 1 // trailing blank
+		h += PickerMaxItems + 1 // always 15 item rows + trailing blank
 	}
 	return h
 }
@@ -308,7 +305,7 @@ func (p *Picker) Render(width int) string {
 	var lines []string
 
 	// Leading blank line
-	lines = append(lines, "")
+	lines = append(lines, " ")
 
 	// Title
 	lines = append(lines, style.HeadingStyle.Render("  "+p.Title))
@@ -320,9 +317,9 @@ func (p *Picker) Render(width int) string {
 
 	if len(items) == 0 {
 		// Separator blank line
-		lines = append(lines, "")
+		lines = append(lines, " ")
 		lines = append(lines, style.CommandDescStyle.Render("  No matches"))
-		lines = append(lines, "")
+		lines = append(lines, " ")
 		return lipgloss.NewStyle().
 			Background(lipgloss.Color(style.P.BgFooter)).
 			Width(width).
@@ -330,7 +327,7 @@ func (p *Picker) Render(width int) string {
 	}
 
 	// Separator blank line after title/filter
-	lines = append(lines, "")
+	lines = append(lines, " ")
 
 	var globalStart int
 	if len(items) > PickerMaxItems {
@@ -345,8 +342,13 @@ func (p *Picker) Render(width int) string {
 		lines = append(lines, p.renderRow(item, isSelected, width))
 	}
 
+	// Pad with blank lines to always show PickerMaxItems item slots
+	for i := len(visible); i < PickerMaxItems; i++ {
+		lines = append(lines, " ")
+	}
+
 	// Trailing blank line
-	lines = append(lines, "")
+	lines = append(lines, " ")
 
 	return lipgloss.NewStyle().
 		Background(lipgloss.Color(style.P.BgFooter)).
@@ -438,20 +440,22 @@ func (p *Picker) renderRow(item PickerItem, sel bool, width int) string {
 }
 
 func padRight(s string, n int) string {
-	if len(s) >= n {
-		return s[:n]
+	runes := []rune(s)
+	if len(runes) >= n {
+		return string(runes[:n])
 	}
-	return s + strings.Repeat(" ", n-len(s))
+	return string(runes) + strings.Repeat(" ", n-len(runes))
 }
 
-func truncateRight(s string, maxLen int) string {
-	if len(s) <= maxLen {
+func truncateRight(s string, maxCells int) string {
+	runes := []rune(s)
+	if len(runes) <= maxCells {
 		return s
 	}
-	if maxLen <= 1 {
-		return "…"
+	if maxCells <= 2 {
+		return ".."
 	}
-	return s[:maxLen-1] + "…"
+	return string(runes[:maxCells-2]) + ".."
 }
 
 func isPrintable(s string) bool {

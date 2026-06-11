@@ -83,8 +83,8 @@ func (m *Model) recalcLayout() {
 
 	const statusLineHeight = 1
 	vpHeight := m.height - inputHeight - headerHeight - footerHeight - statusLineHeight - overlayHeight
-	if vpHeight < 3 {
-		vpHeight = 3
+	if vpHeight < 6 {
+		vpHeight = 6
 	}
 	m.viewport.Width = m.width
 	m.viewport.Height = vpHeight

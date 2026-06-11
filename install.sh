@@ -24,7 +24,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${SCRIPT_DIR}"
 BIN_DIR="${REPO_ROOT}/bin"
 
-GO_VERSION="1.24.2"
+GO_VERSION="1.26.3"
 GO_ARCHIVE="go${GO_VERSION}.linux-amd64.tar.gz"
 GO_SDK="/usr/local/go"
 GO_BIN="${GO_SDK}/bin/go"

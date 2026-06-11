@@ -1,7 +1,6 @@
 package app
 
 import (
-	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -9,21 +8,7 @@ import (
 // Callbacks (OnConfirm, OnCancel, OnSelectionChange) do the real work.
 func (m Model) handleActivePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle viewport scroll keys first (these bypass the picker).
-	switch {
-	case key.Matches(msg, keys.ScrollUp):
-		m.viewport.ScrollUp(3)
-		return m, nil
-
-	case key.Matches(msg, keys.ScrollDown):
-		m.viewport.ScrollDown(3)
-		return m, nil
-
-	case key.Matches(msg, keys.PageUp):
-		m.viewport.PageUp()
-		return m, nil
-
-	case key.Matches(msg, keys.PageDown):
-		m.viewport.PageDown()
+	if m.handleViewportScroll(msg) {
 		return m, nil
 	}
 

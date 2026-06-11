@@ -41,6 +41,26 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleViewportScroll checks for scroll keys and applies them to the viewport.
+// Returns true if a scroll key was matched and handled.
+func (m *Model) handleViewportScroll(msg tea.KeyMsg) bool {
+	switch {
+	case key.Matches(msg, keys.ScrollUp):
+		m.viewport.ScrollUp(3)
+		return true
+	case key.Matches(msg, keys.ScrollDown):
+		m.viewport.ScrollDown(3)
+		return true
+	case key.Matches(msg, keys.PageUp):
+		m.viewport.PageUp()
+		return true
+	case key.Matches(msg, keys.PageDown):
+		m.viewport.PageDown()
+		return true
+	}
+	return false
+}
+
 // handleChatKey handles all key input while in the default chat mode.
 func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
@@ -127,20 +147,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Send):
 		return m.sendMessage()
 
-	case key.Matches(msg, keys.ScrollUp):
-		m.viewport.ScrollUp(3)
-		return m, nil
-
-	case key.Matches(msg, keys.ScrollDown):
-		m.viewport.ScrollDown(3)
-		return m, nil
-
-	case key.Matches(msg, keys.PageUp):
-		m.viewport.PageUp()
-		return m, nil
-
-	case key.Matches(msg, keys.PageDown):
-		m.viewport.PageDown()
+	case m.handleViewportScroll(msg):
 		return m, nil
 
 	case key.Matches(msg, keys.Up):
@@ -255,20 +262,7 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.Type == tea.KeyShiftTab:
 		return m.cycleAuthorization()
 
-	case key.Matches(msg, keys.ScrollUp):
-		m.viewport.ScrollUp(3)
-		return m, nil
-
-	case key.Matches(msg, keys.ScrollDown):
-		m.viewport.ScrollDown(3)
-		return m, nil
-
-	case key.Matches(msg, keys.PageUp):
-		m.viewport.PageUp()
-		return m, nil
-
-	case key.Matches(msg, keys.PageDown):
-		m.viewport.PageDown()
+	case m.handleViewportScroll(msg):
 		return m, nil
 	}
 	return m, nil

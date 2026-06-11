@@ -178,8 +178,9 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			*m = m.confirmSessionPicker(item)
+			cmd := m.setChatMode()
 			m.updateViewportContent()
-			return m.setChatMode()
+			return cmd
 		},
 		OnCancel: func(ctx any) tea.Cmd {
 			m := ctx.(*Model)
@@ -189,9 +190,10 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 				if m.session.file.Session.WorkingDir != "" {
 					m.applyWorkingDir(m.session.file.Session.WorkingDir)
 				}
-				m.updateViewportContent()
 			}
-			return m.setChatMode()
+			cmd := m.setChatMode()
+			m.updateViewportContent()
+			return cmd
 		},
 	}
 

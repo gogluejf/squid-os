@@ -120,39 +120,26 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Escape):
 		return m, nil
 
-	case key.Matches(msg, keys.Help):
-		m.mode = ModeHelp
-		return m, nil
-
 	case key.Matches(msg, keys.Expand):
 		m.expanded = !m.expanded
 		m.session.invalidateRenderAll()
 		m.updateViewportContent()
 		return m, nil
 
-	case key.Matches(msg, keys.Save):
-		return m.openSaveSessionPrompt()
-
-	case key.Matches(msg, keys.Load):
-		return m.openSessionPicker()
-
-	case key.Matches(msg, keys.Model):
-		return m.openModelPicker()
-
-	case key.Matches(msg, keys.NewSession):
-		return m.clearSession()
-
 	case key.Matches(msg, keys.Incognito):
 		return m.toggleIncognito()
 
-	case key.Matches(msg, keys.Thinking):
-		return m.toggleThinking()
-
-	case key.Matches(msg, keys.Skill):
-		return m.openSkillPicker()
-
 	case key.Matches(msg, keys.HistorySearch):
 		return m.startHistorySearch()
+
+	case key.Matches(msg, keys.Send):
+		return m.sendMessage()
+
+	case m.handleViewportScroll(msg):
+		return m, nil
+
+	case matchCommandKey(msg) != "":
+		return m.executeCommandByName(matchCommandKey(msg))
 
 	case msg.Alt && msg.Type == tea.KeyEnter:
 		m.textarea.InsertRune('\n')
@@ -160,15 +147,6 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case msg.Type == tea.KeyTab && !msg.Alt:
 		return m.cycleSkill()
-
-	case msg.Type == tea.KeyShiftTab:
-		return m.cycleAuthorization()
-
-	case key.Matches(msg, keys.Send):
-		return m.sendMessage()
-
-	case m.handleViewportScroll(msg):
-		return m, nil
 
 	case key.Matches(msg, keys.Up):
 		// Only browse history if cursor is on the first line of the textarea
@@ -273,14 +251,11 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.updateViewportContent()
 		return m, nil
 
-	case key.Matches(msg, keys.Thinking):
-		return m.toggleThinking()
+	case matchCommandKey(msg) != "":
+		return m.executeCommandByName(matchCommandKey(msg))
 
 	case msg.Type == tea.KeyTab && !msg.Alt:
 		return m.cycleSkill()
-
-	case msg.Type == tea.KeyShiftTab:
-		return m.cycleAuthorization()
 
 	case m.handleViewportScroll(msg):
 		return m, nil

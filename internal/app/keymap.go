@@ -28,6 +28,7 @@ type keyMap struct {
 	PageUp         key.Binding
 	PageDown       key.Binding
 	HistorySearch  key.Binding
+	AuthMode       key.Binding
 }
 
 var keys = keyMap{
@@ -130,5 +131,9 @@ var keys = keyMap{
 	HistorySearch: key.NewBinding(
 		key.WithKeys("ctrl+r"),
 		key.WithHelp("ctrl+r", "reverse search history"),
+	),
+	AuthMode: key.NewBinding(
+		key.WithKeys("shift+tab"),
+		key.WithHelp("shift+tab", "cycle auth mode"),
 	),
 }

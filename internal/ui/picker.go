@@ -318,18 +318,18 @@ func (p *Picker) Render(width int) string {
 	if p.Filter != "" {
 		var b strings.Builder
 		bg := lipgloss.Color(style.P.BgFooter)
-		b.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextHeading)).Bold(true).Render("  " + p.Title))
+		b.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextHeading)).Bold(true).Render("   " + p.Title))
 		b.WriteString(lipgloss.NewStyle().Background(bg).Render(" "))
 		b.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("filter: " + p.Filter))
 		lines = append(lines, b.String())
 	} else {
-		lines = append(lines, lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgFooter)).Render(style.HeadingStyle.Render("  "+p.Title)))
+		lines = append(lines, lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgFooter)).Render(style.HeadingStyle.Render("   "+p.Title)))
 	}
 
 	if len(items) == 0 {
 		// Separator blank line
 		lines = append(lines, " ")
-		lines = append(lines, lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgFooter)).Render(style.CommandDescStyle.Render("  No matches")))
+		lines = append(lines, lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgFooter)).Render(style.CommandDescStyle.Render("   No matches")))
 		// Pad remaining slots with blank lines to reach PickerMaxItems (No matches takes one slot)
 		for i := 0; i < PickerMaxItems-1; i++ {
 			lines = append(lines, " ")
@@ -391,6 +391,13 @@ func (p *Picker) renderRow(item PickerItem, sel bool, width int) string {
 		base = base.Bold(true)
 	}
 
+	// Leading indicator: "   " for unselected, " ▶ " for selected (all 3 chars)
+	prefix := "   "
+	if sel {
+		prefix = " \u25B6 " // ▶ play arrow padded to 3 chars
+	}
+	prefixLen := len([]rune(prefix))
+
 	// No meta columns: label fills the row
 	if len(item.Meta) == 0 {
 		// Outer width style ensures the background fills the entire line
@@ -398,13 +405,13 @@ func (p *Picker) renderRow(item PickerItem, sel bool, width int) string {
 		if sel {
 			s = s.Bold(true)
 		}
-		inner := base.Foreground(labelFg).Render("  " + item.Label)
+		inner := base.Foreground(labelFg).Render(prefix + item.Label)
 		return s.Render(inner)
 	}
 
 	// Multi-column: every segment styled independently with background
 	var b strings.Builder
-	b.WriteString(base.Render("  "))
+	b.WriteString(base.Foreground(labelFg).Render(prefix))
 
 	b.WriteString(base.Foreground(labelFg).Render(padRight(item.Label, p.labelWidth)))
 
@@ -417,7 +424,7 @@ func (p *Picker) renderRow(item PickerItem, sel bool, width int) string {
 			fixed += 2
 		}
 	}
-	lastWidth := width - fixed - 2
+	lastWidth := width - fixed - prefixLen
 	if lastWidth < 2 {
 		lastWidth = 2
 	}
@@ -436,7 +443,7 @@ func (p *Picker) renderRow(item PickerItem, sel bool, width int) string {
 
 	// Trailing background fill so the entire line has consistent bg
 	// (padRight/truncateRight already account for width, but add trailing spaces just in case)
-	totalWritten := 2 + p.labelWidth
+	totalWritten := prefixLen + p.labelWidth
 	for j := range item.Meta {
 		if j < len(item.Meta)-1 {
 			w := 2

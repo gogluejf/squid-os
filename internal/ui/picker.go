@@ -44,6 +44,7 @@ type Picker struct {
 	labelWidth     int
 	metaWidths     []int
 	widthsComputed bool
+	initialized    bool
 	// lastNotified tracks the previously reported item to avoid redundant callbacks.
 	lastNotified PickerItem
 }
@@ -212,28 +213,43 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 
 // Init computes fixed column widths from ALL items and resolves DefaultValue.
 // Column widths are computed ONCE here and never change during scroll/filter.
+// Fires OnSelectionChange for the resolved selection (default match, or first item).
+// Idempotent — guarded by an initialized flag to prevent re-entry loops.
 func (p *Picker) Init(ctx any) {
+	if p.initialized {
+		return
+	}
+	p.initialized = true
+
 	if !p.widthsComputed {
 		p.computeWidths()
 		p.widthsComputed = true
 	}
 
-	if p.DefaultValue == "" {
+	items := p.FilteredItems()
+	if len(items) == 0 {
 		return
 	}
-	m := strings.ToLower(p.DefaultValue)
-	for i, item := range p.Items {
-		if strings.ToLower(item.Value) == m || strings.ToLower(item.Label) == m {
-			p.Selected = i
-			p.DefaultValue = ""
-			items := p.FilteredItems()
-			if p.Selected < len(items) {
-				p.fireSelectionChange(p.Selected, items[p.Selected], ctx)
+
+	if p.DefaultValue != "" {
+		m := strings.ToLower(p.DefaultValue)
+		for i, item := range p.Items {
+			if strings.ToLower(item.Value) == m || strings.ToLower(item.Label) == m {
+				p.Selected = i
+				p.DefaultValue = ""
+				items := p.FilteredItems()
+				if p.Selected < len(items) {
+					p.fireSelectionChange(p.Selected, items[p.Selected], ctx)
+				}
+				return
 			}
-			return
 		}
+		p.DefaultValue = ""
 	}
-	p.DefaultValue = ""
+
+	// No default match (or no default): select the first item and fire callback
+	p.Selected = 0
+	p.fireSelectionChange(0, items[0], ctx)
 }
 
 // computeWidths scans ALL items and sets fixed column widths (max value + 4 padding).
@@ -302,9 +318,9 @@ func (p *Picker) Render(width int) string {
 	if p.Filter != "" {
 		var b strings.Builder
 		bg := lipgloss.Color(style.P.BgFooter)
-		b.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextHeading)).Bold(true).Render("  "+p.Title))
+		b.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextHeading)).Bold(true).Render("  " + p.Title))
 		b.WriteString(lipgloss.NewStyle().Background(bg).Render(" "))
-		b.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("filter: "+p.Filter))
+		b.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("filter: " + p.Filter))
 		lines = append(lines, b.String())
 	} else {
 		lines = append(lines, lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgFooter)).Render(style.HeadingStyle.Render("  "+p.Title)))
@@ -338,7 +354,7 @@ func (p *Picker) Render(width int) string {
 	}
 
 	for i, item := range visible {
-		isSelected := (globalStart+i) == p.Selected
+		isSelected := (globalStart + i) == p.Selected
 		lines = append(lines, p.renderRow(item, isSelected, width))
 	}
 

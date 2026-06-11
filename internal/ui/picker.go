@@ -108,15 +108,9 @@ func (p *Picker) SelectedItem() PickerItem {
 const PickerMaxItems = 15
 
 // RenderHeight returns the exact number of terminal lines that Render() will output.
+// Always returns the same height regardless of filter state — "No matches" pads to PickerMaxItems.
 func (p *Picker) RenderHeight() int {
-	h := 3 // leading blank + title (+ inline filter) + separator blank
-	items := p.FilteredItems()
-	if len(items) == 0 {
-		h += 2 // "No matches" + trailing blank
-	} else {
-		h += PickerMaxItems + 1 // always 15 item rows + trailing blank
-	}
-	return h
+	return 3 + PickerMaxItems + 1 // leading blank + title + separator + 15 slots (or "No matches" + padding) + trailing blank
 }
 
 // HandleKey processes a key message and returns a tea.Cmd if a callback fires.
@@ -319,7 +313,12 @@ func (p *Picker) Render(width int) string {
 	if len(items) == 0 {
 		// Separator blank line
 		lines = append(lines, " ")
-		lines = append(lines, style.CommandDescStyle.Render("  No matches"))
+		lines = append(lines, lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgFooter)).Render(style.CommandDescStyle.Render("  No matches")))
+		// Pad remaining slots with blank lines to reach PickerMaxItems (No matches takes one slot)
+		for i := 0; i < PickerMaxItems-1; i++ {
+			lines = append(lines, " ")
+		}
+		// Trailing blank line
 		lines = append(lines, " ")
 		return lipgloss.NewStyle().
 			Background(lipgloss.Color(style.P.BgFooter)).

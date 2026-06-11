@@ -109,7 +109,7 @@ var keys = keyMap{
 	),
 	Tab: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "complete"),
+		key.WithHelp("tab", "cycle skill"),
 	),
 	ScrollUp: key.NewBinding(
 		key.WithKeys("shift+up"),

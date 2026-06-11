@@ -22,10 +22,11 @@ func RenderHelp(width, height int) string {
 	 ` + style.FooterKeyStyle.Render("ctrl+e") + `           Expand/collapse thinking & tool results
 	 ` + style.FooterKeyStyle.Render("ctrl+s") + `           Save session (edit name)
 	 ` + style.FooterKeyStyle.Render("ctrl+l") + `           Load session
-	 ` + style.FooterKeyStyle.Render("left alt+m") + `       Select model
+	 ` + style.FooterKeyStyle.Render("alt+m") + `            Select model
 	 ` + style.FooterKeyStyle.Render("ctrl+n") + `           New session / clear chat
-	 ` + style.FooterKeyStyle.Render("left alt+i") + `       Toggle incognito mode
-	 ` + style.FooterKeyStyle.Render("left alt+t") + `       Toggle thinking mode
+	 ` + style.FooterKeyStyle.Render("alt+i") + `            Toggle incognito mode
+	 ` + style.FooterKeyStyle.Render("alt+t") + `            Toggle thinking mode
+	 ` + style.FooterKeyStyle.Render("alt+s") + `            Select skill
 	 ` + style.FooterKeyStyle.Render("shift+tab") + `         Cycle authorization mode
 	 ` + style.FooterKeyStyle.Render("up/down") + `          Browse prompt history
 	 ` + style.FooterKeyStyle.Render("shift+↑/↓") + `        Scroll chat (3 lines)
@@ -33,15 +34,17 @@ func RenderHelp(width, height int) string {
 	 ` + style.FooterKeyStyle.Render("scroll") + `           Mouse wheel scrolls chat
 	 ` + style.FooterKeyStyle.Render("shift+drag") + `       Select and copy text
 	 ` + style.FooterKeyStyle.Render("/") + `                Open command palette
-	 ` + style.FooterKeyStyle.Render("ctrl+r") + `            Reverse search prompt history
+	 ` + style.FooterKeyStyle.Render("tab") + `              Cycle skill
+	 ` + style.FooterKeyStyle.Render("ctrl+r") + `           Reverse search prompt history
 	 ` + style.FooterKeyStyle.Render("esc") + `              Close overlay / dismiss palette`
 
 	commands := `
   Slash Commands
   ` + lipgloss.NewStyle().Foreground(lipgloss.Color(style.P.TextDim)).Render("────────────────────────────────") + `
   ` + style.CommandStyle.Render("/model") + `           Select model
+  ` + style.CommandStyle.Render("/skill") + `           Select active skill
   ` + style.CommandStyle.Render("/thinking") + `        Toggle thinking mode
-  ` + style.CommandStyle.Render("/image") + `           Attach image to next message
+  ` + style.CommandStyle.Render("/auth-mode") + `       Cycle authorization mode
   ` + style.CommandStyle.Render("/save") + `            Save current session
   ` + style.CommandStyle.Render("/load") + `            Load a saved session
   ` + style.CommandStyle.Render("/clear") + `           Clear chat and start fresh

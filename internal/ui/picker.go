@@ -109,10 +109,7 @@ const PickerMaxItems = 15
 
 // RenderHeight returns the exact number of terminal lines that Render() will output.
 func (p *Picker) RenderHeight() int {
-	h := 3 // leading blank + title + separator blank
-	if p.Filter != "" {
-		h++
-	}
+	h := 3 // leading blank + title (+ inline filter) + separator blank
 	items := p.FilteredItems()
 	if len(items) == 0 {
 		h += 2 // "No matches" + trailing blank
@@ -307,12 +304,16 @@ func (p *Picker) Render(width int) string {
 	// Leading blank line
 	lines = append(lines, " ")
 
-	// Title
-	lines = append(lines, style.HeadingStyle.Render("  "+p.Title))
-
-	// Filter line (if any)
+	// Title (+ inline filter if active) — every segment carries BgFooter to prevent ANSI reset holes
 	if p.Filter != "" {
-		lines = append(lines, style.CommandDescStyle.Render("  filter: "+p.Filter))
+		var b strings.Builder
+		bg := lipgloss.Color(style.P.BgFooter)
+		b.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextHeading)).Bold(true).Render("  "+p.Title))
+		b.WriteString(lipgloss.NewStyle().Background(bg).Render(" "))
+		b.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("filter: "+p.Filter))
+		lines = append(lines, b.String())
+	} else {
+		lines = append(lines, lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgFooter)).Render(style.HeadingStyle.Render("  "+p.Title)))
 	}
 
 	if len(items) == 0 {

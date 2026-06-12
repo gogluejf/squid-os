@@ -29,7 +29,7 @@ func (m Model) View() string {
 
 	// Command palette overlay (between viewport and input)
 	switch m.mode {
-		case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker, ModeCommandPicker:
+		case ModeComponentPicker:
 			sections = append(sections, m.activePicker.Render(m.width))
 		case ModeSessionSave:
 			sections = append(sections, m.sessionSave.Render(m.width))

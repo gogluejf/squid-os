@@ -47,8 +47,7 @@ var AllCommands = []SlashCommand{
 		Description: "Cycle authorization mode (auto/ask-on-write/ask-for-all)",
 		Key:         keys.AuthMode,
 		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
-			_, cmd := m.cycleAuthorization()
-			return m, cmd
+			return m.cycleAuthorization()
 		},
 	},
 	{
@@ -168,7 +167,7 @@ func (m *Model) openCommandPicker() {
 		},
 	}
 	m.pickerContext = "command"
-	m.mode = ModeCommandPicker
+	m.mode = ModeComponentPicker
 	m.recalcLayout()
 }
 

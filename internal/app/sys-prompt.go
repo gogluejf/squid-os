@@ -34,7 +34,7 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 		},
 	}
 	m.pickerContext = "system"
-	m.mode = ModeFilePicker
+	m.mode = ModeComponentPicker
 	(&m).recalcLayout()
 	return m, nil
 }

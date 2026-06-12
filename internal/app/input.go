@@ -25,7 +25,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.setChatMode()
 		}
 
-	case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker, ModeCommandPicker:
+	case ModeComponentPicker:
 		return m.handleActivePicker(msg)
 
 	case ModeSessionSave:
@@ -318,10 +318,11 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	default:
 		// Handle character input for filter text
-		if msg.Type == tea.KeyRunes {
+		switch msg.Type {
+		case tea.KeyRunes:
 			m.historySearch.Filter(m.historySearch.FilterText() + string(msg.Runes[0]))
 			m.textarea.SetValue(m.historySearch.SelectedText())
-		} else if msg.Type == tea.KeySpace {
+		case tea.KeySpace:
 			m.historySearch.Filter(m.historySearch.FilterText() + " ")
 			m.textarea.SetValue(m.historySearch.SelectedText())
 		}

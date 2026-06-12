@@ -140,7 +140,7 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 	}
 
 	m.pickerContext = "skill"
-	m.mode = ModeSkillPicker
+	m.mode = ModeComponentPicker
 	(&m).recalcLayout()
 	return m, nil
 }

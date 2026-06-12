@@ -223,7 +223,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 
 	m.pickerContext = "session"
 	m.pickerPayload = sessions
-	m.mode = ModeSessionPicker
+	m.mode = ModeComponentPicker
 	(&m).recalcLayout()
 
 	return m, nil

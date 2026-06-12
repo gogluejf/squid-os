@@ -71,7 +71,7 @@ func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
 	m.pickerContext = "model"
 	m.pickerPayload = entries
 	(&m).refreshContextWindow(entries)
-	m.mode = ModeModelPicker
+	m.mode = ModeComponentPicker
 	(&m).recalcLayout()
 	return m
 }

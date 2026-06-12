@@ -72,7 +72,7 @@ func (m *Model) recalcLayout() {
 
 	overlayHeight := 0
 	switch m.mode {
-	case ModeModelPicker, ModeSkillPicker, ModeSessionPicker, ModeFilePicker, ModeCommandPicker:
+	case ModeComponentPicker:
 		overlayHeight = m.activePicker.RenderHeight()
 		m.activePicker.Init(m) // resolve DefaultValue, fires OnSelectionChange (idempotent)
 	case ModeSessionSave:

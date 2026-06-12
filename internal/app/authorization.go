@@ -47,5 +47,5 @@ func (m Model) cycleAuthorization() (Model, tea.Cmd) {
 	}
 	(&m).setNotification(ui.NotificationInfo, "authorization: "+labels[next])
 	m.updateViewportContent()
-	return m, nil
+	return m, m.setChatMode()
 }

@@ -509,7 +509,26 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 
 		// --- Gate 1: Authorization ---
 		if m.needsAuthorization(tool, args) {
-			entries[i].Execution.Status = tools.ResultStatusPending
+			// Run on-demand preview before showing the auth question.
+			// On error, skip authorization and mark as error — no point
+			// asking the user to approve a tool that will fail.
+			if tool.Preview != nil {
+				preview := tool.Preview(args)
+				if preview.Status == tools.ResultStatusError {
+					entries[i].Execution.Status = tools.ResultStatusError
+					entries[i].Execution.Error = preview.Error
+					continue
+				}
+				// Preview succeeded — populate execution with preview data.
+				entries[i].Execution.Status = tools.ResultStatusPending
+				entries[i].Execution.Result = preview.Result
+				entries[i].Execution.Files = preview.Files
+				for j := range preview.Files {
+					preview.Files[j].ToolCallID = p.id
+				}
+			} else {
+				entries[i].Execution.Status = tools.ResultStatusPending
+			}
 			for j := i + 1; j < len(partials); j++ {
 				entries[j].Execution.Status = tools.ResultStatusPending
 				entries[j].Execution.Error = "waiting: prior tool requires authorization"

@@ -1,67 +1,18 @@
 package app
 
 import (
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/config"
 	"squid-os/internal/log"
-	"squid-os/internal/style"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
 	"squid-os/internal/util"
-
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/lipgloss"
 )
 
-// sessionSavePrompt holds the save-name input state for the session save overlay.
-type sessionSavePrompt struct {
-	Name string
-}
-
-func newSessionSavePrompt(lastName string) sessionSavePrompt {
-	return sessionSavePrompt{Name: lastName}
-}
-
-// RenderHeight returns the same height as the picker so viewport layout stays stable.
-func (s sessionSavePrompt) RenderHeight() int {
-	return component.PickerMaxItems + 4 // matches Picker.RenderHeight: 3 + PickerMaxItems + 1
-}
-
-func (s sessionSavePrompt) Render(width int) string {
-	var b strings.Builder
-	bg := lipgloss.Color(style.P.BgFooter)
-
-	// Leading blank line
-	b.WriteString(" \n")
-
-	// Title
-	b.WriteString(lipgloss.NewStyle().Background(bg).Render(style.HeadingStyle.Render("   Save Session")) + "\n")
-
-	// Separator blank line
-	b.WriteString(" \n")
-
-	// Name prompt — each segment carries bg to prevent ANSI reset holes
-	var nameB strings.Builder
-	nameB.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("   Name: "))
-	nameB.WriteString(lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextAccent)).Bold(true).Render(s.Name + "_"))
-	b.WriteString(nameB.String() + "\n")
-
-	// Pad remaining slots to match picker height (PickerMaxItems - 1 padding lines after name)
-	for i := 0; i < component.PickerMaxItems-1; i++ {
-		b.WriteString(" \n")
-	}
-
-	return lipgloss.NewStyle().
-		Background(bg).
-		Width(width).
-		Render(b.String())
-}
-
-// openSaveSessionPrompt opens the save prompt so the user can confirm or edit the session name.
+// openSaveSessionPrompt opens a prompt so the user can confirm or edit the session name.
 func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 	if m.incognito {
 		return m, nil // no saving in incognito
@@ -70,8 +21,21 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 	if name == "" {
 		name = time.Now().Format("2006-01-02_15-04")
 	}
-	m.sessionSave = newSessionSavePrompt(name)
-	m.mode = ModeSessionSave
+	m.activePrompt = &component.Prompt{
+		Title:  "Save Session",
+		Label:  "Name:",
+		Value:  name,
+		OnConfirm: func(value string) tea.Cmd {
+			nm, cmd := m.saveAs(value, false)
+			m = nm
+			return tea.Batch(cmd, m.setChatMode())
+		},
+		OnCancel: func() tea.Cmd {
+			return m.setChatMode()
+		},
+	}
+	m.promptContext = "save"
+	m.mode = ModeComponent
 	m.textarea.Blur()
 	(&m).recalcLayout()
 	return m, nil
@@ -125,29 +89,6 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 	}
 	m.updateViewportContent()
 	return m, m.setChatMode()
-}
-
-// handleSessionSaveKey handles key input while the save-name prompt overlay is active.
-func (m Model) handleSessionSaveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keys.Escape), key.Matches(msg, keys.Cancel):
-		return m, m.setChatMode()
-
-	case key.Matches(msg, keys.Send):
-		nm, _ := m.saveAs(m.sessionSave.Name, false)
-		return nm, nm.setChatMode()
-
-	default:
-		s := msg.String()
-		if s == "backspace" {
-			if len(m.sessionSave.Name) > 0 {
-				m.sessionSave.Name = m.sessionSave.Name[:len(m.sessionSave.Name)-1]
-			}
-		} else if len(s) == 1 {
-			m.sessionSave.Name += s
-		}
-		return m, nil
-	}
 }
 
 // toggleIncognito switches incognito mode on/off and resets the chat either way.
@@ -249,7 +190,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 	}
 
 	m.pickerContext = "session"
-	m.mode = ModeComponentPicker
+	m.mode = ModeComponent
 	(&m).recalcLayout()
 
 	return m, nil

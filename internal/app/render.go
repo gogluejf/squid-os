@@ -27,12 +27,14 @@ func (m Model) View() string {
 	// Viewport (messages)
 	sections = append(sections, m.viewport.View())
 
-	// Command palette overlay (between viewport and input)
+	// Component overlay (between viewport and input)
 	switch m.mode {
-		case ModeComponentPicker:
-			sections = append(sections, m.activePicker.Render(m.width))
-		case ModeSessionSave:
-			sections = append(sections, m.sessionSave.Render(m.width))
+		case ModeComponent:
+			if m.activePrompt != nil {
+				sections = append(sections, m.activePrompt.Render(m.width))
+			} else {
+				sections = append(sections, m.activePicker.Render(m.width))
+			}
 		case ModeHistorySearch:
 			sections = append(sections, m.historySearch.Render(m.width))
 		}

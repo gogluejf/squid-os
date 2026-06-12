@@ -25,11 +25,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.setChatMode()
 		}
 
-	case ModeComponentPicker:
-		return m.handleActivePicker(msg)
-
-	case ModeSessionSave:
-		return m.handleSessionSaveKey(msg)
+	case ModeComponent:
+		return m.handleComponent(msg)
 
 	case ModeHistorySearch:
 		return m.handleHistorySearchKey(msg)
@@ -61,22 +58,27 @@ func (m *Model) handleViewportScroll(msg tea.KeyMsg) bool {
 	return false
 }
 
-// handleActivePicker delegates all key handling to the Picker component.
-// Callbacks (OnConfirm, OnCancel, OnSelectionChange) do the real work.
-func (m Model) handleActivePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle viewport scroll keys first (these bypass the picker).
+// handleComponent delegates all key handling to the active component
+// (Picker or Prompt). Callbacks do the real work.
+func (m Model) handleComponent(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle viewport scroll keys first (these bypass the component).
 	if m.handleViewportScroll(msg) {
 		return m, nil
 	}
 
-	cmd := m.activePicker.HandleKey(msg, &m)
+	var cmd tea.Cmd
 
-	// For command picker, keep textarea in sync with the filter
-	if m.pickerContext == "command" && cmd == nil {
-		m.textarea.SetValue("/" + m.activePicker.Filter)
+	if m.activePrompt != nil {
+		cmd = m.activePrompt.HandleKey(msg)
+	} else {
+		cmd = m.activePicker.HandleKey(msg, &m)
+
+		// For command picker, keep textarea in sync with the filter
+		if m.pickerContext == "command" && cmd == nil {
+			m.textarea.SetValue("/" + m.activePicker.Filter)
+		}
 	}
 
-	// Filter changes may alter render height.
 	(&m).recalcLayout()
 	return m, cmd
 }

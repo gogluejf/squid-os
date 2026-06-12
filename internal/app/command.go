@@ -167,7 +167,7 @@ func (m *Model) openCommandPicker() {
 		},
 	}
 	m.pickerContext = "command"
-	m.mode = ModeComponentPicker
+	m.mode = ModeComponent
 	m.recalcLayout()
 }
 

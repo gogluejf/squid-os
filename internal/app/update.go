@@ -72,11 +72,14 @@ func (m *Model) recalcLayout() {
 
 	overlayHeight := 0
 	switch m.mode {
-	case ModeComponentPicker:
-		overlayHeight = m.activePicker.RenderHeight()
-		m.activePicker.Init(m) // resolve DefaultValue, fires OnSelectionChange (idempotent)
-	case ModeSessionSave:
-		overlayHeight = m.sessionSave.RenderHeight()
+	case ModeComponent:
+		if m.activePrompt != nil {
+			overlayHeight = m.activePrompt.RenderHeight()
+			m.activePrompt.Init()
+		} else {
+			overlayHeight = m.activePicker.RenderHeight()
+			m.activePicker.Init(m) // resolve DefaultValue, fires OnSelectionChange (idempotent)
+		}
 	case ModeHistorySearch:
 		overlayHeight = m.historySearch.RenderHeight()
 	}

@@ -38,9 +38,12 @@ type Model struct {
 	// Pickers
 	modelEntries []chat.ModelEntry
 	activePicker component.Picker
-	pickerContext   string // "model", "skill", "session", "image", "system"
-	pickerPayload   interface{} // additional context (e.g. modelEntries for model picker)
-	sessionSave     sessionSavePrompt
+	pickerContext string // "model", "skill", "session", "image", "system", "command"
+	pickerPayload interface{}
+
+	// Prompt (used for save session and similar single-input overlays)
+	activePrompt  *component.Prompt
+	promptContext string // "save", etc.
 
 	// Session + messages (bundled)
 	session chatSession

@@ -133,6 +133,7 @@ func (m *Model) setStreamMode() {
 
 // setAuthMode builds a Question component for tool authorization and sets it as the active component.
 func (m *Model) setAuthMode() tea.Cmd {
+	m.stream.active = false
 	ctx := m.stream.authorizationCtx
 
 	// Description: tool-name · display-value (truncation handled by Question render)
@@ -493,7 +494,7 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 			if !result.Approved {
 				// Rejected — cancel this tool and all remaining, break.
 				entries[i].Execution.Status = tools.ResultStatusError
-				entries[i].Execution.Error = "rejected by user — tool was not executed."
+				entries[i].Execution.Error = "rejected by user — tool was not executed, don't retry."
 				// if capturedInstructions == "" {
 				// 	entries[i].Execution.Error += " you can answer grafecully, but don't try again."
 				// }

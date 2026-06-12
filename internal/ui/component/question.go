@@ -15,12 +15,12 @@ const questionPlaceholder = "add instructions to your answer..."
 
 type Question struct {
 	Title       string
-	Description string      // dim text shown under title (optional)
+	Description string // dim text shown under title (optional)
 	Options     []string
 	Selection   int
 	ShowInput   bool
 	TextInput   string
-	TextMode    bool        // true = typing instructions
+	TextMode    bool // true = typing instructions
 	cur         cursor.Model
 	initialized bool
 	OnConfirm   func(int, string, any) tea.Cmd
@@ -170,7 +170,7 @@ func (q *Question) resetBlink() tea.Cmd {
 func (q *Question) truncateDescription(text string, width int) string {
 	// Stop at first newline
 	if idx := strings.Index(text, "\n"); idx >= 0 {
-		text = text[:idx]
+		text = text[:idx] + "\\n" //so it is clear to users that there was a newline and the text is truncated, instead of just cut off mid-line
 	}
 	prefix := "   ↳ "
 	prefixW := lipgloss.Width(prefix)
@@ -232,12 +232,12 @@ func (q *Question) Render(width int) string {
 				Foreground(lipgloss.Color(style.P.TextAccent)).
 				Bold(true).
 				Width(width).
-				Render(" \u25B6 " + label))
+				Render(" \u25B6 "+label))
 		} else {
 			lines = append(lines, lipgloss.NewStyle().
 				Background(bg).
 				Foreground(lipgloss.Color(style.P.TextMuted)).
-				Render("   " + label))
+				Render("   "+label))
 		}
 	}
 

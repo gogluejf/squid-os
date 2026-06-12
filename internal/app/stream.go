@@ -133,7 +133,6 @@ func (m *Model) setStreamMode() {
 
 // setAuthMode builds a Question component for tool authorization and sets it as the active component.
 func (m *Model) setAuthMode() tea.Cmd {
-	m.stream.active = false
 	ctx := m.stream.authorizationCtx
 
 	// Description: tool-name · display-value (truncation handled by Question render)
@@ -512,7 +511,7 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 		if m.needsAuthorization(tool, args) {
 			entries[i].Execution.Status = tools.ResultStatusPending
 			for j := i + 1; j < len(partials); j++ {
-				entries[j].Execution.Status = tools.ResultStatusError
+				entries[j].Execution.Status = tools.ResultStatusPending
 				entries[j].Execution.Error = "waiting: prior tool requires authorization"
 			}
 			isDestructive := false

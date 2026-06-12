@@ -3,32 +3,32 @@ package app
 import "github.com/charmbracelet/bubbles/key"
 
 type keyMap struct {
-	Destroy        key.Binding
-	UndoDestroy    key.Binding
-	Send           key.Binding
-	Cancel         key.Binding
-	Help           key.Binding
-	Expand key.Binding
-	Save           key.Binding
-	Load           key.Binding
-	Model          key.Binding
-	NewSession     key.Binding
-	Incognito      key.Binding
-	Thinking       key.Binding
-	Skill          key.Binding
-	Quit           key.Binding
-	Up             key.Binding
-	Down           key.Binding
-	Left           key.Binding
-	Right          key.Binding
-	Escape         key.Binding
-	Tab            key.Binding
-	ScrollUp       key.Binding
-	ScrollDown     key.Binding
-	PageUp         key.Binding
-	PageDown       key.Binding
-	HistorySearch  key.Binding
-	AuthMode       key.Binding
+	Destroy       key.Binding
+	UndoDestroy   key.Binding
+	Send          key.Binding
+	Cancel        key.Binding
+	Help          key.Binding
+	Expand        key.Binding
+	Save          key.Binding
+	Load          key.Binding
+	Model         key.Binding
+	NewSession    key.Binding
+	Incognito     key.Binding
+	Thinking      key.Binding
+	Skill         key.Binding
+	Quit          key.Binding
+	Up            key.Binding
+	Down          key.Binding
+	Left          key.Binding
+	Right         key.Binding
+	Escape        key.Binding
+	CycleSkill    key.Binding
+	ScrollUp      key.Binding
+	ScrollDown    key.Binding
+	PageUp        key.Binding
+	PageDown      key.Binding
+	HistorySearch key.Binding
+	AuthMode      key.Binding
 }
 
 var keys = keyMap{
@@ -108,7 +108,7 @@ var keys = keyMap{
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "back"),
 	),
-	Tab: key.NewBinding(
+	CycleSkill: key.NewBinding(
 		key.WithKeys("tab"),
 		key.WithHelp("tab", "cycle skill"),
 	),

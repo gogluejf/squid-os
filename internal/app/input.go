@@ -140,7 +140,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textarea.InsertRune('\n')
 		return m, nil
 
-	case msg.Type == tea.KeyTab && !msg.Alt:
+	case key.Matches(msg, keys.CycleSkill) && !msg.Alt:
 		return m.cycleSkill()
 
 	case key.Matches(msg, keys.Up):

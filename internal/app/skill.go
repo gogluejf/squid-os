@@ -10,6 +10,7 @@ import (
 	"squid-os/internal/config"
 	"squid-os/internal/skills"
 	"squid-os/internal/ui"
+	"squid-os/internal/ui/component"
 )
 
 func (m Model) cycleSkill() (Model, tea.Cmd) {
@@ -101,15 +102,15 @@ func (m *Model) getSkillText(name string) string {
 
 // openSkillPicker opens the skill picker overlay, building items from the registry.
 func (m Model) openSkillPicker() (Model, tea.Cmd) {
-	items := make([]ui.PickerItem, 0, 16)
-	items = append(items, ui.PickerItem{
+	items := make([]component.PickerItem, 0, 16)
+	items = append(items, component.PickerItem{
 		Label: "(none)",
 		Meta:  []string{"No skill active"},
 		Value: "(none)",
 	})
 	if reg := skills.GetRegistry(); reg != nil {
 		for _, e := range reg.List() {
-			items = append(items, ui.PickerItem{
+			items = append(items, component.PickerItem{
 				Label: e.Name,
 				Meta:  []string{e.Description},
 				Value: e.Name,
@@ -123,11 +124,11 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 		current = *m.session.file.Session.Skill.Next
 	}
 
-	m.activePicker = ui.Picker{
+	m.activePicker = component.Picker{
 		Title:        "Select Skill",
 		Items:        items,
 		DefaultValue: current,
-		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
+		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			*m = m.confirmSkillPicker(item)
 			m.updateViewportContent()
@@ -146,7 +147,7 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 }
 
 // confirmSkillPicker applies a skill selection from PickerItem.Label.
-func (m Model) confirmSkillPicker(item ui.PickerItem) Model {
+func (m Model) confirmSkillPicker(item component.PickerItem) Model {
 	skillName := strings.TrimSpace(item.Label)
 	if skillName == "(none)" {
 		skillName = ""

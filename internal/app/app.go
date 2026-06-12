@@ -16,6 +16,7 @@ import (
 	"squid-os/internal/skills"
 	"squid-os/internal/tools"
 	"squid-os/internal/ui"
+	"squid-os/internal/ui/component"
 )
 
 // Model is the top-level Bubble Tea model
@@ -29,14 +30,14 @@ type Model struct {
 	height   int
 
 	// Commands
-	allCommands []ui.PickerItem
+	allCommands []component.PickerItem
 
 	// History search overlay
 	historySearch ui.HistorySearchOverlay
 
 	// Pickers
 	modelEntries []chat.ModelEntry
-	activePicker ui.Picker
+	activePicker component.Picker
 	pickerContext   string // "model", "skill", "session", "image", "system"
 	pickerPayload   interface{} // additional context (e.g. modelEntries for model picker)
 	sessionSave     sessionSavePrompt

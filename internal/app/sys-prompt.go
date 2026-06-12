@@ -4,25 +4,25 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/config"
-	"squid-os/internal/ui"
+	"squid-os/internal/ui/component"
 )
 
 // openSystemPicker opens the system prompt file picker.
 func (m Model) openSystemPicker() (Model, tea.Cmd) {
 	prompts := config.ListSystemPrompts(m.paths)
-	items := make([]ui.PickerItem, len(prompts))
+	items := make([]component.PickerItem, len(prompts))
 	for i, p := range prompts {
-		items[i] = ui.PickerItem{
+		items[i] = component.PickerItem{
 			Label: p,
 			Value: p,
 		}
 	}
 
-	m.activePicker = ui.Picker{
+	m.activePicker = component.Picker{
 		Title:        "System Prompt",
 		Items:        items,
 		DefaultValue: m.settings.SystemPromptFile,
-		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
+		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			*m = m.confirmSystemPicker(item)
 			m.updateViewportContent()
@@ -40,7 +40,7 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 }
 
 // confirmSystemPicker loads a system prompt file.
-func (m Model) confirmSystemPicker(item ui.PickerItem) Model {
+func (m Model) confirmSystemPicker(item component.PickerItem) Model {
 	selected := item.Value
 	if selected == "" {
 		selected = item.Label

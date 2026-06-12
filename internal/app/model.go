@@ -7,6 +7,7 @@ import (
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
 	"squid-os/internal/ui"
+	"squid-os/internal/ui/component"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -38,14 +39,14 @@ func (m Model) openModelPicker() (Model, tea.Cmd) {
 
 // buildModelPicker constructs the Picker from a model entry list.
 func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
-	items := make([]ui.PickerItem, len(entries))
+	items := make([]component.PickerItem, len(entries))
 	for i, e := range entries {
 		name := modelBasename(e.ID)
 		ctxLabel := ""
 		if e.ContextLength > 0 {
 			ctxLabel = formatContextLength(e.ContextLength)
 		}
-		items[i] = ui.PickerItem{
+		items[i] = component.PickerItem{
 			Label: name,
 			Meta:  []string{e.Provider, ctxLabel},
 			Value: e.ID,
@@ -53,11 +54,11 @@ func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
 	}
 
 	m.modelEntries = entries
-	m.activePicker = ui.Picker{
+	m.activePicker = component.Picker{
 		Title:        "Select Model",
 		Items:        items,
 		DefaultValue: m.settings.Model,
-		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
+		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			*m = m.confirmModelPicker(item)
 			m.updateViewportContent()
@@ -82,7 +83,7 @@ func (m Model) onModelsLoaded(msg modelsLoadedMsg) Model {
 }
 
 // confirmModelPicker applies a model selection using the PickerItem.Value as the model ID.
-func (m Model) confirmModelPicker(item ui.PickerItem) Model {
+func (m Model) confirmModelPicker(item component.PickerItem) Model {
 	modelID := item.Value
 	if modelID == "" {
 		return m

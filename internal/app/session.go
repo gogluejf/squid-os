@@ -10,6 +10,7 @@ import (
 	"squid-os/internal/log"
 	"squid-os/internal/style"
 	"squid-os/internal/ui"
+	"squid-os/internal/ui/component"
 	"squid-os/internal/util"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -27,7 +28,7 @@ func newSessionSavePrompt(lastName string) sessionSavePrompt {
 
 // RenderHeight returns the same height as the picker so viewport layout stays stable.
 func (s sessionSavePrompt) RenderHeight() int {
-	return ui.PickerMaxItems + 4 // matches Picker.RenderHeight: 3 + PickerMaxItems + 1
+	return component.PickerMaxItems + 4 // matches Picker.RenderHeight: 3 + PickerMaxItems + 1
 }
 
 func (s sessionSavePrompt) Render(width int) string {
@@ -50,7 +51,7 @@ func (s sessionSavePrompt) Render(width int) string {
 	b.WriteString(nameB.String() + "\n")
 
 	// Pad remaining slots to match picker height (PickerMaxItems - 1 padding lines after name)
-	for i := 0; i < ui.PickerMaxItems-1; i++ {
+	for i := 0; i < component.PickerMaxItems-1; i++ {
 		b.WriteString(" \n")
 	}
 
@@ -182,24 +183,24 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 	snap := m.session
 	m.sessionSnapshot = &snap
 
-	items := make([]ui.PickerItem, len(sessions))
+	items := make([]component.PickerItem, len(sessions))
 	for i, s := range sessions {
-		items[i] = ui.PickerItem{
+		items[i] = component.PickerItem{
 			Label: s.Name,
 			Meta:  []string{util.FriendlyModDate(s.ModTime)},
 			Value: s.Name,
 		}
 	}
 
-	m.activePicker = ui.Picker{
+	m.activePicker = component.Picker{
 		Title:        "Load Session",
 		Items:        items,
 		DefaultValue: m.settings.LastSessionName,
-		OnSelectionChange: func(idx int, item ui.PickerItem, ctx any) {
+		OnSelectionChange: func(idx int, item component.PickerItem, ctx any) {
 			m := ctx.(*Model)
 			*m = (*m).previewSession(item.Value)
 		},
-		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
+		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			*m = m.confirmSessionPicker(item)
 			cmd := m.setChatMode()
@@ -248,7 +249,7 @@ func (m Model) previewSession(name string) Model {
 }
 
 // confirmSessionPicker commits the selected session by loading it from disk.
-func (m Model) confirmSessionPicker(item ui.PickerItem) Model {
+func (m Model) confirmSessionPicker(item component.PickerItem) Model {
 	selected := item.Value
 	if selected == "" {
 		return m

@@ -5,7 +5,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/config"
-	"squid-os/internal/ui"
+	"squid-os/internal/ui/component"
 )
 
 // SlashCommand defines a slash command with optional key shortcut.
@@ -101,14 +101,14 @@ var AllCommands = []SlashCommand{
 }
 
 // buildCommandPickerItems builds the standard command list as PickerItems for the command palette.
-func buildCommandPickerItems() []ui.PickerItem {
-	items := make([]ui.PickerItem, len(AllCommands))
+func buildCommandPickerItems() []component.PickerItem {
+	items := make([]component.PickerItem, len(AllCommands))
 	for i, c := range AllCommands {
 		meta := []string{c.Description}
 		if len(c.Key.Keys()) > 0 {
 			meta = append(meta, c.Key.Help().Key)
 		}
-		items[i] = ui.PickerItem{
+		items[i] = component.PickerItem{
 			Label: "/" + c.Name,
 			Meta:  meta,
 			Value: c.Name,
@@ -149,11 +149,11 @@ func (m Model) executeCommandByName(name string) (tea.Model, tea.Cmd) {
 
 // openCommandPicker opens the slash command palette.
 func (m *Model) openCommandPicker() {
-	m.activePicker = ui.Picker{
+	m.activePicker = component.Picker{
 		Title:     "Commands",
 		Items:     m.allCommands,
-		MatchMode: ui.MatchPrefix,
-		OnConfirm: func(item ui.PickerItem, ctx any) tea.Cmd {
+		MatchMode: component.MatchPrefix,
+		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			m.textarea.SetValue("")
 			mm, cmd := m.executeCommandByName(item.Value)

@@ -130,7 +130,17 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 		DefaultValue: current,
 		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
-			*m = m.confirmSkillPicker(item)
+			skillName := strings.TrimSpace(item.Label)
+			if skillName == "(none)" {
+				skillName = ""
+			}
+			current := m.session.file.Session.Skill.Current
+			if m.session.file.Session.Skill.Next != nil {
+				current = *m.session.file.Session.Skill.Next
+			}
+			if skillName != current {
+				m.setSkill(skillName)
+			}
 			m.updateViewportContent()
 			return m.setChatMode()
 		},
@@ -146,18 +156,4 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 	return m, nil
 }
 
-// confirmSkillPicker applies a skill selection from PickerItem.Label.
-func (m Model) confirmSkillPicker(item component.PickerItem) Model {
-	skillName := strings.TrimSpace(item.Label)
-	if skillName == "(none)" {
-		skillName = ""
-	}
-	current := m.session.file.Session.Skill.Current
-	if m.session.file.Session.Skill.Next != nil {
-		current = *m.session.file.Session.Skill.Next
-	}
-	if skillName != current {
-		(&m).setSkill(skillName)
-	}
-	return m
-}
+

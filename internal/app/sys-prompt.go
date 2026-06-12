@@ -24,7 +24,32 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 		DefaultValue: m.settings.SystemPromptFile,
 		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
-			*m = m.confirmSystemPicker(item)
+			selected := item.Value
+			if selected == "" {
+				selected = item.Label
+			}
+			if selected != "" {
+				changed := false
+				if m.settings.SystemPromptFile != "" && m.settings.SystemPromptFile != selected {
+					m.session.updateSystemPromptMsg(m.settings.SystemPromptFile, selected, m.paths)
+					changed = true
+				} else {
+					for i := range m.session.file.Messages {
+						if m.session.file.Messages[i].ID == "sys0" {
+							newContent := config.LoadSystemPrompt(m.paths, selected)
+							m.session.file.Messages[i].Text = newContent
+							m.session.file.Messages[i].InputTokens = countTokensApprox(newContent)
+							changed = true
+							break
+						}
+					}
+				}
+				if changed {
+					m.session.invalidateRenderAll()
+				}
+				m.settings.SystemPromptFile = selected
+				_ = config.SaveSettings(m.paths, m.settings)
+			}
 			m.updateViewportContent()
 			return m.setChatMode()
 		},
@@ -39,33 +64,4 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 	return m, nil
 }
 
-// confirmSystemPicker loads a system prompt file.
-func (m Model) confirmSystemPicker(item component.PickerItem) Model {
-	selected := item.Value
-	if selected == "" {
-		selected = item.Label
-	}
-	if selected != "" {
-		changed := false
-		if m.settings.SystemPromptFile != "" && m.settings.SystemPromptFile != selected {
-			(&m).session.updateSystemPromptMsg(m.settings.SystemPromptFile, selected, m.paths)
-			changed = true
-		} else {
-			for i := range m.session.file.Messages {
-				if m.session.file.Messages[i].ID == "sys0" {
-					newContent := config.LoadSystemPrompt(m.paths, selected)
-					m.session.file.Messages[i].Text = newContent
-					m.session.file.Messages[i].InputTokens = countTokensApprox(newContent)
-					changed = true
-					break
-				}
-			}
-		}
-		if changed {
-			(&m).session.invalidateRenderAll()
-		}
-		m.settings.SystemPromptFile = selected
-		_ = config.SaveSettings(m.paths, m.settings)
-	}
-	return m
-}
+

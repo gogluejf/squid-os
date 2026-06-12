@@ -60,7 +60,31 @@ func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
 		DefaultValue: m.settings.Model,
 		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
-			*m = m.confirmModelPicker(item)
+			modelID := item.Value
+			if modelID != "" {
+				entries := m.pickerPayload.([]chat.ModelEntry)
+				var entry *chat.ModelEntry
+				for i := range entries {
+					if entries[i].ID == modelID {
+						entry = &entries[i]
+						break
+					}
+				}
+				if entry != nil {
+					name := modelBasename(entry.ID)
+					if m.settings.Model != entry.ID {
+						oldModel := modelBasename(m.settings.Model)
+						m.session.pushModelSwitchMsg(oldModel, name)
+					}
+					m.session.updateConfigMsg(entry.Provider, entry.ID, m.settings.Thinking)
+					m.settings.Model = entry.ID
+					m.settings.Provider = entry.Provider
+					m.settings.ContextWindow = entry.ContextLength
+					m.session.invalidateRenderAll()
+					_ = config.SaveSettings(m.paths, m.settings)
+					m.setNotification(ui.NotificationInfo, "switched to model: "+modelBasename(m.settings.Model))
+				}
+			}
 			m.updateViewportContent()
 			return m.setChatMode()
 		},
@@ -82,34 +106,4 @@ func (m Model) onModelsLoaded(msg modelsLoadedMsg) Model {
 	return m.buildModelPicker(msg.models)
 }
 
-// confirmModelPicker applies a model selection using the PickerItem.Value as the model ID.
-func (m Model) confirmModelPicker(item component.PickerItem) Model {
-	modelID := item.Value
-	if modelID == "" {
-		return m
-	}
-	entries := m.pickerPayload.([]chat.ModelEntry)
-	var entry *chat.ModelEntry
-	for i := range entries {
-		if entries[i].ID == modelID {
-			entry = &entries[i]
-			break
-		}
-	}
-	if entry == nil {
-		return m
-	}
-	name := modelBasename(entry.ID)
-	if m.settings.Model != entry.ID {
-		oldModel := modelBasename(m.settings.Model)
-		(&m).session.pushModelSwitchMsg(oldModel, name)
-	}
-	(&m).session.updateConfigMsg(entry.Provider, entry.ID, m.settings.Thinking)
-	m.settings.Model = entry.ID
-	m.settings.Provider = entry.Provider
-	m.settings.ContextWindow = entry.ContextLength
-	(&m).session.invalidateRenderAll()
-	_ = config.SaveSettings(m.paths, m.settings)
-	(&m).setNotification(ui.NotificationInfo, "switched to model: "+modelBasename(m.settings.Model))
-	return m
-}
+

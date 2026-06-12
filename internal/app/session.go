@@ -198,11 +198,37 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 		DefaultValue: m.settings.LastSessionName,
 		OnSelectionChange: func(idx int, item component.PickerItem, ctx any) {
 			m := ctx.(*Model)
-			*m = (*m).previewSession(item.Value)
+			name := item.Value
+			if name == "" {
+				return
+			}
+			sf, err := config.LoadSession(m.paths, name)
+			if err != nil {
+				return
+			}
+			m.session.setFrom(sf, false)
+			if sf.Session.WorkingDir != "" {
+				m.applyWorkingDir(sf.Session.WorkingDir)
+			}
+			m.updateViewportContent()
 		},
 		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
-			*m = m.confirmSessionPicker(item)
+			selected := item.Value
+			if selected == "" {
+				return m.setChatMode()
+			}
+			if !m.incognito {
+				m.settings.LastSessionName = selected
+				_ = config.SaveSettings(m.paths, m.settings)
+			}
+			sf, err := config.LoadSession(m.paths, selected)
+			if err != nil {
+				return m.setChatMode()
+			}
+			m.session.setFrom(sf)
+			m.sessionSnapshot = nil
+			m.setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
 			cmd := m.setChatMode()
 			m.updateViewportContent()
 			return cmd
@@ -223,47 +249,10 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 	}
 
 	m.pickerContext = "session"
-	m.pickerPayload = sessions
 	m.mode = ModeComponentPicker
 	(&m).recalcLayout()
 
 	return m, nil
 }
 
-// previewSession loads a session's messages into view without persisting anything.
-func (m Model) previewSession(name string) Model {
-	if name == "" {
-		return m
-	}
-	sf, err := config.LoadSession(m.paths, name)
-	if err != nil {
-		return m
-	}
-	m.session.setFrom(sf, false)
-	// Restore working dir from the session
-	if sf.Session.WorkingDir != "" {
-		(&m).applyWorkingDir(sf.Session.WorkingDir)
-	}
-	m.updateViewportContent()
-	return m
-}
 
-// confirmSessionPicker commits the selected session by loading it from disk.
-func (m Model) confirmSessionPicker(item component.PickerItem) Model {
-	selected := item.Value
-	if selected == "" {
-		return m
-	}
-	if !m.incognito {
-		m.settings.LastSessionName = selected
-		_ = config.SaveSettings(m.paths, m.settings)
-	}
-	sf, err := config.LoadSession(m.paths, selected)
-	if err != nil {
-		return m
-	}
-	m.session.setFrom(sf)
-	m.sessionSnapshot = nil
-	(&m).setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
-	return m
-}

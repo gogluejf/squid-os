@@ -136,39 +136,17 @@ func (m *Model) setAuthMode() tea.Cmd {
 	m.stream.active = false
 	ctx := m.stream.authorizationCtx
 
-	// Get diff preview if tool supports it
-	var previewDiff string
-	if ctx != nil {
-		tool := m.toolReg.Get(ctx.ToolName)
-		if tool != nil && tool.Preview != nil {
-			result := tool.Preview(ctx.Args)
-			if result.Status == tools.ResultStatusSuccess && len(result.Files) > 0 {
-				previewDiff = result.Files[0].Diff
-			}
-		}
-	}
-
-	// Build title with tool info
-	label := ctx.ToolName
+	// Description: tool-name · display-value (truncation handled by Question render)
+	var description string
 	if ctx.DisplayValue != "" {
-		display := ctx.DisplayValue
-		if len(display) > 40 {
-			display = display[:37] + "..."
-		}
-		label = fmt.Sprintf("%s(%s)", ctx.ToolName, display)
-	}
-	if ctx.IsDestructive {
-		label = "⚠ " + label
-	}
-	if previewDiff != "" {
-		lines := strings.Count(previewDiff, "\n")
-		label = fmt.Sprintf("%s (%d lines changed)", label, lines)
+		description = ctx.ToolName + " · " + ctx.DisplayValue
 	}
 
 	q := &component.Question{
-		Title:     "Authorize Tool",
-		Options:   []string{"Yes", "No"},
-		ShowInput: true,
+		Title:       "Do you authorize this tool?",
+		Description: description,
+		Options:     []string{"Yes", "No"},
+		ShowInput:   true,
 		OnConfirm: func(selection int, instructions string, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			m.stream.authorizationCtx.Result = AuthResult{

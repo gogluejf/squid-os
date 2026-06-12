@@ -1,6 +1,7 @@
 package component
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/cursor"
@@ -14,11 +15,12 @@ const questionPlaceholder = "add instructions to your answer..."
 
 type Question struct {
 	Title       string
+	Description string      // dim text shown under title (optional)
 	Options     []string
 	Selection   int
 	ShowInput   bool
 	TextInput   string
-	TextMode    bool          // true = typing instructions
+	TextMode    bool        // true = typing instructions
 	cur         cursor.Model
 	initialized bool
 	OnConfirm   func(int, string, any) tea.Cmd
@@ -77,6 +79,14 @@ func (q *Question) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 			q.TextMode = false
 		case s == "tab":
 			q.Selection = (q.Selection + 1) % len(q.Options)
+		case s == "up":
+			if q.Selection > 0 {
+				q.Selection--
+			}
+		case s == "down":
+			if q.Selection < len(q.Options)-1 {
+				q.Selection++
+			}
 		case s == "enter":
 			if q.OnConfirm != nil {
 				return q.OnConfirm(q.Selection, q.TextInput, ctx)
@@ -130,6 +140,11 @@ func (q *Question) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		if q.OnCancel != nil {
 			return q.OnCancel(ctx)
 		}
+	case len(s) == 1 && isPrintable(s) && '1' <= s[0] && s[0] <= '9':
+		idx := int(s[0] - '1')
+		if idx < len(q.Options) {
+			q.Selection = idx
+		}
 	}
 
 	return nil
@@ -149,6 +164,43 @@ func (q *Question) resetBlink() tea.Cmd {
 	return q.cur.BlinkCmd()
 }
 
+// truncateDescription truncates the description to fit within the terminal width,
+// stopping at the first newline in the source text.
+// Returns the full line: "   ↳ " + truncated text.
+func (q *Question) truncateDescription(text string, width int) string {
+	// Stop at first newline
+	if idx := strings.Index(text, "\n"); idx >= 0 {
+		text = text[:idx]
+	}
+	prefix := "   ↳ "
+	prefixW := lipgloss.Width(prefix)
+	// Available display width for the description text (leave room for "..." and 3-char right margin)
+	avail := width - prefixW - 3 - 3
+	if avail < 4 {
+		avail = 4
+	}
+
+	// Truncate by display width using lipgloss.Width
+	if lipgloss.Width(text) <= avail {
+		return prefix + text
+	}
+
+	// Walk runes, tracking display width, until we hit the limit
+	runes := []rune(text)
+	var result []rune
+	totalW := 0
+	for _, r := range runes {
+		chW := lipgloss.Width(string(r))
+		if totalW+chW > avail {
+			break
+		}
+		totalW += chW
+		result = append(result, r)
+	}
+	result = append(result, '.', '.', '.')
+	return prefix + string(result)
+}
+
 // Render draws the question overlay.
 func (q *Question) Render(width int) string {
 	bg := lipgloss.Color(style.P.BgFooter)
@@ -161,23 +213,31 @@ func (q *Question) Render(width int) string {
 	// Title
 	lines = append(lines, lipgloss.NewStyle().Background(bg).Render(style.HeadingStyle.Render("   "+q.Title)))
 
+	// Description (dim, optional) — separated from title by a blank line
+	if q.Description != "" {
+		lines = append(lines, " ")
+		lines = append(lines, lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render(q.truncateDescription(q.Description, width)))
+	}
+
 	// Separator blank line
 	lines = append(lines, " ")
 
 	// Option rows
 	for i, opt := range q.Options {
+		num := i + 1
+		label := fmt.Sprintf("%d. %s", num, opt)
 		if i == q.Selection {
 			lines = append(lines, lipgloss.NewStyle().
 				Background(lipgloss.Color(style.P.BgSelected)).
 				Foreground(lipgloss.Color(style.P.TextAccent)).
 				Bold(true).
 				Width(width).
-				Render(" \u25B6 "+opt))
+				Render(" \u25B6 " + label))
 		} else {
 			lines = append(lines, lipgloss.NewStyle().
 				Background(bg).
 				Foreground(lipgloss.Color(style.P.TextMuted)).
-				Render("   "+opt))
+				Render("   " + label))
 		}
 	}
 

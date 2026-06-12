@@ -119,6 +119,7 @@ github.com/muesli/reflow/ansi
 github.com/muesli/reflow/indent
 github.com/muesli/reflow/padding
 github.com/muesli/reflow/wordwrap
+github.com/muesli/reflow/wrap
 # github.com/muesli/termenv v0.16.0
 ## explicit; go 1.17
 github.com/muesli/termenv

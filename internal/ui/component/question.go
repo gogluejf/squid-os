@@ -25,8 +25,8 @@ type Question struct {
 	OnCancel    func() tea.Cmd
 }
 
-// Init validates selection index.
-func (q *Question) Init() {
+// Init validates selection index. Context is ignored by Question.
+func (q *Question) Init(any) {
 	if q.Selection < 0 {
 		q.Selection = 0
 	}
@@ -40,8 +40,8 @@ func (q *Question) RenderHeight() int {
 	return PickerMaxItems + 4
 }
 
-// HandleKey processes key events for the question.
-func (q *Question) HandleKey(msg tea.KeyMsg) tea.Cmd {
+// HandleKey processes key events for the question. Context is ignored.
+func (q *Question) HandleKey(msg tea.KeyMsg, _ any) tea.Cmd {
 	s := msg.String()
 
 	if q.TextMode {

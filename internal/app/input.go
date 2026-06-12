@@ -68,15 +68,8 @@ func (m Model) handleComponent(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 
-	if m.activePrompt != nil {
-		cmd = m.activePrompt.HandleKey(msg)
-	} else {
-		cmd = m.activePicker.HandleKey(msg, &m)
-
-		// For command picker, keep textarea in sync with the filter
-		if m.pickerContext == "command" && cmd == nil {
-			m.textarea.SetValue("/" + m.activePicker.Filter)
-		}
+	if m.activeComponent != nil {
+		cmd = m.activeComponent.HandleKey(msg, &m)
 	}
 
 	(&m).recalcLayout()

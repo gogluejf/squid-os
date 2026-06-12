@@ -124,7 +124,7 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 		current = *m.session.file.Session.Skill.Next
 	}
 
-	m.activePicker = component.Picker{
+	picker := component.Picker{
 		Title:        "Select Skill",
 		Items:        items,
 		DefaultValue: current,
@@ -150,9 +150,7 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 		},
 	}
 
-	m.pickerContext = "skill"
-	m.mode = ModeComponent
-	(&m).recalcLayout()
+	(&m).setComponent(&picker)
 	return m, nil
 }
 

@@ -21,7 +21,7 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 	if name == "" {
 		name = time.Now().Format("2006-01-02_15-04")
 	}
-	m.activePrompt = &component.Prompt{
+	prompt := &component.Prompt{
 		Title:  "Save Session",
 		Label:  "Name:",
 		Value:  name,
@@ -34,10 +34,7 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 			return m.setChatMode()
 		},
 	}
-	m.promptContext = "save"
-	m.mode = ModeComponent
-	m.textarea.Blur()
-	(&m).recalcLayout()
+	(&m).setComponent(prompt)
 	return m, nil
 }
 
@@ -133,7 +130,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 		}
 	}
 
-	m.activePicker = component.Picker{
+	picker := component.Picker{
 		Title:        "Load Session",
 		Items:        items,
 		DefaultValue: m.settings.LastSessionName,
@@ -189,9 +186,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 		},
 	}
 
-	m.pickerContext = "session"
-	m.mode = ModeComponent
-	(&m).recalcLayout()
+	(&m).setComponent(&picker)
 
 	return m, nil
 }

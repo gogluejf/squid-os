@@ -149,7 +149,7 @@ func (m Model) executeCommandByName(name string) (tea.Model, tea.Cmd) {
 
 // openCommandPicker opens the slash command palette.
 func (m *Model) openCommandPicker() {
-	m.activePicker = component.Picker{
+	picker := component.Picker{
 		Title:     "Commands",
 		Items:     m.allCommands,
 		MatchMode: component.MatchPrefix,
@@ -166,9 +166,7 @@ func (m *Model) openCommandPicker() {
 			return m.setChatMode()
 		},
 	}
-	m.pickerContext = "command"
-	m.mode = ModeComponent
-	m.recalcLayout()
+	m.setComponent(&picker)
 }
 
 

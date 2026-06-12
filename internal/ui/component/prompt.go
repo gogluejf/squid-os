@@ -20,8 +20,8 @@ type Prompt struct {
 	OnCancel     func()   tea.Cmd
 }
 
-// Init resolves the default value.
-func (p *Prompt) Init() {
+// Init resolves the default value. Context is ignored by Prompt.
+func (p *Prompt) Init(any) {
 	if p.Value == "" && p.DefaultValue != "" {
 		p.Value = p.DefaultValue
 		p.DefaultValue = ""
@@ -33,8 +33,8 @@ func (p *Prompt) RenderHeight() int {
 	return PickerMaxItems + 4 // 3 + PickerMaxItems + 1, same as Picker
 }
 
-// HandleKey processes key events for the prompt.
-func (p *Prompt) HandleKey(msg tea.KeyMsg) tea.Cmd {
+// HandleKey processes key events for the prompt. Context is ignored.
+func (p *Prompt) HandleKey(msg tea.KeyMsg, _ any) tea.Cmd {
 	s := msg.String()
 
 	switch {

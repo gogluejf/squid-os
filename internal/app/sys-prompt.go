@@ -18,7 +18,7 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 		}
 	}
 
-	m.activePicker = component.Picker{
+	picker := component.Picker{
 		Title:        "System Prompt",
 		Items:        items,
 		DefaultValue: m.settings.SystemPromptFile,
@@ -58,9 +58,7 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 			return m.setChatMode()
 		},
 	}
-	m.pickerContext = "system"
-	m.mode = ModeComponent
-	(&m).recalcLayout()
+	(&m).setComponent(&picker)
 	return m, nil
 }
 

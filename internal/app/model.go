@@ -54,7 +54,7 @@ func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
 	}
 
 	m.modelEntries = entries
-	m.activePicker = component.Picker{
+	picker := component.Picker{
 		Title:        "Select Model",
 		Items:        items,
 		DefaultValue: m.settings.Model,
@@ -93,11 +93,9 @@ func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
 			return m.setChatMode()
 		},
 	}
-	m.pickerContext = "model"
 	m.pickerPayload = entries
 	(&m).refreshContextWindow(entries)
-	m.mode = ModeComponent
-	(&m).recalcLayout()
+	(&m).setComponent(&picker)
 	return m
 }
 

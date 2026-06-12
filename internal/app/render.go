@@ -30,10 +30,8 @@ func (m Model) View() string {
 	// Component overlay (between viewport and input)
 	switch m.mode {
 		case ModeComponent:
-			if m.activePrompt != nil {
-				sections = append(sections, m.activePrompt.Render(m.width))
-			} else {
-				sections = append(sections, m.activePicker.Render(m.width))
+			if m.activeComponent != nil {
+				sections = append(sections, m.activeComponent.Render(m.width))
 			}
 		case ModeHistorySearch:
 			sections = append(sections, m.historySearch.Render(m.width))

@@ -37,13 +37,10 @@ type Model struct {
 
 	// Pickers
 	modelEntries []chat.ModelEntry
-	activePicker component.Picker
-	pickerContext string // "model", "skill", "session", "image", "system", "command"
 	pickerPayload interface{}
 
-	// Prompt (used for save session and similar single-input overlays)
-	activePrompt  *component.Prompt
-	promptContext string // "save", etc.
+	// Active component (Picker, Prompt, or Question overlay)
+	activeComponent component.Component
 
 	// Session + messages (bundled)
 	session chatSession
@@ -150,6 +147,14 @@ func (m *Model) setNotification(level ui.NotificationLevel, msg string) {
 }
 
 func (m *Model) clearNotification() { m.notification = ui.Notification{} }
+
+// setComponent replaces the active overlay component and sets mode.
+func (m *Model) setComponent(c component.Component) {
+	m.activeComponent = c
+	m.mode = ModeComponent
+	m.textarea.Blur()
+	m.recalcLayout()
+}
 
 // applyWorkingDir updates the app model, the tools package, and the session file
 // working directory.  Call from both tool execution (stream.go) and session load

@@ -132,7 +132,7 @@ func (m *Model) setStreamMode() {
 }
 
 // setAuthMode builds a Question component for tool authorization and sets it as the active component.
-func (m *Model) setAuthMode() {
+func (m *Model) setAuthMode() tea.Cmd {
 	m.stream.active = false
 	ctx := m.stream.authorizationCtx
 
@@ -195,6 +195,7 @@ func (m *Model) setAuthMode() {
 
 	m.setComponent(q)
 	m.updateViewportContent()
+	return q.BlinkCmd()
 }
 
 // setChatMode sets mode to ModeChat, resets the textarea placeholder, and recomputes layout.

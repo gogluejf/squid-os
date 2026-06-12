@@ -3,53 +3,104 @@ package component
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"squid-os/internal/style"
 )
 
-// Question is a multi-option selection overlay with a simple instruction input line.
-// Options render like Picker rows (with arrow indicator).
-//
-// Navigation: Up/Down/Left/Right for options, Tab cycles forward, Enter confirms.
-// Ctrl+C or Esc clears instruction text (or cancels if empty).
-// Any other key types into the instruction field.
+const questionPlaceholder = "add instructions to your answer..."
+
 type Question struct {
 	Title       string
 	Options     []string
 	Selection   int
 	ShowInput   bool
 	TextInput   string
+	TextMode    bool          // true = typing instructions
+	cur         cursor.Model
+	initialized bool
 	OnConfirm   func(int, string, any) tea.Cmd
 	OnCancel    func(any) tea.Cmd
 }
 
-// Init validates selection index.
 func (q *Question) Init(any) {
+	if q.initialized {
+		return
+	}
+	q.initialized = true
+
 	if q.Selection < 0 {
 		q.Selection = 0
 	}
 	if q.Selection >= len(q.Options) {
 		q.Selection = len(q.Options) - 1
 	}
+	q.cur = cursor.New()
+	q.cur.Blink = false
+	q.cur.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(style.P.TextAccent)).Background(lipgloss.Color(style.P.BgFooter))
+	q.cur.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(style.P.TextMuted)).Background(lipgloss.Color(style.P.BgFooter))
+	q.cur.Focus()
+	q.syncCursorChar()
 }
 
-// RenderHeight returns the same height as Picker.
+func (q *Question) BlinkCmd() tea.Cmd {
+	return q.cur.BlinkCmd()
+}
+
 func (q *Question) RenderHeight() int {
 	return PickerMaxItems + 4
 }
 
-// Update is a no-op for Question (no blink, no state).
-func (q *Question) Update(tea.Msg, any) tea.Cmd {
-	return nil
+// Update handles tick messages for cursor blinking.
+func (q *Question) Update(msg tea.Msg, ctx any) tea.Cmd {
+	if _, ok := msg.(tea.KeyMsg); ok {
+		return nil
+	}
+	newCur, cmd := q.cur.Update(msg)
+	q.cur = newCur
+	return cmd
 }
 
-// HandleKey processes key events for the question.
 func (q *Question) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 	s := msg.String()
 
+	if q.TextMode {
+		// --- TEXT MODE ---
+		switch {
+		case s == "shift+tab":
+			q.TextMode = false
+		case s == "esc":
+			q.TextMode = false
+		case s == "ctrl+c":
+			q.TextMode = false
+		case s == "tab":
+			q.Selection = (q.Selection + 1) % len(q.Options)
+		case s == "enter":
+			if q.OnConfirm != nil {
+				return q.OnConfirm(q.Selection, q.TextInput, ctx)
+			}
+		case s == "backspace":
+			if len(q.TextInput) > 0 {
+				runes := []rune(q.TextInput)
+				q.TextInput = string(runes[:len(runes)-1])
+			}
+			return q.resetBlink()
+		case s == "space":
+			q.TextInput += " "
+			return q.resetBlink()
+		case len(s) == 1 && isPrintable(s):
+			q.TextInput += s
+			return q.resetBlink()
+		}
+		return nil
+	}
+
+	// --- SELECTION MODE ---
 	switch {
+	case s == "tab":
+		q.TextMode = true
 	case s == "up":
 		if q.Selection > 0 {
 			q.Selection--
@@ -66,39 +117,39 @@ func (q *Question) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		if q.Selection < len(q.Options)-1 {
 			q.Selection++
 		}
-	case s == "tab":
-		q.Selection = (q.Selection + 1) % len(q.Options)
 	case s == "enter":
 		if q.OnConfirm != nil {
-			return q.OnConfirm(q.Selection, q.TextInput, ctx)
+			// Confirm from selection mode — send empty instructions
+			return q.OnConfirm(q.Selection, "", ctx)
 		}
 	case s == "esc":
-		if q.TextInput != "" {
-			q.TextInput = ""
-		} else if q.OnCancel != nil {
+		if q.OnCancel != nil {
 			return q.OnCancel(ctx)
 		}
 	case s == "ctrl+c":
-		if q.TextInput != "" {
-			q.TextInput = ""
-		} else if q.OnCancel != nil {
+		if q.OnCancel != nil {
 			return q.OnCancel(ctx)
 		}
-	case s == "backspace":
-		if len(q.TextInput) > 0 {
-			runes := []rune(q.TextInput)
-			q.TextInput = string(runes[:len(runes)-1])
-		}
-	case s == "space":
-		q.TextInput += " "
-	case len(s) == 1 && isPrintable(s):
-		q.TextInput += s
 	}
 
 	return nil
 }
 
-// Render draws the question overlay using picker-style rows.
+func (q *Question) syncCursorChar() {
+	if q.TextInput == "" {
+		q.cur.SetChar(string([]rune(questionPlaceholder)[:1]))
+	} else {
+		q.cur.SetChar(" ")
+	}
+}
+
+func (q *Question) resetBlink() tea.Cmd {
+	q.syncCursorChar()
+	q.cur.Blink = false
+	return q.cur.BlinkCmd()
+}
+
+// Render draws the question overlay.
 func (q *Question) Render(width int) string {
 	bg := lipgloss.Color(style.P.BgFooter)
 
@@ -113,7 +164,7 @@ func (q *Question) Render(width int) string {
 	// Separator blank line
 	lines = append(lines, " ")
 
-	// Option rows — picker-style with arrow indicator
+	// Option rows
 	for i, opt := range q.Options {
 		if i == q.Selection {
 			lines = append(lines, lipgloss.NewStyle().
@@ -130,21 +181,38 @@ func (q *Question) Render(width int) string {
 		}
 	}
 
-	// Blank separator + instruction line (right after options)
-	if q.ShowInput {
+	// Pad options
+	for i := len(q.Options); i < PickerMaxItems/2; i++ {
 		lines = append(lines, " ")
-		if q.TextInput != "" {
-			lines = append(lines, lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("  Instruction: ") +
-				lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextAccent)).Render(q.TextInput))
-		} else {
-			lines = append(lines, lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("  Instruction: add instructions to your answer..."))
-		}
 	}
 
-	// Pad remaining to fill height
-	remaining := (PickerMaxItems + 1) - len(lines)
+	// Blank separator before instruction area
+	lines = append(lines, " ")
+
+	// Pad to push instruction to the very bottom (before trailing blank)
+	remaining := (PickerMaxItems + 1) - len(lines) - 1 // -1 for instruction line
 	for i := 0; i < remaining; i++ {
 		lines = append(lines, " ")
+	}
+
+	// Instruction line — always at the bottom
+	if q.ShowInput {
+		label := lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("  Instruction: ")
+		if q.TextMode {
+			// Show cursor + typed text (or placeholder)
+			if q.TextInput != "" {
+				lines = append(lines, label+
+					lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextAccent)).Render(q.TextInput)+
+					q.cur.View())
+			} else {
+				lines = append(lines, label+
+					q.cur.View()+
+					lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render(questionPlaceholder[1:]))
+			}
+		} else {
+			// Selection mode — show hint
+			lines = append(lines, lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("  [Tab] to add note or instruction to your answer"))
+		}
 	}
 
 	// Trailing blank line

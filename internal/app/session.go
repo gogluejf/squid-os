@@ -22,15 +22,17 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 		name = time.Now().Format("2006-01-02_15-04")
 	}
 	prompt := &component.Prompt{
-		Title:  "Save Session",
-		Label:  "Name:",
-		Value:  name,
-		OnConfirm: func(value string) tea.Cmd {
+		Title: "Save Session",
+		Label: "Name:",
+		Value: name,
+		OnConfirm: func(value string, ctx any) tea.Cmd {
+			m := ctx.(*Model)
 			nm, cmd := m.saveAs(value, false)
-			m = nm
+			*m = nm
 			return tea.Batch(cmd, m.setChatMode())
 		},
-		OnCancel: func() tea.Cmd {
+		OnCancel: func(ctx any) tea.Cmd {
+			m := ctx.(*Model)
 			return m.setChatMode()
 		},
 	}
@@ -190,5 +192,3 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 
 	return m, nil
 }
-
-

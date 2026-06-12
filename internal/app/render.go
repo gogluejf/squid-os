@@ -47,12 +47,8 @@ func (m Model) View() string {
 		sections = append(sections, ui.RenderStatusLine(m.notification, attachChip, m.width))
 	}
 
-	// Textarea (skip in authorization mode — show prompt instead)
-	if m.mode == ModeAuthorize {
-		sections = append(sections, m.authPrompt.Render())
-	} else {
-		sections = append(sections, m.textarea.View())
-	}
+	// Textarea (shown for all modes except component overlay which replaces it)
+	sections = append(sections, m.textarea.View())
 
 	// Footer: context window = all saved messages + current inference
 	sections = append(sections, ui.RenderFooter(m.buildFooterData(), m.width))

@@ -61,6 +61,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 
+	// Non-key messages: update active component if present (e.g., blink ticks)
+	if m.mode == ModeComponent && m.activeComponent != nil {
+		if cmd := m.activeComponent.Update(msg, &m); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+
 	return m, tea.Batch(cmds...)
 }
 

@@ -30,9 +30,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case ModeHistorySearch:
 		return m.handleHistorySearchKey(msg)
-
-	case ModeAuthorize:
-		return m.handleAuthorizeKey(msg)
 	}
 
 	return m, nil
@@ -66,14 +63,18 @@ func (m Model) handleComponent(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	var cmd tea.Cmd
+	var cmds []tea.Cmd
 
 	if m.activeComponent != nil {
-		cmd = m.activeComponent.HandleKey(msg, &m)
+		if cmd := m.activeComponent.HandleKey(msg, &m); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		// Do NOT call Update with key messages — non-key messages reach
+		// Update() in update.go which forwards them to the component.
 	}
 
 	(&m).recalcLayout()
-	return m, cmd
+	return m, tea.Batch(cmds...)
 }
 
 // handleChatKey handles all key input while in the default chat mode.
@@ -177,57 +178,6 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
-}
-
-// handleAuthorizeKey handles key input while awaiting user authorization for a tool call.
-func (m Model) handleAuthorizeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keys.Left) && !m.authPrompt.TextMode:
-		m.authPrompt.Selection = 0 // Yes
-		return m, nil
-	case key.Matches(msg, keys.Right) && !m.authPrompt.TextMode:
-		m.authPrompt.Selection = 1 // No
-		return m, nil
-	case msg.Type == tea.KeyTab && !msg.Alt:
-		m.authPrompt.TextMode = true
-		return m, nil
-	case msg.Type == tea.KeyShiftTab:
-		m.authPrompt.TextMode = false
-		return m, nil
-	case key.Matches(msg, keys.Send):
-		approved := m.authPrompt.Selection == 0
-		m.stream.authorizationCtx.Result = AuthResult{
-			Approved:     approved,
-			Instructions: m.authPrompt.TextInput,
-		}
-		entries := m.stream.pendingEntries
-		idx := m.stream.pendingToolIndex
-		return m.resumeToolExecution(entries, idx)
-	case msg.Type == tea.KeyEscape:
-		// Escape rejects the tool
-		m.stream.authorizationCtx.Result = AuthResult{
-			Approved:     false,
-			Instructions: "",
-		}
-		entries := m.stream.pendingEntries
-		idx := m.stream.pendingToolIndex
-		return m.resumeToolExecution(entries, idx)
-	default:
-		if m.authPrompt.TextMode {
-			switch msg.Type {
-			case tea.KeyRunes:
-				m.authPrompt.TextInput += string(msg.Runes)
-			case tea.KeyBackspace:
-				runes := []rune(m.authPrompt.TextInput)
-				if len(runes) > 0 {
-					m.authPrompt.TextInput = string(runes[:len(runes)-1])
-				}
-			case tea.KeySpace:
-				m.authPrompt.TextInput += " "
-			}
-		}
-	}
-	return m, nil
 }
 
 // handleStreamingKey handles key input while an inference stream is active.

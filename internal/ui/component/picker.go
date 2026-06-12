@@ -252,6 +252,11 @@ func (p *Picker) Init(ctx any) {
 	p.fireSelectionChange(0, items[0], ctx)
 }
 
+// Update handles non-key messages for Picker (no-op, kept for interface compliance).
+func (p *Picker) Update(tea.Msg, any) tea.Cmd {
+	return nil
+}
+
 // computeWidths scans ALL items and sets fixed column widths (max value + 4 padding).
 func (p *Picker) computeWidths() {
 	labelMax := 0

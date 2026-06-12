@@ -14,6 +14,7 @@ import (
 	"squid-os/internal/config"
 	"squid-os/internal/tools"
 	"squid-os/internal/ui"
+	"squid-os/internal/ui/component"
 )
 
 // partialTool holds the streaming-in-progress state for a single tool call.
@@ -130,9 +131,8 @@ func (m *Model) setStreamMode() {
 	m.textarea.Placeholder = "ctrl+c to cancel..."
 }
 
-// setAuthMode transitions to ModeAuthorize, pausing the stream and populating the auth prompt.
+// setAuthMode builds a Question component for tool authorization and sets it as the active component.
 func (m *Model) setAuthMode() {
-	m.mode = ModeAuthorize
 	m.stream.active = false
 	ctx := m.stream.authorizationCtx
 
@@ -143,19 +143,58 @@ func (m *Model) setAuthMode() {
 		if tool != nil && tool.Preview != nil {
 			result := tool.Preview(ctx.Args)
 			if result.Status == tools.ResultStatusSuccess && len(result.Files) > 0 {
-				previewDiff = result.Files[0].Diff // Assuming the function only change one file, so we take the first diff available
+				previewDiff = result.Files[0].Diff
 			}
 		}
 	}
 
-	m.authPrompt = ui.AuthorizationPrompt{
-		ToolName:      ctx.ToolName,
-		DisplayValue:  ctx.DisplayValue,
-		IsDestructive: ctx.IsDestructive,
-		PreviewDiff:   previewDiff,
-		Selection:     0,
-		Width:         m.width,
+	// Build title with tool info
+	label := ctx.ToolName
+	if ctx.DisplayValue != "" {
+		display := ctx.DisplayValue
+		if len(display) > 40 {
+			display = display[:37] + "..."
+		}
+		label = fmt.Sprintf("%s(%s)", ctx.ToolName, display)
 	}
+	if ctx.IsDestructive {
+		label = "⚠ " + label
+	}
+	if previewDiff != "" {
+		lines := strings.Count(previewDiff, "\n")
+		label = fmt.Sprintf("%s (%d lines changed)", label, lines)
+	}
+
+	q := &component.Question{
+		Title:     "Authorize Tool",
+		Options:   []string{"Yes", "No"},
+		ShowInput: true,
+		OnConfirm: func(selection int, instructions string, ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			m.stream.authorizationCtx.Result = AuthResult{
+				Approved:     selection == 0,
+				Instructions: instructions,
+			}
+			entries := m.stream.pendingEntries
+			idx := m.stream.pendingToolIndex
+			_, cmd := m.resumeToolExecution(entries, idx)
+			return cmd
+		},
+		OnCancel: func(ctx any) tea.Cmd {
+			m := ctx.(*Model)
+			m.stream.authorizationCtx.Result = AuthResult{
+				Approved:     false,
+				Instructions: "",
+			}
+			entries := m.stream.pendingEntries
+			idx := m.stream.pendingToolIndex
+			_, cmd := m.resumeToolExecution(entries, idx)
+			return cmd
+		},
+	}
+
+	m.setComponent(q)
+	m.updateViewportContent()
 }
 
 // setChatMode sets mode to ModeChat, resets the textarea placeholder, and recomputes layout.
@@ -476,7 +515,10 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 			if !result.Approved {
 				// Rejected — cancel this tool and all remaining, break.
 				entries[i].Execution.Status = tools.ResultStatusError
-				entries[i].Execution.Error = "rejected by user — tool was not executed"
+				entries[i].Execution.Error = "rejected by user — tool was not executed."
+				// if capturedInstructions == "" {
+				// 	entries[i].Execution.Error += " you can answer grafecully, but don't try again."
+				// }
 				for j := i + 1; j < len(entries); j++ {
 					entries[j].Execution.Status = tools.ResultStatusError
 					entries[j].Execution.Error = "cancelled: previous tool was not approved"

@@ -16,8 +16,8 @@ type Prompt struct {
 	Label        string   // e.g. "Name:"
 	Value        string
 	DefaultValue string
-	OnConfirm    func(string) tea.Cmd
-	OnCancel     func()   tea.Cmd
+	OnConfirm    func(string, any) tea.Cmd
+	OnCancel     func(any) tea.Cmd
 }
 
 // Init resolves the default value. Context is ignored by Prompt.
@@ -28,23 +28,28 @@ func (p *Prompt) Init(any) {
 	}
 }
 
+// Update handles non-key messages for Prompt (no-op, kept for interface compliance).
+func (p *Prompt) Update(tea.Msg, any) tea.Cmd {
+	return nil
+}
+
 // RenderHeight returns the same height as Picker.
 func (p *Prompt) RenderHeight() int {
 	return PickerMaxItems + 4 // 3 + PickerMaxItems + 1, same as Picker
 }
 
-// HandleKey processes key events for the prompt. Context is ignored.
-func (p *Prompt) HandleKey(msg tea.KeyMsg, _ any) tea.Cmd {
+// HandleKey processes key events for the prompt.
+func (p *Prompt) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 	s := msg.String()
 
 	switch {
 	case s == "enter":
 		if p.OnConfirm != nil {
-			return p.OnConfirm(p.Value)
+			return p.OnConfirm(p.Value, ctx)
 		}
 	case s == "esc" || s == "ctrl+c":
 		if p.OnCancel != nil {
-			return p.OnCancel()
+			return p.OnCancel(ctx)
 		}
 	case s == "backspace":
 		if len(p.Value) > 0 {

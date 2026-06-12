@@ -7,6 +7,7 @@ import tea "github.com/charmbracelet/bubbletea"
 // and dispatches through it.
 type Component interface {
 	Init(ctx any)
+	Update(msg tea.Msg, ctx any) tea.Cmd
 	HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd
 	Render(width int) string
 	RenderHeight() int

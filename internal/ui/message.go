@@ -266,17 +266,26 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 				if tc.Execution.Result != "" {
 					content = append(content, tc.Execution.Result)
 				}
+			case "pending":
+				if tc.Execution.Result != "" {
+					content = append(content, tc.Execution.Result)
+				}
 			}
 		}
 
-		// Diff is always visible — file name header + side-by-side diff canvas
-		if tc.Execution.Status == "success" && len(tc.Execution.Files) > 0 {
+		// Diff visible for both success and pending (with preview data)
+		if (tc.Execution.Status == "success" || tc.Execution.Status == "pending") && len(tc.Execution.Files) > 0 {
 			if d := renderToolFilesDiff(tc.Execution.Files, boxWidth, t.Style); d != "" {
 				content = append(content, d)
 			}
 		}
 
 		b.WriteString(drawToolBox(parts, content, t.Style, boxWidth))
+
+		// Stop rendering after the first pending tool — it's the one being authorized.
+		if tc.Execution.Status == "pending" {
+			break
+		}
 	}
 	return b.String()
 }

@@ -593,7 +593,12 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 			}
 			m.stream.pendingToolIndex = i
 			m.setAuthMode()
+			m.flushToolMessage(msgIdx)
 			m.updateViewportContent()
+			nm, autoSaveCmd := m.autoSave()
+			if autoSaveCmd != nil {
+				return nm, autoSaveCmd
+			}
 			return m, nil
 		}
 
@@ -642,12 +647,8 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 			break
 		}
 
-		// Update incremental metrics on the saved message for crash resilience.
-		msg := &m.session.file.Messages[msgIdx]
-		msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds()
-		msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
-		recomputeSequenceStats(m.session.file.Messages)
-		m.session.invalidateRenderFrom(msgIdx)
+		// Flush metrics and update viewport after each tool.
+		m.flushToolMessage(msgIdx)
 		m.updateViewportContent()
 	}
 
@@ -656,11 +657,7 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 
 	// Final pass: ensure metrics reflect complete state (covers early breaks
 	// where the last loop iteration didn't reach the incremental update).
-	msg := &m.session.file.Messages[msgIdx]
-	msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds()
-	msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
-	recomputeSequenceStats(m.session.file.Messages)
-	m.session.invalidateRenderFrom(msgIdx)
+	m.flushToolMessage(msgIdx)
 
 	if capturedInstructions != "" {
 		userMsg := config.Message{
@@ -672,8 +669,14 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 		m.session.appendMsg(userMsg)
 	}
 
+	nm, autoSaveCmd := m.autoSave()
+
 	m.stream.reset()
 	m.updateViewportContent()
+	if autoSaveCmd != nil {
+		nextModel, nextCmd := nm.startStream()
+		return nextModel, tea.Batch(nextCmd, autoSaveCmd)
+	}
 	return m.startStream()
 }
 
@@ -695,6 +698,16 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 
 	m.updateViewportContent()
 	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd())
+}
+
+// flushToolMessage updates metrics, recomputes sequence stats, and invalidates
+// the render cache for the saved assistant message at msgIdx.
+func (m *Model) flushToolMessage(msgIdx int) {
+	msg := &m.session.file.Messages[msgIdx]
+	msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds()
+	msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
+	recomputeSequenceStats(m.session.file.Messages)
+	m.session.invalidateRenderFrom(msgIdx)
 }
 
 // recomputeSequenceStats scans all assistant messages after the last user message

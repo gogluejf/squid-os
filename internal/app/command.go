@@ -1,27 +1,32 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/config"
+	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
 )
 
 // SlashCommand defines a slash command with optional key shortcut.
 type SlashCommand struct {
-	Name        string
-	Description string
-	Key         key.Binding // keyboard shortcut that triggers this command
-	OnExecute   func(Model) (tea.Model, tea.Cmd)
+	Name             string
+	Description      string
+	Key              key.Binding // keyboard shortcut that triggers this command
+	BlockDuringStream bool       // if true, show notification and skip execution while streaming
+	OnExecute        func(Model) (tea.Model, tea.Cmd)
 }
 
 // AllCommands is the full slash command list
 var AllCommands = []SlashCommand{
 	{
-		Name:        "model",
-		Description: "Select inference model",
-		Key:         keys.Model,
+		Name:             "model",
+		Description:      "Select inference model",
+		Key:              keys.Model,
+		BlockDuringStream: true,
 		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openModelPicker()
 		},
@@ -51,25 +56,28 @@ var AllCommands = []SlashCommand{
 		},
 	},
 	{
-		Name:        "save",
-		Description: "Save current session",
-		Key:         keys.Save,
+		Name:             "save",
+		Description:      "Save current session",
+		Key:              keys.Save,
+		BlockDuringStream: true,
 		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openSaveSessionPrompt()
 		},
 	},
 	{
-		Name:        "load",
-		Description: "Load a saved session",
-		Key:         keys.Load,
+		Name:             "load",
+		Description:      "Load a saved session",
+		Key:              keys.Load,
+		BlockDuringStream: true,
 		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openSessionPicker()
 		},
 	},
 	{
-		Name:        "clear",
-		Description: "Clear chat and start fresh",
-		Key:         keys.NewSession,
+		Name:             "clear",
+		Description:      "Clear chat and start fresh",
+		Key:              keys.NewSession,
+		BlockDuringStream: true,
 		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
 			return m.clearSession()
 		},
@@ -141,10 +149,14 @@ func findCommand(name string) *SlashCommand {
 // executeCommandByName dispatches to the appropriate handler for a command name.
 func (m Model) executeCommandByName(name string) (tea.Model, tea.Cmd) {
 	cmd := findCommand(name)
-	if cmd != nil && cmd.OnExecute != nil {
-		return cmd.OnExecute(m)
+	if cmd == nil || cmd.OnExecute == nil {
+		return m, m.setChatMode()
 	}
-	return m, m.setChatMode()
+	if cmd.BlockDuringStream && m.mode == ModeStreaming {
+		m.setNotification(ui.NotificationInfo, fmt.Sprintf("/%s will be available when assistant finishes", name))
+		return m, nil
+	}
+	return cmd.OnExecute(m)
 }
 
 // openCommandPicker opens the slash command palette.

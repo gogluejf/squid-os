@@ -332,8 +332,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 
 		avgTokenPerSec := m.stream.metrics.AvgTokenPerSec()
 
-		// Tool calls: start the single execution loop
+		// Tool calls: end the stream, save eagerly, start execution
 		if event.StopReason == "tool_calls" && len(m.stream.partialTools) > 0 {
+			(&m).stream.active = false // inference done, entering tool execution
 			_ = avgTokenPerSec
 			return (&m).resumeToolExecution(nil, 0)
 		}
@@ -463,8 +464,8 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 				entries[i].Execution.Status = tools.ResultStatusPending
 			}
 
-			// Save eagerly with initial metrics (DurationTimeMs and TokensPerSecond
-			// start at 0 — finalized later after the loop completes).
+			// Save eagerly with all metrics known at stream end.
+			// Only InputTokens (tool execution result tokens) is unknown — finalized after loop.
 			msgIdx = m.appendAssistantMsg(config.Message{
 				ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 				Role:               config.RoleAssistant,
@@ -475,9 +476,12 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 				TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
 				ToolCalls:          entries,
 				ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), InferenceDuractionMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
+				TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
 				OutputTokens:       m.stream.metrics.TotalOutputTokens(),
+				DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
 				TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
-				// DurationTimeMs = 0, TokensPerSecond = 0, InputTokens = 0 — finalized after loop
+				StopReason:         "tool_calls",
+				// InputTokens = 0 — finalized after loop
 			})
 
 			// Store msgIdx for auth resume.
@@ -646,20 +650,13 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 	m.stream.authorizationCtx = nil
 	m.stream.pendingEntries = nil
 
-	// Finalize remaining metrics on the saved message.
+	// Update the two things that changed during execution.
 	msg := &m.session.file.Messages[msgIdx]
-	avgTokenPerSec := m.stream.metrics.AvgTokenPerSec()
 	msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds()
-	msg.TokensPerSecond = avgTokenPerSec
 	msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
-	msg.StopReason = "tool_calls"
 
-	if msg.SequenceStat != nil {
-		msg.SequenceStat.DurationMs = msg.DurationTimeMs
-		msg.SequenceStat.InputTokens = msg.InputTokens
-		msg.SequenceStat.AvgTokensPerSec = msg.TokensPerSecond
-	}
-
+	// Recompute SequenceStat from scratch — simple and correct.
+	recomputeSequenceStats(m.session.file.Messages)
 	m.session.invalidateRenderAt(msgIdx)
 
 	if capturedInstructions != "" {
@@ -697,28 +694,45 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd())
 }
 
-// appendAssistantMsg saves an assistant message and maintains SequenceStat on the
-// sequence head (first assistant message after the last user message).
-// Returns the index of the appended message in the messages slice.
-func (m *Model) appendAssistantMsg(msg config.Message) int {
-	seqIdx := config.FindSequenceHeadIdx(m.session.file.Messages)
+// recomputeSequenceStats scans all assistant messages after the last user message
+// and writes a fresh SequenceStat on the head (first assistant). This replaces
+// incremental Accumulate with a full recompute — simpler, correct, and cheap
+// (~20 messages = <1μs).
+func recomputeSequenceStats(messages []config.Message) {
+	seqIdx := config.FindSequenceHeadIdx(messages)
 	if seqIdx == -1 {
-		stat := &config.SequenceStat{
-			OutputTokens:         msg.OutputTokens,
-			DurationMs:           msg.DurationTimeMs,
-			InferenceDuractionMs: msg.TextMetrics.InferenceDuractionMs + msg.ThinkingMetrics.InferenceDuractionMs + msg.ToolCallMetrics.InferenceDuractionMs,
-			AvgTokensPerSec:      msg.TokensPerSecond,
-			InputTokens:          msg.InputTokens,
-		}
+		return
+	}
+
+	head := messages[seqIdx]
+	stat := &config.SequenceStat{}
+
+	for i := seqIdx; i < len(messages); i++ {
+		msg := messages[i]
+		stat.OutputTokens += msg.OutputTokens
+		stat.DurationMs += msg.DurationTimeMs
+		stat.InferenceDuractionMs += msg.TextMetrics.InferenceDuractionMs
+		stat.InferenceDuractionMs += msg.ThinkingMetrics.InferenceDuractionMs
+		stat.InferenceDuractionMs += msg.ToolCallMetrics.InferenceDuractionMs
+		stat.InputTokens += msg.InputTokens
 		for _, tc := range msg.ToolCalls {
 			stat.ExecDurMs += tc.Execution.DurationMs
 		}
-		msg.SequenceStat = stat
-		m.session.appendMsg(msg)
-	} else {
-		m.session.appendMsg(msg)
-		head := m.session.file.Messages[seqIdx].SequenceStat
-		head.Accumulate(msg)
 	}
+
+	if stat.InferenceDuractionMs > 0 {
+		stat.AvgTokensPerSec = float64(stat.OutputTokens) / float64(stat.InferenceDuractionMs) * 1000.0
+	}
+
+	head.SequenceStat = stat
+	messages[seqIdx] = head
+}
+
+// appendAssistantMsg saves an assistant message and recomputes SequenceStat on
+// the sequence head (first assistant message after the last user message).
+// Returns the index of the appended message in the messages slice.
+func (m *Model) appendAssistantMsg(msg config.Message) int {
+	m.session.appendMsg(msg)
+	recomputeSequenceStats(m.session.file.Messages)
 	return len(m.session.file.Messages) - 1
 }

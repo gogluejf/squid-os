@@ -30,6 +30,8 @@ var Open = Tool{
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
 
+		target = ResolvePath(target)
+
 		var cmd *exec.Cmd
 		switch runtime.GOOS {
 		case "linux":

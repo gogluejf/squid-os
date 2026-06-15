@@ -654,8 +654,12 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 	// --- Loop done ---
 	m.stream.authorizationCtx = nil
 
-	// Invalidate and re-render after the loop (covers early breaks from
-	// rejection, file change, captured instructions, malformed args).
+	// Final pass: ensure metrics reflect complete state (covers early breaks
+	// where the last loop iteration didn't reach the incremental update).
+	msg := &m.session.file.Messages[msgIdx]
+	msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds()
+	msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
+	recomputeSequenceStats(m.session.file.Messages)
 	m.session.invalidateRenderFrom(msgIdx)
 
 	if capturedInstructions != "" {

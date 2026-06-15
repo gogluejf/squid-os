@@ -21,10 +21,10 @@ const (
 )
 
 type SessionFile struct {
-	Version     int                      `json:"version"`
-	Session     Session                  `json:"session"`
-	Messages    []Message                `json:"messages"`
-	TotalTokens int                      `json:"total_tokens"`
+	Version     int                       `json:"version"`
+	Session     Session                   `json:"session"`
+	Messages    []Message                 `json:"messages"`
+	TotalTokens int                       `json:"total_tokens"`
 	FileState   map[string]FileStateEntry `json:"file_state,omitempty"`
 }
 
@@ -40,16 +40,16 @@ type SessionSkill struct {
 }
 
 type Session struct {
-	ID               string        `json:"id"`
-	Title            string        `json:"title"`
-	CreatedAt        string        `json:"created_at"`
-	UpdatedAt        string        `json:"updated_at"`
-	Provider         string        `json:"provider"`
-	Model            string        `json:"model"`
-	Thinking         bool          `json:"thinking"`
-	SystemPromptFile string        `json:"system_prompt_file"`
-	WorkingDir       string        `json:"working_dir"`
-	Skill            SessionSkill  `json:"skill"`
+	ID               string       `json:"id"`
+	Title            string       `json:"title"`
+	CreatedAt        string       `json:"created_at"`
+	UpdatedAt        string       `json:"updated_at"`
+	Provider         string       `json:"provider"`
+	Model            string       `json:"model"`
+	Thinking         bool         `json:"thinking"`
+	SystemPromptFile string       `json:"system_prompt_file"`
+	WorkingDir       string       `json:"working_dir"`
+	Skill            SessionSkill `json:"skill"`
 }
 
 type ContentMetrics struct {

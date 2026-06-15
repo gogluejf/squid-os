@@ -70,6 +70,7 @@ type streamState struct {
 	authorizationCtx *AuthorizationContext  // non-nil when paused awaiting auth
 	pendingToolIndex int                    // index into partialTools being authorized
 	pendingEntries   []config.ToolCallEntry // entries being worked on during auth
+	msgIdx           int                    // index of the saved assistant message with tool calls (-1 if none)
 }
 
 // AddTextChunk appends text and updates metrics.
@@ -107,6 +108,7 @@ func (ss *streamState) reset() {
 	ss.authorizationCtx = nil
 	ss.pendingToolIndex = -1
 	ss.pendingEntries = nil
+	ss.msgIdx = -1
 }
 
 // needsAuthorization checks the current authorization mode and tool destructiveness
@@ -133,7 +135,6 @@ func (m *Model) setStreamMode() {
 
 // setAuthMode builds a Question component for tool authorization and sets it as the active component.
 func (m *Model) setAuthMode() tea.Cmd {
-	m.stream.active = false
 	ctx := m.stream.authorizationCtx
 
 	// Description: tool-name · display-value (truncation handled by Question render)
@@ -153,9 +154,7 @@ func (m *Model) setAuthMode() tea.Cmd {
 				Approved:     selection == 0,
 				Instructions: instructions,
 			}
-			entries := m.stream.pendingEntries
-			idx := m.stream.pendingToolIndex
-			_, cmd := m.resumeToolExecution(entries, idx)
+			_, cmd := m.resumeToolExecution(nil, 0)
 			return cmd
 		},
 		OnCancel: func(ctx any) tea.Cmd {
@@ -164,9 +163,7 @@ func (m *Model) setAuthMode() tea.Cmd {
 				Approved:     false,
 				Instructions: "",
 			}
-			entries := m.stream.pendingEntries
-			idx := m.stream.pendingToolIndex
-			_, cmd := m.resumeToolExecution(entries, idx)
+			_, cmd := m.resumeToolExecution(nil, 0)
 			return cmd
 		},
 	}
@@ -342,7 +339,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		}
 
 		// Normal completion: save assistant message
-		(&m).appendAssistantMsg(config.Message{
+		_ = (&m).appendAssistantMsg(config.Message{
 			ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
 			Role:               config.RoleAssistant,
 			CreatedAt:          m.stream.metrics.Start,
@@ -429,15 +426,17 @@ func buildInstructionEntry(p partialTool) config.ToolCallEntry {
 }
 
 // resumeToolExecution runs the single tool-execution loop from startIndex.
-// On first call from handleStreamEvent, entries is nil (will be built).
-// On resume after auth response, entries is pendingEntries and startIndex is pendingToolIndex.
+// On first call from handleStreamEvent, entries is nil (will be built and saved).
+// On resume after auth response, entries is nil (will be fetched from saved message).
 //
 // Single loop, three gates:
 //  1. Apply collected auth result (from resume after user response)
 //  2. Auth gate — pause and yield if confirmation needed
 //  3. File change gate — cancel remaining if file was modified externally
 //
-// Then execute. After the loop: append assistant message, optionally append user message, start stream.
+// Then execute. The assistant message is saved before the loop starts with
+// initial metrics, and mutated in place as tools execute. After the loop:
+// finalize remaining metrics, optionally append user message, start stream.
 func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex int) (tea.Model, tea.Cmd) {
 	partials := m.stream.partialTools
 
@@ -446,13 +445,48 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 	}
 	sessionState := m.session.file.FileState
 
-	// First call: build all instruction entries.
+	var msgIdx int
+
+	// First call: build all instruction entries and save eagerly.
+	// Resume after auth: fetch entries from the already-saved message.
 	if entries == nil {
-		entries = make([]config.ToolCallEntry, len(partials))
-		for i, p := range partials {
-			entries[i] = buildInstructionEntry(p)
+		if m.stream.authorizationCtx != nil {
+			// Resuming after auth — entries already live in the saved message.
+			msgIdx = m.stream.msgIdx
+			startIndex = m.stream.pendingToolIndex
+			entries = m.session.file.Messages[msgIdx].ToolCalls
+		} else {
+			// Initial call from handleStreamEvent: build and save before the loop.
+			entries = make([]config.ToolCallEntry, len(partials))
+			for i, p := range partials {
+				entries[i] = buildInstructionEntry(p)
+				entries[i].Execution.Status = tools.ResultStatusPending
+			}
+
+			// Save eagerly with initial metrics (DurationTimeMs and TokensPerSecond
+			// start at 0 — finalized later after the loop completes).
+			msgIdx = m.appendAssistantMsg(config.Message{
+				ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+				Role:               config.RoleAssistant,
+				CreatedAt:          m.stream.metrics.Start,
+				ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
+				ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
+				Text:               strings.TrimLeft(m.stream.text, "\n"),
+				TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
+				ToolCalls:          entries,
+				ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), InferenceDuractionMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
+				OutputTokens:       m.stream.metrics.TotalOutputTokens(),
+				TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
+				// DurationTimeMs = 0, TokensPerSecond = 0, InputTokens = 0 — finalized after loop
+			})
+
+			// Store msgIdx for auth resume.
+			m.stream.msgIdx = msgIdx
+
+			// entries now shares the underlying array with the saved message's ToolCalls,
+			// so mutations to entries[i] are mutations to the persisted message.
+			startIndex = 0
 		}
-		startIndex = 0
 	}
 
 	// Captured from auth result if the user provided instructions (approved + instructions).
@@ -495,9 +529,6 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 				// Rejected — cancel this tool and all remaining, break.
 				entries[i].Execution.Status = tools.ResultStatusError
 				entries[i].Execution.Error = "rejected by user — tool was not executed, don't retry."
-				// if capturedInstructions == "" {
-				// 	entries[i].Execution.Error += " you can answer grafecully, but don't try again."
-				// }
 				for j := i + 1; j < len(entries); j++ {
 					entries[j].Execution.Status = tools.ResultStatusError
 					entries[j].Execution.Error = "cancelled: previous tool was not approved"
@@ -511,8 +542,6 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 		// --- Gate 1: Authorization ---
 		if m.needsAuthorization(tool, args) {
 			// Run on-demand preview before showing the auth question.
-			// On error, skip authorization and mark as error — no point
-			// asking the user to approve a tool that will fail.
 			if tool.Preview != nil {
 				preview := tool.Preview(args)
 				if preview.Status == tools.ResultStatusError {
@@ -520,7 +549,6 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 					entries[i].Execution.Error = preview.Error
 					continue
 				}
-				// Preview succeeded — populate execution with preview data.
 				entries[i].Execution.Status = tools.ResultStatusPending
 				entries[i].Execution.Result = preview.Result
 				entries[i].Execution.Files = preview.Files
@@ -618,24 +646,21 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 	m.stream.authorizationCtx = nil
 	m.stream.pendingEntries = nil
 
+	// Finalize remaining metrics on the saved message.
+	msg := &m.session.file.Messages[msgIdx]
 	avgTokenPerSec := m.stream.metrics.AvgTokenPerSec()
-	m.appendAssistantMsg(config.Message{
-		ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-		Role:               config.RoleAssistant,
-		CreatedAt:          m.stream.metrics.Start,
-		ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
-		ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
-		Text:               strings.TrimLeft(m.stream.text, "\n"),
-		TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
-		ToolCalls:          entries,
-		ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), InferenceDuractionMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
-		TokensPerSecond:    avgTokenPerSec,
-		OutputTokens:       m.stream.metrics.TotalOutputTokens(),
-		InputTokens:        config.TotalExecutionTokens(entries),
-		DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
-		TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
-		StopReason:         "tool_calls",
-	})
+	msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds()
+	msg.TokensPerSecond = avgTokenPerSec
+	msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
+	msg.StopReason = "tool_calls"
+
+	if msg.SequenceStat != nil {
+		msg.SequenceStat.DurationMs = msg.DurationTimeMs
+		msg.SequenceStat.InputTokens = msg.InputTokens
+		msg.SequenceStat.AvgTokensPerSec = msg.TokensPerSecond
+	}
+
+	m.session.invalidateRenderAt(msgIdx)
 
 	if capturedInstructions != "" {
 		userMsg := config.Message{
@@ -674,7 +699,8 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 
 // appendAssistantMsg saves an assistant message and maintains SequenceStat on the
 // sequence head (first assistant message after the last user message).
-func (m *Model) appendAssistantMsg(msg config.Message) {
+// Returns the index of the appended message in the messages slice.
+func (m *Model) appendAssistantMsg(msg config.Message) int {
 	seqIdx := config.FindSequenceHeadIdx(m.session.file.Messages)
 	if seqIdx == -1 {
 		stat := &config.SequenceStat{
@@ -694,4 +720,5 @@ func (m *Model) appendAssistantMsg(msg config.Message) {
 		head := m.session.file.Messages[seqIdx].SequenceStat
 		head.Accumulate(msg)
 	}
+	return len(m.session.file.Messages) - 1
 }

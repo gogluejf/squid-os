@@ -69,7 +69,6 @@ type streamState struct {
 	tokenCount       int                    // counter for throttling viewport updates
 	authorizationCtx *AuthorizationContext  // non-nil when paused awaiting auth
 	pendingToolIndex int                    // index into partialTools being authorized
-	pendingEntries   []config.ToolCallEntry // entries being worked on during auth
 	msgIdx           int                    // index of the saved assistant message with tool calls (-1 if none)
 }
 
@@ -107,7 +106,6 @@ func (ss *streamState) reset() {
 	ss.tokenCount = 0
 	ss.authorizationCtx = nil
 	ss.pendingToolIndex = -1
-	ss.pendingEntries = nil
 	ss.msgIdx = -1
 }
 
@@ -543,7 +541,23 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 			goto doExecute
 		}
 
-		// --- Gate 1: Authorization ---
+		// --- Gate 1: File change validation (BEFORE auth) ---
+		if p.name != "read_file" && p.name != "open" {
+			if pathVal, ok := args["path"].(string); ok {
+				resolvedPath := tools.ResolvePath(pathVal)
+				if err := tools.Validate(resolvedPath, sessionState); err != nil {
+					entries[i].Execution.Status = tools.ResultStatusError
+					entries[i].Execution.Error = fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again with read_file and retry your command.", resolvedPath)
+					for j := i + 1; j < len(entries); j++ {
+						entries[j].Execution.Status = tools.ResultStatusError
+						entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"
+					}
+					break
+				}
+			}
+		}
+
+		// --- Gate 2: Authorization ---
 		if m.needsAuthorization(tool, args) {
 			// Run on-demand preview before showing the auth question.
 			if tool.Preview != nil {
@@ -578,26 +592,9 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 				IsDestructive: isDestructive,
 			}
 			m.stream.pendingToolIndex = i
-			m.stream.pendingEntries = entries
 			m.setAuthMode()
 			m.updateViewportContent()
 			return m, nil
-		}
-
-		// --- Gate 2: File change validation ---
-		if p.name != "read_file" && p.name != "open" {
-			if pathVal, ok := args["path"].(string); ok {
-				resolvedPath := tools.ResolvePath(pathVal)
-				if err := tools.Validate(resolvedPath, sessionState); err != nil {
-					entries[i].Execution.Status = tools.ResultStatusError
-					entries[i].Execution.Error = fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again with read_file and retry your command.", resolvedPath)
-					for j := i + 1; j < len(entries); j++ {
-						entries[j].Execution.Status = tools.ResultStatusError
-						entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"
-					}
-					break
-				}
-			}
 		}
 
 		// --- Execute the tool ---
@@ -656,7 +653,6 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 
 	// --- Loop done ---
 	m.stream.authorizationCtx = nil
-	m.stream.pendingEntries = nil
 
 	// Invalidate and re-render after the loop (covers early breaks from
 	// rejection, file change, captured instructions, malformed args).

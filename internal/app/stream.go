@@ -650,7 +650,7 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 		msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds()
 		msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
 		recomputeSequenceStats(m.session.file.Messages)
-		m.session.invalidateRenderAt(msgIdx)
+		m.session.invalidateRenderFrom(msgIdx)
 		m.updateViewportContent()
 	}
 

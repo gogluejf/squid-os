@@ -229,7 +229,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 		case "success":
 			prefix = style.CheckSuccess.Render("[✓] ")
 		case "pending":
-			prefix = t.Style.Dim.Render("[ ] ")
+			prefix = style.CheckWarning.Render("[?] ")
 		}
 		parts = append(parts, prefix+t.Style.Label.Render(tc.Instruction.Name))
 

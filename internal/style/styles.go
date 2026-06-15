@@ -225,6 +225,10 @@ var (
 			Background(lipgloss.Color(P.BgCode)).
 			Foreground(lipgloss.Color(P.TextError))
 
+	CheckWarning = lipgloss.NewStyle().
+			Background(lipgloss.Color(P.BgCode)).
+			Foreground(lipgloss.Color(P.TextWarning))
+
 	// Command palette
 	CommandStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(P.TextAccent)).

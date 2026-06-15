@@ -63,6 +63,14 @@ func (m Model) handleComponent(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Expand/collapse works during component overlays (e.g. auth questions).
+	if key.Matches(msg, keys.Expand) {
+		m.expanded = !m.expanded
+		m.session.invalidateRenderAll()
+		m.updateViewportContent()
+		return m, nil
+	}
+
 	var cmds []tea.Cmd
 
 	if m.activeComponent != nil {

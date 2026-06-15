@@ -658,6 +658,10 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 	m.stream.authorizationCtx = nil
 	m.stream.pendingEntries = nil
 
+	// Invalidate and re-render after the loop (covers early breaks from
+	// rejection, file change, captured instructions, malformed args).
+	m.session.invalidateRenderFrom(msgIdx)
+
 	if capturedInstructions != "" {
 		userMsg := config.Message{
 			ID:        fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),

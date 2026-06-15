@@ -644,20 +644,19 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 			}
 			break
 		}
+
+		// Update incremental metrics on the saved message for crash resilience.
+		msg := &m.session.file.Messages[msgIdx]
+		msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds()
+		msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
+		recomputeSequenceStats(m.session.file.Messages)
+		m.session.invalidateRenderAt(msgIdx)
+		m.updateViewportContent()
 	}
 
 	// --- Loop done ---
 	m.stream.authorizationCtx = nil
 	m.stream.pendingEntries = nil
-
-	// Update the two things that changed during execution.
-	msg := &m.session.file.Messages[msgIdx]
-	msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds()
-	msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
-
-	// Recompute SequenceStat from scratch — simple and correct.
-	recomputeSequenceStats(m.session.file.Messages)
-	m.session.invalidateRenderAt(msgIdx)
 
 	if capturedInstructions != "" {
 		userMsg := config.Message{

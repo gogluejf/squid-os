@@ -58,6 +58,9 @@ func (p *Prompt) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		}
 	case len(s) == 1 && isPrintable(s):
 		p.Value += s
+	case msg.Type == tea.KeyRunes && len(msg.Runes) > 1:
+		// Paste event — insert all runes
+		p.Value += string(msg.Runes)
 	}
 
 	return nil

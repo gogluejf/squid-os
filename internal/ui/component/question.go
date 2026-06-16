@@ -100,6 +100,10 @@ func (q *Question) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		case s == "space":
 			q.TextInput += " "
 			return q.resetBlink()
+		case msg.Type == tea.KeyRunes && len(msg.Runes) > 1:
+			// Paste event — insert all runes at once
+			q.TextInput += string(msg.Runes)
+			return q.resetBlink()
 		case len(s) == 1 && isPrintable(s):
 			q.TextInput += s
 			return q.resetBlink()

@@ -182,6 +182,17 @@ func (p *Picker) HandleKey(msg tea.KeyMsg, ctx any) tea.Cmd {
 		return nil
 	}
 
+	if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 {
+		// Paste event — insert all runes into filter
+		p.Filter += string(msg.Runes)
+		p.Selected = 0
+		items := p.FilteredItems()
+		if len(items) > 0 {
+			p.fireSelectionChange(0, items[0], ctx)
+		}
+		return nil
+	}
+
 	if len(s) == 1 && isPrintable(s) {
 		p.Filter += s
 		p.Selected = 0

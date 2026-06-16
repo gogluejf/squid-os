@@ -273,7 +273,7 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Handle character input for filter text
 		switch msg.Type {
 		case tea.KeyRunes:
-			m.historySearch.Filter(m.historySearch.FilterText() + string(msg.Runes[0]))
+			m.historySearch.Filter(m.historySearch.FilterText() + string(msg.Runes))
 			m.textarea.SetValue(m.historySearch.SelectedText())
 		case tea.KeySpace:
 			m.historySearch.Filter(m.historySearch.FilterText() + " ")

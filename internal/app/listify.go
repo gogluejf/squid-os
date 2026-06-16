@@ -80,10 +80,13 @@ func listify(ta textarea.Model) textarea.Model {
 			if cursorCol == 0 {
 				// Cursor at beginning of line content
 				if strings.TrimSpace(content) == "" {
-					// Empty line: insert a new empty numbered line here
+					// Empty line: treat like cursor at end — keep this line,
+					// append new empty numbered line below
 					result = append(result, fmtNumbered(nextNum, ""))
 					nextNum++
-					newCursorLine = i
+					result = append(result, fmtNumbered(nextNum, ""))
+					nextNum++
+					newCursorLine = i + 1
 					newCursorCol = 0
 				} else {
 					// Content exists: insert empty numbered line BEFORE this content

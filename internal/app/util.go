@@ -116,8 +116,8 @@ func (m *Model) SetAttachedImage(path string) {
 // adjusts and scrolls to bottom.
 func (m *Model) autoSizeTextarea() {
 	lines := m.textarea.LineCount()
-	if lines < 1 {
-		m.textarea.SetHeight(1)
+	if lines < 2 {
+		m.textarea.SetHeight(2)
 	} else if lines < m.textarea.MaxHeight {
 		m.textarea.SetHeight(lines)
 	} else {

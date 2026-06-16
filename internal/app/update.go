@@ -109,6 +109,9 @@ func (m *Model) recalcLayout() {
 // countLines returns the number of logical lines in a string (at least 1).
 func countLines(s string) int {
 	n := 1 + strings.Count(s, "\n")
+	if n < 2 { // minimum 2 lines
+		n = 2
+	}
 	if n > 20 { // matches MaxHeight
 		n = 20
 	}

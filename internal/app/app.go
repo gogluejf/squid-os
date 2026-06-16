@@ -85,7 +85,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	ta := textarea.New()
 
 	ta.ShowLineNumbers = false
-	ta.SetHeight(1)
+	ta.SetHeight(2)
 	ta.MaxHeight = 20
 	ta.Placeholder = "Type a message..."
 	ta.Focus()

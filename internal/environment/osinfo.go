@@ -36,7 +36,7 @@ func CollectOSInfo(workingDir string) OSInfo {
 // falls back to `find` for a flat listing limited to maxDepth levels.
 func GenerateTree(dir string, maxDepth int) string {
 	if runCommandSilent("tree", "--version") {
-		cmd := exec.Command("tree", "-d", "-a", "--gitignore", "-I", "data|node_modules|.git|.vscode|.idea|.cache|.next|.nuxt|.pytest_cache|.dart_tool|.gradle|.terraform|.parcel-cache|.eslintcache", "--dirsfirst", dir)
+		cmd := exec.Command("tree", "-d", "-a", "--gitignore", "-I", "data|node_modules|.git|.vscode|.idea|.cache|.next|.nuxt|.pytest_cache|.dart_tool|.gradle|.terraform|.parcel-cache|.eslintcache|vendor", "--dirsfirst", dir)
 		data, err := cmd.CombinedOutput()
 		// tree may exit non-zero (e.g., permission errors on some dirs) but still produce output
 		if err == nil || len(data) > 0 {
@@ -55,7 +55,7 @@ func GenerateTree(dir string, maxDepth int) string {
 		"!", "-path", "*/.nuxt/*", "!", "-path", "*/.pytest_cache/*",
 		"!", "-path", "*/.dart_tool/*", "!", "-path", "*/.gradle/*",
 		"!", "-path", "*/.terraform/*", "!", "-path", "*/.parcel-cache/*",
-		"!", "-path", "*/.eslintcache/*",
+		"!", "-path", "*/.eslintcache/*", "!", "-path", "*/vendor/*",
 		"-print")
 	data, err := find.Output()
 	if err != nil {

@@ -14,7 +14,9 @@ var numberRegex = regexp.MustCompile(`^(\d+)>\s?`)
 
 // listify applies sequential numbering to the textarea content.
 //
-// Behavior depends on cursor position:
+// If all lines are already properly numbered in sequence (1>, 2>, 3>...)
+// with no missing prefixes, just renumber — no new lines inserted.
+// Otherwise, insert a new numbered line based on cursor position:
 //
 //   - Cursor on empty line (or line with only whitespace):
 //     If it's the last line → append a new numbered item below.
@@ -27,7 +29,6 @@ var numberRegex = regexp.MustCompile(`^(\d+)>\s?`)
 //     suffix moves to next number.
 //
 //   - All lines are renumbered sequentially 1>, 2>, 3> regardless of prior state.
-//
 //   - If a line lost its number prefix (user deleted it), it gets a new one in sequence.
 //
 // Returns the new textarea model with updated value and cursor position.
@@ -45,6 +46,48 @@ func listify(ta textarea.Model) textarea.Model {
 	}
 	if cursorLine >= totalLines {
 		cursorLine = totalLines - 1
+	}
+
+	// Check if all lines are already properly numbered in sequence.
+	// If so, just renumber without inserting anything.
+	allNumbered := len(lines) > 0
+	if allNumbered {
+		for i, line := range lines {
+			expected := strconv.Itoa(i+1) + "> "
+			if !strings.HasPrefix(line, expected) && stripNumber(line) != line {
+				// Has some number prefix but wrong — needs fix
+				allNumbered = false
+				break
+			}
+			if strings.HasPrefix(line, expected) {
+				continue
+			}
+			// Line doesn't have a "N> " prefix at all
+			if numberRegex.MatchString(line) {
+				// Has a number prefix but not the expected one
+				allNumbered = false
+				break
+			}
+			// No number prefix — could be a plain content line or empty
+			// If there's actual content without a prefix, it's not properly numbered
+			if strings.TrimSpace(line) != "" {
+				allNumbered = false
+				break
+			}
+		}
+	}
+
+	if allNumbered {
+		// Just renumber — no new lines
+		var result []string
+		for i, line := range lines {
+			result = append(result, fmtNumbered(i+1, stripNumber(line)))
+		}
+		newValue := strings.Join(result, "\n")
+		ta.SetValue(newValue)
+		// Restore cursor position
+		placeCursor(ta, result, cursorLine, cursorCol)
+		return ta
 	}
 
 	// Get the raw content of the cursor line (strip number prefix if present)
@@ -128,30 +171,30 @@ func listify(ta textarea.Model) textarea.Model {
 	ta.SetValue(newValue)
 
 	// Move cursor to the target line
-	// After SetValue, the textarea resets to row 0, col 0.
-	if newCursorLine < 0 {
-		newCursorLine = 0
-	}
-	if newCursorLine >= len(result) {
-		newCursorLine = len(result) - 1
-	}
-
-	// Move to target line by calling CursorDown/Up
-	for ta.Line() < newCursorLine {
-		ta.CursorDown()
-	}
-	for ta.Line() > newCursorLine {
-		ta.CursorUp()
-	}
-
-	// newCursorCol is relative to the content (after "N> " prefix).
-	// SetCursor works on the full raw line, so add the prefix length.
-	targetLine := result[newCursorLine]
-	targetContent := stripNumber(targetLine)
-	prefixLen := len([]rune(targetLine)) - len([]rune(targetContent))
-	ta.SetCursor(prefixLen + newCursorCol)
+	placeCursor(ta, result, newCursorLine, newCursorCol)
 
 	return ta
+}
+
+// placeCursor positions the cursor on the given line at the given content column
+// (after the "N> " prefix).
+func placeCursor(ta textarea.Model, result []string, targetLine int, cursorCol int) {
+	if targetLine < 0 {
+		targetLine = 0
+	}
+	if targetLine >= len(result) {
+		targetLine = len(result) - 1
+	}
+	for ta.Line() < targetLine {
+		ta.CursorDown()
+	}
+	for ta.Line() > targetLine {
+		ta.CursorUp()
+	}
+	targetLineRaw := result[targetLine]
+	targetContent := stripNumber(targetLineRaw)
+	prefixLen := len([]rune(targetLineRaw)) - len([]rune(targetContent))
+	ta.SetCursor(prefixLen + cursorCol)
 }
 
 // stripNumber removes the "N> " prefix from a line, returning the content after it.

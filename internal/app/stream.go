@@ -326,7 +326,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 
 			m.stream.reset()
 			(&m).setChatMode()
-			return m, autoSaveCmd
+			return nm, autoSaveCmd
 		}
 
 		avgTokenPerSec := m.stream.metrics.AvgTokenPerSec()
@@ -385,12 +385,15 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		return m, waitForStreamEvent(m.stream.ch)
 	}
 
-	// ToolCalls flush: enrich partialTools with ID/Type.
+	// ToolCalls flush: enrich partialTools with ID/Type/Args.
+	// Use the repaired args from the flushed ToolCall — they've already
+	// been through jsonrepair in chat.flushToolCalls().
 	if len(event.ToolCalls) > 0 {
 		for i, tc := range event.ToolCalls {
 			if i < len(m.stream.partialTools) {
 				m.stream.partialTools[i].id = tc.ID
 				m.stream.partialTools[i].typeStr = tc.Type
+				m.stream.partialTools[i].args = tc.ArgsJSON
 			}
 		}
 	}
@@ -507,14 +510,24 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 
 		var args map[string]interface{}
 		if p.args != "" {
-			if err := json.Unmarshal([]byte(p.args), &args); err != nil {
-				entries[i].Execution.Status = tools.ResultStatusError
-				entries[i].Execution.Error = fmt.Sprintf("malformed tool arguments from model: %v", err)
-				for j := i + 1; j < len(entries); j++ {
-					entries[j].Execution.Status = tools.ResultStatusError
-					entries[j].Execution.Error = "cancelled: prior tool had malformed arguments"
+			argsJSON := p.args
+			if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+				// Try repairing malformed JSON before giving up
+				argsJSON, repaired := chat.RepairArgs(argsJSON)
+				if repaired {
+					if err2 := json.Unmarshal([]byte(argsJSON), &args); err2 != nil {
+						err = err2
+					}
 				}
-				break
+				if args == nil {
+					entries[i].Execution.Status = tools.ResultStatusError
+					entries[i].Execution.Error = fmt.Sprintf("malformed tool arguments from model: %v", err)
+					for j := i + 1; j < len(entries); j++ {
+						entries[j].Execution.Status = tools.ResultStatusError
+						entries[j].Execution.Error = "cancelled: prior tool had malformed arguments"
+					}
+					break
+				}
 			}
 		}
 

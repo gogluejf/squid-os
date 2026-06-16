@@ -405,9 +405,11 @@ type toolCallBuffer struct {
 	ArgsBuf strings.Builder
 }
 
-// repairArgs attempts to fix malformed JSON from the model's streamed arguments.
+// RepairArgs attempts to fix malformed JSON from the model's streamed arguments.
 // Returns the repaired string and whether it is now valid JSON.
-func repairArgs(args string) (string, bool) {
+// If repair fails completely, returns a sanitized version that is safe to embed
+// in API requests (won't cause HTTP 400 from invalid escape sequences).
+func RepairArgs(args string) (string, bool) {
 	if args == "" {
 		return args, false
 	}
@@ -418,13 +420,23 @@ func repairArgs(args string) (string, bool) {
 	}
 	// Try repair
 	repaired, err := jsonrepair.Repair(args)
-	if err != nil {
-		return args, false
+	if err == nil && repaired != "" {
+		if json.Unmarshal([]byte(repaired), &check) == nil {
+			return repaired, true
+		}
 	}
-	if json.Unmarshal([]byte(repaired), &check) == nil {
-		return repaired, true
+	// jsonrepair failed or produced unparseable output.
+	// Try closing an unclosed brace.
+	t := strings.TrimSpace(args)
+	if len(t) > 0 && t[0] == '{' && t[len(t)-1] != '}' {
+		closed := args + "}"
+		if json.Unmarshal([]byte(closed), &check) == nil {
+			return closed, true
+		}
 	}
-	return args, false
+	// Completely unrepairable. Return a safe placeholder so it doesn't
+	// break API requests when embedded in BuildAPIMessages.
+	return `{"_error": "malformed JSON from model, original args discarded"}`, false
 }
 
 // flushToolCalls converts buffered tool call deltas into ToolCall structs.
@@ -439,7 +451,7 @@ func flushToolCalls(buffers map[int]*toolCallBuffer) []ToolCall {
 		args := buf.ArgsBuf.String()
 
 		// Repair potentially malformed JSON from the model
-		args, _ = repairArgs(args)
+		args, _ = RepairArgs(args)
 
 		result = append(result, ToolCall{
 			ID:   buf.ID,
@@ -539,7 +551,7 @@ func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []c
 				for i, tc := range msg.ToolCalls {
 					args := tc.Instruction.Arguments
 					// Repair malformed arguments stored from previous turns
-					args, _ = repairArgs(args)
+					args, _ = RepairArgs(args)
 					cm.ToolCalls[i] = ToolCall{
 						ID:   tc.ID,
 						Type: tc.Type,

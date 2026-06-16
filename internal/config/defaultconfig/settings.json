@@ -1,0 +1,17 @@
+{
+  "provider": "vllm",
+  "model": "",
+  "thinking": false,
+  "system_prompt_file": "default.md",
+  "max_history": 500,
+  "last_session_name": "",
+  "auto_save": true,
+  "auto_load_last_session": true,
+  "context_window": 200000,
+  "debug_enabled": true,
+  "authorization": "auto",
+  "project_dir": "src",
+  "memory_dir": "memory",
+  "temp_folder": "tmp",
+  "documents_dir": "Documents/squid-os"
+}

@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 )
 
 type ProviderConfig struct {
@@ -15,27 +16,10 @@ type EndpointsConfig struct {
 	Providers []ProviderConfig `json:"providers"`
 }
 
-func DefaultEndpoints() EndpointsConfig {
-	return EndpointsConfig{
-		Providers: []ProviderConfig{
-			{
-				Name:      "vllm",
-				ChatURL:   "https://localhost/v1/chat/completions",
-				ModelsURL: "https://localhost/v1/models",
-			},
-			{
-				Name:      "ollama",
-				ChatURL:   "https://localhost/ollama/v1/chat/completions",
-				ModelsURL: "https://localhost/ollama/v1/models",
-			},
-		},
-	}
-}
-
-// LoadEndpoints loads endpoints.json or returns defaults
-func LoadEndpoints(p Paths) EndpointsConfig {
-	e := DefaultEndpoints()
-	data, err := os.ReadFile(p.EndpointsFile())
+// LoadEndpoints loads endpoints.json from the given config directory.
+func LoadEndpoints(cfgDir string) EndpointsConfig {
+	var e EndpointsConfig
+	data, err := os.ReadFile(filepath.Join(cfgDir, "endpoints.json"))
 	if err != nil {
 		return e
 	}

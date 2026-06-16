@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 )
 
 // Authorization modes
@@ -31,23 +32,6 @@ type Settings struct {
 	DocumentsDir string `json:"documents_dir"`  // default: "Documents/squid-os"
 }
 
-func DefaultSettings() Settings {
-	return Settings{
-		Provider:            "vllm",
-		Model:               "",
-		Thinking:            false,
-		MaxHistory:          500,
-		AutoSave:            true,
-		AutoLoadLastSession: true,
-		DebugEnabled:        true,
-		Authorization:       AuthorizationAuto,
-		ProjectDir:          "src",
-		MemoryDir:           "memory",
-		TempFolder:          "tmp",
-		DocumentsDir:        "Documents/squid-os",
-	}
-}
-
 // ValidateAuthorization returns the normalized authorization mode, falling back to auto.
 func (s Settings) ValidateAuthorization() string {
 	switch s.Authorization {
@@ -58,17 +42,14 @@ func (s Settings) ValidateAuthorization() string {
 	}
 }
 
-// LoadSettings loads settings.json or returns defaults
-func LoadSettings(p Paths) Settings {
-	s := DefaultSettings()
-	data, err := os.ReadFile(p.SettingsFile())
+// LoadSettings loads settings.json from the given config directory.
+func LoadSettings(cfgDir string) Settings {
+	var s Settings
+	data, err := os.ReadFile(filepath.Join(cfgDir, "settings.json"))
 	if err != nil {
 		return s
 	}
 	_ = json.Unmarshal(data, &s)
-	if s.MaxHistory <= 0 {
-		s.MaxHistory = 500
-	}
 	return s
 }
 

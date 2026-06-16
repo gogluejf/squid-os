@@ -1,0 +1,14 @@
+{
+  "providers": [
+    {
+      "name": "vllm",
+      "chat_completions_url": "https://localhost/vllm/v1/chat/completions",
+      "models_url": "https://localhost/vllm/v1/models"
+    },
+    {
+      "name": "ollama",
+      "chat_completions_url": "https://localhost/ollama/v1/chat/completions",
+      "models_url": "https://localhost/ollama/v1/models"
+    }
+  ]
+}

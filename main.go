@@ -47,31 +47,19 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	cfgDir := home + "/.config/squid-os"
 
-	defaultSettings := config.DefaultSettings()
-	paths := config.NewPaths(cfgDir, home, defaultSettings)
+	// Unpack embedded defaults on first run (before any other config load)
+	if err := config.InitConfig(cfgDir); err != nil {
+		return fmt.Errorf("init config: %w", err)
+	}
+
+	settings := config.LoadSettings(cfgDir)
+	paths := config.NewPaths(cfgDir, home, settings)
 	if err := paths.EnsureDirs(); err != nil {
 		return fmt.Errorf("create config dirs: %w", err)
 	}
 	log.Init(paths)
 
-	// Seed default config files on first run
-	if _, err := os.Stat(paths.EndpointsFile()); os.IsNotExist(err) {
-		_ = config.SaveEndpoints(paths, config.DefaultEndpoints())
-	}
-	if _, err := os.Stat(paths.SettingsFile()); os.IsNotExist(err) {
-		_ = config.SaveSettings(paths, config.DefaultSettings())
-	}
-	_ = config.SeedDefaultSystemPrompt(paths)
-
-	// Load config (always from files after seeding)
-	settings := config.LoadSettings(paths)
-
-	paths = config.NewPaths(cfgDir, home, settings)
-	if err := paths.EnsureDirs(); err != nil {
-		return fmt.Errorf("create domain dirs: %w", err)
-	}
-
-	endpoints := config.LoadEndpoints(paths)
+	endpoints := config.LoadEndpoints(cfgDir)
 	history := config.LoadHistory(paths)
 
 	log.SetEnabled(settings.DebugEnabled && !flagIncognito)

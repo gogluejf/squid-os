@@ -171,6 +171,8 @@ func fmtNumbered(num int, content string) string {
 // applyListify applies listify to the model's textarea.
 func (m *Model) applyListify() (tea.Model, tea.Cmd) {
 	m.textarea = listify(m.textarea)
+	m.autoSizeTextarea()
+	m.recalcLayout()
 	return m, nil
 }
 

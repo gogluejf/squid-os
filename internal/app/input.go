@@ -115,6 +115,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Cancel):
 		if m.textarea.Value() != "" {
 			m.textarea.SetValue("")
+			m.autoSizeTextarea()
 		} else {
 			_ = config.SaveHistory(m.paths, m.history)
 			return m, tea.Quit
@@ -147,6 +148,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case msg.Alt && msg.Type == tea.KeyEnter:
 		m.textarea.InsertRune('\n')
+		m.autoSizeTextarea()
 		return m, nil
 
 	case key.Matches(msg, keys.CycleSkill) && !msg.Alt:
@@ -176,8 +178,13 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.historyDown()
 
 	default:
+		oldLines := m.textarea.LineCount()
 		var cmd tea.Cmd
 		m.textarea, cmd = m.textarea.Update(msg)
+		// Resize if line count changed (e.g., backspace removing a line, Alt+Enter adding one)
+		if m.textarea.LineCount() != oldLines {
+			m.autoSizeTextarea()
+		}
 		// Reset history navigation when user starts typing (not cursor movement)
 		if m.historyIdx != -1 && !key.Matches(msg, keys.Left) && !key.Matches(msg, keys.Right) {
 			m.draft = ""
@@ -240,6 +247,7 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Escape), key.Matches(msg, keys.Cancel):
 		// Escape or Ctrl+C → restore original textarea content and exit search mode
 		m.textarea.SetValue(m.draft)
+		m.autoSizeTextarea()
 		m.mode = ModeChat
 		m.historySearch.Reset()
 		return m, m.setChatMode()
@@ -252,11 +260,13 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.historySearch.PrevMatch()
 		}
 		m.textarea.SetValue(m.historySearch.SelectedText())
+		m.autoSizeTextarea()
 		return m, nil
 
 	case key.Matches(msg, keys.Send), key.Matches(msg, keys.Left), key.Matches(msg, keys.Right):
 		// Enter, Left, or Right → confirm selection and keep text in textarea
 		m.textarea.SetValue(m.historySearch.SelectedText())
+		m.autoSizeTextarea()
 		m.mode = ModeChat
 		m.historySearch.Reset()
 		return m, m.setChatMode()
@@ -272,6 +282,7 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else {
 				m.textarea.SetValue(m.historySearch.SelectedText())
 			}
+			m.autoSizeTextarea()
 		}
 		return m, nil
 
@@ -285,6 +296,7 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.historySearch.Filter(m.historySearch.FilterText() + " ")
 			m.textarea.SetValue(m.historySearch.SelectedText())
 		}
+		m.autoSizeTextarea()
 		return m, nil
 	}
 }

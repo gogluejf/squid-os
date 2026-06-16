@@ -179,7 +179,6 @@ func (m *Model) setChatMode() tea.Cmd {
 	m.textarea.Placeholder = "Type a message..."
 	m.mode = ModeChat
 	m.textarea.Focus()
-	m.recalcLayout()
 	m.updateViewportContent()
 	return textarea.Blink
 }

@@ -58,7 +58,10 @@ func (m Model) View() string {
 
 // updateViewportContent rebuilds the viewport content from all current messages
 // plus any active streaming text, and scrolls to the bottom.
+// Always syncs textarea height first so layout reflects actual content.
 func (m *Model) updateViewportContent() {
+	m.recalcLayout()
+
 	var b strings.Builder
 
 	// Invalidate cache on width change

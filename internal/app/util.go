@@ -35,6 +35,7 @@ func (m Model) historyUp() (Model, tea.Cmd) {
 		if m.historyIdx > 0 {
 			m.historyIdx--
 			m.textarea.SetValue(m.history.Entries[m.historyIdx])
+			m.autoSizeTextarea()
 		}
 		return m, nil
 	}
@@ -48,6 +49,7 @@ func (m Model) historyUp() (Model, tea.Cmd) {
 	if m.textarea.Value() == "" && m.draft != "" {
 		m.textarea.SetValue(m.draft)
 		m.draft = ""
+		m.autoSizeTextarea()
 		return m, nil
 	}
 
@@ -56,6 +58,7 @@ func (m Model) historyUp() (Model, tea.Cmd) {
 	m.historyIdx = len(m.history.Entries) - 1
 	if m.historyIdx >= 0 {
 		m.textarea.SetValue(m.history.Entries[m.historyIdx])
+		m.autoSizeTextarea()
 	}
 	return m, nil
 }
@@ -71,11 +74,13 @@ func (m Model) historyDown() (Model, tea.Cmd) {
 		if m.historyIdx < len(m.history.Entries)-1 {
 			m.historyIdx++
 			m.textarea.SetValue(m.history.Entries[m.historyIdx])
+			m.autoSizeTextarea()
 		} else {
 			// At end of history, restore draft
 			m.textarea.SetValue(m.draft)
 			m.draft = ""
 			m.historyIdx = -1
+			m.autoSizeTextarea()
 		}
 		return m, nil
 	}
@@ -87,6 +92,7 @@ func (m Model) historyDown() (Model, tea.Cmd) {
 	}
 	m.draft = m.textarea.Value()
 	m.textarea.SetValue("")
+	m.autoSizeTextarea()
 	return m, nil
 }
 
@@ -102,6 +108,23 @@ func countTokensApprox(s string) int {
 // SetAttachedImage sets the image to attach to the next message (from --image flag).
 func (m *Model) SetAttachedImage(path string) {
 	m.attachedImage = path
+}
+
+// autoSizeTextarea adjusts the textarea height to match its content line count,
+// capped at MaxHeight (20). Call after SetValue when the content might have grown
+// or when restoring a block of text. Also recalculates layout so the viewport
+// adjusts and scrolls to bottom.
+func (m *Model) autoSizeTextarea() {
+	lines := m.textarea.LineCount()
+	if lines < 1 {
+		m.textarea.SetHeight(1)
+	} else if lines < m.textarea.MaxHeight {
+		m.textarea.SetHeight(lines)
+	} else {
+		m.textarea.SetHeight(m.textarea.MaxHeight)
+	}
+	m.recalcLayout()
+	m.updateViewportContent()
 }
 
 // formatContextLength returns a human-readable context window label (e.g. "128k", "32k").

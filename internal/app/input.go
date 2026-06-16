@@ -151,7 +151,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.autoSizeTextarea()
 		return m, nil
 
-	case key.Matches(msg, keys.CycleSkill) && !msg.Alt:
+	case key.Matches(msg, keys.CycleSkill):
 		return m.cycleSkill()
 
 	case msg.Type == tea.KeyTab && !msg.Alt:

@@ -110,8 +110,8 @@ var keys = keyMap{
 		key.WithHelp("esc", "back"),
 	),
 	CycleSkill: key.NewBinding(
-		key.WithKeys("ctrl+1"),
-		key.WithHelp("ctrl+1", "cycle skill"),
+		key.WithKeys("ctrl+k"),
+		key.WithHelp("ctrl+k", "cycle skill"),
 	),
 	Listify: key.NewBinding(
 		key.WithKeys("tab"),

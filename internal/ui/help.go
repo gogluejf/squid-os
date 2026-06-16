@@ -85,7 +85,7 @@ func RenderHelp(width, height int) string {
 		keyRow("ctrl+e", "Expand/collapse thinking & tool results"),
 		keyRow("ctrl+h", "Toggle this help"),
 		keyRow("alt+t", "Toggle thinking mode"),
-		keyRow("ctrl+1", "Cycle skill"),
+		keyRow("ctrl+k", "Cycle skill"),
 		keyRow("shift+tab", "Cycle authorization mode"),
 		keyRow("/", "Open command palette"),
 		keyRow("esc", "Close overlay / dismiss palette"),

@@ -152,6 +152,9 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.CycleSkill) && !msg.Alt:
 		return m.cycleSkill()
 
+	case msg.Type == tea.KeyTab && !msg.Alt:
+		return m.applyListify()
+
 	case key.Matches(msg, keys.Up):
 		// Only browse history if cursor is on the first line of the textarea
 		if m.textarea.Line() > 0 {
@@ -207,8 +210,11 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case matchCommandKey(msg) != "":
 		return m.executeCommandByName(matchCommandKey(msg))
 
-	case msg.Type == tea.KeyTab && !msg.Alt:
+	case key.Matches(msg, keys.CycleSkill):
 		return m.cycleSkill()
+
+	case msg.Type == tea.KeyTab && !msg.Alt:
+		return m.applyListify()
 
 	case m.handleViewportScroll(msg):
 		return m, nil

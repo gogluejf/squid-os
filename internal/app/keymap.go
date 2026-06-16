@@ -23,6 +23,7 @@ type keyMap struct {
 	Right         key.Binding
 	Escape        key.Binding
 	CycleSkill    key.Binding
+	Listify       key.Binding
 	ScrollUp      key.Binding
 	ScrollDown    key.Binding
 	PageUp        key.Binding
@@ -109,8 +110,12 @@ var keys = keyMap{
 		key.WithHelp("esc", "back"),
 	),
 	CycleSkill: key.NewBinding(
+		key.WithKeys("ctrl+1"),
+		key.WithHelp("ctrl+1", "cycle skill"),
+	),
+	Listify: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "cycle skill"),
+		key.WithHelp("tab", "numberize / next item"),
 	),
 	ScrollUp: key.NewBinding(
 		key.WithKeys("shift+up"),

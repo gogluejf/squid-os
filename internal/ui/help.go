@@ -82,29 +82,30 @@ func RenderHelp(width, height int) string {
 
 	// ── Chat + Streaming (always available) ──
 	b.WriteString(section("Chat & Streaming", []string{
-		keyRow("ctrl+e",    "Expand/collapse thinking & tool results"),
-		keyRow("ctrl+h",    "Toggle this help"),
-		keyRow("alt+t",     "Toggle thinking mode"),
-		keyRow("tab",       "Cycle skill"),
+		keyRow("ctrl+e", "Expand/collapse thinking & tool results"),
+		keyRow("ctrl+h", "Toggle this help"),
+		keyRow("alt+t", "Toggle thinking mode"),
+		keyRow("ctrl+1", "Cycle skill"),
 		keyRow("shift+tab", "Cycle authorization mode"),
+		keyRow("/", "Open command palette"),
+		keyRow("esc", "Close overlay / dismiss palette"),
 	}))
 	b.WriteString("\n\n")
 
 	// ── Chat ──
 	b.WriteString(section("Chat", []string{
-		keyRow("enter",        "Send message"),
+		keyRow("tab", "Numberize / next item"),
+		keyRow("enter", "Send message"),
 		keyRow("left alt+enter", "New line"),
-		keyRow("ctrl+c",       "Clear input / quit app"),
-		keyRow("ctrl+d",       "Destroy last message pair"),
-		keyRow("ctrl+u",       "Undo last destroy"),
-		keyRow("alt+i",        "Toggle incognito mode"),
-		keyRow("ctrl+r",       "Reverse search history"),
-		keyRow("shift+↑/↓",    "Scroll chat (3 lines)"),
-		keyRow("pgup/pgdn",    "Scroll chat (full page)"),
-		keyRow("scroll",       "Mouse wheel scrolls chat"),
-		keyRow("shift+drag",   "Select and copy text"),
-		keyRow("/",            "Open command palette"),
-		keyRow("esc",          "Close overlay / dismiss palette"),
+		keyRow("ctrl+c", "Clear input / quit app"),
+		keyRow("ctrl+d", "Destroy last message pair"),
+		keyRow("ctrl+u", "Undo last destroy"),
+		keyRow("alt+i", "Toggle incognito mode"),
+		keyRow("ctrl+r", "Reverse search history"),
+		keyRow("shift+↑/↓", "Scroll chat (3 lines)"),
+		keyRow("pgup/pgdn", "Scroll chat (full page)"),
+		keyRow("scroll", "Mouse wheel scrolls chat"),
+		keyRow("shift+drag", "Select and copy text"),
 	}))
 	b.WriteString("\n\n")
 
@@ -116,16 +117,16 @@ func RenderHelp(width, height int) string {
 
 	// ── Commands ──
 	b.WriteString(section("Commands (/)", []string{
-		cmdRowWithShortcut("/model",     "alt+m",     "Select model"),
-		cmdRowWithShortcut("/skill",     "alt+s",     "Activate skill (next turn)"),
-		cmdRowWithShortcut("/thinking",  "alt+t",     "Toggle thinking mode"),
+		cmdRowWithShortcut("/model", "alt+m", "Select model"),
+		cmdRowWithShortcut("/skill", "alt+s", "Activate skill (next turn)"),
+		cmdRowWithShortcut("/thinking", "alt+t", "Toggle thinking mode"),
 		cmdRowWithShortcut("/auth-mode", "shift+tab", "Cycle authorization mode"),
-		cmdRowWithShortcut("/save",      "ctrl+s",    "Save current session"),
-		cmdRowWithShortcut("/load",      "ctrl+l",    "Load a saved session"),
-		cmdRowWithShortcut("/clear",     "ctrl+n",    "Clear chat and start fresh"),
-		cmdRowWithShortcut("/help",      "ctrl+h",    "Show help"),
-		cmdRow("/system",    "Load system prompt"),
-		cmdRow("/exit",      "Exit squid-os"),
+		cmdRowWithShortcut("/save", "ctrl+s", "Save current session"),
+		cmdRowWithShortcut("/load", "ctrl+l", "Load a saved session"),
+		cmdRowWithShortcut("/clear", "ctrl+n", "Clear chat and start fresh"),
+		cmdRowWithShortcut("/help", "ctrl+h", "Show help"),
+		cmdRow("/system", "Load system prompt"),
+		cmdRow("/exit", "Exit squid-os"),
 	}))
 	b.WriteString("\n\n")
 

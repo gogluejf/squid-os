@@ -50,7 +50,6 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 				m.settings.SystemPromptFile = selected
 				_ = config.SaveSettings(m.paths, m.settings)
 			}
-			m.updateViewportContent()
 			return m.setChatMode()
 		},
 		OnCancel: func(ctx any) tea.Cmd {

@@ -29,7 +29,10 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 			m := ctx.(*Model)
 			nm, cmd := m.saveAs(value, false)
 			*m = nm
-			return tea.Batch(cmd, m.setChatMode())
+			if cmd != nil {
+				return tea.Batch(m.setChatMode(), cmd)
+			}
+			return m.setChatMode()
 		},
 		OnCancel: func(ctx any) tea.Cmd {
 			m := ctx.(*Model)
@@ -86,7 +89,6 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 	} else {
 		(&m).setNotification(ui.NotificationInfo, "new session started  ·  ctrl+s to save")
 	}
-	m.updateViewportContent()
 	return m, m.setChatMode()
 }
 
@@ -107,7 +109,6 @@ func (m Model) toggleIncognito() (Model, tea.Cmd) {
 	} else {
 		(&m).setNotification(ui.NotificationInfo, "incognito is off")
 	}
-	m.updateViewportContent()
 	return m, m.setChatMode()
 }
 
@@ -169,9 +170,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			m.session.setFrom(sf)
 			m.sessionSnapshot = nil
 			m.setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
-			cmd := m.setChatMode()
-			m.updateViewportContent()
-			return cmd
+			return m.setChatMode()
 		},
 		OnCancel: func(ctx any) tea.Cmd {
 			m := ctx.(*Model)
@@ -182,9 +181,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 					m.applyWorkingDir(m.session.file.Session.WorkingDir)
 				}
 			}
-			cmd := m.setChatMode()
-			m.updateViewportContent()
-			return cmd
+			return m.setChatMode()
 		},
 	}
 

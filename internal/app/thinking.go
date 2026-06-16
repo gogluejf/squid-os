@@ -13,7 +13,6 @@ func (m Model) toggleThinking() (Model, tea.Cmd) {
 	_ = config.SaveSettings(m.paths, m.settings)
 	(&m).session.updateConfigMsg(m.settings.Provider, m.settings.Model, m.settings.Thinking)
 	(&m).session.invalidateRenderAll()
-	(&m).updateViewportContent()
 	if m.settings.Thinking {
 		(&m).setNotification(ui.NotificationInfo, "thinking on")
 	} else {

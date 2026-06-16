@@ -141,7 +141,6 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 			if skillName != current {
 				m.setSkill(skillName)
 			}
-			m.updateViewportContent()
 			return m.setChatMode()
 		},
 		OnCancel: func(ctx any) tea.Cmd {

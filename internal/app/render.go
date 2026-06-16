@@ -135,8 +135,9 @@ func (m *Model) updateViewportContent() {
 		}))
 	}
 
-	// Show squid art when no user messages have been sent yet
-	if !m.session.hasUserMessage() && !m.stream.active {
+	// Show squid art when no user messages have been sent yet.
+	// Skip during component overlays — viewport is reduced, art would look wrong.
+	if !m.session.hasUserMessage() && !m.stream.active && m.mode != ModeComponent {
 		existingRows := strings.Count(b.String(), "\n")
 		b.WriteString(ui.RenderSquidArt(m.width, m.viewport.Height, existingRows))
 	}

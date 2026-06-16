@@ -171,12 +171,16 @@ func (m *Model) setAuthMode() tea.Cmd {
 	return q.BlinkCmd()
 }
 
-// setChatMode sets mode to ModeChat, resets the textarea placeholder, and recomputes layout.
+// setChatMode sets mode to ModeChat, resets the textarea placeholder, recomputes layout,
+// and re-renders the viewport. Callers should not call updateViewportContent() separately
+// after setChatMode — the layout must be recalculated first (to restore full viewport
+// height after component overlays) before rendering.
 func (m *Model) setChatMode() tea.Cmd {
 	m.textarea.Placeholder = "Type a message..."
 	m.mode = ModeChat
 	m.textarea.Focus()
 	m.recalcLayout()
+	m.updateViewportContent()
 	return textarea.Blink
 }
 
@@ -263,9 +267,8 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		m = nm
 
 		m.stream.reset()
-		cmd := (&m).setChatMode()
-		m.updateViewportContent()
-		return m, tea.Batch(cmd, autoSaveCmd)
+		(&m).setChatMode()
+		return m, autoSaveCmd
 	}
 
 	if event.Done {
@@ -292,10 +295,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			(&m).setNotification(ui.NotificationInfo, "stream cancelled")
 
 			m.stream.reset()
-			blinkCmd := (&m).setChatMode()
-			m.updateViewportContent()
+			(&m).setChatMode()
 			nm, autoSaveCmd := m.autoSave()
-			return nm, tea.Batch(blinkCmd, autoSaveCmd)
+			return nm, autoSaveCmd
 		}
 
 		// Detect silent failure: stream ended with no content and no stop reason.
@@ -323,9 +325,8 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			m = nm
 
 			m.stream.reset()
-			cmd := (&m).setChatMode()
-			m.updateViewportContent()
-			return m, tea.Batch(cmd, autoSaveCmd)
+			(&m).setChatMode()
+			return m, autoSaveCmd
 		}
 
 		avgTokenPerSec := m.stream.metrics.AvgTokenPerSec()
@@ -354,10 +355,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		})
 
 		m.stream.reset()
-		blinkCmd := (&m).setChatMode()
-		m.updateViewportContent()
+		(&m).setChatMode()
 		nm, autoSaveCmd := m.autoSave()
-		return nm, tea.Batch(blinkCmd, autoSaveCmd)
+		return nm, autoSaveCmd
 	}
 
 	// ToolCallDelta: accumulate per-tool state and update display.

@@ -85,7 +85,6 @@ func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
 					m.setNotification(ui.NotificationInfo, "switched to model: "+modelBasename(m.settings.Model))
 				}
 			}
-			m.updateViewportContent()
 			return m.setChatMode()
 		},
 		OnCancel: func(ctx any) tea.Cmd {

@@ -46,6 +46,5 @@ func (m Model) cycleAuthorization() (Model, tea.Cmd) {
 		config.AuthorizationAskForAll:  "ask-for-all — confirm every tool call",
 	}
 	(&m).setNotification(ui.NotificationInfo, "authorization: "+labels[next])
-	m.updateViewportContent()
 	return m, m.setChatMode()
 }

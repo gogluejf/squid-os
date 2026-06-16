@@ -220,9 +220,6 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.CycleSkill):
 		return m.cycleSkill()
 
-	case msg.Type == tea.KeyTab && !msg.Alt:
-		return m.applyListify()
-
 	case m.handleViewportScroll(msg):
 		return m, nil
 	}

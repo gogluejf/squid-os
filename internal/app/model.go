@@ -31,15 +31,20 @@ func (m Model) scanModelsCmd() tea.Cmd {
 // openModelPicker starts a model scan if we don't have cached entries,
 // or immediately shows the picker from cache.
 func (m Model) openModelPicker() (Model, tea.Cmd) {
-	if len(m.modelEntries) > 0 {
-		m = m.buildModelPicker(m.modelEntries)
-		return m, nil
-	}
-	return m, m.scanModelsCmd()
+	return m, (&m).showModelPicker()
 }
 
-// buildModelPicker constructs the Picker from a model entry list.
-func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
+// showModelPicker shows the model picker directly or triggers a scan first.
+func (m *Model) showModelPicker() tea.Cmd {
+	if len(m.modelEntries) > 0 {
+		m.buildModelPicker(m.modelEntries)
+		return nil
+	}
+	return m.scanModelsCmd()
+}
+
+// buildModelPicker constructs the Picker from a model entry list and sets it on the model.
+func (m *Model) buildModelPicker(entries []chat.ModelEntry) {
 	items := make([]component.PickerItem, 0, len(entries))
 	for _, e := range entries {
 		if e.NeedsConfig {
@@ -125,12 +130,12 @@ func (m Model) buildModelPicker(entries []chat.ModelEntry) Model {
 		},
 	}
 	m.pickerPayload = entries
-	(&m).refreshContextWindow(entries)
-	(&m).setComponent(&picker)
-	return m
+	m.refreshContextWindow(entries)
+	m.setComponent(&picker)
 }
 
 // onModelsLoaded handles the async scan result — builds the picker and caches entries.
 func (m Model) onModelsLoaded(msg modelsLoadedMsg) Model {
-	return m.buildModelPicker(msg.models)
+	(&m).buildModelPicker(msg.models)
+	return m
 }

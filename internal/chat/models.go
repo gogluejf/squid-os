@@ -222,12 +222,14 @@ func fetchModelsDetail(ctx context.Context, modelsURL string, provider provider.
 }
 
 // isAuthError returns true if the error indicates an authentication failure.
+// Only 401 is a clear auth failure.  403 can mean "insufficient scopes"
+// (e.g. ChatGPT subscription token hitting api.openai.com) — not a bad token.
 func isAuthError(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "401") || strings.Contains(msg, "403") ||
-		strings.Contains(msg, "unauthorized") || strings.Contains(msg, "forbidden") ||
+	return strings.Contains(msg, "401") ||
+		strings.Contains(msg, "unauthorized") ||
 		strings.Contains(msg, "no credentials")
 }

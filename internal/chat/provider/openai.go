@@ -54,7 +54,18 @@ func NewOpenAIProvider(settings *config.ProviderSettings) *OpenAIProvider {
 func (o *OpenAIProvider) Name() string                         { return config.ProviderOpenAI }
 func (o *OpenAIProvider) Dialect() config.Dialect              { return config.DialectOpenAICompatible }
 func (o *OpenAIProvider) SupportedAuth() []config.AuthMethod   { return []config.AuthMethod{config.AuthAPIKey, config.AuthOAuth} }
-func (o *OpenAIProvider) StaticModels() []string               { return nil }
+func (o *OpenAIProvider) StaticModels() []string {
+	return []string{
+		"gpt-4o",
+		"gpt-4o-mini",
+		"gpt-4.1",
+		"gpt-4.1-mini",
+		"gpt-4.5",
+		"gpt-5",
+		"gpt-5.4",
+		"gpt-5.4-mini",
+	}
+}
 func (o *OpenAIProvider) DefaultBaseURL() string               { return "https://api.openai.com" }
 func (o *OpenAIProvider) RequiresBaseURL() bool                { return false }
 
@@ -66,7 +77,10 @@ func (o *OpenAIProvider) GetChatURL() string {
 }
 
 func (o *OpenAIProvider) GetModelsURL() string {
-	return "https://api.openai.com/v1/models"
+	if o.creds().ActiveAuthMethod == config.AuthAPIKey {
+		return "https://api.openai.com/v1/models"
+	}
+	return ""
 }
 
 func (o *OpenAIProvider) PrepareRequest(req *http.Request) error {

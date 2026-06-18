@@ -27,31 +27,21 @@ const (
 )
 
 func init() {
-	RegisterMeta(ProviderMeta{
-		Name:          config.ProviderOpenAI,
-		ChatURL:       "https://api.openai.com/v1/chat/completions",
-		ModelsURL:     "https://api.openai.com/v1/models",
-		Dialect:       config.DialectOpenAICompatible,
-		SupportedAuth: []config.AuthMethod{config.AuthAPIKey, config.AuthOAuth},
-		New: func(creds *config.ProviderCreds) ProviderImpl {
-			return NewOpenAIProvider(creds)
-		},
+	Register(config.ProviderOpenAI, func(creds *config.ProviderCreds) Provider {
+		return NewOpenAIProvider(creds)
 	})
 }
 
-// OpenAIProvider implements ProviderImpl for OpenAI authentication.
+// OpenAIProvider implements Provider for OpenAI.
 type OpenAIProvider struct {
+	creds        *config.ProviderCreds
 	codeVerifier string
 	state        string
-	creds        *config.ProviderCreds
-
-	// Device auth fields
 	deviceAuthID string
 	userCode     string
-	pollInterval int // seconds
+	pollInterval int
 }
 
-// NewOpenAIProvider creates an OpenAIProvider from user settings.
 func NewOpenAIProvider(creds *config.ProviderCreds) *OpenAIProvider {
 	if creds == nil {
 		creds = &config.ProviderCreds{}
@@ -59,226 +49,31 @@ func NewOpenAIProvider(creds *config.ProviderCreds) *OpenAIProvider {
 	return &OpenAIProvider{creds: creds}
 }
 
-// StartOAuth returns the authorization URL the user must visit.
-func (o *OpenAIProvider) StartOAuth(redirectURI string) (string, error) {
-	o.codeVerifier = generatePKCEVerifier()
-	challenge := generateCodeChallenge(o.codeVerifier)
-	state := generateState()
-	o.state = state
+// --- Provider interface ---
 
-	params := url.Values{
-		"client_id":                 {openaiClientID},
-		"response_type":             {"code"},
-		"code_challenge":            {challenge},
-		"code_challenge_method":     {"S256"},
-		"redirect_uri":              {redirectURI},
-		"state":                     {state},
-		"scope":                     {"openid profile email offline_access"},
-		"codex_cli_simplified_flow": {"true"},
-		"id_token_add_organizations": {"true"},
-		"originator":                {"opencode"},
-	}
+func (o *OpenAIProvider) Name() string                         { return config.ProviderOpenAI }
+func (o *OpenAIProvider) Dialect() config.Dialect              { return config.DialectOpenAICompatible }
+func (o *OpenAIProvider) SupportedAuth() []config.AuthMethod   { return []config.AuthMethod{config.AuthAPIKey, config.AuthOAuth} }
+func (o *OpenAIProvider) StaticModels() []string               { return nil }
+func (o *OpenAIProvider) DefaultBaseURL() string               { return "https://api.openai.com" }
 
-	return openaiAuthURL + "?" + params.Encode(), nil
-}
-
-// FinishOAuth exchanges the authorization code for tokens.
-func (o *OpenAIProvider) FinishOAuth(code, redirectURI string) error {
-	if o.codeVerifier == "" {
-		return fmt.Errorf("openai: no PKCE code verifier — call StartOAuth first")
-	}
-
-	data := url.Values{
-		"grant_type":    {"authorization_code"},
-		"client_id":     {openaiClientID},
-		"code":          {code},
-		"code_verifier": {o.codeVerifier},
-		"redirect_uri":  {redirectURI},
-	}
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.PostForm(openaiTokenURL, data)
-	if err != nil {
-		return fmt.Errorf("openai token exchange failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("openai token exchange returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	var tokenResp struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int    `json:"expires_in"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return fmt.Errorf("openai token response parse error: %w", err)
-	}
-
-	o.creds.ActiveAuthMethod = config.AuthOAuth
-	o.creds.OAuth = &config.OAuthCreds{
-		AccessToken:  tokenResp.AccessToken,
-		RefreshToken: tokenResp.RefreshToken,
-		AccountID:    extractChatGPTAccountID(tokenResp.AccessToken),
-		ExpiresAt:    time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second),
-	}
-	o.codeVerifier = ""
-	return nil
-}
-
-// StartDeviceAuth initiates the device authorization flow. Returns the URL the
-// user must visit and a short user_code they must enter.  This flow works on
-// headless machines with no browser — the user visits the URL on any device.
-func (o *OpenAIProvider) StartDeviceAuth() (visitURL string, code string, err error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-
-	payload := []byte(`{"client_id":"` + openaiClientID + `"}`)
-	req, err := http.NewRequest("POST", openaiDeviceAuth, bytes.NewReader(payload))
-	if err != nil {
-		return "", "", fmt.Errorf("openai device auth request failed: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "squid-os")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", "", fmt.Errorf("openai device auth request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", "", fmt.Errorf("openai device auth returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	var deviceData struct {
-		DeviceAuthID string `json:"device_auth_id"`
-		UserCode     string `json:"user_code"`
-		Interval     string `json:"interval"` // seconds
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&deviceData); err != nil {
-		return "", "", fmt.Errorf("openai device auth response parse error: %w", err)
-	}
-
-	o.deviceAuthID = deviceData.DeviceAuthID
-	o.userCode = deviceData.UserCode
-	if deviceData.Interval == "" {
-		o.pollInterval = 5
-	} else {
-		o.pollInterval, _ = fmt.Sscanf(deviceData.Interval, "%d", &o.pollInterval)
-		if o.pollInterval < 1 {
-			o.pollInterval = 5
-		}
-	}
-
-	return openaiDeviceUser, deviceData.UserCode, nil
-}
-
-// PollDeviceAuth polls the device auth endpoint until the user has completed
-// authorization or an error occurs.  The pollInterval was set by StartDeviceAuth.
-func (o *OpenAIProvider) PollDeviceAuth() error {
-	client := &http.Client{Timeout: 15 * time.Second}
-
-	for {
-		payload := []byte(`{"device_auth_id":"` + o.deviceAuthID + `","user_code":"` + o.userCode + `"}`)
-		req, err := http.NewRequest("POST", openaiDeviceCode, bytes.NewReader(payload))
-		if err != nil {
-			return fmt.Errorf("openai device poll request failed: %w", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "squid-os")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return fmt.Errorf("openai device poll request failed: %w", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusOK {
-			// User completed auth — we get authorization_code + code_verifier
-			var deviceToken struct {
-				AuthorizationCode string `json:"authorization_code"`
-				CodeVerifier      string `json:"code_verifier"`
-			}
-			if err := json.NewDecoder(resp.Body).Decode(&deviceToken); err != nil {
-				return fmt.Errorf("openai device token parse error: %w", err)
-			}
-
-			// Exchange the authorization code for real tokens
-			data := url.Values{
-				"grant_type":    {"authorization_code"},
-				"code":          {deviceToken.AuthorizationCode},
-				"redirect_uri":  {openaiDeviceCallback},
-				"client_id":     {openaiClientID},
-				"code_verifier": {deviceToken.CodeVerifier},
-			}
-
-			tokenResp, err := client.PostForm(openaiTokenURL, data)
-			if err != nil {
-				return fmt.Errorf("openai token exchange failed: %w", err)
-			}
-			defer tokenResp.Body.Close()
-
-			if tokenResp.StatusCode != http.StatusOK {
-				body, _ := io.ReadAll(tokenResp.Body)
-				return fmt.Errorf("openai token exchange returned %d: %s", tokenResp.StatusCode, string(body))
-			}
-
-			var tr struct {
-				AccessToken  string `json:"access_token"`
-				RefreshToken string `json:"refresh_token"`
-				ExpiresIn    int    `json:"expires_in"`
-			}
-			if err := json.NewDecoder(tokenResp.Body).Decode(&tr); err != nil {
-				return fmt.Errorf("openai token response parse error: %w", err)
-			}
-
-			o.creds.ActiveAuthMethod = config.AuthOAuth
-			o.creds.OAuth = &config.OAuthCreds{
-				AccessToken:  tr.AccessToken,
-				RefreshToken: tr.RefreshToken,
-				AccountID:    extractChatGPTAccountID(tr.AccessToken),
-				ExpiresAt:    time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second),
-			}
-			return nil
-
-		} else if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound {
-			// User hasn't completed yet — keep polling
-			time.Sleep(time.Duration(o.pollInterval+3) * time.Second) // 3s safety margin
-			continue
-		} else {
-			body, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("openai device poll returned %d: %s", resp.StatusCode, string(body))
-		}
-	}
-}
-
-// GetChatURL returns the inference endpoint based on auth method.
 func (o *OpenAIProvider) GetChatURL(settings *config.ProviderSettings) string {
 	if settings != nil && settings.Credentials != nil && settings.Credentials.ActiveAuthMethod == config.AuthOAuth {
-		// OAuth tokens target the ChatGPT backend API
 		return "https://chatgpt.com/backend-api/codex/responses"
 	}
 	return "https://api.openai.com/v1/chat/completions"
 }
 
-// GetModelsURL returns the models listing URL.
 func (o *OpenAIProvider) GetModelsURL(settings *config.ProviderSettings) string {
 	return "https://api.openai.com/v1/models"
 }
 
-// PrepareRequest injects the Authorization header.
-// For OAuth tokens, also adds Codex-specific headers (Originator, User-Agent, Account-Id).
 func (o *OpenAIProvider) PrepareRequest(req *http.Request) error {
 	token := o.getCurrentToken()
 	if token == "" {
 		return fmt.Errorf("openai: no credentials configured")
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-
-	// Codex-specific headers only for OAuth tokens
 	if o.creds != nil && o.creds.ActiveAuthMethod == config.AuthOAuth {
 		req.Header.Set("Originator", "opencode")
 		req.Header.Set("User-Agent", "squid-os")
@@ -289,7 +84,6 @@ func (o *OpenAIProvider) PrepareRequest(req *http.Request) error {
 	return nil
 }
 
-// IsExpired returns true if OAuth credentials have expired.
 func (o *OpenAIProvider) IsExpired() bool {
 	if o.creds == nil || o.creds.OAuth == nil {
 		return false
@@ -297,7 +91,6 @@ func (o *OpenAIProvider) IsExpired() bool {
 	return time.Now().After(o.creds.OAuth.ExpiresAt.Add(-60 * time.Second))
 }
 
-// Refresh attempts to refresh OAuth tokens.
 func (o *OpenAIProvider) Refresh() error {
 	if o.creds == nil || o.creds.OAuth == nil || o.creds.OAuth.RefreshToken == "" {
 		return fmt.Errorf("openai: no refresh token available")
@@ -345,7 +138,197 @@ func (o *OpenAIProvider) Refresh() error {
 	return nil
 }
 
-// GetCredentials returns a copy of the current credentials for persistence.
+// --- Device auth ---
+
+func (o *OpenAIProvider) StartDeviceAuth() (visitURL string, code string, err error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	payload := []byte(`{"client_id":"` + openaiClientID + `"}`)
+	req, err := http.NewRequest("POST", openaiDeviceAuth, bytes.NewReader(payload))
+	if err != nil {
+		return "", "", fmt.Errorf("openai device auth request failed: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "squid-os")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("openai device auth request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", "", fmt.Errorf("openai device auth returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var deviceData struct {
+		DeviceAuthID string `json:"device_auth_id"`
+		UserCode     string `json:"user_code"`
+		Interval     string `json:"interval"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&deviceData); err != nil {
+		return "", "", fmt.Errorf("openai device auth response parse error: %w", err)
+	}
+
+	o.deviceAuthID = deviceData.DeviceAuthID
+	o.userCode = deviceData.UserCode
+	if deviceData.Interval == "" {
+		o.pollInterval = 5
+	} else {
+		o.pollInterval, _ = fmt.Sscanf(deviceData.Interval, "%d", &o.pollInterval)
+		if o.pollInterval < 1 {
+			o.pollInterval = 5
+		}
+	}
+
+	return openaiDeviceUser, deviceData.UserCode, nil
+}
+
+func (o *OpenAIProvider) PollDeviceAuth() error {
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	for {
+		payload := []byte(`{"device_auth_id":"` + o.deviceAuthID + `","user_code":"` + o.userCode + `"}`)
+		req, err := http.NewRequest("POST", openaiDeviceCode, bytes.NewReader(payload))
+		if err != nil {
+			return fmt.Errorf("openai device poll request failed: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "squid-os")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("openai device poll request failed: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			var deviceToken struct {
+				AuthorizationCode string `json:"authorization_code"`
+				CodeVerifier      string `json:"code_verifier"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&deviceToken); err != nil {
+				return fmt.Errorf("openai device token parse error: %w", err)
+			}
+
+			data := url.Values{
+				"grant_type":    {"authorization_code"},
+				"code":          {deviceToken.AuthorizationCode},
+				"redirect_uri":  {openaiDeviceCallback},
+				"client_id":     {openaiClientID},
+				"code_verifier": {deviceToken.CodeVerifier},
+			}
+
+			tokenResp, err := client.PostForm(openaiTokenURL, data)
+			if err != nil {
+				return fmt.Errorf("openai token exchange failed: %w", err)
+			}
+			defer tokenResp.Body.Close()
+
+			if tokenResp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(tokenResp.Body)
+				return fmt.Errorf("openai token exchange returned %d: %s", resp.StatusCode, string(body))
+			}
+
+			var tr struct {
+				AccessToken  string `json:"access_token"`
+				RefreshToken string `json:"refresh_token"`
+				ExpiresIn    int    `json:"expires_in"`
+			}
+			if err := json.NewDecoder(tokenResp.Body).Decode(&tr); err != nil {
+				return fmt.Errorf("openai token response parse error: %w", err)
+			}
+
+			o.creds.ActiveAuthMethod = config.AuthOAuth
+			o.creds.OAuth = &config.OAuthCreds{
+				AccessToken:  tr.AccessToken,
+				RefreshToken: tr.RefreshToken,
+				AccountID:    extractChatGPTAccountID(tr.AccessToken),
+				ExpiresAt:    time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second),
+			}
+			return nil
+
+		} else if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound {
+			time.Sleep(time.Duration(o.pollInterval+3) * time.Second)
+			continue
+		} else {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("openai device poll returned %d: %s", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// --- Standard OAuth ---
+
+func (o *OpenAIProvider) StartOAuth(redirectURI string) (string, error) {
+	o.codeVerifier = generatePKCEVerifier()
+	challenge := generateCodeChallenge(o.codeVerifier)
+	state := generateState()
+	o.state = state
+
+	params := url.Values{
+		"client_id":                 {openaiClientID},
+		"response_type":             {"code"},
+		"code_challenge":            {challenge},
+		"code_challenge_method":     {"S256"},
+		"redirect_uri":              {redirectURI},
+		"state":                     {state},
+		"scope":                     {"openid profile email offline_access"},
+		"codex_cli_simplified_flow": {"true"},
+		"id_token_add_organizations": {"true"},
+		"originator":                {"opencode"},
+	}
+
+	return openaiAuthURL + "?" + params.Encode(), nil
+}
+
+func (o *OpenAIProvider) FinishOAuth(code, redirectURI string) error {
+	if o.codeVerifier == "" {
+		return fmt.Errorf("openai: no PKCE code verifier — call StartOAuth first")
+	}
+
+	data := url.Values{
+		"grant_type":    {"authorization_code"},
+		"client_id":     {openaiClientID},
+		"code":          {code},
+		"code_verifier": {o.codeVerifier},
+		"redirect_uri":  {redirectURI},
+	}
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.PostForm(openaiTokenURL, data)
+	if err != nil {
+		return fmt.Errorf("openai token exchange failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("openai token exchange returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResp struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return fmt.Errorf("openai token response parse error: %w", err)
+	}
+
+	o.creds.ActiveAuthMethod = config.AuthOAuth
+	o.creds.OAuth = &config.OAuthCreds{
+		AccessToken:  tokenResp.AccessToken,
+		RefreshToken: tokenResp.RefreshToken,
+		AccountID:    extractChatGPTAccountID(tokenResp.AccessToken),
+		ExpiresAt:    time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second),
+	}
+	o.codeVerifier = ""
+	return nil
+}
+
+// --- Accessors ---
+
 func (o *OpenAIProvider) GetCredentials() *config.ProviderCreds {
 	if o.creds == nil {
 		return nil
@@ -360,6 +343,16 @@ func (o *OpenAIProvider) GetCredentials() *config.ProviderCreds {
 		}
 	}
 	return &creds
+}
+
+func (o *OpenAIProvider) CodeVerifier() string   { return o.codeVerifier }
+func (o *OpenAIProvider) SetCodeVerifier(v string) { o.codeVerifier = v }
+func (o *OpenAIProvider) State() string           { return o.state }
+func (o *OpenAIProvider) GetDeviceAuthID() string { return o.deviceAuthID }
+func (o *OpenAIProvider) SetDeviceState(id, code string) {
+	o.deviceAuthID = id
+	o.userCode = code
+	o.pollInterval = 5
 }
 
 func (o *OpenAIProvider) getCurrentToken() string {
@@ -380,8 +373,6 @@ func (o *OpenAIProvider) getCurrentToken() string {
 }
 
 func generatePKCEVerifier() string {
-	// RFC 7636: HIGH-ALPHA / LOW-ALPHA / DIGIT / "-" / "." / "_" / "~"
-	// Allowed chars: A-Z a-z 0-9 - . _ ~
 	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
 	b := make([]byte, 43)
 	rand.Read(b)
@@ -400,33 +391,4 @@ func generateState() string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
-}
-
-// CodeVerifier returns the PKCE code verifier generated during StartOAuth.
-// It is needed by the caller to pass it to FinishOAuth on the same instance.
-func (o *OpenAIProvider) CodeVerifier() string {
-	return o.codeVerifier
-}
-
-// SetCodeVerifier sets the PKCE code verifier directly. Used when the verifier
-// was generated in a previous step and needs to be restored on a new instance.
-func (o *OpenAIProvider) SetCodeVerifier(v string) {
-	o.codeVerifier = v
-}
-
-// SetDeviceState restores device auth state so a new instance can continue polling.
-func (o *OpenAIProvider) SetDeviceState(deviceAuthID, userCode string) {
-	o.deviceAuthID = deviceAuthID
-	o.userCode = userCode
-	o.pollInterval = 5
-}
-
-// GetDeviceAuthID returns the device auth ID for storing across wizard steps.
-func (o *OpenAIProvider) GetDeviceAuthID() string {
-	return o.deviceAuthID
-}
-
-// State returns the OAuth state parameter generated during StartOAuth.
-func (o *OpenAIProvider) State() string {
-	return o.state
 }

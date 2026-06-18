@@ -31,18 +31,18 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 		wg     sync.WaitGroup
 	)
 
-	for _, meta := range provider.AllMeta() {
+	for _, name := range provider.All() {
 		wg.Add(1)
-		go func(m provider.ProviderMeta) {
+		go func(name string) {
 			defer wg.Done()
 
 			// Look up user settings for this provider
-			settings := config.ResolveProviderSettings(endpoints, m.Name)
+			settings := config.ResolveProviderSettings(endpoints, name)
 			if settings == nil {
 				mu.Lock()
 				models = append(models, ModelEntry{
 					ID:          "<not configured>",
-					Provider:    m.Name,
+					Provider:    name,
 					NeedsConfig: true,
 				})
 				mu.Unlock()
@@ -51,48 +51,46 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 
 			s := *settings
 			if s.Name == "" {
-				s.Name = m.Name
+				s.Name = name
 			}
 
 			if !IsConfigured(s) {
 				mu.Lock()
 				models = append(models, ModelEntry{
 					ID:          "<not configured>",
-					Provider:    m.Name,
+					Provider:    name,
 					NeedsConfig: true,
 				})
 				mu.Unlock()
 				return
 			}
 
-			impl := LoadProviderImpl(s)
-			if impl == nil {
+			p := provider.Lookup(name, s.Credentials)
+			if p == nil {
 				mu.Lock()
 				models = append(models, ModelEntry{
 					ID:          "<not supported>",
-					Provider:    m.Name,
+					Provider:    name,
 					NeedsConfig: true,
 				})
 				mu.Unlock()
 				return
 			}
 
-			// 1. Add static models from meta (if any) — always available
-			if len(m.StaticModels) > 0 {
-				for _, id := range m.StaticModels {
-					mu.Lock()
-					models = append(models, ModelEntry{ID: id, Provider: m.Name})
-					mu.Unlock()
-				}
+			// 1. Add static models — always available
+			for _, id := range p.StaticModels() {
+				mu.Lock()
+				models = append(models, ModelEntry{ID: id, Provider: name})
+				mu.Unlock()
 			}
 
 			// 2. If there's a models URL, fetch and append (deduplicate)
-			modelsURL := impl.GetModelsURL(&s)
+			modelsURL := p.GetModelsURL(&s)
 			if modelsURL == "" {
 				return
 			}
 
-			entries, err := fetchModelsDetail(ctx, modelsURL, impl, m.Name)
+			entries, err := fetchModelsDetail(ctx, modelsURL, p, name)
 			if err != nil {
 				mu.Lock()
 				if isAuthError(err) {
@@ -104,13 +102,13 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 					}
 					models = append(models, ModelEntry{
 						ID:          label,
-						Provider:    m.Name,
+						Provider:    name,
 						NeedsConfig: true,
 					})
 				} else {
 					models = append(models, ModelEntry{
 						ID:          "<unreachable>",
-						Provider:    m.Name,
+						Provider:    name,
 						NeedsConfig: true,
 					})
 				}
@@ -119,10 +117,9 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 			}
 
 			mu.Lock()
-			// Deduplicate against already-added static models
 			existing := make(map[string]bool)
 			for _, e := range models {
-				if e.Provider == m.Name {
+				if e.Provider == name {
 					existing[e.ID] = true
 				}
 			}
@@ -132,7 +129,7 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 				}
 			}
 			mu.Unlock()
-		}(meta)
+		}(name)
 	}
 
 	wg.Wait()

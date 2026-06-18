@@ -29,21 +29,16 @@ func (m *Model) showProviderConfig(s *config.ProviderSettings) tea.Cmd {
 
 // ensureProviderConfigured checks if the active provider is configured and
 // credentials are valid. Returns (blocked, cmd).
-// Always shows the model picker when provider/model is not ready —
-// the picker has sentinel entries that route to the config wizard per provider.
 func (m *Model) ensureProviderConfigured() (bool, tea.Cmd) {
-	// No model selected — let the user pick
 	if m.settings.Model == "" {
 		return true, m.showModelPicker()
 	}
 
 	s := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
 	if s == nil || !chat.IsConfigured(*s) {
-		// Provider not configured — show model picker so user can choose/configure
 		return true, m.showModelPicker()
 	}
 
-	// Check if OAuth creds are expired and attempt auto-refresh
 	impl := chat.LoadProviderImpl(*s)
 	if impl != nil && impl.IsExpired() {
 		if err := impl.Refresh(); err != nil {
@@ -52,6 +47,9 @@ func (m *Model) ensureProviderConfigured() (bool, tea.Cmd) {
 		// Refresh succeeded — save updated creds
 		if openai, ok := impl.(*provider.OpenAIProvider); ok {
 			s.Credentials = openai.GetCredentials()
+			m.saveSettings(*s)
+		} else if codex, ok := impl.(*provider.CodexProvider); ok {
+			s.Credentials = codex.GetCredentials()
 			m.saveSettings(*s)
 		}
 	}
@@ -74,8 +72,8 @@ func (m *Model) ensureProviderConfigured() (bool, tea.Cmd) {
 // combination of providers: known vs custom, single vs multiple auth
 // methods, and the "none" method.
 func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence {
-	meta := chat.GetProviderMeta(s.Name)
-	authMethods := meta.SupportedAuth
+	p := chat.GetProviderMeta(s.Name)
+	authMethods := p.SupportedAuth()
 
 	steps := make(map[string]component.SequenceStep)
 
@@ -205,15 +203,33 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 		OnEnter: func(ctx any, r map[string]any) {
 			step := steps["oauthURL"]
 			if q, ok := step.Component.(*component.Question); ok {
-				o := provider.NewOpenAIProvider(nil)
-				visitURL, userCode, err := o.StartDeviceAuth()
-				if err != nil {
-					q.Description = fmt.Sprintf("Could not start device auth: %v", err)
-					return
+				var devAuth any
+				switch s.Name {
+				case config.ProviderOpenAICodex:
+					devAuth = provider.NewCodexProvider(nil)
+				default:
+					devAuth = provider.NewOpenAIProvider(nil)
 				}
-				q.Description = fmt.Sprintf("Visit this URL on any device (phone, laptop) and enter the code:\n\n  Code: %s\n  URL:  %s\n\nThen click below when you've entered it.", userCode, visitURL)
-				r["oauthDeviceAuthID"] = o.GetDeviceAuthID()
-				r["oauthUserCode"] = userCode
+				switch o := devAuth.(type) {
+				case *provider.OpenAIProvider:
+					visitURL, userCode, err := o.StartDeviceAuth()
+					if err != nil {
+						q.Description = fmt.Sprintf("Could not start device auth: %v", err)
+						return
+					}
+					q.Description = fmt.Sprintf("Visit this URL on any device (phone, laptop) and enter the code:\n\n  Code: %s\n  URL:  %s\n\nThen click below when you've entered it.", userCode, visitURL)
+					r["oauthDeviceAuthID"] = o.GetDeviceAuthID()
+					r["oauthUserCode"] = userCode
+				case *provider.CodexProvider:
+					visitURL, userCode, err := o.StartDeviceAuth()
+					if err != nil {
+						q.Description = fmt.Sprintf("Could not start device auth: %v", err)
+						return
+					}
+					q.Description = fmt.Sprintf("Visit this URL on any device (phone, laptop) and enter the code:\n\n  Code: %s\n  URL:  %s\n\nThen click below when you've entered it.", userCode, visitURL)
+					r["oauthDeviceAuthID"] = o.GetDeviceAuthID()
+					r["oauthUserCode"] = userCode
+				}
 			}
 			steps["oauthURL"] = step
 		},
@@ -239,16 +255,33 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 					q.Description = "Error: device auth state lost"
 					return
 				}
-				o := provider.NewOpenAIProvider(nil)
-				// Reconstruct internal state for polling
-				o.SetDeviceState(deviceAuthID, userCode)
-				if err := o.PollDeviceAuth(); err != nil {
-					q.Description = fmt.Sprintf("Authorization failed: %v", err)
-					r["oauthError"] = err.Error()
-					return
+				var devAuth any
+				switch s.Name {
+				case config.ProviderOpenAICodex:
+					devAuth = provider.NewCodexProvider(nil)
+				default:
+					devAuth = provider.NewOpenAIProvider(nil)
 				}
-				// Success — store credentials
-				r["oauthCreds"] = o.GetCredentials()
+				var creds *config.ProviderCreds
+				switch o := devAuth.(type) {
+				case *provider.OpenAIProvider:
+					o.SetDeviceState(deviceAuthID, userCode)
+					if err := o.PollDeviceAuth(); err != nil {
+						q.Description = fmt.Sprintf("Authorization failed: %v", err)
+						r["oauthError"] = err.Error()
+						return
+					}
+					creds = o.GetCredentials()
+				case *provider.CodexProvider:
+					o.SetDeviceState(deviceAuthID, userCode)
+					if err := o.PollDeviceAuth(); err != nil {
+						q.Description = fmt.Sprintf("Authorization failed: %v", err)
+						r["oauthError"] = err.Error()
+						return
+					}
+					creds = o.GetCredentials()
+				}
+				r["oauthCreds"] = creds
 				q.Description = "Authorization successful!"
 			}
 			steps["oauthCode"] = step
@@ -342,7 +375,7 @@ func (m *Model) onProviderConfigComplete(s *config.ProviderSettings, results map
 	}
 
 	meta := chat.GetProviderMeta(s.Name)
-	authMethods := meta.SupportedAuth
+	authMethods := meta.SupportedAuth()
 
 	// Determine active auth method
 	if item, ok := results["authPick"].(component.PickerItem); ok {

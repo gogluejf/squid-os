@@ -128,21 +128,17 @@ func NewEngine(settings *config.ProviderSettings, model string, thinking bool) *
 	if settings == nil {
 		return &Engine{settings: nil}
 	}
-	meta := provider.GetMeta(settings.Name)
 
+	p := provider.Lookup(settings.Name, settings.Credentials)
 	var a adapter.APIAdapter
-	switch meta.Dialect {
+	switch p.Dialect() {
 	case config.DialectOpenAICodex:
 		a = &adapter.CodexAdapter{}
 	default:
 		a = &adapter.ChatCompletionsAdapter{}
 	}
 
-	p := LoadProviderImpl(*settings)
-	chatURL := ""
-	if p != nil {
-		chatURL = p.GetChatURL(settings)
-	}
+	chatURL := p.GetChatURL(settings)
 
 	return &Engine{
 		settings: settings,

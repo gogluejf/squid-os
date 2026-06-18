@@ -8,50 +8,52 @@ import (
 )
 
 // ProviderImpl is an alias for the provider package's interface.
-type ProviderImpl = provider.ProviderImpl
+type ProviderImpl = provider.Provider
 
 // LoadProviderImpl creates a ProviderImpl from a provider name and user settings.
-// Uses the factory function registered in the provider's meta.
-// Returns nil if the dialect is not supported or no factory is registered.
+// Returns nil if the provider is not registered or has an unsupported dialect.
 func LoadProviderImpl(settings config.ProviderSettings) ProviderImpl {
-	meta := provider.GetMeta(settings.Name)
-
-	// Unsupported dialect
-	if meta.Dialect != config.DialectOpenAICompatible && meta.Dialect != config.DialectOpenAICodex {
+	p := provider.Lookup(settings.Name, settings.Credentials)
+	if p == nil {
 		return nil
 	}
 
-	// Use the factory from meta
-	if meta.New != nil {
-		return meta.New(settings.Credentials)
+	// Unsupported dialect
+	d := p.Dialect()
+	if d != config.DialectOpenAICompatible && d != config.DialectOpenAICodex {
+		return nil
 	}
-	return nil
+
+	return p
 }
 
 // NeedsURL returns true if the provider requires a user-provided base URL (not a known provider).
 func NeedsURL(settings config.ProviderSettings) bool {
-	meta := provider.GetMeta(settings.Name)
-	return meta.ChatURL == ""
+	p := provider.Lookup(settings.Name, nil)
+	if p == nil {
+		return true
+	}
+	return p.DefaultBaseURL() == ""
 }
 
 // DefaultBaseURL returns the default base URL from provider meta.
-// Returns empty string if the provider is a known provider with a hardcoded ChatURL.
 func DefaultBaseURL(name string) string {
-	return provider.GetMeta(name).DefaultBaseURL
+	p := provider.Lookup(name, nil)
+	if p == nil {
+		return ""
+	}
+	return p.DefaultBaseURL()
 }
 
 // IsConfigured checks if user settings have valid credentials.
-// Looks up supported auth methods from provider meta.
 func IsConfigured(settings config.ProviderSettings) bool {
-	meta := provider.GetMeta(settings.Name)
+	p := provider.Lookup(settings.Name, nil)
+	if p == nil || len(p.SupportedAuth()) == 0 {
+		return NeedsURL(settings) == false || settings.BaseURL != ""
+	}
 
 	if settings.Credentials == nil {
 		return false
-	}
-
-	if len(meta.SupportedAuth) == 0 {
-		// No auth needed — but may still need a URL
-		return NeedsURL(settings) == false || settings.BaseURL != ""
 	}
 
 	switch settings.Credentials.ActiveAuthMethod {
@@ -66,9 +68,9 @@ func IsConfigured(settings config.ProviderSettings) bool {
 	}
 }
 
-// GetProviderMeta returns the metadata for a provider.
-func GetProviderMeta(name string) provider.ProviderMeta {
-	return provider.GetMeta(name)
+// GetProviderMeta returns a provider instance for reading metadata.
+func GetProviderMeta(name string) provider.Provider {
+	return provider.Lookup(name, nil)
 }
 
 // UnsupportedDialectError returns a clear error for unsupported provider dialects.

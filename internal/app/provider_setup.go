@@ -27,22 +27,25 @@ func (m *Model) showProviderConfig(s *config.ProviderSettings) tea.Cmd {
 
 // ensureProviderConfigured checks if the active provider is configured and
 // credentials are valid. Returns (blocked, cmd).
+// Always shows the model picker when provider/model is not ready —
+// the picker has sentinel entries that route to the config wizard per provider.
 func (m *Model) ensureProviderConfigured() (bool, tea.Cmd) {
-	s := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
-	if s == nil {
-		// No settings entry — create one
-		s = &config.ProviderSettings{Name: m.settings.Provider}
+	// No model selected — let the user pick
+	if m.settings.Model == "" {
+		return true, m.showModelPicker()
 	}
 
-	if !chat.IsConfigured(*s) {
-		return true, m.showProviderConfig(s)
+	s := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
+	if s == nil || !chat.IsConfigured(*s) {
+		// Provider not configured — show model picker so user can choose/configure
+		return true, m.showModelPicker()
 	}
 
 	// Check if OAuth creds are expired and attempt auto-refresh
 	impl := chat.LoadProviderImpl(*s)
 	if impl != nil && impl.IsExpired() {
 		if err := impl.Refresh(); err != nil {
-			return true, m.showProviderConfig(s)
+			return true, m.showModelPicker()
 		}
 		// Refresh succeeded — save updated creds
 		if openai, ok := impl.(*provider.OpenAIProvider); ok {

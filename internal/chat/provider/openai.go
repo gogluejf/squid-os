@@ -28,6 +28,9 @@ func init() {
 		ModelsURL:     "https://api.openai.com/v1/models",
 		Dialect:       config.DialectOpenAICompatible,
 		SupportedAuth: []config.AuthMethod{config.AuthAPIKey, config.AuthOAuth},
+		New: func(creds *config.ProviderCreds) ProviderImpl {
+			return NewOpenAIProvider(creds)
+		},
 	})
 }
 

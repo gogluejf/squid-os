@@ -1,18 +1,27 @@
 package provider
 
 import (
+	"net/http"
 	"sync"
 
 	"squid-os/internal/config"
 )
 
+// ProviderImpl handles authentication preparation for a specific provider.
+type ProviderImpl interface {
+	PrepareRequest(req *http.Request) error
+	IsExpired() bool
+	Refresh() error
+}
+
 // ProviderMeta defines what a provider supports — read-only, defined in code.
 type ProviderMeta struct {
 	Name          string
-	ChatURL       string           // hardcoded for known providers, empty for custom
-	ModelsURL     string           // same
+	ChatURL       string
+	ModelsURL     string
 	Dialect       config.Dialect
 	SupportedAuth []config.AuthMethod
+	New           func(*config.ProviderCreds) ProviderImpl // factory; nil = unsupported
 }
 
 var (
@@ -20,7 +29,7 @@ var (
 	metaMu       sync.RWMutex
 )
 
-// RegisterMeta registers a provider's metadata. Called from each provider's init().
+// RegisterMeta registers a provider's metadata and factory. Called from each provider's init().
 func RegisterMeta(m ProviderMeta) {
 	metaMu.Lock()
 	defer metaMu.Unlock()

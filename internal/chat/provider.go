@@ -2,21 +2,17 @@ package chat
 
 import (
 	"fmt"
-	"net/http"
 
 	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
 )
 
-// ProviderImpl handles authentication preparation for a specific provider.
-type ProviderImpl interface {
-	PrepareRequest(req *http.Request) error
-	IsExpired() bool
-	Refresh() error
-}
+// ProviderImpl is an alias for the provider package's interface.
+type ProviderImpl = provider.ProviderImpl
 
 // LoadProviderImpl creates a ProviderImpl from a provider name and user settings.
-// Returns nil if the dialect is not supported (caller should check and handle).
+// Uses the factory function registered in the provider's meta.
+// Returns nil if the dialect is not supported or no factory is registered.
 func LoadProviderImpl(settings config.ProviderSettings) ProviderImpl {
 	meta := provider.GetMeta(settings.Name)
 
@@ -25,12 +21,11 @@ func LoadProviderImpl(settings config.ProviderSettings) ProviderImpl {
 		return nil
 	}
 
-	switch settings.Name {
-	case config.ProviderOpenAI:
-		return provider.NewOpenAIProvider(settings.Credentials)
-	default:
-		return provider.NewLocalProvider(settings.Credentials)
+	// Use the factory from meta
+	if meta.New != nil {
+		return meta.New(settings.Credentials)
 	}
+	return nil
 }
 
 // ResolveChatURL returns the chat completions URL for a provider.

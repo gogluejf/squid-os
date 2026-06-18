@@ -10,7 +10,7 @@ func init() {
 	RegisterMeta(ProviderMeta{
 		Name:          config.ProviderVLLM,
 		Dialect:       config.DialectOpenAICompatible,
-		SupportedAuth: []config.AuthMethod{config.AuthNone},
+		SupportedAuth: []config.AuthMethod{config.AuthNone, config.AuthAPIKey},
 	})
 	RegisterMeta(ProviderMeta{
 		Name:          config.ProviderOllama,
@@ -19,11 +19,23 @@ func init() {
 	})
 }
 
-// LocalProvider is a no-op provider for local backends (vllm, ollama) that don't require auth.
-type LocalProvider struct{}
+// LocalProvider is a local backend provider (vllm, ollama).
+// Supports optional API key auth via Bearer token.
+type LocalProvider struct {
+	creds *config.ProviderCreds
+}
 
-func (l *LocalProvider) PrepareRequest(req *http.Request) error { return nil }
-func (l *LocalProvider) GetAccessToken() string                { return "" }
-func (l *LocalProvider) NeedsAuth() bool                       { return false }
-func (l *LocalProvider) IsExpired() bool                       { return false }
-func (l *LocalProvider) Refresh() error                        { return nil }
+// NewLocalProvider creates a LocalProvider from user settings.
+func NewLocalProvider(creds *config.ProviderCreds) *LocalProvider {
+	return &LocalProvider{creds: creds}
+}
+
+func (l *LocalProvider) PrepareRequest(req *http.Request) error {
+	if l.creds != nil && l.creds.ActiveAuthMethod == config.AuthAPIKey && l.creds.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+l.creds.APIKey)
+	}
+	return nil
+}
+
+func (l *LocalProvider) IsExpired() bool { return false }
+func (l *LocalProvider) Refresh() error  { return nil }

@@ -11,8 +11,6 @@ import (
 // ProviderImpl handles authentication preparation for a specific provider.
 type ProviderImpl interface {
 	PrepareRequest(req *http.Request) error
-	GetAccessToken() string
-	NeedsAuth() bool
 	IsExpired() bool
 	Refresh() error
 }
@@ -31,7 +29,7 @@ func LoadProviderImpl(settings config.ProviderSettings) ProviderImpl {
 	case config.ProviderOpenAI:
 		return provider.NewOpenAIProvider(settings.Credentials)
 	default:
-		return &provider.LocalProvider{}
+		return provider.NewLocalProvider(settings.Credentials)
 	}
 }
 

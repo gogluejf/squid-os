@@ -115,16 +115,6 @@ func (o *OpenAIProvider) PrepareRequest(req *http.Request) error {
 	return nil
 }
 
-// GetAccessToken returns the current access token for logging/debugging.
-func (o *OpenAIProvider) GetAccessToken() string {
-	return o.getCurrentToken()
-}
-
-// NeedsAuth returns true if this provider requires authentication.
-func (o *OpenAIProvider) NeedsAuth() bool {
-	return true
-}
-
 // IsExpired returns true if OAuth credentials have expired.
 func (o *OpenAIProvider) IsExpired() bool {
 	if o.creds == nil || o.creds.OAuth == nil {

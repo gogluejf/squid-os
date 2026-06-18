@@ -18,9 +18,11 @@ func (m *Model) showProviderConfig(s *config.ProviderSettings) tea.Cmd {
 	seq := m.buildAuthWizard(s)
 	seq.Init(m)
 	m.setComponent(seq)
-	// Return blink cmd for Question components
-	if q, ok := seq.Steps[seq.Current].Component.(*component.Question); ok {
-		return q.BlinkCmd()
+	// Return blink cmd if the current step is a Question
+	if step, ok := seq.Steps[seq.Current]; ok {
+		if q, ok := step.Component.(*component.Question); ok {
+			return q.BlinkCmd()
+		}
 	}
 	return nil
 }
@@ -57,33 +59,89 @@ func (m *Model) ensureProviderConfigured() (bool, tea.Cmd) {
 	return false, nil
 }
 
-// buildAuthWizard creates a Sequence for provider configuration.
+// buildAuthWizard creates a Sequence (state machine) for provider configuration.
+//
+// Steps are declared by key and linked via OnAdvance callbacks:
+//
+//	baseURL  → Prompt to enter the provider base URL.
+//	authPick → Picker to choose the auth method (only when >1 method).
+//	apiKey   → Prompt to enter an API key.
+//	oauthURL → Question that shows the OAuth URL the user must open.
+//	oauthCode → Prompt to paste the authorization code.
+//	done     → Question with Confirm / Cancel and a summary description.
+//
+// The start key and OnAdvance routers make the flow work for every
+// combination of providers: known vs custom, single vs multiple auth
+// methods, and the "none" method.
 func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence {
 	meta := chat.GetProviderMeta(s.Name)
-	var steps []component.SequenceStep
+	authMethods := meta.SupportedAuth
 
-	// Step 1: BaseURL for providers that need it
+	steps := make(map[string]component.SequenceStep)
+
+	// --- Determine the start key ---
+	var startKey string
 	if chat.NeedsURL(*s) {
-		steps = append(steps, component.SequenceStep{
+		startKey = "baseURL"
+	} else if len(authMethods) > 1 {
+		startKey = "authPick"
+	} else if len(authMethods) == 1 {
+		startKey = methodKey(authMethods[0])
+	} else {
+		// No auth methods at all — just done
+		startKey = "done"
+	}
+
+	// --- Helper: build description for the done step ---
+	buildDoneDesc := func(r map[string]any) string {
+		var parts []string
+		parts = append(parts, fmt.Sprintf("Provider: %s", s.Name))
+		if url, ok := r["baseURL"].(string); ok && url != "" {
+			parts = append(parts, fmt.Sprintf("Base URL: %s", url))
+		}
+		if s.Credentials != nil {
+			parts = append(parts, fmt.Sprintf("Auth: %s", s.Credentials.ActiveAuthMethod))
+		} else if method, ok := r["authPick"].(component.PickerItem); ok {
+			parts = append(parts, fmt.Sprintf("Auth: %s", method.Value))
+		}
+		if key, ok := r["apiKey"].(string); ok && key != "" {
+			parts = append(parts, fmt.Sprintf("Key: %s", maskKey(key)))
+		}
+		if code, ok := r["oauthCode"].(string); ok && code != "" {
+			parts = append(parts, "Auth: OAuth (token received)")
+		}
+		return strings.Join(parts, "\n")
+	}
+
+	// --- Step: baseURL ---
+	if chat.NeedsURL(*s) {
+		steps["baseURL"] = component.SequenceStep{
 			Key: "baseURL",
 			Component: &component.Prompt{
 				Title:       fmt.Sprintf("Configure %s", s.Name),
-				Description: "The base URL of your inference provider (e.g. https://localhost:8080)",
+				Description: "Enter the base URL of your inference provider (e.g. https://localhost:8080)",
 				Label:       "Base URL: ",
 			},
-		})
+			OnAdvance: func(ctx any, r map[string]any) string {
+				// Determine next step based on auth methods
+				if len(authMethods) > 1 {
+					return "authPick"
+				} else if len(authMethods) == 1 {
+					return methodKey(authMethods[0])
+				}
+				return "done"
+			},
+		}
 	}
 
-	authMethods := meta.SupportedAuth
-
-	// Step 2: Auth method picker (if multiple methods available)
+	// --- Step: authPick (only when >1 method) ---
 	if len(authMethods) > 1 {
 		methodLabels := make([]string, len(authMethods))
 		for i, a := range authMethods {
 			methodLabels[i] = string(a)
 		}
-		steps = append(steps, component.SequenceStep{
-			Key: "authMethod",
+		steps["authPick"] = component.SequenceStep{
+			Key: "authPick",
 			Component: &component.Picker{
 				Title: fmt.Sprintf("Auth method for %s", s.Name),
 				Items: func() []component.PickerItem {
@@ -94,71 +152,101 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 					return items
 				}(),
 			},
-		})
-
-		// Credential entry steps for both methods
-		steps = append(steps, component.SequenceStep{
-			Key: "apiKey",
-			Component: &component.Prompt{
-				Title: fmt.Sprintf("API key for %s", s.Name),
-				Label: "Key: ",
+			OnAdvance: func(ctx any, r map[string]any) string {
+				// Route to the chosen method's step
+				if item, ok := r["authPick"].(component.PickerItem); ok {
+					return methodKey(config.AuthMethod(item.Value))
+				}
+				return "done"
 			},
-		})
-		steps = append(steps, component.SequenceStep{
-			Key: "oauthURL",
-			Component: &component.Prompt{
-				Title: fmt.Sprintf("OAuth for %s", s.Name),
-				Label: "Auth code: ",
-			},
-		})
-	} else if len(authMethods) == 1 {
-		method := authMethods[0]
-		if method == config.AuthAPIKey {
-			steps = append(steps, component.SequenceStep{
-				Key: "apiKey",
-				Component: &component.Prompt{
-					Title: fmt.Sprintf("API key for %s", s.Name),
-					Label: "Key: ",
-				},
-			})
-		} else if method == config.AuthOAuth {
-			steps = append(steps, component.SequenceStep{
-				Key: "oauthURL",
-				Component: &component.Question{
-					Title:       fmt.Sprintf("OAuth for %s", s.Name),
-					Description: "Open this URL in your browser, log in, then paste the authorization code:\n\n" + getOpenAIAuthURL("http://localhost:8080/callback"),
-					Options:     []string{"I've pasted the code below"},
-				},
-			})
-			steps = append(steps, component.SequenceStep{
-				Key: "oauthCode",
-				Component: &component.Prompt{
-					Title: "Paste authorization code",
-					Label: "Code: ",
-				},
-			})
-		} else if method == config.AuthNone {
-			steps = append(steps, component.SequenceStep{
-				Key: "confirm",
-				Component: &component.Question{
-					Title:   fmt.Sprintf("%s configured", s.Name),
-					Options: []string{"Done"},
-				},
-			})
 		}
-	} else {
-		steps = append(steps, component.SequenceStep{
-			Key: "confirm",
-			Component: &component.Question{
-				Title:   fmt.Sprintf("%s configured", s.Name),
-				Options: []string{"Done"},
-			},
-		})
 	}
 
+	// --- Step: apiKey ---
+	steps["apiKey"] = component.SequenceStep{
+		Key: "apiKey",
+		Component: &component.Prompt{
+			Title:       fmt.Sprintf("API Key for %s", s.Name),
+			Description: "Enter your API key for this provider",
+			Label:       "Key: ",
+		},
+		OnAdvance: func(ctx any, r map[string]any) string {
+			return "done"
+		},
+	}
+
+	// --- Step: oauthURL ---
+	steps["oauthURL"] = component.SequenceStep{
+		Key: "oauthURL",
+		Component: &component.Question{
+			Title:       fmt.Sprintf("OAuth for %s", s.Name),
+			Description: "Loading auth URL...",
+			Options:     []string{"Continue"},
+		},
+		OnEnter: func(ctx any, r map[string]any) {
+			// Set the actual OAuth URL dynamically before the step renders
+			step := steps["oauthURL"]
+			if q, ok := step.Component.(*component.Question); ok {
+				o := provider.NewOpenAIProvider(nil)
+				url, err := o.StartOAuth("http://localhost:8080/callback")
+				if err != nil {
+					q.Description = fmt.Sprintf("Could not generate auth URL: %v", err)
+				} else {
+					q.Description = "Open this URL in your browser, log in, then paste the authorization code below:\n\n" + url
+				}
+			}
+			steps["oauthURL"] = step
+		},
+		OnAdvance: func(ctx any, r map[string]any) string {
+			return "oauthCode"
+		},
+	}
+
+	// --- Step: oauthCode ---
+	steps["oauthCode"] = component.SequenceStep{
+		Key: "oauthCode",
+		Component: &component.Prompt{
+			Title:       "Authorization Code",
+			Description: "Paste the authorization code from the browser redirect",
+			Label:       "Code: ",
+		},
+		OnAdvance: func(ctx any, r map[string]any) string {
+			return "done"
+		},
+	}
+
+	// --- Step: done (summary + confirm/cancel) ---
+	steps["done"] = component.SequenceStep{
+		Key: "done",
+		Component: &component.Question{
+			Title:   "Confirm Configuration",
+			Options: []string{"Confirm", "Cancel"},
+		},
+		OnEnter: func(ctx any, r map[string]any) {
+			// Build the summary description dynamically before rendering
+			step := steps["done"]
+			if q, ok := step.Component.(*component.Question); ok {
+				q.Description = buildDoneDesc(r)
+			}
+			steps["done"] = step
+		},
+		OnAdvance: func(ctx any, r map[string]any) string {
+			// Selection 0 = Confirm → finish ("")
+			// Selection 1 = Cancel → signal via result
+			if qr, ok := r["done"].(component.QuestionResult); ok {
+				if qr.Selection == 1 {
+					r["cancelled"] = true
+				}
+			}
+			return "" // end sequence
+		},
+	}
+
+	// --- Wire up the Sequence ---
 	seq := &component.Sequence{
-		Steps:  steps,
-		Result: make(map[string]any),
+		Steps:    steps,
+		StartKey: startKey,
+		Result:   make(map[string]any),
 		OnDone: func(ctx any, results map[string]any) tea.Cmd {
 			model := ctx.(*Model)
 			return model.onProviderConfigComplete(s, results)
@@ -172,19 +260,38 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 	return seq
 }
 
-func getOpenAIAuthURL(redirectURI string) string {
-	o := provider.NewOpenAIProvider(nil)
-	url, err := o.StartOAuth(redirectURI)
-	if err != nil {
-		return fmt.Sprintf("Could not generate auth URL: %v", err)
+// methodKey returns the step key for a given auth method.
+func methodKey(m config.AuthMethod) string {
+	switch m {
+	case config.AuthNone:
+		return "done"
+	case config.AuthAPIKey:
+		return "apiKey"
+	case config.AuthOAuth:
+		return "oauthURL"
+	default:
+		return "done"
 	}
-	return url
+}
+
+// maskKey masks an API key, showing only the first and last 4 characters.
+func maskKey(key string) string {
+	if len(key) <= 8 {
+		return "****"
+	}
+	runes := []rune(key)
+	return string(runes[:4]) + "..." + string(runes[len(runes)-4:])
 }
 
 // onProviderConfigComplete applies the wizard results to provider settings and saves.
-func (m *Model) onProviderConfigComplete(s *config.ProviderSettings, ctx map[string]any) tea.Cmd {
+func (m *Model) onProviderConfigComplete(s *config.ProviderSettings, results map[string]any) tea.Cmd {
+	// Check if user cancelled
+	if cancelled, ok := results["cancelled"].(bool); ok && cancelled {
+		return m.setChatMode()
+	}
+
 	// Apply BaseURL
-	if baseURL, ok := ctx["baseURL"].(string); ok && baseURL != "" {
+	if baseURL, ok := results["baseURL"].(string); ok && baseURL != "" {
 		s.BaseURL = strings.TrimSpace(baseURL)
 		if !strings.HasPrefix(s.BaseURL, "http") {
 			s.BaseURL = "https://" + s.BaseURL
@@ -194,25 +301,16 @@ func (m *Model) onProviderConfigComplete(s *config.ProviderSettings, ctx map[str
 	meta := chat.GetProviderMeta(s.Name)
 	authMethods := meta.SupportedAuth
 
-	// Apply auth method
-	if method, ok := ctx["authMethod"].(component.PickerItem); ok {
+	// Determine active auth method
+	if item, ok := results["authPick"].(component.PickerItem); ok {
 		s.Credentials = &config.ProviderCreds{
-			ActiveAuthMethod: config.AuthMethod(method.Value),
+			ActiveAuthMethod: config.AuthMethod(item.Value),
 		}
-	} else if methodStr, ok := ctx["authMethod"].(string); ok {
-		s.Credentials = &config.ProviderCreds{
-			ActiveAuthMethod: config.AuthMethod(methodStr),
-		}
-	}
-
-	// If no credentials set yet but we have auth methods
-	if s.Credentials == nil && len(authMethods) == 1 {
+	} else if len(authMethods) == 1 {
 		s.Credentials = &config.ProviderCreds{
 			ActiveAuthMethod: authMethods[0],
 		}
-	}
-
-	if s.Credentials == nil {
+	} else if s.Credentials == nil {
 		s.Credentials = &config.ProviderCreds{
 			ActiveAuthMethod: config.AuthNone,
 		}
@@ -220,17 +318,12 @@ func (m *Model) onProviderConfigComplete(s *config.ProviderSettings, ctx map[str
 
 	switch s.Credentials.ActiveAuthMethod {
 	case config.AuthAPIKey:
-		if key, ok := ctx["apiKey"].(string); ok {
+		if key, ok := results["apiKey"].(string); ok {
 			s.Credentials.APIKey = strings.TrimSpace(key)
 		}
 	case config.AuthOAuth:
-		var code string
-		if c, ok := ctx["oauthCode"].(string); ok && c != "" {
-			code = c
-		} else if c, ok := ctx["oauthURL"].(string); ok && c != "" {
-			code = c
-		}
-		if code != "" {
+		code, ok := results["oauthCode"].(string)
+		if ok && code != "" {
 			o := provider.NewOpenAIProvider(s.Credentials)
 			if _, err := o.StartOAuth("http://localhost:8080/callback"); err != nil {
 				m.setNotification(ui.NotificationError, fmt.Sprintf("Failed to start OAuth: %v", err))

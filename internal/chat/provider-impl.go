@@ -17,7 +17,7 @@ func LoadProviderImpl(settings config.ProviderSettings) ProviderImpl {
 	meta := provider.GetMeta(settings.Name)
 
 	// Unsupported dialect
-	if meta.Dialect != config.DialectOpenAICompatible {
+	if meta.Dialect != config.DialectOpenAICompatible && meta.Dialect != config.DialectOpenAICodex {
 		return nil
 	}
 
@@ -30,13 +30,10 @@ func LoadProviderImpl(settings config.ProviderSettings) ProviderImpl {
 
 // ResolveChatURL returns the chat completions URL for a provider.
 // Uses hardcoded URL from meta for known providers, or BaseURL from settings for custom.
-// For OpenAI Codex OAuth, redirects to the ChatGPT backend API.
+// Deprecated: Engine now uses the adapter to determine the URL directly.
+// Kept for backward compatibility in places that don't use Engine.
 func ResolveChatURL(settings config.ProviderSettings) string {
 	meta := provider.GetMeta(settings.Name)
-	if settings.Name == config.ProviderOpenAI && settings.Credentials != nil && settings.Credentials.ActiveAuthMethod == config.AuthOAuth {
-		// Codex OAuth tokens target the ChatGPT backend API, not the Platform API
-		return "https://chatgpt.com/backend-api/codex/responses"
-	}
 	if meta.ChatURL != "" {
 		return meta.ChatURL
 	}

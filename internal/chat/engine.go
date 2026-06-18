@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"squid-os/internal/chat/adapter"
+	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
 	"squid-os/internal/log"
 	"squid-os/internal/tools"
@@ -29,6 +31,8 @@ type StreamEvent struct {
 	ToolCallDelta string     // incremental arg fragment for timing/token tracking
 	ToolCallIdx   int        // tool call index this delta belongs to
 	ToolCallName  string     // accumulated name so far for this tool call
+	ToolCallID    string     // tool call ID from adapter
+	ToolCallType  string     // tool call type from adapter
 }
 
 // ToolCall represents a single tool call from the model.
@@ -109,13 +113,14 @@ type sseResponse struct {
 	Choices []sseChoice `json:"choices"`
 }
 
-// Engine manages chat inference against an OpenAI-compatible endpoint
+// Engine manages chat inference against a provider endpoint
 type Engine struct {
 	settings *config.ProviderSettings
 	ChatURL  string
 	Model    string
 	Thinking bool
 	provider ProviderImpl
+	adapter  adapter.APIAdapter
 	client   *http.Client
 }
 
@@ -123,14 +128,25 @@ func NewEngine(settings *config.ProviderSettings, model string, thinking bool) *
 	if settings == nil {
 		return &Engine{settings: nil}
 	}
+	meta := provider.GetMeta(settings.Name)
+
+	var a adapter.APIAdapter
+	switch meta.Dialect {
+	case config.DialectOpenAICodex:
+		a = &adapter.CodexAdapter{}
+	default:
+		a = &adapter.ChatCompletionsAdapter{}
+	}
+
 	return &Engine{
 		settings: settings,
-		ChatURL:  ResolveChatURL(*settings),
+		ChatURL:  a.GetChatURL(settings),
 		Model:    model,
 		Thinking: thinking,
 		provider: LoadProviderImpl(*settings),
+		adapter:  a,
 		client: &http.Client{
-			Timeout: 0, // no timeout for streaming
+			Timeout: 0,
 		},
 	}
 }
@@ -172,24 +188,16 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 	go func() {
 		defer close(ch)
 
-		reqBody := chatRequest{
-			Model:    e.Model,
-			Stream:   true,
-			Messages: messages,
-		}
-
-		if len(toolDefs) > 0 {
-			reqBody.Tools = toolsToDefinitions(toolDefs)
-			reqBody.ToolChoice = "auto"
-		}
-
-		reqBody.ChatTemplateKwargs = map[string]interface{}{
-			"enable_thinking": e.Thinking,
-		}
-
-		body, err := json.Marshal(reqBody)
+		// Serialize messages to JSON for the adapter
+		messagesJSON, err := json.Marshal(messages)
 		if err != nil {
-			// Return: Failed to marshal request body to JSON
+			ch <- StreamEvent{Error: fmt.Errorf("marshal messages: %w", err)}
+			return
+		}
+
+		// Build request body using adapter
+		body, err := e.adapter.BuildBody(e.Model, messagesJSON, toolDefs, e.Thinking)
+		if err != nil {
 			ch <- StreamEvent{Error: fmt.Errorf("marshal request: %w", err)}
 			return
 		}
@@ -331,20 +339,14 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 				return
 			}
 
-			var sse sseResponse
-			if err := json.Unmarshal([]byte(payload), &sse); err != nil {
+			// Use adapter to parse SSE event
+			evt := e.adapter.ParseSSE(payload)
+			if evt == nil {
 				continue
 			}
 
-			if len(sse.Choices) == 0 {
-				continue
-			}
-
-			choice := sse.Choices[0]
-
-			// Flush parser carry before tool call deltas so buffered text doesn't
-			// linger and get emitted after tool call timing has started.
-			if len(choice.Delta.ToolCalls) > 0 {
+			// Handle done event
+			if evt.Done {
 				result := parser.Flush()
 				if result.Text != "" || result.Thinking != "" {
 					ch <- StreamEvent{
@@ -353,42 +355,61 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 						InThinking: parser.InThink,
 					}
 				}
+				if evt.StopReason == "tool_calls" && len(toolBuffers) > 0 {
+					tc := flushToolCalls(toolBuffers)
+					ch <- StreamEvent{ToolCalls: tc}
+				}
+				ch <- StreamEvent{Done: true, StopReason: evt.StopReason}
+				return
 			}
 
-			// Process tool call deltas
-			for _, tc := range choice.Delta.ToolCalls {
-				buf, ok := toolBuffers[tc.Index]
+			// Handle tool call deltas from adapter
+			if evt.ToolCallDelta != "" || evt.ToolCallName != "" {
+				// Flush parser carry before tool call deltas
+				result := parser.Flush()
+				if result.Text != "" || result.Thinking != "" {
+					ch <- StreamEvent{
+						Text:       result.Text,
+						Thinking:   result.Thinking,
+						InThinking: parser.InThink,
+					}
+				}
+
+				// For Codex adapter, we may not have index — use a single buffer
+				idx := 0
+				if evt.ToolCallIdx > 0 {
+					idx = evt.ToolCallIdx
+				}
+				buf, ok := toolBuffers[idx]
 				if !ok {
 					buf = &toolCallBuffer{}
-					toolBuffers[tc.Index] = buf
+					toolBuffers[idx] = buf
 				}
-				if tc.ID != "" {
-					buf.ID = tc.ID
+				if evt.ToolCallID != "" {
+					buf.ID = evt.ToolCallID
 				}
-				if tc.Type != "" {
-					buf.Type = tc.Type
+				if evt.ToolCallType != "" {
+					buf.Type = evt.ToolCallType
 				}
-				if tc.Function != nil {
-					if name, ok := tc.Function["name"].(string); ok {
-						buf.NameBuf.WriteString(name)
-					}
-					if args, ok := tc.Function["arguments"].(string); ok && args != "" {
-						buf.ArgsBuf.WriteString(args)
-						ch <- StreamEvent{
-							ToolCallDelta: args,
-							ToolCallIdx:   tc.Index,
-							ToolCallName:  buf.NameBuf.String(),
-						}
+				if evt.ToolCallName != "" {
+					buf.NameBuf.WriteString(evt.ToolCallName)
+				}
+				if evt.ToolCallDelta != "" {
+					buf.ArgsBuf.WriteString(evt.ToolCallDelta)
+					ch <- StreamEvent{
+						ToolCallDelta: evt.ToolCallDelta,
+						ToolCallIdx:   idx,
+						ToolCallName:  buf.NameBuf.String(),
 					}
 				}
+				continue
 			}
 
-			content := choice.Delta.Content
-			if content == "" {
-				// Check for finish reason even without content
-				if choice.FinishReason != nil {
-					// Return: Empty content but has finish_reason (stream complete)
-					result := parser.Flush()
+			// Handle text/thinking content
+			if evt.Text != "" || evt.Thinking != "" {
+				// For thinking events, use the parser to handle think blocks
+				if evt.Thinking != "" {
+					result := parser.Process(evt.Thinking)
 					if result.Text != "" || result.Thinking != "" {
 						ch <- StreamEvent{
 							Text:       result.Text,
@@ -396,23 +417,15 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 							InThinking: parser.InThink,
 						}
 					}
-					// Flush tool calls if finish_reason is tool_calls
-					if *choice.FinishReason == "tool_calls" && len(toolBuffers) > 0 {
-						tc := flushToolCalls(toolBuffers)
-						ch <- StreamEvent{ToolCalls: tc}
+				} else if evt.Text != "" {
+					result := parser.Process(evt.Text)
+					if result.Text != "" || result.Thinking != "" {
+						ch <- StreamEvent{
+							Text:       result.Text,
+							Thinking:   result.Thinking,
+							InThinking: parser.InThink,
+						}
 					}
-					ch <- StreamEvent{Done: true, StopReason: *choice.FinishReason}
-					return
-				}
-				continue
-			}
-
-			result := parser.Process(content)
-			if result.Text != "" || result.Thinking != "" {
-				ch <- StreamEvent{
-					Text:       result.Text,
-					Thinking:   result.Thinking,
-					InThinking: parser.InThink,
 				}
 			}
 		}

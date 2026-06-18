@@ -20,6 +20,7 @@ type Dialect string
 
 const (
 	DialectOpenAICompatible Dialect = "openai"
+	DialectOpenAICodex      Dialect = "openai-codex"
 	DialectAnthropic        Dialect = "anthropic"
 	DialectGemini           Dialect = "gemini"
 )
@@ -29,6 +30,7 @@ const (
 	ProviderVLLM        = "vllm"
 	ProviderOllama      = "ollama"
 	ProviderOpenAI      = "openai"
+	ProviderOpenAICodex = "openai-codex"
 	ProviderLiteLLM     = "litellm"
 )
 
@@ -50,6 +52,7 @@ type ProviderCreds struct {
 type OAuthCreds struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
+	AccountID    string    `json:"account_id,omitempty"` // ChatGPT-Account-Id from JWT
 	ExpiresAt    time.Time `json:"expires_at"`
 }
 

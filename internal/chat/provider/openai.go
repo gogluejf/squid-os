@@ -121,6 +121,7 @@ func (o *OpenAIProvider) FinishOAuth(code, redirectURI string) error {
 	o.creds.OAuth = &config.OAuthCreds{
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: tokenResp.RefreshToken,
+		AccountID:    extractChatGPTAccountID(tokenResp.AccessToken),
 		ExpiresAt:    time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second),
 	}
 	o.codeVerifier = ""
@@ -238,6 +239,7 @@ func (o *OpenAIProvider) PollDeviceAuth() error {
 			o.creds.OAuth = &config.OAuthCreds{
 				AccessToken:  tr.AccessToken,
 				RefreshToken: tr.RefreshToken,
+				AccountID:    extractChatGPTAccountID(tr.AccessToken),
 				ExpiresAt:    time.Now().Add(time.Duration(tr.ExpiresIn) * time.Second),
 			}
 			return nil
@@ -253,15 +255,23 @@ func (o *OpenAIProvider) PollDeviceAuth() error {
 	}
 }
 
-// PrepareRequest injects the Authorization header and Codex-specific headers.
+// PrepareRequest injects the Authorization header.
+// For OAuth tokens, also adds Codex-specific headers (Originator, User-Agent, Account-Id).
 func (o *OpenAIProvider) PrepareRequest(req *http.Request) error {
 	token := o.getCurrentToken()
 	if token == "" {
 		return fmt.Errorf("openai: no credentials configured")
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Originator", "opencode")
-	req.Header.Set("User-Agent", "squid-os")
+
+	// Codex-specific headers only for OAuth tokens
+	if o.creds != nil && o.creds.ActiveAuthMethod == config.AuthOAuth {
+		req.Header.Set("Originator", "opencode")
+		req.Header.Set("User-Agent", "squid-os")
+		if o.creds.OAuth != nil && o.creds.OAuth.AccountID != "" {
+			req.Header.Set("ChatGPT-Account-Id", o.creds.OAuth.AccountID)
+		}
+	}
 	return nil
 }
 
@@ -331,6 +341,7 @@ func (o *OpenAIProvider) GetCredentials() *config.ProviderCreds {
 		creds.OAuth = &config.OAuthCreds{
 			AccessToken:  o.creds.OAuth.AccessToken,
 			RefreshToken: o.creds.OAuth.RefreshToken,
+			AccountID:    o.creds.OAuth.AccountID,
 			ExpiresAt:    o.creds.OAuth.ExpiresAt,
 		}
 	}

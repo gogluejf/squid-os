@@ -22,6 +22,7 @@ type ProviderMeta struct {
 	DefaultBaseURL  string             // default base URL for wizard prompt (used when ChatURL is empty)
 	Dialect         config.Dialect
 	SupportedAuth   []config.AuthMethod
+	StaticModels    []string           // models declared statically (used when no models endpoint)
 	New             func(*config.ProviderCreds) ProviderImpl // factory; nil = unsupported
 }
 
@@ -61,4 +62,9 @@ func IsKnownProvider(name string) bool {
 	defer metaMu.RUnlock()
 	_, ok := metaRegistry[name]
 	return ok
+}
+
+// GetMetaForAdapter returns a minimal copy of meta for use by the chat adapter layer.
+func GetMetaForAdapter(name string) ProviderMeta {
+	return GetMeta(name)
 }

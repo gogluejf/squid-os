@@ -13,6 +13,7 @@ import (
 // RenderHeight matches Picker so viewport layout stays stable.
 type Prompt struct {
 	Title        string
+	Description  string   // dim text shown under title (optional)
 	Label        string   // e.g. "Name:"
 	Value        string
 	DefaultValue string
@@ -78,6 +79,12 @@ func (p *Prompt) Render(width int) string {
 	// Title
 	lines = append(lines, lipgloss.NewStyle().Background(bg).Render(style.HeadingStyle.Render("   "+p.Title)))
 
+	// Description (dim, optional) — separated from title by a blank line
+	if p.Description != "" {
+		lines = append(lines, " ")
+		lines = append(lines, lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("   "+p.Description))
+	}
+
 	// Separator blank line
 	lines = append(lines, " ")
 
@@ -88,7 +95,12 @@ func (p *Prompt) Render(width int) string {
 	lines = append(lines, inputLine.String())
 
 	// Pad remaining slots to match PickerMaxItems
-	for i := 0; i < PickerMaxItems-1; i++ {
+	// Subtract 2 extra lines if description is shown (blank + description)
+	extraLines := 0
+	if p.Description != "" {
+		extraLines = 2
+	}
+	for i := 0; i < PickerMaxItems-1-extraLines; i++ {
 		lines = append(lines, " ")
 	}
 

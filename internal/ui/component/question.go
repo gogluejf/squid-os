@@ -168,28 +168,22 @@ func (q *Question) resetBlink() tea.Cmd {
 	return q.cur.BlinkCmd()
 }
 
-// truncateDescription truncates the description to fit within the terminal width,
-// stopping at the first newline in the source text.
-// Returns the full line: "   ↳ " + truncated text.
-func (q *Question) truncateDescription(text string, width int) string {
+func (q *Question) renderDescription(text string, width int) string {
 	// Stop at first newline
 	if idx := strings.Index(text, "\n"); idx >= 0 {
-		text = text[:idx] + "\\n" //so it is clear to users that there was a newline and the text is truncated, instead of just cut off mid-line
+		text = text[:idx] + "\\n"
 	}
-	prefix := "   ↳ "
+	prefix := "   "
 	prefixW := lipgloss.Width(prefix)
-	// Available display width for the description text (leave room for "..." and 3-char right margin)
-	avail := width - prefixW - 3 - 3
+	avail := width - prefixW - 3
 	if avail < 4 {
 		avail = 4
 	}
 
-	// Truncate by display width using lipgloss.Width
 	if lipgloss.Width(text) <= avail {
 		return prefix + text
 	}
 
-	// Walk runes, tracking display width, until we hit the limit
 	runes := []rune(text)
 	var result []rune
 	totalW := 0
@@ -220,7 +214,7 @@ func (q *Question) Render(width int) string {
 	// Description (dim, optional) — separated from title by a blank line
 	if q.Description != "" {
 		lines = append(lines, " ")
-		lines = append(lines, lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render(q.truncateDescription(q.Description, width)))
+		lines = append(lines, lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render(q.renderDescription(q.Description, width)))
 	}
 
 	// Separator blank line

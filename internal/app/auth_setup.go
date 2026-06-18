@@ -64,8 +64,9 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 		steps = append(steps, component.SequenceStep{
 			Key: "baseURL",
 			Component: &component.Prompt{
-				Title: fmt.Sprintf("Configure %s", s.Name),
-				Label: "Base URL: ",
+				Title:       fmt.Sprintf("Configure %s", s.Name),
+				Description: "The base URL of your inference provider (e.g. https://localhost:8080)",
+				Label:       "Base URL: ",
 			},
 		})
 	}

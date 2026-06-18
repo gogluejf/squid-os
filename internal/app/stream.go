@@ -565,7 +565,7 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 				resolvedPath := tools.ResolvePath(pathVal)
 				if err := tools.Validate(resolvedPath, sessionState); err != nil {
 					entries[i].Execution.Status = tools.ResultStatusError
-					entries[i].Execution.Error = fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again with read_file and retry your command.", resolvedPath)
+					entries[i].Execution.Error = fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again uisng the tool \"read_file\" and retry your command.", resolvedPath)
 					for j := i + 1; j < len(entries); j++ {
 						entries[j].Execution.Status = tools.ResultStatusError
 						entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"

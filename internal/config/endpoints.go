@@ -28,8 +28,7 @@ const (
 const (
 	ProviderVLLM        = "vllm"
 	ProviderOllama      = "ollama"
-	ProviderOpenAI      = "openai"
-	ProviderOpenAICodex = "openai-codex"
+	ProviderOpenAI = "openai"
 )
 
 // ProviderSettings holds what the user configured for a provider — stored in endpoints.json.

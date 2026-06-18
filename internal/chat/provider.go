@@ -28,7 +28,7 @@ func LoadProviderImpl(settings config.ProviderSettings) ProviderImpl {
 	}
 
 	switch settings.Name {
-	case config.ProviderOpenAI, config.ProviderOpenAICodex:
+	case config.ProviderOpenAI:
 		return provider.NewOpenAIProvider(settings.Credentials)
 	default:
 		return &provider.LocalProvider{}

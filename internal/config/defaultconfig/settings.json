@@ -1,5 +1,5 @@
 {
-  "provider": "vllm",
+  "provider": "",
   "model": "",
   "thinking": false,
   "system_prompt_file": "default.md",

@@ -29,13 +29,6 @@ func init() {
 		Dialect:       config.DialectOpenAICompatible,
 		SupportedAuth: []config.AuthMethod{config.AuthAPIKey, config.AuthOAuth},
 	})
-	RegisterMeta(ProviderMeta{
-		Name:          config.ProviderOpenAICodex,
-		ChatURL:       "https://api.openai.com/v1/chat/completions",
-		ModelsURL:     "https://api.openai.com/v1/models",
-		Dialect:       config.DialectOpenAICompatible,
-		SupportedAuth: []config.AuthMethod{config.AuthAPIKey, config.AuthOAuth},
-	})
 }
 
 // OpenAIProvider implements ProviderImpl for OpenAI authentication.

@@ -8,9 +8,10 @@ import (
 
 func init() {
 	RegisterMeta(ProviderMeta{
-		Name:          config.ProviderOllama,
-		Dialect:       config.DialectOpenAICompatible,
-		SupportedAuth: []config.AuthMethod{config.AuthNone},
+		Name:            config.ProviderOllama,
+		DefaultBaseURL:  "http://localhost:11434",
+		Dialect:         config.DialectOpenAICompatible,
+		SupportedAuth:   []config.AuthMethod{config.AuthNone},
 		New: func(creds *config.ProviderCreds) ProviderImpl {
 			return &OllamaProvider{creds: creds}
 		},

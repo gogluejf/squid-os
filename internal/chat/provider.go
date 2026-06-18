@@ -59,6 +59,12 @@ func NeedsURL(settings config.ProviderSettings) bool {
 	return meta.ChatURL == ""
 }
 
+// DefaultBaseURL returns the default base URL from provider meta.
+// Returns empty string if the provider is a known provider with a hardcoded ChatURL.
+func DefaultBaseURL(name string) string {
+	return provider.GetMeta(name).DefaultBaseURL
+}
+
 // IsConfigured checks if user settings have valid credentials.
 // Looks up supported auth methods from provider meta.
 func IsConfigured(settings config.ProviderSettings) bool {

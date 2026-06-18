@@ -8,9 +8,10 @@ import (
 
 func init() {
 	RegisterMeta(ProviderMeta{
-		Name:          config.ProviderVLLM,
-		Dialect:       config.DialectOpenAICompatible,
-		SupportedAuth: []config.AuthMethod{config.AuthNone, config.AuthAPIKey},
+		Name:            config.ProviderVLLM,
+		DefaultBaseURL:  "http://localhost:8000",
+		Dialect:         config.DialectOpenAICompatible,
+		SupportedAuth:   []config.AuthMethod{config.AuthNone, config.AuthAPIKey},
 		New: func(creds *config.ProviderCreds) ProviderImpl {
 			return &VLLMProvider{creds: creds}
 		},

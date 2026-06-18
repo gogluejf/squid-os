@@ -115,12 +115,18 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 
 	// --- Step: baseURL ---
 	if chat.NeedsURL(*s) {
+		defaultURL := chat.DefaultBaseURL(s.Name)
+		// Use existing BaseURL if already set, otherwise use the default
+		if s.BaseURL != "" {
+			defaultURL = s.BaseURL
+		}
 		steps["baseURL"] = component.SequenceStep{
 			Key: "baseURL",
 			Component: &component.Prompt{
 				Title:       fmt.Sprintf("Configure %s", s.Name),
-				Description: "Enter the base URL of your inference provider (e.g. https://localhost:8080)",
+				Description: "Enter the base URL of your inference provider",
 				Label:       "Base URL: ",
+				DefaultValue: defaultURL,
 			},
 			OnAdvance: func(ctx any, r map[string]any) string {
 				// Determine next step based on auth methods

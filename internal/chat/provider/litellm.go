@@ -8,9 +8,10 @@ import (
 
 func init() {
 	RegisterMeta(ProviderMeta{
-		Name:          config.ProviderLiteLLM,
-		Dialect:       config.DialectOpenAICompatible,
-		SupportedAuth: []config.AuthMethod{config.AuthNone, config.AuthAPIKey},
+		Name:            config.ProviderLiteLLM,
+		DefaultBaseURL:  "http://localhost:4000",
+		Dialect:         config.DialectOpenAICompatible,
+		SupportedAuth:   []config.AuthMethod{config.AuthNone, config.AuthAPIKey},
 		New: func(creds *config.ProviderCreds) ProviderImpl {
 			return &LiteLLMProvider{creds: creds}
 		},

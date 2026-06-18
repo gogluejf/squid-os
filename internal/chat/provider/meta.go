@@ -16,12 +16,13 @@ type ProviderImpl interface {
 
 // ProviderMeta defines what a provider supports — read-only, defined in code.
 type ProviderMeta struct {
-	Name          string
-	ChatURL       string
-	ModelsURL     string
-	Dialect       config.Dialect
-	SupportedAuth []config.AuthMethod
-	New           func(*config.ProviderCreds) ProviderImpl // factory; nil = unsupported
+	Name            string
+	ChatURL         string
+	ModelsURL       string
+	DefaultBaseURL  string             // default base URL for wizard prompt (used when ChatURL is empty)
+	Dialect         config.Dialect
+	SupportedAuth   []config.AuthMethod
+	New             func(*config.ProviderCreds) ProviderImpl // factory; nil = unsupported
 }
 
 var (

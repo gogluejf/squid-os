@@ -34,7 +34,8 @@ const (
 )
 
 // formatDescription splits raw text on '\n', pads each line with the standard
-// indent, truncates at maxLines and appends a "+N more lines" trailer.
+// indent, wraps lines that exceed the available width, and truncates at maxLines
+// with a "+N more lines" trailer if needed.
 // Returns the formatted lines and the total line count (including the trailer
 // if truncation occurred, not including the separator blank line).
 //
@@ -54,53 +55,91 @@ func formatDescription(text string, width int, maxLines int) (lines []string, co
 
 	raw := strings.Split(text, "\n")
 
-	if len(raw) <= maxLines {
-		// Fits entirely — no truncation
-		for _, line := range raw {
-			// Truncate overly long individual lines
-			if lipgloss.Width(line) > avail {
-				runes := []rune(line)
-				var result []rune
-				totalW := 0
-				for _, r := range runes {
-					chW := lipgloss.Width(string(r))
-					if totalW+chW > avail {
-						break
-					}
-					totalW += chW
-					result = append(result, r)
-				}
-				result = append(result, '.', '.', '.')
-				line = string(result)
-			}
+	// First pass: expand all raw lines into wrapped lines
+	var wrapped []string
+	for _, line := range raw {
+		wrapped = append(wrapped, wrapLine(line, avail)...)
+	}
+
+	// Second pass: apply maxLines cap to the flattened list
+	if len(wrapped) <= maxLines {
+		for _, line := range wrapped {
 			lines = append(lines, DescriptionIndent+line)
 		}
 		return lines, len(lines)
 	}
 
-	// Truncate: show maxLines, then a trailer line
 	for i := 0; i < maxLines; i++ {
-		line := raw[i]
-		if lipgloss.Width(line) > avail {
-			runes := []rune(line)
-			var result []rune
-			totalW := 0
-			for _, r := range runes {
-				chW := lipgloss.Width(string(r))
-				if totalW+chW > avail {
-					break
-				}
-				totalW += chW
-				result = append(result, r)
-			}
-			result = append(result, '.', '.', '.')
-			line = string(result)
-		}
-		lines = append(lines, DescriptionIndent+line)
+		lines = append(lines, DescriptionIndent+wrapped[i])
 	}
-	remaining := len(raw) - maxLines
+	remaining := len(wrapped) - maxLines
 	lines = append(lines, DescriptionIndent+fmt.Sprintf("... (+%d more lines)", remaining))
 	return lines, len(lines)
+}
+
+// wrapLine splits a single line into multiple lines so that no output line
+// exceeds maxWidth.  It breaks on spaces when possible, and falls back to
+// hard-break at maxWidth when a token (e.g. a long URL) is longer than avail.
+func wrapLine(line string, maxWidth int) []string {
+	if lipgloss.Width(line) <= maxWidth {
+		return []string{line}
+	}
+
+	var result []string
+	words := strings.Fields(line)
+	var current []string
+	currentWidth := 0
+
+	for _, word := range words {
+		w := lipgloss.Width(word)
+		added := w
+		if len(current) > 0 {
+			added++ // space
+		}
+
+		// If a single word is wider than maxWidth, hard-break it
+		if w > maxWidth {
+			// Flush current line first
+			if len(current) > 0 {
+				result = append(result, strings.Join(current, " "))
+				current = nil
+				currentWidth = 0
+			}
+			// Hard-break the word into chunks
+			runes := []rune(word)
+			var chunk []rune
+			chunkWidth := 0
+			for _, r := range runes {
+				chW := lipgloss.Width(string(r))
+				if chunkWidth+chW > maxWidth {
+					result = append(result, string(chunk))
+					chunk = nil
+					chunkWidth = 0
+				}
+				chunk = append(chunk, r)
+				chunkWidth += chW
+			}
+			if len(chunk) > 0 {
+				result = append(result, string(chunk))
+			}
+			continue
+		}
+
+		if currentWidth+added <= maxWidth {
+			current = append(current, word)
+			currentWidth += added
+		} else {
+			result = append(result, strings.Join(current, " "))
+			current = []string{word}
+			currentWidth = w
+		}
+	}
+
+	if len(current) > 0 {
+		result = append(result, strings.Join(current, " "))
+	}
+
+	return result
 }
 
 // renderDescriptionLines applies styling to the pre-formatted description lines

@@ -15,7 +15,7 @@ const questionPlaceholder = "add instructions to your answer..."
 
 type Question struct {
 	Title       string
-	Description string // dim text shown under title (optional)
+	Description string // dim text shown under title (optional, multi-line)
 	Options     []string
 	Selection   int
 	ShowInput   bool
@@ -168,37 +168,6 @@ func (q *Question) resetBlink() tea.Cmd {
 	return q.cur.BlinkCmd()
 }
 
-func (q *Question) renderDescription(text string, width int) string {
-	// Stop at first newline
-	if idx := strings.Index(text, "\n"); idx >= 0 {
-		text = text[:idx] + "\\n"
-	}
-	prefix := "   "
-	prefixW := lipgloss.Width(prefix)
-	avail := width - prefixW - 3
-	if avail < 4 {
-		avail = 4
-	}
-
-	if lipgloss.Width(text) <= avail {
-		return prefix + text
-	}
-
-	runes := []rune(text)
-	var result []rune
-	totalW := 0
-	for _, r := range runes {
-		chW := lipgloss.Width(string(r))
-		if totalW+chW > avail {
-			break
-		}
-		totalW += chW
-		result = append(result, r)
-	}
-	result = append(result, '.', '.', '.')
-	return prefix + string(result)
-}
-
 // Render draws the question overlay.
 func (q *Question) Render(width int) string {
 	bg := lipgloss.Color(style.P.BgFooter)
@@ -211,17 +180,45 @@ func (q *Question) Render(width int) string {
 	// Title
 	lines = append(lines, lipgloss.NewStyle().Background(bg).Render(style.HeadingStyle.Render("   "+q.Title)))
 
-	// Description (dim, optional) — separated from title by a blank line
+	// Description (dim, optional, multi-line) — separated from title by a blank line
+	var descCount int
 	if q.Description != "" {
 		lines = append(lines, " ")
-		lines = append(lines, lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render(q.renderDescription(q.Description, width)))
+		var descLines []string
+		descLines, descCount = formatDescription(q.Description, width, DescriptionMaxLines)
+		lines = append(lines, strings.Split(renderDescriptionLines(descLines, width), "\n")...)
 	}
 
 	// Separator blank line
 	lines = append(lines, " ")
 
-	// Option rows
-	for i, opt := range q.Options {
+	// Option rows — compute how many we can fit given description lines
+	maxOptions := PickerMaxItems / 2
+	// Reserve space: leading(1) + title(1) + [blank+desc(1+N)] + sep(1) + options + sep(1) + instruction(1) + trailing(1)
+	// Total budget = PickerMaxItems + 4
+	// Fixed overhead: leading(1) + title(1) + separator before options(1) + separator before instruction(1) + instruction(1) + trailing(1) = 6
+	// Description overhead: 1 (blank) + descCount lines
+	// Available for options = (PickerMaxItems + 4) - 6 - (1 + descCount if desc) = PickerMaxItems - 3 - descCount
+	fixedOverhead := 6
+	descOverhead := 0
+	if q.Description != "" {
+		descOverhead = 1 + descCount // blank + description lines
+	}
+	availForOptions := (PickerMaxItems + 4) - fixedOverhead - descOverhead
+	if availForOptions < 1 {
+		availForOptions = 1
+	}
+	if availForOptions > maxOptions {
+		availForOptions = maxOptions
+	}
+
+	maxShow := len(q.Options)
+	if maxShow > availForOptions {
+		maxShow = availForOptions
+	}
+
+	for i := 0; i < maxShow; i++ {
+		opt := q.Options[i]
 		num := i + 1
 		label := fmt.Sprintf("%d. %s", num, opt)
 		if i == q.Selection {
@@ -239,25 +236,18 @@ func (q *Question) Render(width int) string {
 		}
 	}
 
-	// Pad options
-	for i := len(q.Options); i < PickerMaxItems/2; i++ {
+	// Pad options to fill remaining space up to availForOptions
+	for i := maxShow; i < availForOptions; i++ {
 		lines = append(lines, " ")
 	}
 
 	// Blank separator before instruction area
 	lines = append(lines, " ")
 
-	// Pad to push instruction to the very bottom (before trailing blank)
-	remaining := (PickerMaxItems + 1) - len(lines) - 1 // -1 for instruction line
-	for i := 0; i < remaining; i++ {
-		lines = append(lines, " ")
-	}
-
 	// Instruction line — always at the bottom
 	if q.ShowInput {
 		label := lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("  Instruction: ")
 		if q.TextMode {
-			// Show cursor + typed text (or placeholder)
 			if q.TextInput != "" {
 				lines = append(lines, label+
 					lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextAccent)).Render(q.TextInput)+
@@ -268,7 +258,6 @@ func (q *Question) Render(width int) string {
 					lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render(questionPlaceholder[1:]))
 			}
 		} else {
-			// Selection mode — show hint
 			lines = append(lines, lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("  [Tab] to add note or instruction to your answer"))
 		}
 	}

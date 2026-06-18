@@ -31,6 +31,7 @@ type PickerItem struct {
 // Call Init(ctx) after construction to compute column widths and resolve defaults.
 type Picker struct {
 	Title             string
+	Description       string // dim multi-line text shown under title (optional)
 	Items             []PickerItem
 	Filter            string
 	Selected          int
@@ -110,8 +111,18 @@ const PickerMaxItems = 15
 
 // RenderHeight returns the exact number of terminal lines that Render() will output.
 // Always returns the same height regardless of filter state — "No matches" pads to PickerMaxItems.
+// Description lines are included in the count.
 func (p *Picker) RenderHeight() int {
-	return 3 + PickerMaxItems + 1 // leading blank + title + separator + 15 slots (or "No matches" + padding) + trailing blank
+	// Base: leading blank + title + separator + 15 slots + trailing blank = 19
+	// Plus: blank before desc + desc lines (if any)
+	descCount := 0
+	if p.Description != "" {
+		_, descCount = formatDescription(p.Description, 80, DescriptionMaxLines) // width doesn't affect line count
+		if descCount > 0 {
+			descCount += 1 // blank separator before description
+		}
+	}
+	return 3 + PickerMaxItems + 1 + descCount
 }
 
 // HandleKey processes a key message and returns a tea.Cmd if a callback fires.
@@ -310,15 +321,39 @@ func (p *Picker) computeWidths() {
 func (p *Picker) Render(width int) string {
 	items := p.FilteredItems()
 
+	// Compute description lines
+	var descLines []string
+	var descCount int
+	if p.Description != "" {
+		descLines, descCount = formatDescription(p.Description, width, DescriptionMaxLines)
+	}
+
+	// Compute how many item slots we have left
+	// Total budget = PickerMaxItems + 4 (matches RenderHeight base)
+	// Fixed: leading blank(1) + title(1) + sep before items(1) + trailing blank(1) = 4
+	// Description: blank(1) + descCount lines
+	// Remaining for item slots = PickerMaxItems - descCount
+	itemSlots := PickerMaxItems
+	if descCount > 0 {
+		itemSlots -= (1 + descCount) // blank + desc lines
+	}
+	if itemSlots < 1 {
+		itemSlots = 1
+	}
+
 	var visible []PickerItem
-	if len(items) > PickerMaxItems {
-		start := p.Selected - 7
+	if len(items) > itemSlots {
+		start := p.Selected - (itemSlots / 2)
 		if start < 0 {
 			start = 0
 		}
-		end := start + PickerMaxItems
+		end := start + itemSlots
 		if end > len(items) {
 			end = len(items)
+			start = end - itemSlots
+			if start < 0 {
+				start = 0
+			}
 		}
 		visible = items[start:end]
 	} else {
@@ -330,7 +365,7 @@ func (p *Picker) Render(width int) string {
 	// Leading blank line
 	lines = append(lines, " ")
 
-	// Title (+ inline filter if active) — every segment carries BgFooter to prevent ANSI reset holes
+	// Title (+ inline filter if active)
 	if p.Filter != "" {
 		var b strings.Builder
 		bg := lipgloss.Color(style.P.BgFooter)
@@ -342,12 +377,18 @@ func (p *Picker) Render(width int) string {
 		lines = append(lines, lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgFooter)).Render(style.HeadingStyle.Render("   "+p.Title)))
 	}
 
+	// Description (dim, multi-line) — separated from title by a blank line
+	if len(descLines) > 0 {
+		lines = append(lines, " ")
+		lines = append(lines, strings.Split(renderDescriptionLines(descLines, width), "\n")...)
+	}
+
 	if len(items) == 0 {
 		// Separator blank line
 		lines = append(lines, " ")
 		lines = append(lines, lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgFooter)).Render(style.CommandDescStyle.Render("   No matches")))
-		// Pad remaining slots with blank lines to reach PickerMaxItems (No matches takes one slot)
-		for i := 0; i < PickerMaxItems-1; i++ {
+		// Pad remaining slots with blank lines to reach itemSlots
+		for i := 0; i < itemSlots-1; i++ {
 			lines = append(lines, " ")
 		}
 		// Trailing blank line
@@ -358,12 +399,12 @@ func (p *Picker) Render(width int) string {
 			Render(strings.Join(lines, "\n"))
 	}
 
-	// Separator blank line after title/filter
+	// Separator blank line after title/description
 	lines = append(lines, " ")
 
 	var globalStart int
-	if len(items) > PickerMaxItems {
-		globalStart = p.Selected - 7
+	if len(items) > itemSlots {
+		globalStart = p.Selected - (itemSlots / 2)
 		if globalStart < 0 {
 			globalStart = 0
 		}
@@ -374,8 +415,8 @@ func (p *Picker) Render(width int) string {
 		lines = append(lines, p.renderRow(item, isSelected, width))
 	}
 
-	// Pad with blank lines to always show PickerMaxItems item slots
-	for i := len(visible); i < PickerMaxItems; i++ {
+	// Pad with blank lines to always show itemSlots item rows
+	for i := len(visible); i < itemSlots; i++ {
 		lines = append(lines, " ")
 	}
 

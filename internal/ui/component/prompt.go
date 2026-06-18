@@ -80,9 +80,12 @@ func (p *Prompt) Render(width int) string {
 	lines = append(lines, lipgloss.NewStyle().Background(bg).Render(style.HeadingStyle.Render("   "+p.Title)))
 
 	// Description (dim, optional) — separated from title by a blank line
+	var descLines []string
+	var descCount int
 	if p.Description != "" {
 		lines = append(lines, " ")
-		lines = append(lines, lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(style.P.TextMuted)).Render("   "+p.Description))
+		descLines, descCount = formatDescription(p.Description, width, DescriptionMaxLines)
+		lines = append(lines, strings.Split(renderDescriptionLines(descLines, width), "\n")...)
 	}
 
 	// Separator blank line
@@ -95,12 +98,18 @@ func (p *Prompt) Render(width int) string {
 	lines = append(lines, inputLine.String())
 
 	// Pad remaining slots to match PickerMaxItems
-	// Subtract 2 extra lines if description is shown (blank + description)
-	extraLines := 0
-	if p.Description != "" {
-		extraLines = 2
+	// Account for: blank before desc, desc lines, blank after desc, blank separator, input line
+	usedExtra := descCount + (1 + 1) // blank before desc + blank after desc (separator)
+	if descCount == 0 {
+		usedExtra = 0 // no description, no extra blanks
 	}
-	for i := 0; i < PickerMaxItems-1-extraLines; i++ {
+	// Fixed lines: leading blank (1) + title (1) + separator blank (1) + input (1) + trailing blank (1) = 5
+	fixedLines := 5
+	pad := PickerMaxItems + 4 - fixedLines - usedExtra
+	if pad < 0 {
+		pad = 0
+	}
+	for i := 0; i < pad; i++ {
 		lines = append(lines, " ")
 	}
 

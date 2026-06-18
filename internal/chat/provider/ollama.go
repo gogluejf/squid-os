@@ -8,10 +8,10 @@ import (
 
 func init() {
 	RegisterMeta(ProviderMeta{
-		Name:            config.ProviderOllama,
-		DefaultBaseURL:  "http://localhost:11434",
-		Dialect:         config.DialectOpenAICompatible,
-		SupportedAuth:   []config.AuthMethod{config.AuthNone},
+		Name:           config.ProviderOllama,
+		DefaultBaseURL: "https://localhost:11434",
+		Dialect:        config.DialectOpenAICompatible,
+		SupportedAuth:  []config.AuthMethod{config.AuthNone},
 		New: func(creds *config.ProviderCreds) ProviderImpl {
 			return &OllamaProvider{creds: creds}
 		},
@@ -24,5 +24,11 @@ type OllamaProvider struct {
 }
 
 func (o *OllamaProvider) PrepareRequest(req *http.Request) error { return nil }
-func (o *OllamaProvider) IsExpired() bool                       { return false }
-func (o *OllamaProvider) Refresh() error                        { return nil }
+func (o *OllamaProvider) IsExpired() bool                        { return false }
+func (o *OllamaProvider) Refresh() error                         { return nil }
+func (o *OllamaProvider) GetChatURL(settings *config.ProviderSettings) string {
+	return settings.BaseURL + "/v1/chat/completions"
+}
+func (o *OllamaProvider) GetModelsURL(settings *config.ProviderSettings) string {
+	return settings.BaseURL + "/v1/models"
+}

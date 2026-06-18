@@ -138,12 +138,18 @@ func NewEngine(settings *config.ProviderSettings, model string, thinking bool) *
 		a = &adapter.ChatCompletionsAdapter{}
 	}
 
+	p := LoadProviderImpl(*settings)
+	chatURL := ""
+	if p != nil {
+		chatURL = p.GetChatURL(settings)
+	}
+
 	return &Engine{
 		settings: settings,
-		ChatURL:  a.GetChatURL(settings),
+		ChatURL:  chatURL,
 		Model:    model,
 		Thinking: thinking,
-		provider: LoadProviderImpl(*settings),
+		provider: p,
 		adapter:  a,
 		client: &http.Client{
 			Timeout: 0,

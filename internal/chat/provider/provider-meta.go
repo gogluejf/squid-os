@@ -12,18 +12,22 @@ type ProviderImpl interface {
 	PrepareRequest(req *http.Request) error
 	IsExpired() bool
 	Refresh() error
+	// GetChatURL returns the inference endpoint URL for these settings.
+	GetChatURL(settings *config.ProviderSettings) string
+	// GetModelsURL returns the models listing URL, or "" if none.
+	GetModelsURL(settings *config.ProviderSettings) string
 }
 
 // ProviderMeta defines what a provider supports — read-only, defined in code.
 type ProviderMeta struct {
-	Name            string
-	ChatURL         string
-	ModelsURL       string
-	DefaultBaseURL  string             // default base URL for wizard prompt (used when ChatURL is empty)
-	Dialect         config.Dialect
-	SupportedAuth   []config.AuthMethod
-	StaticModels    []string           // models declared statically (used when no models endpoint)
-	New             func(*config.ProviderCreds) ProviderImpl // factory; nil = unsupported
+	Name           string
+	ChatURL        string
+	ModelsURL      string
+	DefaultBaseURL string // default base URL for wizard prompt (used when ChatURL is empty)
+	Dialect        config.Dialect
+	SupportedAuth  []config.AuthMethod
+	StaticModels   []string                                 // models declared statically (used when no models endpoint)
+	New            func(*config.ProviderCreds) ProviderImpl // factory; nil = unsupported
 }
 
 var (
@@ -54,17 +58,4 @@ func AllMeta() []ProviderMeta {
 		metas = append(metas, m)
 	}
 	return metas
-}
-
-// IsKnownProvider returns true if a provider with this name is registered.
-func IsKnownProvider(name string) bool {
-	metaMu.RLock()
-	defer metaMu.RUnlock()
-	_, ok := metaRegistry[name]
-	return ok
-}
-
-// GetMetaForAdapter returns a minimal copy of meta for use by the chat adapter layer.
-func GetMetaForAdapter(name string) ProviderMeta {
-	return GetMeta(name)
 }

@@ -2,8 +2,6 @@ package adapter
 
 import (
 	"encoding/json"
-	"squid-os/internal/chat/provider"
-	"squid-os/internal/config"
 	"squid-os/internal/tools"
 )
 
@@ -68,24 +66,21 @@ type codexToolDef struct {
 	Parameters  json.RawMessage `json:"parameters,omitempty"`
 }
 
-// chatMsg is a minimal view of ChatMessage for JSON decoding
 type chatMsg struct {
-	Role       string      `json:"role"`
-	Content    interface{} `json:"content,omitempty"`
-	ToolCallID string      `json:"tool_call_id,omitempty"`
-	Name       string      `json:"name,omitempty"`
+	Role       string         `json:"role"`
+	Content    interface{}    `json:"content,omitempty"`
+	ToolCallID string         `json:"tool_call_id,omitempty"`
+	Name       string         `json:"name,omitempty"`
 	ToolCalls  []chatToolCall `json:"tool_calls,omitempty"`
 }
 
 type chatToolCall struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
 	Function struct {
 		Name string `json:"name"`
 		Args string `json:"arguments"`
 	} `json:"function,omitempty"`
-	Name     string `json:"-"` // not from JSON
-	ArgsJSON string `json:"-"` // not from JSON
 }
 
 type codexTextDelta struct {
@@ -97,7 +92,6 @@ type codexReasoningDelta struct {
 }
 
 func (a *CodexAdapter) BuildBody(model string, messagesJSON []byte, toolDefs []tools.Tool, thinking bool) ([]byte, error) {
-	// Decode the messages from the engine's JSON representation
 	var msgs []chatMsg
 	if err := json.Unmarshal(messagesJSON, &msgs); err != nil {
 		return nil, err
@@ -250,33 +244,4 @@ func (a *CodexAdapter) ParseSSE(payload string) *AdapterEvent {
 	}
 
 	return nil
-}
-
-func (a *CodexAdapter) GetChatURL(settings *config.ProviderSettings) string {
-	if settings.Credentials != nil && settings.Credentials.ActiveAuthMethod == config.AuthOAuth {
-		return "https://chatgpt.com/backend-api/codex/responses"
-	}
-	return "https://api.openai.com/v1/responses"
-}
-
-func (a *CodexAdapter) GetModelsURL(settings *config.ProviderSettings) string {
-	meta := provider.GetMetaForAdapter(settings.Name)
-	if meta.ModelsURL != "" {
-		return meta.ModelsURL
-	}
-	return ""
-}
-
-// CodexOAuthModels returns the list of models available via OpenAI Codex OAuth.
-func CodexOAuthModels() []string {
-	return []string{
-		"gpt-5.1-codex",
-		"gpt-5.1-codex-max",
-		"gpt-5.1-codex-mini",
-		"gpt-5.2",
-		"gpt-5.2-codex",
-		"gpt-5.3-codex",
-		"gpt-5.4",
-		"gpt-5.4-mini",
-	}
 }

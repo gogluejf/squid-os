@@ -8,10 +8,10 @@ import (
 
 func init() {
 	RegisterMeta(ProviderMeta{
-		Name:            config.ProviderVLLM,
-		DefaultBaseURL:  "http://localhost:8000",
-		Dialect:         config.DialectOpenAICompatible,
-		SupportedAuth:   []config.AuthMethod{config.AuthNone, config.AuthAPIKey},
+		Name:           config.ProviderVLLM,
+		DefaultBaseURL: "https://localhost:8000",
+		Dialect:        config.DialectOpenAICompatible,
+		SupportedAuth:  []config.AuthMethod{config.AuthNone, config.AuthAPIKey},
 		New: func(creds *config.ProviderCreds) ProviderImpl {
 			return &VLLMProvider{creds: creds}
 		},
@@ -30,6 +30,11 @@ func (v *VLLMProvider) PrepareRequest(req *http.Request) error {
 	}
 	return nil
 }
-
 func (v *VLLMProvider) IsExpired() bool { return false }
 func (v *VLLMProvider) Refresh() error  { return nil }
+func (v *VLLMProvider) GetChatURL(settings *config.ProviderSettings) string {
+	return settings.BaseURL + "/v1/chat/completions"
+}
+func (v *VLLMProvider) GetModelsURL(settings *config.ProviderSettings) string {
+	return settings.BaseURL + "/v1/models"
+}

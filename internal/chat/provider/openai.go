@@ -255,6 +255,20 @@ func (o *OpenAIProvider) PollDeviceAuth() error {
 	}
 }
 
+// GetChatURL returns the inference endpoint based on auth method.
+func (o *OpenAIProvider) GetChatURL(settings *config.ProviderSettings) string {
+	if settings != nil && settings.Credentials != nil && settings.Credentials.ActiveAuthMethod == config.AuthOAuth {
+		// OAuth tokens target the ChatGPT backend API
+		return "https://chatgpt.com/backend-api/codex/responses"
+	}
+	return "https://api.openai.com/v1/chat/completions"
+}
+
+// GetModelsURL returns the models listing URL.
+func (o *OpenAIProvider) GetModelsURL(settings *config.ProviderSettings) string {
+	return "https://api.openai.com/v1/models"
+}
+
 // PrepareRequest injects the Authorization header.
 // For OAuth tokens, also adds Codex-specific headers (Originator, User-Agent, Account-Id).
 func (o *OpenAIProvider) PrepareRequest(req *http.Request) error {

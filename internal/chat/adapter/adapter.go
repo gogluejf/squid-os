@@ -1,7 +1,6 @@
 package adapter
 
 import (
-	"squid-os/internal/config"
 	"squid-os/internal/tools"
 )
 
@@ -13,10 +12,6 @@ type APIAdapter interface {
 	BuildBody(model string, messagesJSON []byte, toolDefs []tools.Tool, thinking bool) ([]byte, error)
 	// ParseSSE parses one SSE JSON payload. Returns nil to skip.
 	ParseSSE(payload string) *AdapterEvent
-	// GetChatURL returns the inference endpoint for these settings.
-	GetChatURL(settings *config.ProviderSettings) string
-	// GetModelsURL returns the models listing endpoint, or "" if none.
-	GetModelsURL(settings *config.ProviderSettings) string
 }
 
 // AdapterEvent is the adapter's parsed SSE event.

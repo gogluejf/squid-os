@@ -270,6 +270,22 @@ func (o *CodexProvider) FinishOAuth(code, redirectURI string) error {
 
 // --- ProviderImpl interface ---
 
+// GetChatURL returns the inference endpoint based on auth method.
+func (o *CodexProvider) GetChatURL(settings *config.ProviderSettings) string {
+	if settings != nil && settings.Credentials != nil && settings.Credentials.ActiveAuthMethod == config.AuthOAuth {
+		return codexBackendAPI
+	}
+	return codexPlatformAPI
+}
+
+// GetModelsURL returns the models listing URL for API key auth.
+func (o *CodexProvider) GetModelsURL(settings *config.ProviderSettings) string {
+	if settings != nil && settings.Credentials != nil && settings.Credentials.ActiveAuthMethod == config.AuthAPIKey {
+		return codexPlatformModels
+	}
+	return "" // OAuth has no models endpoint — uses StaticModels
+}
+
 // PrepareRequest adds the required Codex headers.
 func (o *CodexProvider) PrepareRequest(req *http.Request) error {
 	token := o.getCurrentToken()

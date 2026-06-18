@@ -87,7 +87,7 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 			}
 
 			// 2. If there's a models URL, fetch and append (deduplicate)
-			modelsURL := ResolveModelsURL(s)
+			modelsURL := impl.GetModelsURL(&s)
 			if modelsURL == "" {
 				return
 			}

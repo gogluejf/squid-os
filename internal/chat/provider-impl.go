@@ -28,33 +28,6 @@ func LoadProviderImpl(settings config.ProviderSettings) ProviderImpl {
 	return nil
 }
 
-// ResolveChatURL returns the chat completions URL for a provider.
-// Uses hardcoded URL from meta for known providers, or BaseURL from settings for custom.
-// Deprecated: Engine now uses the adapter to determine the URL directly.
-// Kept for backward compatibility in places that don't use Engine.
-func ResolveChatURL(settings config.ProviderSettings) string {
-	meta := provider.GetMeta(settings.Name)
-	if meta.ChatURL != "" {
-		return meta.ChatURL
-	}
-	if meta.Dialect == config.DialectAnthropic {
-		return settings.BaseURL + "/v1/messages"
-	}
-	return settings.BaseURL + "/v1/chat/completions"
-}
-
-// ResolveModelsURL returns the models listing URL for a provider.
-func ResolveModelsURL(settings config.ProviderSettings) string {
-	meta := provider.GetMeta(settings.Name)
-	if meta.ModelsURL != "" {
-		return meta.ModelsURL
-	}
-	if meta.Dialect == config.DialectOpenAICompatible {
-		return settings.BaseURL + "/v1/models"
-	}
-	return ""
-}
-
 // NeedsURL returns true if the provider requires a user-provided base URL (not a known provider).
 func NeedsURL(settings config.ProviderSettings) bool {
 	meta := provider.GetMeta(settings.Name)
@@ -93,24 +66,9 @@ func IsConfigured(settings config.ProviderSettings) bool {
 	}
 }
 
-// GetSupportedAuth returns the supported auth methods for a provider.
-func GetSupportedAuth(name string) []config.AuthMethod {
-	return provider.GetMeta(name).SupportedAuth
-}
-
 // GetProviderMeta returns the metadata for a provider.
 func GetProviderMeta(name string) provider.ProviderMeta {
 	return provider.GetMeta(name)
-}
-
-// AllProviderMeta returns all registered provider metadata.
-func AllProviderMeta() []provider.ProviderMeta {
-	return provider.AllMeta()
-}
-
-// IsKnownProvider returns true if a provider with this name is registered.
-func IsKnownProvider(name string) bool {
-	return provider.IsKnownProvider(name)
 }
 
 // UnsupportedDialectError returns a clear error for unsupported provider dialects.

@@ -8,10 +8,10 @@ import (
 
 func init() {
 	RegisterMeta(ProviderMeta{
-		Name:            config.ProviderLiteLLM,
-		DefaultBaseURL:  "http://localhost:4000",
-		Dialect:         config.DialectOpenAICompatible,
-		SupportedAuth:   []config.AuthMethod{config.AuthNone, config.AuthAPIKey},
+		Name:           config.ProviderLiteLLM,
+		DefaultBaseURL: "https://localhost:4000",
+		Dialect:        config.DialectOpenAICompatible,
+		SupportedAuth:  []config.AuthMethod{config.AuthNone, config.AuthAPIKey},
 		New: func(creds *config.ProviderCreds) ProviderImpl {
 			return &LiteLLMProvider{creds: creds}
 		},
@@ -33,3 +33,9 @@ func (l *LiteLLMProvider) PrepareRequest(req *http.Request) error {
 
 func (l *LiteLLMProvider) IsExpired() bool { return false }
 func (l *LiteLLMProvider) Refresh() error  { return nil }
+func (l *LiteLLMProvider) GetChatURL(settings *config.ProviderSettings) string {
+	return settings.BaseURL + "/v1/chat/completions"
+}
+func (l *LiteLLMProvider) GetModelsURL(settings *config.ProviderSettings) string {
+	return settings.BaseURL + "/v1/models"
+}

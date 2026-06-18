@@ -2,8 +2,6 @@ package adapter
 
 import (
 	"encoding/json"
-	"squid-os/internal/chat/provider"
-	"squid-os/internal/config"
 	"squid-os/internal/tools"
 )
 
@@ -126,26 +124,4 @@ func (a *ChatCompletionsAdapter) ParseSSE(payload string) *AdapterEvent {
 	}
 
 	return nil
-}
-
-func (a *ChatCompletionsAdapter) GetChatURL(settings *config.ProviderSettings) string {
-	meta := provider.GetMetaForAdapter(settings.Name)
-	if meta.ChatURL != "" {
-		return meta.ChatURL
-	}
-	if meta.Dialect == config.DialectAnthropic {
-		return settings.BaseURL + "/v1/messages"
-	}
-	return settings.BaseURL + "/v1/chat/completions"
-}
-
-func (a *ChatCompletionsAdapter) GetModelsURL(settings *config.ProviderSettings) string {
-	meta := provider.GetMetaForAdapter(settings.Name)
-	if meta.ModelsURL != "" {
-		return meta.ModelsURL
-	}
-	if meta.Dialect == config.DialectOpenAICompatible {
-		return settings.BaseURL + "/v1/models"
-	}
-	return ""
 }

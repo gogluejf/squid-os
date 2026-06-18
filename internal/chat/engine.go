@@ -111,12 +111,12 @@ type sseResponse struct {
 
 // Engine manages chat inference against an OpenAI-compatible endpoint
 type Engine struct {
-	settings   *config.ProviderSettings
-	ChatURL    string
-	Model      string
-	Thinking   bool
-	provider   ProviderImpl
-	client     *http.Client
+	settings *config.ProviderSettings
+	ChatURL  string
+	Model    string
+	Thinking bool
+	provider ProviderImpl
+	client   *http.Client
 }
 
 func NewEngine(settings *config.ProviderSettings, model string, thinking bool) *Engine {
@@ -256,7 +256,7 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 				}
 				// If we didn't get a new OK response, return re-auth error
 				if resp == nil || resp.StatusCode != http.StatusOK {
-					ch <- StreamEvent{Error: fmt.Errorf("authentication failed — provider credentials need reconfiguration")}
+					ch <- StreamEvent{Error: fmt.Errorf("provider authentication failed — reconfigure provider settings (use command /model)")}
 					return
 				}
 			} else {

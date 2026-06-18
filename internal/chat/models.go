@@ -85,8 +85,14 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 			if err != nil {
 				mu.Lock()
 				if isAuthError(err) {
+					label := "<auth failed>"
+					if s.Credentials.ActiveAuthMethod == config.AuthOAuth {
+						label = "<auth expired>"
+					} else if s.Credentials.ActiveAuthMethod == config.AuthAPIKey {
+						label = "<key invalid>"
+					}
 					models = append(models, ModelEntry{
-						ID:          "<auth expired>",
+						ID:          label,
 						Provider:    m.Name,
 						NeedsConfig: true,
 					})

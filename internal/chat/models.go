@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -114,6 +115,31 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 	}
 
 	wg.Wait()
+
+	// Sort: real models first (by provider, then ID), sentinel entries at the end.
+	sort.Slice(models, func(i, j int) bool {
+		a, b := models[i], models[j]
+		aSentinel := a.NeedsConfig
+		bSentinel := b.NeedsConfig
+
+		// Sentinels always go to the end
+		if aSentinel != bSentinel {
+			return !aSentinel
+		}
+		if aSentinel {
+			// Both sentinels: sort by provider, then ID
+			if a.Provider != b.Provider {
+				return a.Provider < b.Provider
+			}
+			return a.ID < b.ID
+		}
+		// Both real models: sort by provider, then ID
+		if a.Provider != b.Provider {
+			return a.Provider < b.Provider
+		}
+		return a.ID < b.ID
+	})
+
 	return models
 }
 

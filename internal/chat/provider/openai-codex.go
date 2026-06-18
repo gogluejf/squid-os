@@ -23,14 +23,14 @@ const (
 )
 
 func init() {
-	Register(config.ProviderOpenAICodex, func(creds *config.ProviderCreds) Provider {
-		return NewCodexProvider(creds)
+	Register(config.ProviderOpenAICodex, func(settings *config.ProviderSettings) Provider {
+		return NewCodexProvider(settings)
 	})
 }
 
 // CodexProvider implements Provider for OpenAI Codex.
 type CodexProvider struct {
-	creds        *config.ProviderCreds
+	settings     *config.ProviderSettings
 	codeVerifier string
 	state        string
 	deviceAuthID string
@@ -38,11 +38,11 @@ type CodexProvider struct {
 	pollInterval int
 }
 
-func NewCodexProvider(creds *config.ProviderCreds) *CodexProvider {
-	if creds == nil {
-		creds = &config.ProviderCreds{}
+func NewCodexProvider(settings *config.ProviderSettings) *CodexProvider {
+	if settings == nil {
+		settings = &config.ProviderSettings{}
 	}
-	return &CodexProvider{creds: creds}
+	return &CodexProvider{settings: settings}
 }
 
 // --- Provider interface ---
@@ -65,16 +65,17 @@ func (o *CodexProvider) StaticModels() []string {
 	}
 }
 func (o *CodexProvider) DefaultBaseURL() string { return "https://chatgpt.com" }
+func (o *CodexProvider) RequiresBaseURL() bool  { return false }
 
-func (o *CodexProvider) GetChatURL(settings *config.ProviderSettings) string {
-	if settings != nil && settings.Credentials != nil && settings.Credentials.ActiveAuthMethod == config.AuthOAuth {
+func (o *CodexProvider) GetChatURL() string {
+	if o.creds().ActiveAuthMethod == config.AuthOAuth {
 		return "https://chatgpt.com/backend-api/codex/responses"
 	}
 	return "https://api.openai.com/v1/responses"
 }
 
-func (o *CodexProvider) GetModelsURL(settings *config.ProviderSettings) string {
-	if settings != nil && settings.Credentials != nil && settings.Credentials.ActiveAuthMethod == config.AuthAPIKey {
+func (o *CodexProvider) GetModelsURL() string {
+	if o.creds().ActiveAuthMethod == config.AuthAPIKey {
 		return "https://api.openai.com/v1/models"
 	}
 	return ""
@@ -88,28 +89,28 @@ func (o *CodexProvider) PrepareRequest(req *http.Request) error {
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Originator", "opencode")
 	req.Header.Set("User-Agent", "squid-os")
-	if o.creds != nil && o.creds.OAuth != nil && o.creds.OAuth.AccountID != "" {
-		req.Header.Set("ChatGPT-Account-Id", o.creds.OAuth.AccountID)
+	if o.creds().OAuth != nil && o.creds().OAuth.AccountID != "" {
+		req.Header.Set("ChatGPT-Account-Id", o.creds().OAuth.AccountID)
 	}
 	return nil
 }
 
 func (o *CodexProvider) IsExpired() bool {
-	if o.creds == nil || o.creds.OAuth == nil {
+	if o.creds().OAuth == nil {
 		return false
 	}
-	return time.Now().After(o.creds.OAuth.ExpiresAt.Add(-60 * time.Second))
+	return time.Now().After(o.creds().OAuth.ExpiresAt.Add(-60 * time.Second))
 }
 
 func (o *CodexProvider) Refresh() error {
-	if o.creds == nil || o.creds.OAuth == nil || o.creds.OAuth.RefreshToken == "" {
+	if o.creds().OAuth == nil || o.creds().OAuth.RefreshToken == "" {
 		return fmt.Errorf("codex: no refresh token available")
 	}
 
 	data := url.Values{
 		"grant_type":    {"refresh_token"},
 		"client_id":     {codexClientID},
-		"refresh_token": {o.creds.OAuth.RefreshToken},
+		"refresh_token": {o.creds().OAuth.RefreshToken},
 	}
 
 	payload := bytes.NewBufferString(data.Encode())
@@ -140,13 +141,13 @@ func (o *CodexProvider) Refresh() error {
 		return fmt.Errorf("codex refresh response parse error: %w", err)
 	}
 
-	o.creds.OAuth.AccessToken = tokenResp.AccessToken
+	o.creds().OAuth.AccessToken = tokenResp.AccessToken
 	if tokenResp.RefreshToken != "" {
-		o.creds.OAuth.RefreshToken = tokenResp.RefreshToken
+		o.creds().OAuth.RefreshToken = tokenResp.RefreshToken
 	}
-	o.creds.OAuth.ExpiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+	o.creds().OAuth.ExpiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 	if tokenResp.AccessToken != "" {
-		o.creds.OAuth.AccountID = extractChatGPTAccountID(tokenResp.AccessToken)
+		o.creds().OAuth.AccountID = extractChatGPTAccountID(tokenResp.AccessToken)
 	}
 	return nil
 }
@@ -254,8 +255,8 @@ func (o *CodexProvider) PollDeviceAuth() error {
 
 			accountID := extractChatGPTAccountID(tr.AccessToken)
 
-			o.creds.ActiveAuthMethod = config.AuthOAuth
-			o.creds.OAuth = &config.OAuthCreds{
+			o.creds().ActiveAuthMethod = config.AuthOAuth
+			o.creds().OAuth = &config.OAuthCreds{
 				AccessToken:  tr.AccessToken,
 				RefreshToken: tr.RefreshToken,
 				AccountID:    accountID,
@@ -333,8 +334,8 @@ func (o *CodexProvider) FinishOAuth(code, redirectURI string) error {
 
 	accountID := extractChatGPTAccountID(tokenResp.AccessToken)
 
-	o.creds.ActiveAuthMethod = config.AuthOAuth
-	o.creds.OAuth = &config.OAuthCreds{
+	o.creds().ActiveAuthMethod = config.AuthOAuth
+	o.creds().OAuth = &config.OAuthCreds{
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: tokenResp.RefreshToken,
 		AccountID:    accountID,
@@ -347,16 +348,13 @@ func (o *CodexProvider) FinishOAuth(code, redirectURI string) error {
 // --- Accessors ---
 
 func (o *CodexProvider) GetCredentials() *config.ProviderCreds {
-	if o.creds == nil {
-		return nil
-	}
-	creds := *o.creds
-	if o.creds.OAuth != nil {
+	creds := *o.creds()
+	if o.creds().OAuth != nil {
 		creds.OAuth = &config.OAuthCreds{
-			AccessToken:  o.creds.OAuth.AccessToken,
-			RefreshToken: o.creds.OAuth.RefreshToken,
-			AccountID:    o.creds.OAuth.AccountID,
-			ExpiresAt:    o.creds.OAuth.ExpiresAt,
+			AccessToken:  o.creds().OAuth.AccessToken,
+			RefreshToken: o.creds().OAuth.RefreshToken,
+			AccountID:    o.creds().OAuth.AccountID,
+			ExpiresAt:    o.creds().OAuth.ExpiresAt,
 		}
 	}
 	return &creds
@@ -372,16 +370,21 @@ func (o *CodexProvider) SetDeviceState(id, code string) {
 	o.pollInterval = 5
 }
 
-func (o *CodexProvider) getCurrentToken() string {
-	if o.creds == nil {
-		return ""
+func (o *CodexProvider) creds() *config.ProviderCreds {
+	if o.settings == nil || o.settings.Credentials == nil {
+		o.settings = &config.ProviderSettings{Credentials: &config.ProviderCreds{}}
 	}
-	switch o.creds.ActiveAuthMethod {
+	return o.settings.Credentials
+}
+
+func (o *CodexProvider) getCurrentToken() string {
+	c := o.creds()
+	switch c.ActiveAuthMethod {
 	case config.AuthAPIKey:
-		return o.creds.APIKey
+		return c.APIKey
 	case config.AuthOAuth:
-		if o.creds.OAuth != nil {
-			return o.creds.OAuth.AccessToken
+		if c.OAuth != nil {
+			return c.OAuth.AccessToken
 		}
 		return ""
 	default:

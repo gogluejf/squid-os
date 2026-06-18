@@ -7,26 +7,48 @@ import (
 )
 
 func init() {
-	Register(config.ProviderVLLM, func(creds *config.ProviderCreds) Provider {
-		return &VLLMProvider{creds: creds}
+	Register(config.ProviderVLLM, func(settings *config.ProviderSettings) Provider {
+		return newVLLMProvider(settings)
 	})
 }
 
 type VLLMProvider struct {
-	creds *config.ProviderCreds
+	settings *config.ProviderSettings
 }
 
-func (v *VLLMProvider) Name() string                             { return config.ProviderVLLM }
-func (v *VLLMProvider) Dialect() config.Dialect                  { return config.DialectOpenAICompatible }
-func (v *VLLMProvider) SupportedAuth() []config.AuthMethod       { return []config.AuthMethod{config.AuthNone, config.AuthAPIKey} }
-func (v *VLLMProvider) StaticModels() []string                   { return nil }
-func (v *VLLMProvider) DefaultBaseURL() string                   { return "http://localhost:8000" }
-func (v *VLLMProvider) GetChatURL(settings *config.ProviderSettings) string  { return settings.BaseURL + "/v1/chat/completions" }
-func (v *VLLMProvider) GetModelsURL(settings *config.ProviderSettings) string { return settings.BaseURL + "/v1/models" }
+func newVLLMProvider(settings *config.ProviderSettings) *VLLMProvider {
+	if settings == nil {
+		settings = &config.ProviderSettings{}
+	}
+	return &VLLMProvider{settings: settings}
+}
+
+func (v *VLLMProvider) Name() string                          { return config.ProviderVLLM }
+func (v *VLLMProvider) Dialect() config.Dialect               { return config.DialectOpenAICompatible }
+func (v *VLLMProvider) SupportedAuth() []config.AuthMethod    { return []config.AuthMethod{config.AuthNone, config.AuthAPIKey} }
+func (v *VLLMProvider) StaticModels() []string                { return nil }
+func (v *VLLMProvider) DefaultBaseURL() string                { return "http://localhost:8000" }
+func (v *VLLMProvider) RequiresBaseURL() bool                 { return true }
+
+func (v *VLLMProvider) GetChatURL() string {
+	base := v.settings.BaseURL
+	if base == "" {
+		base = v.DefaultBaseURL()
+	}
+	return base + "/v1/chat/completions"
+}
+
+func (v *VLLMProvider) GetModelsURL() string {
+	base := v.settings.BaseURL
+	if base == "" {
+		base = v.DefaultBaseURL()
+	}
+	return base + "/v1/models"
+}
 
 func (v *VLLMProvider) PrepareRequest(req *http.Request) error {
-	if v.creds != nil && v.creds.ActiveAuthMethod == config.AuthAPIKey && v.creds.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+v.creds.APIKey)
+	if v.settings.Credentials != nil && v.settings.Credentials.ActiveAuthMethod == config.AuthAPIKey && v.settings.Credentials.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+v.settings.Credentials.APIKey)
 	}
 	return nil
 }

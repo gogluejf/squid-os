@@ -6,7 +6,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"squid-os/internal/chat"
 	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
 	"squid-os/internal/ui"
@@ -35,20 +34,20 @@ func (m *Model) ensureProviderConfigured() (bool, tea.Cmd) {
 	}
 
 	s := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
-	if s == nil || !chat.IsConfigured(*s) {
+	if s == nil || !provider.IsConfigured(s) {
 		return true, m.showModelPicker()
 	}
 
-	impl := chat.LoadProviderImpl(*s)
-	if impl != nil && impl.IsExpired() {
-		if err := impl.Refresh(); err != nil {
+	p := provider.Lookup(s.Name, s)
+	if p != nil && p.IsExpired() {
+		if err := p.Refresh(); err != nil {
 			return true, m.showModelPicker()
 		}
 		// Refresh succeeded — save updated creds
-		if openai, ok := impl.(*provider.OpenAIProvider); ok {
+		if openai, ok := p.(*provider.OpenAIProvider); ok {
 			s.Credentials = openai.GetCredentials()
 			m.saveSettings(*s)
-		} else if codex, ok := impl.(*provider.CodexProvider); ok {
+		} else if codex, ok := p.(*provider.CodexProvider); ok {
 			s.Credentials = codex.GetCredentials()
 			m.saveSettings(*s)
 		}
@@ -72,14 +71,14 @@ func (m *Model) ensureProviderConfigured() (bool, tea.Cmd) {
 // combination of providers: known vs custom, single vs multiple auth
 // methods, and the "none" method.
 func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence {
-	p := chat.GetProviderMeta(s.Name)
+	p := provider.GetByName(s.Name)
 	authMethods := p.SupportedAuth()
 
 	steps := make(map[string]component.SequenceStep)
 
 	// --- Determine the start key ---
 	var startKey string
-	if chat.NeedsURL(*s) {
+	if p.RequiresBaseURL() {
 		startKey = "baseURL"
 	} else if len(authMethods) > 1 {
 		startKey = "authPick"
@@ -122,8 +121,8 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 	}
 
 	// --- Step: baseURL ---
-	if chat.NeedsURL(*s) {
-		defaultURL := chat.DefaultBaseURL(s.Name)
+	if p.RequiresBaseURL() {
+		defaultURL := p.DefaultBaseURL()
 		// Use existing BaseURL if already set, otherwise use the default
 		if s.BaseURL != "" {
 			defaultURL = s.BaseURL
@@ -374,7 +373,7 @@ func (m *Model) onProviderConfigComplete(s *config.ProviderSettings, results map
 		}
 	}
 
-	meta := chat.GetProviderMeta(s.Name)
+	meta := provider.GetByName(s.Name)
 	authMethods := meta.SupportedAuth()
 
 	// Determine active auth method

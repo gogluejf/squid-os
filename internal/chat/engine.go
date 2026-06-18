@@ -116,10 +116,9 @@ type sseResponse struct {
 // Engine manages chat inference against a provider endpoint
 type Engine struct {
 	settings *config.ProviderSettings
-	ChatURL  string
 	Model    string
 	Thinking bool
-	provider ProviderImpl
+	provider provider.Provider
 	adapter  adapter.APIAdapter
 	client   *http.Client
 }
@@ -129,7 +128,7 @@ func NewEngine(settings *config.ProviderSettings, model string, thinking bool) *
 		return &Engine{settings: nil}
 	}
 
-	p := provider.Lookup(settings.Name, settings.Credentials)
+	p := provider.Lookup(settings.Name, settings)
 	var a adapter.APIAdapter
 	switch p.Dialect() {
 	case config.DialectOpenAICodex:
@@ -138,11 +137,8 @@ func NewEngine(settings *config.ProviderSettings, model string, thinking bool) *
 		a = &adapter.ChatCompletionsAdapter{}
 	}
 
-	chatURL := p.GetChatURL(settings)
-
 	return &Engine{
 		settings: settings,
-		ChatURL:  chatURL,
 		Model:    model,
 		Thinking: thinking,
 		provider: p,
@@ -210,7 +206,7 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 		defer f.Close()
 		f.Write(prettyBody.Bytes())
 
-		req, err := http.NewRequestWithContext(ctx, "POST", e.ChatURL, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(ctx, "POST", e.provider.GetChatURL(), bytes.NewReader(body))
 		if err != nil {
 			// Return: Failed to create HTTP request
 			ch <- StreamEvent{Error: fmt.Errorf("create request: %w", err)}
@@ -248,7 +244,7 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 					if retryBodyFn != nil {
 						bodyReader, brErr := retryBodyFn()
 						if brErr == nil {
-							req2, rqErr := http.NewRequestWithContext(ctx, "POST", e.ChatURL, bodyReader)
+							req2, rqErr := http.NewRequestWithContext(ctx, "POST", e.provider.GetChatURL(), bodyReader)
 							if rqErr == nil {
 								req2.Header.Set("Content-Type", "application/json")
 								authErr := e.provider.PrepareRequest(req2)

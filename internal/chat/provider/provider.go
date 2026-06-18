@@ -19,14 +19,19 @@ type Provider interface {
 	IsExpired() bool
 	Refresh() error
 
-	// Endpoints
-	GetChatURL(settings *config.ProviderSettings) string
-	GetModelsURL(settings *config.ProviderSettings) string
+	// Endpoints — reads from the provider's own settings
+	GetChatURL() string
+	GetModelsURL() string
 
 	// Configuration
 	SupportedAuth() []config.AuthMethod
 	StaticModels() []string
 	DefaultBaseURL() string
+
+	// RequiresBaseURL returns true if this provider needs a user-provided
+	// base URL (e.g. vllm, ollama, litellm).  Known cloud providers
+	// (openai, openai-codex) return false.
+	RequiresBaseURL() bool
 }
 
 // Registry of provider factories.
@@ -35,8 +40,8 @@ var (
 	regMu    sync.RWMutex
 )
 
-// Factory creates a Provider from user credentials.
-type Factory func(creds *config.ProviderCreds) Provider
+// Factory creates a Provider from user settings (single struct).
+type Factory func(*config.ProviderSettings) Provider
 
 // Register registers a provider factory by name. Called from each provider's init().
 func Register(name string, f Factory) {
@@ -46,12 +51,12 @@ func Register(name string, f Factory) {
 }
 
 // Lookup finds a provider factory by name and creates an instance.
-// Returns nil if the provider is not registered.
-func Lookup(name string, creds *config.ProviderCreds) Provider {
+// Pass nil settings for reading static metadata only.
+func Lookup(name string, settings *config.ProviderSettings) Provider {
 	regMu.RLock()
 	defer regMu.RUnlock()
 	if f, ok := registry[name]; ok {
-		return f(creds)
+		return f(settings)
 	}
 	return nil
 }
@@ -75,8 +80,7 @@ func IsKnown(name string) bool {
 	return ok
 }
 
-// GetByName returns a provider by creating it with nil credentials.
-// Useful for reading static metadata without user settings.
+// GetByName returns a provider for reading static metadata.
 func GetByName(name string) Provider {
 	regMu.RLock()
 	defer regMu.RUnlock()
@@ -84,4 +88,21 @@ func GetByName(name string) Provider {
 		return f(nil)
 	}
 	return nil
+}
+
+// IsConfigured checks if settings have valid credentials for the active auth method.
+func IsConfigured(s *config.ProviderSettings) bool {
+	if s == nil || s.Credentials == nil {
+		return false
+	}
+	switch s.Credentials.ActiveAuthMethod {
+	case config.AuthNone:
+		return true
+	case config.AuthAPIKey:
+		return s.Credentials.APIKey != ""
+	case config.AuthOAuth:
+		return s.Credentials.OAuth != nil && s.Credentials.OAuth.AccessToken != ""
+	default:
+		return false
+	}
 }

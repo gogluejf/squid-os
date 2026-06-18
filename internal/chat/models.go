@@ -54,7 +54,7 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 				s.Name = name
 			}
 
-			if !IsConfigured(s) {
+			if !provider.IsConfigured(&s) {
 				mu.Lock()
 				models = append(models, ModelEntry{
 					ID:          "<not configured>",
@@ -65,7 +65,7 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 				return
 			}
 
-			p := provider.Lookup(name, s.Credentials)
+			p := provider.Lookup(name, &s)
 			if p == nil {
 				mu.Lock()
 				models = append(models, ModelEntry{
@@ -85,12 +85,12 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 			}
 
 			// 2. If there's a models URL, fetch and append (deduplicate)
-			modelsURL := p.GetModelsURL(&s)
+			modelsURL := p.GetModelsURL()
 			if modelsURL == "" {
 				return
 			}
 
-			entries, err := fetchModelsDetail(ctx, modelsURL, p, name)
+			entries, err := fetchModelsDetail(ctx, modelsURL, p)
 			if err != nil {
 				mu.Lock()
 				if isAuthError(err) {
@@ -171,15 +171,15 @@ func ModelIDs(entries []ModelEntry) []string {
 }
 
 // fetchModelsDetail fetches models using the provider's auth implementation.
-func fetchModelsDetail(ctx context.Context, modelsURL string, impl ProviderImpl, providerName string) ([]ModelEntry, error) {
+func fetchModelsDetail(ctx context.Context, modelsURL string, provider provider.Provider) ([]ModelEntry, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, "GET", modelsURL, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if impl != nil {
-		if err := impl.PrepareRequest(req); err != nil {
+	if provider != nil {
+		if err := provider.PrepareRequest(req); err != nil {
 			return nil, err
 		}
 	}
@@ -216,7 +216,7 @@ func fetchModelsDetail(ctx context.Context, modelsURL string, impl ProviderImpl,
 		} else if m.MaxTokens != nil {
 			ctxLen = *m.MaxTokens
 		}
-		entries = append(entries, ModelEntry{ID: m.ID, Provider: providerName, ContextLength: ctxLen})
+		entries = append(entries, ModelEntry{ID: m.ID, Provider: provider.Name(), ContextLength: ctxLen})
 	}
 	return entries, nil
 }

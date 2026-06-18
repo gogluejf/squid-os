@@ -7,26 +7,48 @@ import (
 )
 
 func init() {
-	Register(config.ProviderLiteLLM, func(creds *config.ProviderCreds) Provider {
-		return &LiteLLMProvider{creds: creds}
+	Register(config.ProviderLiteLLM, func(settings *config.ProviderSettings) Provider {
+		return newLiteLLMProvider(settings)
 	})
 }
 
 type LiteLLMProvider struct {
-	creds *config.ProviderCreds
+	settings *config.ProviderSettings
 }
 
-func (l *LiteLLMProvider) Name() string                          { return config.ProviderLiteLLM }
-func (l *LiteLLMProvider) Dialect() config.Dialect               { return config.DialectOpenAICompatible }
-func (l *LiteLLMProvider) SupportedAuth() []config.AuthMethod    { return []config.AuthMethod{config.AuthNone, config.AuthAPIKey} }
-func (l *LiteLLMProvider) StaticModels() []string                { return nil }
-func (l *LiteLLMProvider) DefaultBaseURL() string                { return "http://localhost:4000" }
-func (l *LiteLLMProvider) GetChatURL(settings *config.ProviderSettings) string  { return settings.BaseURL + "/v1/chat/completions" }
-func (l *LiteLLMProvider) GetModelsURL(settings *config.ProviderSettings) string { return settings.BaseURL + "/v1/models" }
+func newLiteLLMProvider(settings *config.ProviderSettings) *LiteLLMProvider {
+	if settings == nil {
+		settings = &config.ProviderSettings{}
+	}
+	return &LiteLLMProvider{settings: settings}
+}
+
+func (l *LiteLLMProvider) Name() string                         { return config.ProviderLiteLLM }
+func (l *LiteLLMProvider) Dialect() config.Dialect              { return config.DialectOpenAICompatible }
+func (l *LiteLLMProvider) SupportedAuth() []config.AuthMethod   { return []config.AuthMethod{config.AuthNone, config.AuthAPIKey} }
+func (l *LiteLLMProvider) StaticModels() []string               { return nil }
+func (l *LiteLLMProvider) DefaultBaseURL() string               { return "http://localhost:4000" }
+func (l *LiteLLMProvider) RequiresBaseURL() bool                { return true }
+
+func (l *LiteLLMProvider) GetChatURL() string {
+	base := l.settings.BaseURL
+	if base == "" {
+		base = l.DefaultBaseURL()
+	}
+	return base + "/v1/chat/completions"
+}
+
+func (l *LiteLLMProvider) GetModelsURL() string {
+	base := l.settings.BaseURL
+	if base == "" {
+		base = l.DefaultBaseURL()
+	}
+	return base + "/v1/models"
+}
 
 func (l *LiteLLMProvider) PrepareRequest(req *http.Request) error {
-	if l.creds != nil && l.creds.ActiveAuthMethod == config.AuthAPIKey && l.creds.APIKey != "" {
-		req.Header.Set("x-litellm-api-key", l.creds.APIKey)
+	if l.settings.Credentials != nil && l.settings.Credentials.ActiveAuthMethod == config.AuthAPIKey && l.settings.Credentials.APIKey != "" {
+		req.Header.Set("x-litellm-api-key", l.settings.Credentials.APIKey)
 	}
 	return nil
 }

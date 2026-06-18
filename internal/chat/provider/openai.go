@@ -27,14 +27,14 @@ const (
 )
 
 func init() {
-	Register(config.ProviderOpenAI, func(creds *config.ProviderCreds) Provider {
-		return NewOpenAIProvider(creds)
+	Register(config.ProviderOpenAI, func(settings *config.ProviderSettings) Provider {
+		return NewOpenAIProvider(settings)
 	})
 }
 
 // OpenAIProvider implements Provider for OpenAI.
 type OpenAIProvider struct {
-	creds        *config.ProviderCreds
+	settings     *config.ProviderSettings
 	codeVerifier string
 	state        string
 	deviceAuthID string
@@ -42,11 +42,11 @@ type OpenAIProvider struct {
 	pollInterval int
 }
 
-func NewOpenAIProvider(creds *config.ProviderCreds) *OpenAIProvider {
-	if creds == nil {
-		creds = &config.ProviderCreds{}
+func NewOpenAIProvider(settings *config.ProviderSettings) *OpenAIProvider {
+	if settings == nil {
+		settings = &config.ProviderSettings{}
 	}
-	return &OpenAIProvider{creds: creds}
+	return &OpenAIProvider{settings: settings}
 }
 
 // --- Provider interface ---
@@ -56,15 +56,16 @@ func (o *OpenAIProvider) Dialect() config.Dialect              { return config.D
 func (o *OpenAIProvider) SupportedAuth() []config.AuthMethod   { return []config.AuthMethod{config.AuthAPIKey, config.AuthOAuth} }
 func (o *OpenAIProvider) StaticModels() []string               { return nil }
 func (o *OpenAIProvider) DefaultBaseURL() string               { return "https://api.openai.com" }
+func (o *OpenAIProvider) RequiresBaseURL() bool                { return false }
 
-func (o *OpenAIProvider) GetChatURL(settings *config.ProviderSettings) string {
-	if settings != nil && settings.Credentials != nil && settings.Credentials.ActiveAuthMethod == config.AuthOAuth {
+func (o *OpenAIProvider) GetChatURL() string {
+	if o.creds().ActiveAuthMethod == config.AuthOAuth {
 		return "https://chatgpt.com/backend-api/codex/responses"
 	}
 	return "https://api.openai.com/v1/chat/completions"
 }
 
-func (o *OpenAIProvider) GetModelsURL(settings *config.ProviderSettings) string {
+func (o *OpenAIProvider) GetModelsURL() string {
 	return "https://api.openai.com/v1/models"
 }
 
@@ -74,32 +75,32 @@ func (o *OpenAIProvider) PrepareRequest(req *http.Request) error {
 		return fmt.Errorf("openai: no credentials configured")
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	if o.creds != nil && o.creds.ActiveAuthMethod == config.AuthOAuth {
+	if o.creds().ActiveAuthMethod == config.AuthOAuth {
 		req.Header.Set("Originator", "opencode")
 		req.Header.Set("User-Agent", "squid-os")
-		if o.creds.OAuth != nil && o.creds.OAuth.AccountID != "" {
-			req.Header.Set("ChatGPT-Account-Id", o.creds.OAuth.AccountID)
+		if o.creds().OAuth != nil && o.creds().OAuth.AccountID != "" {
+			req.Header.Set("ChatGPT-Account-Id", o.creds().OAuth.AccountID)
 		}
 	}
 	return nil
 }
 
 func (o *OpenAIProvider) IsExpired() bool {
-	if o.creds == nil || o.creds.OAuth == nil {
+	if o.creds().OAuth == nil {
 		return false
 	}
-	return time.Now().After(o.creds.OAuth.ExpiresAt.Add(-60 * time.Second))
+	return time.Now().After(o.creds().OAuth.ExpiresAt.Add(-60 * time.Second))
 }
 
 func (o *OpenAIProvider) Refresh() error {
-	if o.creds == nil || o.creds.OAuth == nil || o.creds.OAuth.RefreshToken == "" {
+	if o.creds().OAuth == nil || o.creds().OAuth.RefreshToken == "" {
 		return fmt.Errorf("openai: no refresh token available")
 	}
 
 	data := url.Values{
 		"grant_type":    {"refresh_token"},
 		"client_id":     {openaiClientID},
-		"refresh_token": {o.creds.OAuth.RefreshToken},
+		"refresh_token": {o.creds().OAuth.RefreshToken},
 	}
 
 	payload := bytes.NewBufferString(data.Encode())
@@ -130,11 +131,11 @@ func (o *OpenAIProvider) Refresh() error {
 		return fmt.Errorf("openai refresh response parse error: %w", err)
 	}
 
-	o.creds.OAuth.AccessToken = tokenResp.AccessToken
+	o.creds().OAuth.AccessToken = tokenResp.AccessToken
 	if tokenResp.RefreshToken != "" {
-		o.creds.OAuth.RefreshToken = tokenResp.RefreshToken
+		o.creds().OAuth.RefreshToken = tokenResp.RefreshToken
 	}
-	o.creds.OAuth.ExpiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+	o.creds().OAuth.ExpiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 	return nil
 }
 
@@ -239,8 +240,8 @@ func (o *OpenAIProvider) PollDeviceAuth() error {
 				return fmt.Errorf("openai token response parse error: %w", err)
 			}
 
-			o.creds.ActiveAuthMethod = config.AuthOAuth
-			o.creds.OAuth = &config.OAuthCreds{
+			o.creds().ActiveAuthMethod = config.AuthOAuth
+			o.creds().OAuth = &config.OAuthCreds{
 				AccessToken:  tr.AccessToken,
 				RefreshToken: tr.RefreshToken,
 				AccountID:    extractChatGPTAccountID(tr.AccessToken),
@@ -316,8 +317,8 @@ func (o *OpenAIProvider) FinishOAuth(code, redirectURI string) error {
 		return fmt.Errorf("openai token response parse error: %w", err)
 	}
 
-	o.creds.ActiveAuthMethod = config.AuthOAuth
-	o.creds.OAuth = &config.OAuthCreds{
+	o.creds().ActiveAuthMethod = config.AuthOAuth
+	o.creds().OAuth = &config.OAuthCreds{
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: tokenResp.RefreshToken,
 		AccountID:    extractChatGPTAccountID(tokenResp.AccessToken),
@@ -330,16 +331,13 @@ func (o *OpenAIProvider) FinishOAuth(code, redirectURI string) error {
 // --- Accessors ---
 
 func (o *OpenAIProvider) GetCredentials() *config.ProviderCreds {
-	if o.creds == nil {
-		return nil
-	}
-	creds := *o.creds
-	if o.creds.OAuth != nil {
+	creds := *o.creds()
+	if o.creds().OAuth != nil {
 		creds.OAuth = &config.OAuthCreds{
-			AccessToken:  o.creds.OAuth.AccessToken,
-			RefreshToken: o.creds.OAuth.RefreshToken,
-			AccountID:    o.creds.OAuth.AccountID,
-			ExpiresAt:    o.creds.OAuth.ExpiresAt,
+			AccessToken:  o.creds().OAuth.AccessToken,
+			RefreshToken: o.creds().OAuth.RefreshToken,
+			AccountID:    o.creds().OAuth.AccountID,
+			ExpiresAt:    o.creds().OAuth.ExpiresAt,
 		}
 	}
 	return &creds
@@ -355,16 +353,21 @@ func (o *OpenAIProvider) SetDeviceState(id, code string) {
 	o.pollInterval = 5
 }
 
-func (o *OpenAIProvider) getCurrentToken() string {
-	if o.creds == nil {
-		return ""
+func (o *OpenAIProvider) creds() *config.ProviderCreds {
+	if o.settings == nil || o.settings.Credentials == nil {
+		o.settings = &config.ProviderSettings{Credentials: &config.ProviderCreds{}}
 	}
-	switch o.creds.ActiveAuthMethod {
+	return o.settings.Credentials
+}
+
+func (o *OpenAIProvider) getCurrentToken() string {
+	c := o.creds()
+	switch c.ActiveAuthMethod {
 	case config.AuthAPIKey:
-		return o.creds.APIKey
+		return c.APIKey
 	case config.AuthOAuth:
-		if o.creds.OAuth != nil {
-			return o.creds.OAuth.AccessToken
+		if c.OAuth != nil {
+			return c.OAuth.AccessToken
 		}
 		return ""
 	default:

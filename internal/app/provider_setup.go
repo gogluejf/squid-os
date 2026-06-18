@@ -194,25 +194,26 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 		},
 	}
 
-	// --- Step: oauthURL ---
+	// --- Step: oauthURL (now device auth for OpenAI) ---
 	steps["oauthURL"] = component.SequenceStep{
 		Key: "oauthURL",
 		Component: &component.Question{
 			Title:       fmt.Sprintf("OAuth for %s", s.Name),
-			Description: "Loading auth URL...",
-			Options:     []string{"Continue"},
+			Description: "Loading...",
+			Options:     []string{"I've entered the code"},
 		},
 		OnEnter: func(ctx any, r map[string]any) {
-			// Set the actual OAuth URL dynamically before the step renders
 			step := steps["oauthURL"]
 			if q, ok := step.Component.(*component.Question); ok {
 				o := provider.NewOpenAIProvider(nil)
-				url, err := o.StartOAuth("http://localhost:8080/callback")
+				visitURL, userCode, err := o.StartDeviceAuth()
 				if err != nil {
-					q.Description = fmt.Sprintf("Could not generate auth URL: %v", err)
-				} else {
-					q.Description = "Open this URL in your browser, log in, then paste the authorization code below:\n\n" + url
+					q.Description = fmt.Sprintf("Could not start device auth: %v", err)
+					return
 				}
+				q.Description = fmt.Sprintf("Visit this URL on any device (phone, laptop) and enter the code:\n\n  Code: %s\n  URL:  %s\n\nThen click below when you've entered it.", userCode, visitURL)
+				r["oauthDeviceAuthID"] = o.GetDeviceAuthID()
+				r["oauthUserCode"] = userCode
 			}
 			steps["oauthURL"] = step
 		},
@@ -221,13 +222,36 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 		},
 	}
 
-	// --- Step: oauthCode ---
+	// --- Step: oauthCode (poll for device auth completion) ---
 	steps["oauthCode"] = component.SequenceStep{
 		Key: "oauthCode",
-		Component: &component.Prompt{
-			Title:       "Authorization Code",
-			Description: "Paste the authorization code from the browser redirect",
-			Label:       "Code: ",
+		Component: &component.Question{
+			Title:       "Waiting for authorization...",
+			Description: "Waiting for you to enter the code on your device...",
+			Options:     []string{"Done"},
+		},
+		OnEnter: func(ctx any, r map[string]any) {
+			step := steps["oauthCode"]
+			if q, ok := step.Component.(*component.Question); ok {
+				deviceAuthID, hasID := r["oauthDeviceAuthID"].(string)
+				userCode, hasCode := r["oauthUserCode"].(string)
+				if !hasID || !hasCode {
+					q.Description = "Error: device auth state lost"
+					return
+				}
+				o := provider.NewOpenAIProvider(nil)
+				// Reconstruct internal state for polling
+				o.SetDeviceState(deviceAuthID, userCode)
+				if err := o.PollDeviceAuth(); err != nil {
+					q.Description = fmt.Sprintf("Authorization failed: %v", err)
+					r["oauthError"] = err.Error()
+					return
+				}
+				// Success — store credentials
+				r["oauthCreds"] = o.GetCredentials()
+				q.Description = "Authorization successful!"
+			}
+			steps["oauthCode"] = step
 		},
 		OnAdvance: func(ctx any, r map[string]any) string {
 			return "done"
@@ -341,18 +365,12 @@ func (m *Model) onProviderConfigComplete(s *config.ProviderSettings, results map
 			s.Credentials.APIKey = strings.TrimSpace(key)
 		}
 	case config.AuthOAuth:
-		code, ok := results["oauthCode"].(string)
-		if ok && code != "" {
-			o := provider.NewOpenAIProvider(s.Credentials)
-			if _, err := o.StartOAuth("http://localhost:8080/callback"); err != nil {
-				m.setNotification(ui.NotificationError, fmt.Sprintf("Failed to start OAuth: %v", err))
-				return m.setChatMode()
-			}
-			if err := o.FinishOAuth(strings.TrimSpace(code)); err != nil {
-				m.setNotification(ui.NotificationError, fmt.Sprintf("OAuth token exchange failed: %v", err))
-				return m.setChatMode()
-			}
-			s.Credentials = o.GetCredentials()
+		// Check if device auth already completed and stored credentials
+		if creds, ok := results["oauthCreds"].(*config.ProviderCreds); ok && creds != nil {
+			s.Credentials = creds
+		} else if errMsg, ok := results["oauthError"].(string); ok && errMsg != "" {
+			m.setNotification(ui.NotificationError, fmt.Sprintf("OAuth failed: %s", errMsg))
+			return m.setChatMode()
 		}
 	}
 

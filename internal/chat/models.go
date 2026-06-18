@@ -22,6 +22,20 @@ type ModelEntry struct {
 	NeedsConfig   bool // true for sentinel entries (unconfigured/expired)
 }
 
+// codexOAuthModels is the list of models available via OpenAI Codex OAuth.
+// Sourced from OpenCode's allowed model set — these are the models the Codex
+// OAuth token can actually use (ChatGPT subscription, not Platform API).
+var codexOAuthModels = []string{
+	"gpt-5.1-codex",
+	"gpt-5.1-codex-max",
+	"gpt-5.1-codex-mini",
+	"gpt-5.2",
+	"gpt-5.2-codex",
+	"gpt-5.3-codex",
+	"gpt-5.4",
+	"gpt-5.4-mini",
+}
+
 // ScanModels fetches models from all registered providers.
 // Returns sentinel entries for unconfigured providers.
 func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEntry {
@@ -79,6 +93,17 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 
 			modelsURL := ResolveModelsURL(s)
 			if modelsURL == "" {
+				return
+			}
+
+			// Codex OAuth tokens can't query the standard /v1/models endpoint
+			// (missing api.model.read scope). Use the hardcoded model list instead.
+			if s.Name == config.ProviderOpenAI && s.Credentials.ActiveAuthMethod == config.AuthOAuth {
+				for _, id := range codexOAuthModels {
+					mu.Lock()
+					models = append(models, ModelEntry{ID: id, Provider: m.Name})
+					mu.Unlock()
+				}
 				return
 			}
 

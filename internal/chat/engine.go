@@ -111,17 +111,24 @@ type sseResponse struct {
 
 // Engine manages chat inference against an OpenAI-compatible endpoint
 type Engine struct {
-	ChatURL  string
-	Model    string
-	Thinking bool
-	client   *http.Client
+	settings   *config.ProviderSettings
+	ChatURL    string
+	Model      string
+	Thinking   bool
+	provider   ProviderImpl
+	client     *http.Client
 }
 
-func NewEngine(chatURL, model string, thinking bool) *Engine {
+func NewEngine(settings *config.ProviderSettings, model string, thinking bool) *Engine {
+	if settings == nil {
+		return &Engine{settings: nil}
+	}
 	return &Engine{
-		ChatURL:  chatURL,
+		settings: settings,
+		ChatURL:  ResolveChatURL(*settings),
 		Model:    model,
 		Thinking: thinking,
+		provider: LoadProviderImpl(*settings),
 		client: &http.Client{
 			Timeout: 0, // no timeout for streaming
 		},
@@ -155,6 +162,12 @@ func MarshalToolsJSON(ts []tools.Tool) ([]byte, error) {
 // Pass nil for toolDefs if no tools are available.
 func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []tools.Tool) <-chan StreamEvent {
 	ch := make(chan StreamEvent, 64)
+
+	if e.settings == nil {
+		ch <- StreamEvent{Error: fmt.Errorf("no provider defined — please select one with /model")}
+		close(ch)
+		return ch
+	}
 
 	go func() {
 		defer close(ch)
@@ -195,6 +208,13 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 		}
 		req.Header.Set("Content-Type", "application/json")
 
+		if e.provider != nil {
+			if err := e.provider.PrepareRequest(req); err != nil {
+				ch <- StreamEvent{Error: fmt.Errorf("provider auth: %w", err)}
+				return
+			}
+		}
+
 		resp, err := e.client.Do(req)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -206,29 +226,59 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 			ch <- StreamEvent{Error: fmt.Errorf("request failed: %w", err)}
 			return
 		}
-		defer resp.Body.Close()
 
+		// Handle non-OK response with 401 retry logic
 		if resp.StatusCode != http.StatusOK {
-			// Parse error response body to extract error message
-			var errorResp struct {
-				Error struct {
-					Message string      `json:"message"`
-					Type    string      `json:"type"`
-					Code    interface{} `json:"code"` // Can be string or number
-				} `json:"error"`
-			}
-
-			// Try to parse the error response
-			if err := json.NewDecoder(resp.Body).Decode(&errorResp); err == nil && errorResp.Error.Message != "" {
-				// Return: API error with message from server
-				ch <- StreamEvent{Error: fmt.Errorf("API error [%d]: %s", resp.StatusCode, errorResp.Error.Message)}
+			// Handle 401 — try token refresh and retry once
+			if resp.StatusCode == http.StatusUnauthorized && e.provider != nil {
+				refreshErr := e.provider.Refresh()
+				if refreshErr == nil {
+					// Refresh succeeded — retry with new token
+					retryBodyFn := req.GetBody
+					if retryBodyFn != nil {
+						bodyReader, brErr := retryBodyFn()
+						if brErr == nil {
+							req2, rqErr := http.NewRequestWithContext(ctx, "POST", e.ChatURL, bodyReader)
+							if rqErr == nil {
+								req2.Header.Set("Content-Type", "application/json")
+								authErr := e.provider.PrepareRequest(req2)
+								if authErr == nil {
+									resp.Body.Close()
+									resp, err = e.client.Do(req2)
+									if err != nil {
+										ch <- StreamEvent{Error: fmt.Errorf("retry request failed: %w", err)}
+										return
+									}
+								}
+							}
+						}
+					}
+				}
+				// If we didn't get a new OK response, return re-auth error
+				if resp == nil || resp.StatusCode != http.StatusOK {
+					ch <- StreamEvent{Error: fmt.Errorf("authentication failed — provider credentials need reconfiguration")}
+					return
+				}
 			} else {
-				// Fallback: generic error with status code
-				ch <- StreamEvent{Error: fmt.Errorf("API returned %d", resp.StatusCode)}
+				// Non-401 error — parse and return
+				var errorResp struct {
+					Error struct {
+						Message string      `json:"message"`
+						Type    string      `json:"type"`
+						Code    interface{} `json:"code"`
+					} `json:"error"`
+				}
+				if jsonErr := json.NewDecoder(resp.Body).Decode(&errorResp); jsonErr == nil && errorResp.Error.Message != "" {
+					ch <- StreamEvent{Error: fmt.Errorf("API error [%d]: %s", resp.StatusCode, errorResp.Error.Message)}
+				} else {
+					ch <- StreamEvent{Error: fmt.Errorf("API returned %d", resp.StatusCode)}
+				}
+				return
 			}
-			return
 		}
 
+		// Stream processing
+		defer resp.Body.Close()
 		parser := &ThinkParser{}
 		// Qwen quirk: when thinking enabled but hidden, model may emit
 		// reasoning before any <think> open tag

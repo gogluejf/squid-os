@@ -64,12 +64,12 @@ type streamState struct {
 	cancelFn         context.CancelFunc
 	ch               <-chan chat.StreamEvent
 	userCancelled    bool
-	partialTools     []partialTool          // live state during arg streaming, indexed by tool call index
-	lastToolIdx      int                    // index of the last tool that received a delta (-1 if none)
-	tokenCount       int                    // counter for throttling viewport updates
-	authorizationCtx *AuthorizationContext  // non-nil when paused awaiting auth
-	pendingToolIndex int                    // index into partialTools being authorized
-	msgIdx           int                    // index of the saved assistant message with tool calls (-1 if none)
+	partialTools     []partialTool         // live state during arg streaming, indexed by tool call index
+	lastToolIdx      int                   // index of the last tool that received a delta (-1 if none)
+	tokenCount       int                   // counter for throttling viewport updates
+	authorizationCtx *AuthorizationContext // non-nil when paused awaiting auth
+	pendingToolIndex int                   // index into partialTools being authorized
+	msgIdx           int                   // index of the saved assistant message with tool calls (-1 if none)
 }
 
 // AddTextChunk appends text and updates metrics.
@@ -178,6 +178,7 @@ func (m *Model) setAuthMode() tea.Cmd {
 func (m *Model) setChatMode() tea.Cmd {
 	m.textarea.Placeholder = "Type a message..."
 	m.mode = ModeChat
+	m.activeComponent = nil
 	m.textarea.Focus()
 	m.updateViewportContent()
 	return textarea.Blink
@@ -189,6 +190,11 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	text := strings.TrimSpace(m.textarea.Value())
 	if text == "" {
 		return m, nil
+	}
+
+	// Check provider configuration before sending
+	if blocked, cmd := (&m).ensureProviderConfigured(); blocked {
+		return m, cmd
 	}
 
 	// Check for pending skill change (Next is a pointer: nil = no pending change)
@@ -227,8 +233,8 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	(&m).toolReg = tools.GetRegistry()
 	(&m).clearNotification()
 
-	chatURL := config.ResolveChatURL(m.endpoints, m.settings.Provider)
-	engine := chat.NewEngine(chatURL, m.settings.Model, m.settings.Thinking)
+	providerSettings := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
+	engine := chat.NewEngine(providerSettings, m.settings.Model, m.settings.Thinking)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.stream.cancelFn = cancel
@@ -699,8 +705,8 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 	m.setStreamMode()
 	m.toolReg = tools.GetRegistry()
 
-	chatURL := config.ResolveChatURL(m.endpoints, m.settings.Provider)
-	engine := chat.NewEngine(chatURL, m.settings.Model, m.settings.Thinking)
+	providerSettings := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
+	engine := chat.NewEngine(providerSettings, m.settings.Model, m.settings.Thinking)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.stream.cancelFn = cancel

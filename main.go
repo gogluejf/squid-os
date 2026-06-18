@@ -59,7 +59,7 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	log.Init(paths)
 
-	endpoints := config.LoadEndpoints(cfgDir)
+	endpoints := config.LoadEndpoints(paths)
 	history := config.LoadHistory(paths)
 
 	log.SetEnabled(settings.DebugEnabled && !flagIncognito)

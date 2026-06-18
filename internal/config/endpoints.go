@@ -3,42 +3,101 @@ package config
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
+	"time"
 )
 
-type ProviderConfig struct {
-	Name      string `json:"name"`
-	ChatURL   string `json:"chat_completions_url"`
-	ModelsURL string `json:"models_url"`
+// AuthMethod defines how a provider authenticates requests.
+type AuthMethod string
+
+const (
+	AuthNone   AuthMethod = "none"
+	AuthAPIKey AuthMethod = "api_key"
+	AuthOAuth  AuthMethod = "oauth"
+)
+
+// Dialect defines the API format a provider uses.
+type Dialect string
+
+const (
+	DialectOpenAICompatible Dialect = "openai"
+	DialectAnthropic        Dialect = "anthropic"
+	DialectGemini           Dialect = "gemini"
+)
+
+// Known provider name constants.
+const (
+	ProviderVLLM        = "vllm"
+	ProviderOllama      = "ollama"
+	ProviderOpenAI      = "openai"
+	ProviderOpenAICodex = "openai-codex"
+)
+
+// ProviderSettings holds what the user configured for a provider — stored in endpoints.json.
+type ProviderSettings struct {
+	Name        string         `json:"name"`
+	BaseURL     string         `json:"base_url,omitempty"`
+	Credentials *ProviderCreds `json:"credentials,omitempty"`
 }
 
-type EndpointsConfig struct {
-	Providers []ProviderConfig `json:"providers"`
+// ProviderCreds holds the active credentials for a provider.
+type ProviderCreds struct {
+	ActiveAuthMethod AuthMethod  `json:"active_auth_method"`
+	APIKey           string      `json:"api_key,omitempty"`
+	OAuth            *OAuthCreds `json:"oauth,omitempty"`
 }
 
-// LoadEndpoints loads endpoints.json from the given config directory.
-func LoadEndpoints(cfgDir string) EndpointsConfig {
-	var e EndpointsConfig
-	data, err := os.ReadFile(filepath.Join(cfgDir, "endpoints.json"))
-	if err != nil {
-		return e
+// OAuthCreds holds OAuth2 tokens for a provider.
+type OAuthCreds struct {
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	ExpiresAt    time.Time `json:"expires_at"`
+}
+
+// IsConfigured returns true if the user settings have valid credentials for the active auth method.
+func (s ProviderSettings) IsConfigured() bool {
+	if s.Credentials == nil {
+		return false
 	}
-	_ = json.Unmarshal(data, &e)
+	switch s.Credentials.ActiveAuthMethod {
+	case AuthNone:
+		return true
+	case AuthAPIKey:
+		return s.Credentials.APIKey != ""
+	case AuthOAuth:
+		return s.Credentials.OAuth != nil && s.Credentials.OAuth.AccessToken != ""
+	default:
+		return false
+	}
+}
+
+// EndpointsConfig holds the list of user-configured providers.
+type EndpointsConfig struct {
+	Providers []ProviderSettings `json:"providers"`
+}
+
+// LoadEndpoints loads endpoints.json from the given Paths.
+// Returns only user-saved settings. May be empty.
+func LoadEndpoints(p Paths) EndpointsConfig {
+	data, err := os.ReadFile(p.EndpointsFile())
+	if err != nil {
+		return EndpointsConfig{}
+	}
+
+	var e EndpointsConfig
+	if err := json.Unmarshal(data, &e); err != nil {
+		return EndpointsConfig{}
+	}
 	return e
 }
 
-// ResolveChatURL returns the ChatURL for the active provider, falling back to
-// the first provider's URL, then the vllm default.
-func ResolveChatURL(endpoints EndpointsConfig, provider string) string {
-	for _, p := range endpoints.Providers {
-		if p.Name == provider {
-			return p.ChatURL
+// ResolveProviderSettings finds a provider's user settings by name.
+func ResolveProviderSettings(endpoints EndpointsConfig, name string) *ProviderSettings {
+	for i := range endpoints.Providers {
+		if endpoints.Providers[i].Name == name {
+			return &endpoints.Providers[i]
 		}
 	}
-	if len(endpoints.Providers) > 0 {
-		return endpoints.Providers[0].ChatURL
-	}
-	return "https://localhost/v1/chat/completions"
+	return nil
 }
 
 // SaveEndpoints writes endpoints.json

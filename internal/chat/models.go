@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
+	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
 )
 
@@ -15,10 +17,12 @@ import (
 type ModelEntry struct {
 	ID            string
 	Provider      string
-	ContextLength int // 0 if unknown
+	ContextLength int  // 0 if unknown
+	NeedsConfig   bool // true for sentinel entries (unconfigured/expired)
 }
 
-// ScanModels fetches models from all providers (always fresh, no cache)
+// ScanModels fetches models from all registered providers.
+// Returns sentinel entries for unconfigured providers.
 func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEntry {
 	var (
 		mu     sync.Mutex
@@ -26,32 +30,108 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 		wg     sync.WaitGroup
 	)
 
-	for _, provider := range endpoints.Providers {
+	for _, meta := range provider.AllMeta() {
 		wg.Add(1)
-		go func(p config.ProviderConfig) {
+		go func(m provider.ProviderMeta) {
 			defer wg.Done()
-			entries, err := FetchModelsDetail(ctx, p.ModelsURL, p.Name)
-			if err != nil {
-				return // silently skip unavailable providers
+
+			// Look up user settings for this provider
+			settings := config.ResolveProviderSettings(endpoints, m.Name)
+			if settings == nil {
+				mu.Lock()
+				models = append(models, ModelEntry{
+					ID:          "<not configured>",
+					Provider:    m.Name,
+					NeedsConfig: true,
+				})
+				mu.Unlock()
+				return
 			}
+
+			s := *settings
+			if s.Name == "" {
+				s.Name = m.Name
+			}
+
+			if !IsConfigured(s) {
+				mu.Lock()
+				models = append(models, ModelEntry{
+					ID:          "<not configured>",
+					Provider:    m.Name,
+					NeedsConfig: true,
+				})
+				mu.Unlock()
+				return
+			}
+
+			impl := LoadProviderImpl(s)
+			if impl == nil {
+				mu.Lock()
+				models = append(models, ModelEntry{
+					ID:          "<not supported>",
+					Provider:    m.Name,
+					NeedsConfig: true,
+				})
+				mu.Unlock()
+				return
+			}
+
+			modelsURL := ResolveModelsURL(s)
+			if modelsURL == "" {
+				return
+			}
+
+			entries, err := fetchModelsDetail(ctx, modelsURL, impl, m.Name)
+			if err != nil {
+				mu.Lock()
+				if isAuthError(err) {
+					models = append(models, ModelEntry{
+						ID:          "<auth expired>",
+						Provider:    m.Name,
+						NeedsConfig: true,
+					})
+				} else {
+					models = append(models, ModelEntry{
+						ID:          "<unreachable>",
+						Provider:    m.Name,
+						NeedsConfig: true,
+					})
+				}
+				mu.Unlock()
+				return
+			}
+
 			mu.Lock()
 			models = append(models, entries...)
 			mu.Unlock()
-		}(provider)
+		}(meta)
 	}
 
 	wg.Wait()
 	return models
 }
 
-// FetchModelsDetail queries /v1/models endpoint and returns full model entries
-// with context length. It handles vLLM (max_model_len), Ollama (context_length),
-// and generic backends (max_tokens).
-func FetchModelsDetail(ctx context.Context, modelsURL string, provider string) ([]ModelEntry, error) {
+// ModelIDs extracts just the IDs from model entries
+func ModelIDs(entries []ModelEntry) []string {
+	ids := make([]string, len(entries))
+	for i, e := range entries {
+		ids[i] = e.ID
+	}
+	return ids
+}
+
+// fetchModelsDetail fetches models using the provider's auth implementation.
+func fetchModelsDetail(ctx context.Context, modelsURL string, impl ProviderImpl, providerName string) ([]ModelEntry, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, "GET", modelsURL, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if impl != nil {
+		if err := impl.PrepareRequest(req); err != nil {
+			return nil, err
+		}
 	}
 
 	resp, err := client.Do(req)
@@ -64,13 +144,12 @@ func FetchModelsDetail(ctx context.Context, modelsURL string, provider string) (
 		return nil, fmt.Errorf("models endpoint returned %d", resp.StatusCode)
 	}
 
-	// OpenAI-compatible response; different backends expose context in different fields
 	var result struct {
 		Data []struct {
 			ID            string `json:"id"`
-			MaxModelLen   *int   `json:"max_model_len"`       // vLLM
-			ContextLength *int   `json:"context_length"`      // Ollama
-			MaxTokens     *int   `json:"max_tokens"`          // some backends
+			MaxModelLen   *int   `json:"max_model_len"`
+			ContextLength *int   `json:"context_length"`
+			MaxTokens     *int   `json:"max_tokens"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -87,16 +166,18 @@ func FetchModelsDetail(ctx context.Context, modelsURL string, provider string) (
 		} else if m.MaxTokens != nil {
 			ctxLen = *m.MaxTokens
 		}
-		entries = append(entries, ModelEntry{ID: m.ID, Provider: provider, ContextLength: ctxLen})
+		entries = append(entries, ModelEntry{ID: m.ID, Provider: providerName, ContextLength: ctxLen})
 	}
 	return entries, nil
 }
 
-// ModelIDs extracts just the IDs from model entries
-func ModelIDs(entries []ModelEntry) []string {
-	ids := make([]string, len(entries))
-	for i, e := range entries {
-		ids[i] = e.ID
+// isAuthError returns true if the error indicates an authentication failure.
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
 	}
-	return ids
+	msg := err.Error()
+	return strings.Contains(msg, "401") || strings.Contains(msg, "403") ||
+		strings.Contains(msg, "unauthorized") || strings.Contains(msg, "forbidden") ||
+		strings.Contains(msg, "no credentials")
 }

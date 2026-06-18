@@ -12,14 +12,13 @@ import (
 
 // Run executes a single prompt and streams the response to stdout
 func Run(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, prompt, imagePath string) error {
-	// Find the active provider
-	chatURL := config.ResolveChatURL(endpoints, settings.Provider)
+	s := config.ResolveProviderSettings(endpoints, settings.Provider)
 
 	if settings.Model == "" {
 		return fmt.Errorf("no model configured. Run squid-os and use /model to select one, or set it in settings.json")
 	}
 
-	engine := chat.NewEngine(chatURL, settings.Model, settings.Thinking)
+	engine := chat.NewEngine(s, settings.Model, settings.Thinking)
 
 	// Build messages using the centralized function
 	messages := []config.Message{

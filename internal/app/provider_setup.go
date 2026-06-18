@@ -92,6 +92,16 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 		startKey = "done"
 	}
 
+	// --- Gather saved values for pre-filling ---
+	savedAuthMethod := ""
+	savedAPIKey := ""
+	if s.Credentials != nil && s.Credentials.ActiveAuthMethod != "" {
+		savedAuthMethod = string(s.Credentials.ActiveAuthMethod)
+	}
+	if s.Credentials != nil && s.Credentials.APIKey != "" {
+		savedAPIKey = s.Credentials.APIKey
+	}
+
 	// --- Helper: build description for the done step ---
 	buildDoneDesc := func(r map[string]any) string {
 		var parts []string
@@ -149,7 +159,8 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 		steps["authPick"] = component.SequenceStep{
 			Key: "authPick",
 			Component: &component.Picker{
-				Title: fmt.Sprintf("Auth method for %s", s.Name),
+				Title:        fmt.Sprintf("Auth method for %s", s.Name),
+				Description:  "Choose how to authenticate",
 				Items: func() []component.PickerItem {
 					items := make([]component.PickerItem, len(methodLabels))
 					for i, label := range methodLabels {
@@ -157,6 +168,7 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 					}
 					return items
 				}(),
+				DefaultValue: savedAuthMethod,
 			},
 			OnAdvance: func(ctx any, r map[string]any) string {
 				// Route to the chosen method's step
@@ -172,9 +184,10 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 	steps["apiKey"] = component.SequenceStep{
 		Key: "apiKey",
 		Component: &component.Prompt{
-			Title:       fmt.Sprintf("API Key for %s", s.Name),
-			Description: "Enter your API key for this provider",
-			Label:       "Key: ",
+			Title:        fmt.Sprintf("API Key for %s", s.Name),
+			Description:  "Enter your API key for this provider",
+			Label:        "Key: ",
+			DefaultValue: savedAPIKey,
 		},
 		OnAdvance: func(ctx any, r map[string]any) string {
 			return "done"

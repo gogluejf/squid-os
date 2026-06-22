@@ -13,6 +13,7 @@ import (
 	"squid-os/internal/config"
 	"squid-os/internal/log"
 	"squid-os/internal/tools"
+	"slices"
 	"strings"
 	"time"
 
@@ -292,8 +293,13 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 			parser.InThink = true
 		}
 
-		// Buffer for accumulating tool call deltas by index
+		// Buffer for accumulating tool call deltas.
+		// Primary key is tool index when provided (chat completions).
+		// For adapters like Codex/Responses that provide call_id but no index,
+		// assign a stable synthetic index per call_id.
 		toolBuffers := make(map[int]*toolCallBuffer)
+		toolCallIDToIdx := make(map[string]int)
+		nextSyntheticToolIdx := 0
 
 		scanner := bufio.NewScanner(resp.Body)
 		// Increase buffer for large chunks
@@ -353,11 +359,20 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 						InThinking: parser.InThink,
 					}
 				}
-				if evt.StopReason == "tool_calls" && len(toolBuffers) > 0 {
+				// Flush any remaining tool calls — the Codex backend doesn't
+				// set stop_reason on response.completed, so always flush if
+				// there are buffered tool calls.
+				stopReason := evt.StopReason
+				if len(toolBuffers) > 0 {
 					tc := flushToolCalls(toolBuffers)
 					ch <- StreamEvent{ToolCalls: tc}
+					// Ensure downstream (stream.go) knows to enter tool execution.
+					// Codex backend doesn't set stop_reason, so we infer it.
+					if stopReason == "" {
+						stopReason = "tool_calls"
+					}
 				}
-				ch <- StreamEvent{Done: true, StopReason: evt.StopReason}
+				ch <- StreamEvent{Done: true, StopReason: stopReason}
 				return
 			}
 
@@ -373,10 +388,19 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 					}
 				}
 
-				// For Codex adapter, we may not have index — use a single buffer
-				idx := 0
-				if evt.ToolCallIdx > 0 {
-					idx = evt.ToolCallIdx
+				// Choose a stable buffer key per tool call.
+				// ChatCompletions adapters provide ToolCallIdx.
+				// Codex/Responses provides ToolCallID but no index, so map call_id
+				// to a stable local index for the duration of the stream.
+				idx := evt.ToolCallIdx
+				if evt.ToolCallID != "" {
+					mappedIdx, ok := toolCallIDToIdx[evt.ToolCallID]
+					if !ok {
+						mappedIdx = nextSyntheticToolIdx
+						toolCallIDToIdx[evt.ToolCallID] = mappedIdx
+						nextSyntheticToolIdx++
+					}
+					idx = mappedIdx
 				}
 				buf, ok := toolBuffers[idx]
 				if !ok {
@@ -501,9 +525,17 @@ func RepairArgs(args string) (string, bool) {
 }
 
 // flushToolCalls converts buffered tool call deltas into ToolCall structs.
+// Order is by ascending stable index so app-side positional merge stays aligned
+// with delta-time partialTools accumulation.
 func flushToolCalls(buffers map[int]*toolCallBuffer) []ToolCall {
-	result := make([]ToolCall, 0, len(buffers))
-	for i := 0; i < len(buffers); i++ {
+	keys := make([]int, 0, len(buffers))
+	for k := range buffers {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	result := make([]ToolCall, 0, len(keys))
+	for _, i := range keys {
 		buf := buffers[i]
 		if buf == nil {
 			continue

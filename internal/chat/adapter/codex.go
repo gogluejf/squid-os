@@ -9,15 +9,15 @@ import (
 type CodexAdapter struct{}
 
 type codexRequest struct {
-	Model        string           `json:"model"`
-	Instructions string           `json:"instructions,omitempty"`
-	Input        []codexInputItem `json:"input"`
-	Tools        []codexToolDef   `json:"tools,omitempty"`
-	Stream       bool             `json:"stream"`
-	Store        bool             `json:"store"`
-	ToolChoice   interface{}      `json:"tool_choice,omitempty"`
-	Text         *codexTextFmt    `json:"text,omitempty"`
-	Reasoning    *codexReasoning  `json:"reasoning,omitempty"`
+	Model        string            `json:"model"`
+	Instructions string            `json:"instructions,omitempty"`
+	Input        []json.RawMessage `json:"input"`
+	Tools        []codexToolDef    `json:"tools,omitempty"`
+	Stream       bool              `json:"stream"`
+	Store        bool              `json:"store"`
+	ToolChoice   interface{}       `json:"tool_choice,omitempty"`
+	Text         *codexTextFmt     `json:"text,omitempty"`
+	Reasoning    *codexReasoning   `json:"reasoning,omitempty"`
 }
 
 type codexTextFmt struct {
@@ -34,13 +34,11 @@ type codexReasoning struct {
 	Effort  string `json:"effort,omitempty"`
 }
 
-type codexInputItem struct {
-	Type       string          `json:"type"`
-	Role       string          `json:"role,omitempty"`
-	Content    []codexContent  `json:"content,omitempty"`
-	Name       string          `json:"name,omitempty"`
-	ToolCallID string          `json:"tool_call_id,omitempty"`
-	ToolCalls  []codexToolCall `json:"call_arguments,omitempty"`
+// Input item: {"type": "message", "role": "...", "content": [...]}
+type codexMessage struct {
+	Type    string         `json:"type"`
+	Role    string         `json:"role,omitempty"`
+	Content []codexContent `json:"content,omitempty"`
 }
 
 type codexContent struct {
@@ -48,15 +46,19 @@ type codexContent struct {
 	Text string `json:"text,omitempty"`
 }
 
-type codexToolCall struct {
-	ID       string        `json:"id"`
-	Type     string        `json:"type"`
-	Function codexFuncCall `json:"function"`
+// Input item: {"type": "function_call", "call_id": "...", "name": "...", "arguments": "..."}
+type codexFunctionCall struct {
+	Type      string `json:"type"`
+	CallID    string `json:"call_id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
-type codexFuncCall struct {
-	Name string `json:"name"`
-	Args string `json:"arguments"`
+// Input item: {"type": "function_call_output", "call_id": "...", "output": "..."}
+type codexFunctionCallOutput struct {
+	Type   string `json:"type"`
+	CallID string `json:"call_id"`
+	Output string `json:"output"`
 }
 
 type codexToolDef struct {
@@ -98,7 +100,7 @@ func (a *CodexAdapter) BuildBody(model string, messagesJSON []byte, toolDefs []t
 	}
 
 	var sysPrompt string
-	var inputItems []codexInputItem
+	var inputItems []json.RawMessage
 
 	for _, msg := range msgs {
 		switch msg.Role {
@@ -106,8 +108,9 @@ func (a *CodexAdapter) BuildBody(model string, messagesJSON []byte, toolDefs []t
 			if str, ok := msg.Content.(string); ok {
 				sysPrompt = str
 			}
+
 		case "user":
-			item := codexInputItem{Type: "message", Role: "user"}
+			item := codexMessage{Type: "message", Role: "user"}
 			if str, ok := msg.Content.(string); ok {
 				item.Content = []codexContent{{Type: "input_text", Text: str}}
 			} else if parts, ok := msg.Content.([]interface{}); ok {
@@ -121,41 +124,51 @@ func (a *CodexAdapter) BuildBody(model string, messagesJSON []byte, toolDefs []t
 					}
 				}
 			}
-			inputItems = append(inputItems, item)
+			data, _ := json.Marshal(item)
+			inputItems = append(inputItems, data)
+
 		case "assistant":
-			item := codexInputItem{Type: "message", Role: "assistant"}
-			if str, ok := msg.Content.(string); ok {
+			// If the assistant has text content, emit a message item
+			if str, ok := msg.Content.(string); ok && str != "" {
+				item := codexMessage{Type: "message", Role: "assistant"}
 				item.Content = []codexContent{{Type: "output_text", Text: str}}
+				data, _ := json.Marshal(item)
+				inputItems = append(inputItems, data)
 			}
-			if len(msg.ToolCalls) > 0 {
-				item.ToolCalls = make([]codexToolCall, len(msg.ToolCalls))
-				for i, tc := range msg.ToolCalls {
-					item.ToolCalls[i] = codexToolCall{
-						ID:   tc.ID,
-						Type: tc.Type,
-						Function: codexFuncCall{
-							Name: tc.Function.Name,
-							Args: tc.Function.Args,
-						},
-					}
+			// Emit each tool call as a standalone function_call item
+			for _, tc := range msg.ToolCalls {
+				item := codexFunctionCall{
+					Type:      "function_call",
+					CallID:    tc.ID,
+					Name:      tc.Function.Name,
+					Arguments: tc.Function.Args,
 				}
+				data, _ := json.Marshal(item)
+				inputItems = append(inputItems, data)
 			}
-			inputItems = append(inputItems, item)
+			// Assistant with neither text nor tool calls (edge case) — skip
+
 		case "tool":
-			item := codexInputItem{
-				Type:       "function_call_output",
-				ToolCallID: msg.ToolCallID,
-			}
+			// Tool result as function_call_output
+			var output string
 			if str, ok := msg.Content.(string); ok {
-				item.Content = []codexContent{{Type: "output_text", Text: str}}
+				output = str
 			}
-			inputItems = append(inputItems, item)
+			item := codexFunctionCallOutput{
+				Type:   "function_call_output",
+				CallID: msg.ToolCallID,
+				Output: output,
+			}
+			data, _ := json.Marshal(item)
+			inputItems = append(inputItems, data)
+
 		case "synthetic":
-			item := codexInputItem{Type: "message", Role: "assistant"}
+			item := codexMessage{Type: "message", Role: "assistant"}
 			if str, ok := msg.Content.(string); ok {
 				item.Content = []codexContent{{Type: "output_text", Text: str}}
 			}
-			inputItems = append(inputItems, item)
+			data, _ := json.Marshal(item)
+			inputItems = append(inputItems, data)
 		}
 	}
 
@@ -221,7 +234,30 @@ func (a *CodexAdapter) ParseSSE(payload string) *AdapterEvent {
 		}
 		return &AdapterEvent{Thinking: delta.Delta}
 
-	case "response.function_call.arguments.delta":
+	// response.output_item.added — new tool call started
+	// Payload has: call_id, name, type:"function_call"
+	case "response.output_item.added":
+		var item struct {
+			Item struct {
+				CallID string `json:"call_id"`
+				Name   string `json:"name"`
+				Type   string `json:"type"`
+			} `json:"item"`
+		}
+		if err := json.Unmarshal([]byte(payload), &item); err != nil {
+			return nil
+		}
+		if item.Item.Type != "function_call" {
+			return nil
+		}
+		return &AdapterEvent{
+			ToolCallID: item.Item.CallID,
+			ToolCallName: item.Item.Name,
+		}
+
+	// response.function_call_arguments.delta — incremental arg chunks
+	// Note: the event name is "function_call_arguments" not "function_call.arguments"
+	case "response.function_call_arguments.delta":
 		var delta struct {
 			Delta string `json:"delta"`
 		}
@@ -229,15 +265,6 @@ func (a *CodexAdapter) ParseSSE(payload string) *AdapterEvent {
 			return nil
 		}
 		return &AdapterEvent{ToolCallDelta: delta.Delta}
-
-	case "response.function_call.name.delta":
-		var delta struct {
-			Delta string `json:"delta"`
-		}
-		if err := json.Unmarshal([]byte(payload), &delta); err != nil {
-			return nil
-		}
-		return &AdapterEvent{ToolCallName: delta.Delta}
 
 	case "response.completed":
 		return &AdapterEvent{Done: true}

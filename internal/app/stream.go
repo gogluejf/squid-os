@@ -65,7 +65,6 @@ type streamState struct {
 	ch               <-chan chat.StreamEvent
 	userCancelled    bool
 	partialTools     []partialTool         // live state during arg streaming, indexed by tool call index
-	lastToolIdx      int                   // index of the last tool that received a delta (-1 if none)
 	tokenCount       int                   // counter for throttling viewport updates
 	authorizationCtx *AuthorizationContext // non-nil when paused awaiting auth
 	pendingToolIndex int                   // index into partialTools being authorized
@@ -102,7 +101,7 @@ func (ss *streamState) reset() {
 	ss.ch = nil
 	ss.userCancelled = false
 	ss.partialTools = nil
-	ss.lastToolIdx = -1
+
 	ss.tokenCount = 0
 	ss.authorizationCtx = nil
 	ss.pendingToolIndex = -1
@@ -371,7 +370,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		for len(m.stream.partialTools) <= event.ToolCallIdx {
 			m.stream.partialTools = append(m.stream.partialTools, partialTool{})
 		}
-		m.stream.lastToolIdx = event.ToolCallIdx
+
 		p := &m.stream.partialTools[event.ToolCallIdx]
 		if event.ToolCallName != "" {
 			p.name = event.ToolCallName
@@ -390,16 +389,21 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		return m, waitForStreamEvent(m.stream.ch)
 	}
 
-	// ToolCalls flush: enrich partialTools with ID/Type/Args.
-	// Use the repaired args from the flushed ToolCall — they've already
-	// been through jsonrepair in chat.flushToolCalls().
+	// ToolCalls flush: treat flushed tool calls as the canonical final state.
+	// They may arrive even if delta-time partial state was incomplete, so make
+	// sure partialTools is long enough and backfill missing fields, especially name.
+	// Args are already repaired in chat.flushToolCalls().
 	if len(event.ToolCalls) > 0 {
 		for i, tc := range event.ToolCalls {
-			if i < len(m.stream.partialTools) {
-				m.stream.partialTools[i].id = tc.ID
-				m.stream.partialTools[i].typeStr = tc.Type
-				m.stream.partialTools[i].args = tc.ArgsJSON
+			for len(m.stream.partialTools) <= i {
+				m.stream.partialTools = append(m.stream.partialTools, partialTool{})
 			}
+			m.stream.partialTools[i].id = tc.ID
+			m.stream.partialTools[i].typeStr = tc.Type
+			if m.stream.partialTools[i].name == "" {
+				m.stream.partialTools[i].name = tc.Name
+			}
+			m.stream.partialTools[i].args = tc.ArgsJSON
 		}
 	}
 	if event.Text != "" {

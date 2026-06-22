@@ -216,8 +216,15 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 // inside the same box (separated by "\n").
 func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expanded bool, reg *tools.Registry) string {
 	var b strings.Builder
+	if reg == nil {
+		reg = &tools.Registry{}
+	}
 	for _, tc := range toolCalls {
 		t := reg.Get(tc.Instruction.Name)
+		if t == nil {
+			// Unknown or empty tool name — render a generic placeholder
+			t = &tools.Tool{Style: style.ToolStyle()}
+		}
 
 		var parts []string
 
@@ -646,8 +653,14 @@ func renderSeqStatRight(stat *config.SequenceStat) string {
 func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, expanded bool) string {
 	var b strings.Builder
 	reg := tools.GetRegistry()
+	if reg == nil {
+		reg = &tools.Registry{}
+	}
 	for _, tc := range pendingTools {
 		t := reg.Get(tc.Name)
+		if t == nil {
+			t = &tools.Tool{Style: style.ToolStyle()}
+		}
 
 		var parts []string
 

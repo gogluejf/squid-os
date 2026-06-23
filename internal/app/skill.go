@@ -59,17 +59,17 @@ func (m *Model) injectSkillChangeSynthetic(old string, nxt string) {
 
 	if nxt == "" {
 		text = fmt.Sprintf("Skill %q has been unloaded by the user. Don't use the previously loaded skill anymore.", old)
-		label = "skill-unload"
+		label = "skill_unload"
 		params = nil
 	} else if old == "" {
 		text = fmt.Sprintf("Skill %q has been loaded by the user.\n\n", nxt)
 		text += m.getSkillText(nxt)
-		label = "skill-load"
+		label = "skill_load"
 		params = map[string]string{"name": nxt}
 	} else {
 		text = fmt.Sprintf("Skill changed from %q to %q by the user. Stop using the previous skill and use the new one instead.\n\n", old, nxt)
 		text += m.getSkillText(nxt)
-		label = "skill-load"
+		label = "skill_load"
 		params = map[string]string{"name": nxt}
 	}
 

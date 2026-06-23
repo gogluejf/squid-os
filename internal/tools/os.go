@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	"squid-os/internal/style"
 )
@@ -30,7 +31,9 @@ var Open = Tool{
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
 
-		target = ResolvePath(target)
+		if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
+			target = ResolvePath(target)
+		}
 
 		var cmd *exec.Cmd
 		switch runtime.GOOS {

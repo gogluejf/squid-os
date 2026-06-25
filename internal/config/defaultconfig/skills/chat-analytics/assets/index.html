@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        /* ===== Reset & Base ===== */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #1e1e1e;
+            --nav: #252526;
+            --card: #2d2d2d;
+            --border: #3e3e42;
+            --text: #d4d4d4;
+            --text-muted: #999;
+            --accent: #569cd6;
+            --success: #4ec9b0;
+            --warn: #ce9178;
+            --red: #f44747;
+            --orange: #d29922;
+            --purple: #bc8cff;
+            --code-bg: #202020;
+            --sidebar-width: 320px;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            min-height: 100vh;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* ===== Sidebar ===== */
+        #sidebar {
+            width: var(--sidebar-width);
+            min-width: var(--sidebar-width);
+            background: var(--nav);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            overflow: hidden;
+        }
+        #sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        #sidebar-header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--accent);
+        }
+        #search-input {
+            width: 100%;
+            padding: 9px 14px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+        }
+        #search-input:focus {
+            border-color: var(--accent);
+        }
+        #session-list {
+            flex: 1;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+        .session-item {
+            padding: 12px 18px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .session-item:hover { background: var(--card); }
+        .session-item.active { background: var(--card); border-left: 3px solid var(--accent); }
+        .session-item .filename {
+            font-size: 12px;
+            color: var(--accent);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+        .session-item .meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        .session-item .tokens {
+            color: var(--success);
+        }
+        .session-item .msg-count {
+            color: var(--warn);
+        }
+        .session-item .model-badge {
+            font-size: 10px;
+            padding: 3px 9px;
+            background: #3a6d8c;
+            border-radius: 12px;
+            color: #fff;
+        }
+        .dashboard-link {
+            padding: 12px 18px;
+            cursor: pointer;
+            color: var(--accent);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.15s;
+            font-size: 13px;
+        }
+        .dashboard-link:hover { background: var(--card); }
+        .dashboard-link.active { background: var(--card); }
+
+        /* ===== Main Content ===== */
+        #main {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            padding: 40px 32px;
+            overflow-y: auto;
+            height: 100vh;
+        }
+        .view { display: none; }
+        .view.active { display: block; }
+
+        /* ===== Dashboard Stats ===== */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 36px;
+        }
+        .stat-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .stat-card .label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .stat-card .value {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .stat-card .sub {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        /* ===== Tables ===== */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 28px;
+        }
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            background: var(--nav);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            font-weight: bold;
+        }
+        td { font-size: 13px; }
+        tr:hover td { background: var(--nav); }
+        .link-cell a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        .link-cell a:hover { text-decoration: underline; }
+
+        /* ===== Charts ===== */
+        .chart-container {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 28px;
+        }
+        .chart-container h3 {
+            margin-bottom: 16px;
+            font-size: 15px;
+            color: var(--text);
+        }
+        canvas { max-height: 380px; }
+
+        /* ===== Section Headers ===== */
+        .section { margin-bottom: 40px; }
+        .section h2 {
+            font-size: 18px;
+            color: var(--accent);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        .section h3 {
+            font-size: 15px;
+            color: var(--success);
+            margin-bottom: 14px;
+        }
+
+        /* ===== Token Tally Bars ===== */
+        .tally-bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .tally-bar .tally-label {
+            width: 180px;
+            font-size: 12px;
+            color: var(--text-muted);
+            text-align: left;
+            padding-right: 14px;
+        }
+        .tally-bar .tally-track {
+            flex: 1;
+            height: 24px;
+            background: var(--nav);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .tally-bar .tally-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        .tally-bar .tally-value {
+
+            font-size: 12px;
+            color: var(--text);
+            padding-left: 14px;
+            text-align: left;
+        }
+        .fill-input { background: var(--accent); opacity: 0.7; }
+        .fill-output { background: var(--success); opacity: 0.7; }
+        .fill-thinking { background: var(--purple); opacity: 0.6; }
+        .fill-tool { background: var(--warn); opacity: 0.7; }
+        .fill-system { background: var(--red); opacity: 0.6; }
+        .fill-user { background: #79c0ff; opacity: 0.6; }
+        .fill-synthetic { background: #ff7b72; opacity: 0.6; }
+
+        /* ===== Loading ===== */
+        .loading {
+            color: var(--text-muted);
+            font-size: 13px;
+            padding: 24px;
+        }
+
+        /* ===== Utility ===== */
+        .k { color: var(--success); }
+        .mono { font-family: Consolas, "SF Mono", "Fira Code", monospace; }
+        .badge {
+            display: inline-block;
+            padding: 3px 9px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .badge-model { background: #3a6d8c; color: #fff; border-radius: 12px; padding: 3px 9px; font-weight: bold; }
+        .badge-provider { background: #2d7a5e; color: #fff; border-radius: 12px; padding: 3px 9px; font-weight: bold; }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 900px) {
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <div id="sidebar-header">
+            <h1>📊 Chat Analytics</h1>
+            <input type="text" id="search-input" placeholder="Search sessions..." />
+        </div>
+        <div class="dashboard-link active" data-view="dashboard" onclick="showView('dashboard')">Dashboard</div>
+        <div id="session-list"></div>
+    </div>
+
+    <div id="main">
+        <!-- Dashboard View -->
+        <div id="view-dashboard" class="view active">
+            <div class="section">
+                <h2>Overview</h2>
+                <div class="dashboard-grid" id="dashboard-stats"></div>
+            </div>
+            <div class="section">
+                <h2>Activity (per week)</h2>
+                <div class="chart-container">
+                    <canvas id="activity-chart"></canvas>
+                </div>
+            </div>
+            <div class="section">
+                <h2>Weekly Tokens</h2>
+                <div class="chart-container">
+                    <canvas id="tokens-chart"></canvas>
+                </div>
+            </div>
+            <div class="section">
+                <h2>Sessions by Provider</h2>
+                <div class="chart-container">
+                    <canvas id="provider-chart"></canvas>
+                </div>
+            </div>
+            <div class="section">
+                <h2>Skills Usage (per week)</h2>
+                <div class="chart-container">
+                    <canvas id="skills-chart"></canvas>
+                </div>
+            </div>
+            <div class="section">
+                <h2>Models</h2>
+                <table id="models-table">
+                    <thead><tr><th>Model</th><th>Provider</th><th>Sessions</th><th>Avg In</th><th>Avg Out</th><th>Avg Turns</th><th>Avg Tools</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="section">
+                <h2>Top 10 Biggest Conversations</h2>
+                <table id="top10-table">
+                    <thead><tr><th>Session</th><th>Model</th><th>Tokens</th><th>Turns</th><th>Date</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Detail View -->
+        <div id="view-detail" class="view">
+            <div class="section">
+                <h2 id="detail-title">Session Details</h2>
+                <div class="dashboard-grid" id="detail-stats">
+                    <div class="stat-card">
+                        <div class="label">Model</div>
+                        <div class="value mono" id="detail-model" style="font-size:14px"></div>
+                        <div class="sub" id="detail-provider"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Total Tokens</div>
+                        <div class="value" id="detail-total-tokens" style="color:var(--success)"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Duration</div>
+                        <div class="value" id="detail-duration"></div>
+                        <div class="sub" id="detail-dates"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Waiting Time</div>
+                        <div class="value" id="detail-total-ttft" style="font-size:26px"></div>
+                        <div class="sub" id="detail-total-ttft-sub"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Speed</div>
+                        <div class="value" id="detail-speed"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Turns</div>
+                        <div class="value" id="detail-turns" style="color:var(--warn)"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Tool Calls</div>
+                        <div class="value" id="detail-tool-calls" style="color:var(--accent)"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- General Info -->
+            <div class="section">
+                <h3>General</h3>
+                <div>
+                    <div class="tally-bar"><div class="tally-label">System Prompt</div><div class="tally-value mono" id="gen-prompt"></div></div>
+                    <div class="tally-bar"><div class="tally-label">Environment</div><div class="tally-value mono" id="gen-environment"></div></div>
+                    <div class="tally-bar"><div class="tally-label">Initial Model</div><div class="tally-value mono" id="gen-tools-enabled"></div></div>
+                    <div class="tally-bar"><div class="tally-label">Initial Thinking</div><div class="tally-value mono" id="gen-thinking"></div></div>
+                    <div class="tally-bar"><div class="tally-label">Tool Calls</div><div class="tally-value mono" id="gen-tools"></div></div>
+                    <div class="tally-bar"><div class="tally-label">Synthetic</div><div class="tally-value mono" id="gen-synthetic"></div></div>
+                    <div class="tally-bar"><div class="tally-label">Aborted</div><div class="tally-value mono" id="gen-aborted"></div></div>
+                    <div class="tally-bar"><div class="tally-label">Skills Used</div><div class="tally-value mono" id="gen-skills"></div></div>
+                </div>
+            </div>
+
+            <!-- Token Tally -->
+            <div class="section">
+                <h3>Token Tally</h3>
+                <div id="token-tally"></div>
+            </div>
+
+            <!-- Timeline Chart -->
+            <div class="section">
+                <h3>Token Timeline</h3>
+                <div class="chart-container">
+                    <canvas id="timeline-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Performance Chart -->
+            <div class="section">
+                <h3>Performance (tokens/sec)</h3>
+                <div class="chart-container">
+                    <canvas id="perf-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- TTFT Chart -->
+            <div class="section">
+                <h3>Time to First Token (TTFT)</h3>
+                <div class="chart-container">
+                    <canvas id="ttft-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Tools Table -->
+            <div class="section">
+                <h3>Tools Usage</h3>
+                <table id="tools-table">
+                    <thead><tr><th>Tool</th><th>Calls</th><th>Tokens In</th><th>Tokens Out</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <!-- Skills Table -->
+            <div class="section">
+                <h3>Skills</h3>
+                <table id="skills-table">
+                    <thead><tr><th>Skill</th><th>Loads</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <!-- Files Table -->
+            <div class="section">
+                <h3>Files Touched</h3>
+                <table id="files-table">
+                    <thead><tr><th>File</th><th>Reads</th><th>Edits</th><th>Creates</th><th>Tokens</th><th>Checksum</th><th>Last Updated</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== Globals =====
+        let allSessions = [];
+        let charts = {};
+
+        // ===== Chart Defaults =====
+        Chart.defaults.color = '#999';
+        Chart.defaults.borderColor = '#3e3e42';
+        Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+        // ===== API Helper =====
+        async function api(path) {
+            const r = await fetch(path);
+            if (!r.ok) throw new Error(`API error: ${r.status} ${path}`);
+            return r.json();
+        }
+
+        // ===== Format Helpers =====
+        function fmtK(n) {
+            if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+            return n.toString();
+        }
+
+        function fmtDur(ms) {
+            if (ms < 1000) return ms + 'ms';
+            if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+            if (ms < 3600000) return (ms / 60000).toFixed(1) + 'm';
+            return (ms / 3600000).toFixed(1) + 'h';
+        }
+
+        function fmtDate(iso) {
+            if (!iso) return '';
+            try {
+                const d = new Date(iso);
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            } catch { return iso; }
+        }
+
+        // ===== Load Sessions =====
+        async function loadSessions() {
+            try {
+                allSessions = await api('/api/sessions');
+                renderSessionList(allSessions);
+                loadDashboard();
+            } catch (e) {
+                document.getElementById('session-list').innerHTML =
+                    '<div class="loading">Error loading sessions: ' + e.message + '</div>';
+            }
+        }
+
+        // ===== Render Session List =====
+        function renderSessionList(sessions) {
+            const container = document.getElementById('session-list');
+            container.innerHTML = '';
+            sessions.forEach(s => {
+                const div = document.createElement('div');
+                div.className = 'session-item';
+                div.dataset.filename = s.filename;
+                div.onclick = () => showDetail(s.filename);
+                div.innerHTML = `
+                    <div class="meta" style="margin-bottom:4px">
+                        <span class="filename" title="${s.filename}" style="flex:1;overflow:hidden;text-overflow:ellipsis">${s.filename.replace('.chat.json', '')}</span>
+                        <span>${s.time_ago}</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:8px">
+                        <span class="model-badge">${s.model.split('/').pop()}</span>
+                        <div style="text-align:right">
+                            <div style="font-size:11px;color:var(--success)">${fmtK(s.total_tokens)}</div>
+                            <div style="font-size:11px;color:var(--warn)">${s.turns} turns</div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // ===== Search =====
+        document.getElementById('search-input').addEventListener('input', function() {
+            const q = this.value.toLowerCase();
+            const filtered = allSessions.filter(s =>
+                s.filename.toLowerCase().includes(q) ||
+                s.model.toLowerCase().includes(q) ||
+                s.provider.toLowerCase().includes(q)
+            );
+            renderSessionList(filtered);
+        });
+
+        // ===== View Switching =====
+        function showView(name) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.dashboard-link').forEach(l => l.classList.remove('active'));
+            document.querySelectorAll('.session-item').forEach(i => i.classList.remove('active'));
+
+            if (name === 'dashboard') {
+                document.getElementById('view-dashboard').classList.add('active');
+                document.querySelector('.dashboard-link[data-view="dashboard"]').classList.add('active');
+            } else if (name === 'detail') {
+                document.getElementById('view-detail').classList.add('active');
+            }
+        }
+
+        // ===== Dashboard =====
+        async function loadDashboard() {
+            const summary = await api('/api/dashboard/summary');
+            renderDashboardStats(summary);
+            renderTop10(summary.top_10);
+
+            const models = await api('/api/dashboard/models');
+            renderModelsTable(models);
+
+            const activity = await api('/api/dashboard/activity');
+            renderActivityChart(activity);
+
+            const skills = await api('/api/dashboard/skills');
+            renderSkillsChart(skills);
+        }
+
+        function renderDashboardStats(s) {
+            const container = document.getElementById('dashboard-stats');
+            const stats = [
+                { label: 'Total Conversations', value: s.total_conversations, color: '' },
+                { label: 'Avg Input Tokens', value: fmtK(s.avg_input_tokens), color: 'var(--success)' },
+                { label: 'Avg Output Tokens', value: fmtK(s.avg_output_tokens), color: 'var(--success)' },
+                { label: 'Avg TTFT', value: s.avg_ttft_ms ? (s.avg_ttft_ms / 1000).toFixed(1) + 's' : 'N/A', color: '' },
+                { label: 'Avg Speed', value: s.avg_speed_tok_per_sec ? s.avg_speed_tok_per_sec + ' tok/s' : 'N/A', color: '' },
+                { label: 'Avg Turns', value: s.avg_turns, color: 'var(--warn)' },
+                { label: 'Avg Tool Calls', value: s.avg_tool_calls, color: 'var(--accent)' },
+            ];
+            container.innerHTML = stats.map(s => `
+                <div class="stat-card">
+                    <div class="label">${s.label}</div>
+                    <div class="value" ${s.color ? 'style="color:' + s.color + '"' : ''}>${s.value}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderModelsTable(models) {
+            const tbody = document.querySelector('#models-table tbody');
+            tbody.innerHTML = models.map(m => `
+                <tr>
+                    <td class="mono">${m.model}</td>
+                    <td><span class="badge badge-provider">${m.provider}</span></td>
+                    <td>${m.sessions}</td>
+                    <td class="mono" style="color:var(--success)">${fmtK(m.avg_input_tokens)}</td>
+                    <td class="mono" style="color:var(--success)">${fmtK(m.avg_output_tokens)}</td>
+                    <td style="color:var(--warn)">${m.avg_turns}</td>
+                    <td style="color:var(--accent)">${m.avg_tool_calls}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderTop10(sessions) {
+            const tbody = document.querySelector('#top10-table tbody');
+            tbody.innerHTML = sessions.map(s => `
+                <tr>
+                    <td class="link-cell"><a href="#" onclick="showDetail('${s.filename}');return false">${s.filename.replace('.chat.json','')}</a></td>
+                    <td class="mono">${s.model.split('/').pop()}</td>
+                    <td class="mono" style="color:var(--success)">${fmtK(s.total_tokens)}</td>
+                    <td style="color:var(--warn)">${s.turns} <span style="color:var(--text-muted)">(${s.messages} msgs)</span></td>
+                    <td>${fmtDate(s.created_at)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function fmtChartNum(n) {
+            if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
+            return n.toString();
+        }
+
+        function renderActivityChart(activity) {
+            if (charts.activity) charts.activity.destroy();
+            const weeks = activity.weeks || activity;
+            const providers = activity.providers || [];
+            const labels = weeks.map(w => w.week);
+            const ctx = document.getElementById('activity-chart').getContext('2d');
+            charts.activity = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Sessions',
+                            data: weeks.map(w => w.sessions),
+                            borderColor: '#569cd6',
+                            backgroundColor: 'rgba(86,156,214,0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2,
+                            pointBackgroundColor: '#569cd6',
+                            borderWidth: 2,
+                            yAxisID: 'y',
+                        },
+                        {
+                            label: 'Total Tokens',
+                            data: weeks.map(w => w.input_tokens + w.output_tokens),
+                            borderColor: '#4ec9b0',
+                            backgroundColor: 'rgba(78,201,176,0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2,
+                            borderWidth: 2,
+                            yAxisID: 'y1',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { labels: { color: '#999' } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    if (ctx.dataset.yAxisID === 'y1') {
+                                        return ctx.dataset.label + ': ' + fmtChartNum(ctx.parsed.y);
+                                    }
+                                    return ctx.dataset.label + ': ' + ctx.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#999' }, grid: { color: '#3e3e42' } },
+                        y: { position: 'left', ticks: { color: '#999', stepSize: 1 }, grid: { color: '#3e3e42' }, title: { display: true, text: 'Sessions', color: '#999' } },
+                        y1: { position: 'right', ticks: { color: '#999', callback: v => fmtChartNum(v) }, grid: { display: false }, title: { display: true, text: 'Tokens', color: '#999' } },
+                    }
+                }
+            });
+
+            // Tokens histogram
+            if (charts.tokens) charts.tokens.destroy();
+            const ctx2 = document.getElementById('tokens-chart').getContext('2d');
+            charts.tokens = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Input',
+                            data: weeks.map(w => w.input_tokens),
+                            backgroundColor: 'rgba(86,156,214,0.7)',
+                            borderColor: '#569cd6',
+                            borderWidth: 1,
+                        },
+                        {
+                            label: 'Output',
+                            data: weeks.map(w => w.output_tokens),
+                            backgroundColor: 'rgba(78,201,176,0.7)',
+                            borderColor: '#4ec9b0',
+                            borderWidth: 1,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { labels: { color: '#999' } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const n = ctx.parsed.y;
+                                    return ctx.dataset.label + ': ' + (n >= 1000000 ? (n / 1000000).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(0) + 'K' : n);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#999' }, grid: { color: '#3e3e42' } },
+                        y: {
+                            position: 'left',
+                            ticks: {
+                                color: '#999',
+                                callback: function(v) { return fmtChartNum(v); }
+                            },
+                            grid: { color: '#3e3e42' },
+                            title: { display: true, text: 'Tokens', color: '#999' },
+                        },
+                    }
+                }
+            });
+
+            // Provider stacked chart (per week)
+            if (charts.provider) charts.provider.destroy();
+            const colors = ['#569cd6', '#4ec9b0', '#d29922', '#bc8cff', '#f44747', '#79c0ff', '#ff7b72', '#ce9178'];
+            const providerDatasets = providers.map((p, i) => ({
+                label: p,
+                data: weeks.map(w => (w.providers && w.providers[p]) || 0),
+                backgroundColor: colors[i % colors.length] + 'b3',
+                borderColor: colors[i % colors.length],
+                borderWidth: 1,
+            }));
+            const ctx3 = document.getElementById('provider-chart').getContext('2d');
+            charts.provider = new Chart(ctx3, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: providerDatasets,
+                },
+                options: {
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { labels: { color: '#999', boxWidth: 12 } }
+                    },
+                    scales: {
+                        x: { stacked: true, ticks: { color: '#999' }, grid: { color: '#3e3e42' } },
+                        y: { stacked: true, ticks: { color: '#999', stepSize: 1 }, grid: { color: '#3e3e42' }, title: { display: true, text: 'Sessions', color: '#999' } },
+                    }
+                }
+            });
+        }
+
+        function renderSkillsChart(skillsData) {
+            if (charts.skills) charts.skills.destroy();
+            const weeks = skillsData.week_keys || [];
+            const weekData = skillsData.weeks || [];
+            const skillNames = skillsData.skills || [];
+            const colors = ['#569cd6', '#4ec9b0', '#d29922', '#bc8cff', '#f44747', '#79c0ff', '#ff7b72', '#ce9178', '#6a9955', '#dcdcaa'];
+            const skillDatasets = skillNames.map((s, i) => ({
+                label: s,
+                data: weekData.map(w => (w && w[s]) || 0),
+                backgroundColor: colors[i % colors.length] + 'b3',
+                borderColor: colors[i % colors.length],
+                borderWidth: 1,
+            }));
+            const ctx = document.getElementById('skills-chart').getContext('2d');
+            charts.skills = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: weeks,
+                    datasets: skillDatasets,
+                },
+                options: {
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { labels: { color: '#999', boxWidth: 12 } }
+                    },
+                    scales: {
+                        x: { stacked: true, ticks: { color: '#999' }, grid: { color: '#3e3e42' } },
+                        y: { stacked: true, ticks: { color: '#999', stepSize: 1 }, grid: { color: '#3e3e42' }, title: { display: true, text: 'Skill Loads', color: '#999' } },
+                    }
+                }
+            });
+        }
+        async function showDetail(filename) {
+            document.querySelectorAll('.session-item').forEach(i => {
+                i.classList.toggle('active', i.dataset.filename === filename);
+            });
+            showView('detail');
+
+            document.getElementById('detail-title').textContent = filename.replace('.chat.json', '');
+
+            // Show loading
+            document.getElementById('main').querySelector('#view-detail').innerHTML = '<div class="loading">Loading session data...</div>';
+            document.getElementById('view-detail').classList.add('active');
+
+            try {
+                const [general, tally, timeline, tools, skills, files, perf] = await Promise.all([
+                    api(`/api/sessions/${filename}/general`),
+                    api(`/api/sessions/${filename}/tally`),
+                    api(`/api/sessions/${filename}/timeline`),
+                    api(`/api/sessions/${filename}/tools`),
+                    api(`/api/sessions/${filename}/skills`),
+                    api(`/api/sessions/${filename}/files`),
+                    api(`/api/sessions/${filename}/performance`),
+                ]);
+
+                renderDetail(filename, general, tally, timeline, tools, skills, files, perf);
+            } catch (e) {
+                console.error(e);
+                location.reload();
+            }
+        }
+
+        function renderDetail(filename, general, tally, timeline, tools, skills, files, perf) {
+            rebuildDetailView();
+            document.getElementById('detail-title').textContent = `Session Details: ${filename.replace('.chat.json', '')}`;
+
+            document.getElementById('detail-model').textContent = general.model;
+            document.getElementById('detail-provider').textContent =
+                `${general.provider}` +
+                ` · Thinking: ${general.thinking ? 'on' : 'off'}`;
+            document.getElementById('detail-duration').textContent = fmtDur(general.total_duration_ms);
+            document.getElementById('detail-dates').textContent =
+                `${fmtDate(general.created_at)} → ${fmtDate(general.updated_at)}`;
+            document.getElementById('detail-turns').innerHTML = `${general.turns} <span style="color:var(--text-muted)">(${general.messages || general.total_messages || tally.total_messages || 0} msgs)</span>`;
+            document.getElementById('detail-speed').textContent = general.avg_speed_tok_per_sec ? Math.round(general.avg_speed_tok_per_sec) + ' tok/s' : 'N/A';
+            const ttftTimeline = perf.ttft_timeline || [];
+            const totalTTFTms = ttftTimeline.reduce((s, p) => s + (p.ttft_ms || 0), 0);
+            if (totalTTFTms > 0) {
+                const avgTTFT = totalTTFTms / ttftTimeline.length;
+                document.getElementById('detail-total-ttft').textContent = fmtDur(totalTTFTms);
+                document.getElementById('detail-total-ttft-sub').textContent = 'Avg time to first token: ' + (avgTTFT / 1000).toFixed(2) + 's';
+            } else {
+                document.getElementById('detail-total-ttft').textContent = 'N/A';
+                document.getElementById('detail-total-ttft-sub').textContent = '';
+            }
+            document.getElementById('detail-total-tokens').textContent = fmtK(tally.total_tokens || 0);
+            document.getElementById('detail-tool-calls').textContent = general.tool_calls || 0;
+
+            document.getElementById('gen-prompt').textContent = general.system_prompt_file || 'None';
+            document.getElementById('gen-thinking').textContent = (general.inference?.initial?.thinking ? 'on' : 'off');
+            document.getElementById('gen-tools').textContent = general.tool_calls || 0;
+            document.getElementById('gen-synthetic').textContent = general.synthetic_messages || 0;
+            document.getElementById('gen-aborted').textContent = general.aborted || 0;
+            document.getElementById('gen-skills').textContent = Object.keys(skills.skills || {}).length;
+            document.getElementById('gen-environment').textContent = (general.init_params?.environment || 'None');
+            const initialProvider = general.inference?.initial?.provider || '';
+            const initialModel = general.inference?.initial?.model || '';
+            document.getElementById('gen-tools-enabled').textContent = (initialProvider && initialModel)
+                ? `${initialProvider}/${initialModel}`
+                : (initialModel || initialProvider || 'None');
+
+            const maxToken = Math.max(
+                tally.total_input || 0, tally.total_output || 0,
+                tally.user_input || 0, tally.text || 0,
+                tally.thinking || 0,
+                tally.tool_call || 0, tally.tool_instruction || 0,
+                tally.tool_execution || 0,
+                tally.system_prompt || 0, tally.synthetic || 0
+            );
+            const tallyItems = [
+                { label: 'Total Input', value: tally.total_input || 0, cls: 'fill-input' },
+                { label: 'Total Output', value: tally.total_output || 0, cls: 'fill-output' },
+                { label: 'User Input', value: tally.user_input || 0, cls: 'fill-user' },
+                { label: 'Tool Execution', value: tally.tool_execution || 0, cls: 'fill-tool' },
+                { label: 'System Prompt', value: tally.system_prompt || 0, cls: 'fill-system' },
+                { label: 'Synthetic', value: tally.synthetic || 0, cls: 'fill-synthetic' },
+            ];
+            const outputItems = [
+                { label: 'Assistant Output', value: tally.text || 0, cls: 'fill-output' },
+                { label: 'Thinking', value: tally.thinking || 0, cls: 'fill-thinking' },
+                { label: 'Tool Call Instr.', value: tally.tool_call || tally.tool_instruction || 0, cls: 'fill-tool' },
+            ];
+            document.getElementById('token-tally').innerHTML = `
+                <h4 style="color:var(--text);margin:0 0 10px 0;font-size:13px">Total</h4>
+                ${tallyItems.filter(i => i.label.startsWith('Total')).map(item => {
+                    const pct = maxToken > 0 ? (item.value / maxToken * 100) : 0;
+                    return `<div class="tally-bar"><div class="tally-label">${item.label}</div><div class="tally-track"><div class="tally-fill ${item.cls}" style="width:${pct}%"></div></div><div class="tally-value mono">${fmtK(item.value)}</div></div>`;
+                }).join('')}
+                <h4 style="color:var(--text);margin:16px 0 10px 0;font-size:12px;text-transform:uppercase">Input Breakdown</h4>
+                ${tallyItems.filter(i => !i.label.startsWith('Total')).map(item => {
+                    const pct = maxToken > 0 ? (item.value / maxToken * 100) : 0;
+                    return `<div class="tally-bar"><div class="tally-label">${item.label}</div><div class="tally-track"><div class="tally-fill ${item.cls}" style="width:${pct}%"></div></div><div class="tally-value mono">${fmtK(item.value)}</div></div>`;
+                }).join('')}
+                <h4 style="color:var(--text);margin:16px 0 10px 0;font-size:12px;text-transform:uppercase">Output Breakdown</h4>
+                ${outputItems.map(item => {
+                    const pct = maxToken > 0 ? (item.value / maxToken * 100) : 0;
+                    return `<div class="tally-bar"><div class="tally-label">${item.label}</div><div class="tally-track"><div class="tally-fill ${item.cls}" style="width:${pct}%"></div></div><div class="tally-value mono">${fmtK(item.value)}</div></div>`;
+                }).join('')}
+            `;
+
+            if (charts.timeline) charts.timeline.destroy();
+            const tlData = timeline.timeline || [];
+            const userMsgs = new Set();
+            tlData.forEach((t, i) => { if (t.role === 'user') userMsgs.add(i); });
+            const ctx1 = document.getElementById('timeline-chart').getContext('2d');
+            charts.timeline = new Chart(ctx1, {
+                type: 'bar',
+                plugins: [{
+                    id: 'userLines',
+                    afterDraw(chart) {
+                        const { ctx, chartArea, scales } = chart;
+                        if (!chartArea || !scales.x) return;
+                        userMsgs.forEach(idx => {
+                            const x = scales.x.getPixelForValue(idx) + 0.5;
+                            if (x >= chartArea.left && x <= chartArea.right) {
+                                ctx.save();
+                                ctx.strokeStyle = '#d29922';
+                                ctx.lineWidth = 1;
+                                ctx.setLineDash([6, 4]);
+                                ctx.beginPath();
+                                ctx.moveTo(x, chartArea.top);
+                                ctx.lineTo(x, chartArea.bottom);
+                                ctx.stroke();
+                                ctx.restore();
+                            }
+                        });
+                    }
+                }],
+                data: {
+                    labels: tlData.map((_, i) => i + 1),
+                    datasets: [
+                        {
+                            label: 'Input Tokens',
+                            data: tlData.map(t => t.input_tokens),
+                            backgroundColor: 'rgba(86,156,214,0.5)',
+                            borderColor: '#569cd6',
+                            borderWidth: 1,
+                        },
+                        {
+                            label: 'Output Tokens',
+                            data: tlData.map(t => t.output_tokens),
+                            backgroundColor: 'rgba(78,201,176,0.5)',
+                            borderColor: '#4ec9b0',
+                            borderWidth: 1,
+                        },
+                        {
+                            label: 'Thinking Tokens',
+                            data: tlData.map(t => t.thinking_tokens || 0),
+                            backgroundColor: 'rgba(188,140,255,0.3)',
+                            borderColor: 'rgba(188,140,255,0.7)',
+                            borderWidth: 1,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { labels: { color: '#999' } },
+                        tooltip: {
+                            callbacks: {
+                                title: function(items) {
+                                    if (!items.length) return '';
+                                    const idx = items[0].dataIndex;
+                                    return tlData[idx].id || '';
+                                },
+                                afterBody: function(ctx) {
+                                    const item = tlData[ctx[0].dataIndex];
+                                    if (!item) return [];
+                                    return [
+                                        `Role: ${item.role}`,
+                                        `Tools: ${item.tool_count}`,
+                                        `Duration: ${fmtDur(item.duration_ms)}`,
+                                        `Files: ${item.files.length}`,
+                                        item.files.slice(0, 3).join(', ') + (item.files.length > 3 ? '...' : ''),
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                autoSkip: false,
+                                color: '#d29922',
+                                callback: function(value, index) {
+                                    return userMsgs.has(index) ? (Array.from(userMsgs).filter(i => i <= index).length).toString() : '';
+                                }
+                            },
+                            grid: { color: '#3e3e42' },
+                            title: { display: true, text: 'Turn', color: '#999' }
+                        },
+                        y: { ticks: { color: '#999', callback: v => fmtK(v) }, grid: { color: '#3e3e42' }, title: { display: true, text: 'Tokens', color: '#999' } },
+                    }
+                }
+            });
+
+            if (charts.perf) charts.perf.destroy();
+            const perfData = tlData.filter(t => t.role === 'assistant' && (t.tokens_per_second || 0) > 0);
+            const markerPointSet = new Set();
+            let prevPerfModel = null;
+            perfData.forEach((p, i) => {
+                const cur = p.current_model_label || '';
+                if (i === 0 && cur) {
+                    markerPointSet.add(i);
+                } else if (cur && cur !== prevPerfModel) {
+                    markerPointSet.add(i);
+                }
+                prevPerfModel = cur || prevPerfModel;
+            });
+            const perfXLabels = perfData.map((p, i) => {
+                const cum = p.ctx_total || 0;
+                if (cum >= 1000000) return (cum / 1000000).toFixed(1) + 'M';
+                if (cum >= 1000) return (cum / 1000).toFixed(0) + 'K';
+                return cum.toString();
+            });
+            const perfModelLabels = perfData.map((p, i) => markerPointSet.has(i) ? (p.current_model_label || '') : '');
+            const ctx2 = document.getElementById('perf-chart').getContext('2d');
+            charts.perf = new Chart(ctx2, {
+                type: 'line',
+                plugins: [{
+                    id: 'modelLines',
+                    afterDraw(chart) {
+                        const { ctx, chartArea, scales } = chart;
+                        if (!chartArea || !scales.x) return;
+                        const xScale = scales.x;
+                        markerPointSet.forEach((idx) => {
+                            const x = xScale.getPixelForValue(idx) + 0.5;
+                            if (x >= chartArea.left && x <= chartArea.right) {
+                                ctx.save();
+                                ctx.strokeStyle = '#d29922';
+                                ctx.lineWidth = 1;
+                                ctx.setLineDash([6, 4]);
+                                ctx.beginPath();
+                                ctx.moveTo(x, chartArea.top);
+                                ctx.lineTo(x, chartArea.bottom);
+                                ctx.stroke();
+                                ctx.restore();
+                            }
+                        });
+                    }
+                }],
+                data: {
+                    labels: perfXLabels,
+                    datasets: [{
+                        label: 'Tokens/sec',
+                        data: perfData.map(p => p.tokens_per_second),
+                        borderColor: '#569cd6',
+                        backgroundColor: 'rgba(86,156,214,0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3,
+                        spanGaps: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { labels: { color: '#999' } },
+                        tooltip: {
+                            callbacks: {
+                                title: function(items) {
+                                    if (!items.length) return '';
+                                    const idx = items[0].dataIndex;
+                                    const p = perfData[idx];
+                                    return (p.id || '') + '\nCumulative: ' + (p.ctx_total || 0).toLocaleString() + ' tokens';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                callback: function(value, index) {
+                                    const p = perfData[index];
+                                    if (p && markerPointSet.has(index)) {
+                                        return '';
+                                    }
+                                    return perfXLabels[index] || '';
+                                },
+                                maxRotation: 60,
+                                minRotation: 0,
+                                autoSkip: true,
+                                color: '#999',
+                            },
+                            grid: { color: '#3e3e42' },
+                            title: { display: true, text: 'Cumulative Tokens', color: '#999' }
+                        },
+                        xTop: {
+                            position: 'top',
+                            labels: perfModelLabels,
+                            ticks: {
+                                autoSkip: false,
+                                color: '#d29922',
+                                maxRotation: 0,
+                                minRotation: 0,
+                                callback: function(value, index) {
+                                    return perfModelLabels[index] || '';
+                                }
+                            },
+                            grid: { display: false },
+                            border: { display: false }
+                        },
+                        y: { ticks: { color: '#999' }, grid: { color: '#3e3e42' }, title: { display: true, text: 'Tokens/sec', color: '#999' } },
+                    }
+                }
+            });
+
+            // TTFT Chart
+            if (charts.ttft) charts.ttft.destroy();
+            const ttftData = perf && perf.ttft_timeline ? perf.ttft_timeline : [];
+            const ttftMarkerSet = new Set();
+            let prevTTFTModel = null;
+            ttftData.forEach((p, i) => {
+                const cur = p.current_model_label || '';
+                if (i === 0 && cur) {
+                    ttftMarkerSet.add(i);
+                } else if (cur && cur !== prevTTFTModel) {
+                    ttftMarkerSet.add(i);
+                }
+                prevTTFTModel = cur || prevTTFTModel;
+            });
+            const ttftXLabels = ttftData.map((p) => {
+                const cum = p.ctx_total || 0;
+                if (cum >= 1000000) return (cum / 1000000).toFixed(1) + 'M';
+                if (cum >= 1000) return (cum / 1000).toFixed(0) + 'K';
+                return cum.toString();
+            });
+            const ttftModelLabels = ttftData.map((p, i) => ttftMarkerSet.has(i) ? (p.current_model_label || '') : '');
+            const ctxTtft = document.getElementById('ttft-chart').getContext('2d');
+            charts.ttft = new Chart(ctxTtft, {
+                type: 'line',
+                plugins: [{
+                    id: 'modelLines',
+                    afterDraw(chart) {
+                        const { ctx, chartArea, scales } = chart;
+                        if (!chartArea || !scales.x) return;
+                        const xScale = scales.x;
+                        ttftMarkerSet.forEach((idx) => {
+                            const x = xScale.getPixelForValue(idx) + 0.5;
+                            if (x >= chartArea.left && x <= chartArea.right) {
+                                ctx.save();
+                                ctx.strokeStyle = '#d29922';
+                                ctx.lineWidth = 1;
+                                ctx.setLineDash([6, 4]);
+                                ctx.beginPath();
+                                ctx.moveTo(x, chartArea.top);
+                                ctx.lineTo(x, chartArea.bottom);
+                                ctx.stroke();
+                                ctx.restore();
+                            }
+                        });
+                    }
+                }],
+                data: {
+                    labels: ttftXLabels,
+                    datasets: [{
+                        label: 'TTFT (ms)',
+                        data: ttftData.map(p => p.ttft_ms),
+                        borderColor: '#bc8cff',
+                        backgroundColor: 'rgba(188,140,255,0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#bc8cff',
+                        spanGaps: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { labels: { color: '#999' } },
+                        tooltip: {
+                            callbacks: {
+                                title: function(items) {
+                                    if (!items.length) return '';
+                                    const idx = items[0].dataIndex;
+                                    const p = ttftData[idx];
+                                    return (p.id || '') + '\nCumulative: ' + (p.ctx_total || 0).toLocaleString() + ' tokens';
+                                },
+                                label: function(ctx) {
+                                    const ms = ctx.parsed.y;
+                                    const s = (ms / 1000).toFixed(2);
+                                    return 'TTFT: ' + ms + 'ms (' + s + 's)';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                callback: function(value, index) {
+                                    const p = ttftData[index];
+                                    if (p && ttftMarkerSet.has(index)) {
+                                        return '';
+                                    }
+                                    return ttftXLabels[index] || '';
+                                },
+                                maxRotation: 60,
+                                minRotation: 0,
+                                autoSkip: true,
+                                color: '#999',
+                            },
+                            grid: { color: '#3e3e42' },
+                            title: { display: true, text: 'Cumulative Tokens', color: '#999' }
+                        },
+                        xTop: {
+                            position: 'top',
+                            labels: ttftModelLabels,
+                            ticks: {
+                                autoSkip: false,
+                                color: '#d29922',
+                                maxRotation: 0,
+                                minRotation: 0,
+                                callback: function(value, index) {
+                                    return ttftModelLabels[index] || '';
+                                }
+                            },
+                            grid: { display: false },
+                            border: { display: false }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#999',
+                                callback: function(v) {
+                                    if (v >= 1000) return (v / 1000).toFixed(1) + 's';
+                                    return v + 'ms';
+                                }
+                            },
+                            grid: { color: '#3e3e42' },
+                            title: { display: true, text: 'TTFT', color: '#999' }
+                        },
+                    }
+                }
+            });
+
+            const toolsTbody = document.querySelector('#tools-table tbody');
+            const toolEntries = Object.entries(tools.tools || {});
+            toolsTbody.innerHTML = toolEntries.length ? toolEntries.map(([name, data]) => `
+                <tr>
+                    <td class="mono" style="color:var(--accent)">${name}</td>
+                    <td style="color:var(--accent)">${data.calls}</td>
+                    <td class="mono" style="color:var(--success)">${fmtK(data.tokens_in)}</td>
+                    <td class="mono" style="color:var(--success)">${fmtK(data.tokens_out)}</td>
+                </tr>
+            `).join('') : '<tr><td colspan="4" style="color:var(--text-muted)">No tools used</td></tr>';
+
+            const skillsTbody = document.querySelector('#skills-table tbody');
+            const skillEntries = Object.entries(skills.skills || {});
+            skillsTbody.innerHTML = skillEntries.length ? skillEntries.map(([name, data]) => `
+                <tr>
+                    <td class="mono">${name}</td>
+                    <td>${data.loads}</td>
+                </tr>
+            `).join('') : '<tr><td colspan="2" style="color:var(--text-muted)">No skills loaded</td></tr>';
+
+            const filesTbody = document.querySelector('#files-table tbody');
+            const fileEntries = files.files || [];
+            filesTbody.innerHTML = fileEntries.length ? fileEntries.map(f => `
+                <tr>
+                    <td class="mono" style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${f.path}">${f.path}</td>
+                    <td>${f.reads ? f.reads + ' <span style="color:var(--success)">(' + fmtK(f.reads_tokens) + ')</span>' : '-'}</td>
+                    <td>${f.edits ? f.edits + ' <span style="color:var(--success)">(' + fmtK(f.edits_tokens) + ')</span>' : '-'}</td>
+                    <td>${f.creates ? f.creates + ' <span style="color:var(--success)">(' + fmtK(f.creates_tokens) + ')</span>' : '-'}</td>
+                    <td class="mono" style="color:var(--success)">${fmtK(f.total_tokens)}</td>
+                    <td class="mono" style="font-size:11px" title="${f.checksum}">${f.checksum ? f.checksum.slice(0, 12) + '…' : ''}</td>
+                    <td style="font-size:11px">${f.last_updated ? fmtDate(f.last_updated) : ''}</td>
+                </tr>
+            `).join('') : '<tr><td colspan="7" style="color:var(--text-muted)">No files touched</td></tr>';
+        }
+
+        function rebuildDetailView() {
+            const main = document.getElementById('main');
+            const old = document.getElementById('view-detail');
+            if (old) old.remove();
+
+            const div = document.createElement('div');
+            div.id = 'view-detail';
+            div.className = 'view active';
+            div.innerHTML = `
+                <div class="section">
+                    <h2 id="detail-title">Session Details</h2>
+                    <div class="dashboard-grid" id="detail-stats">
+                        <div class="stat-card">
+                            <div class="label">Model</div>
+                            <div class="value mono" id="detail-model" style="font-size:14px"></div>
+                            <div class="sub" id="detail-provider"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Total Tokens</div>
+                            <div class="value" id="detail-total-tokens" style="color:var(--success)"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Duration</div>
+                            <div class="value" id="detail-duration"></div>
+                            <div class="sub" id="detail-dates"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Waiting Time</div>
+                            <div class="value" id="detail-total-ttft" style="font-size:26px"></div>
+                            <div class="sub" id="detail-total-ttft-sub"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Speed</div>
+                            <div class="value" id="detail-speed"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Turns</div>
+                            <div class="value" id="detail-turns" style="color:var(--warn)"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">Tool Calls</div>
+                            <div class="value" id="detail-tool-calls" style="color:var(--accent)"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="section">
+                    <h3>General</h3>
+                    <div>
+                        <div class="tally-bar"><div class="tally-label">System Prompt</div><div class="tally-value mono" id="gen-prompt"></div></div>
+                        <div class="tally-bar"><div class="tally-label">Environment</div><div class="tally-value mono" id="gen-environment"></div></div>
+                        <div class="tally-bar"><div class="tally-label">Initial Model</div><div class="tally-value mono" id="gen-tools-enabled"></div></div>
+                        <div class="tally-bar"><div class="tally-label">Initial Thinking</div><div class="tally-value mono" id="gen-thinking"></div></div>
+                        <div class="tally-bar"><div class="tally-label">Tool Calls</div><div class="tally-value mono" id="gen-tools"></div></div>
+                        <div class="tally-bar"><div class="tally-label">Synthetic</div><div class="tally-value mono" id="gen-synthetic"></div></div>
+                        <div class="tally-bar"><div class="tally-label">Aborted</div><div class="tally-value mono" id="gen-aborted"></div></div>
+                        <div class="tally-bar"><div class="tally-label">Skills Used</div><div class="tally-value mono" id="gen-skills"></div></div>
+                    </div>
+                </div>
+                <div class="section"><h3>Token Tally</h3><div id="token-tally"></div></div>
+                <div class="section"><h3>Token Timeline</h3><div class="chart-container"><canvas id="timeline-chart"></canvas></div></div>
+                <div class="section"><h3>Performance (tokens/sec)</h3><div class="chart-container"><canvas id="perf-chart"></canvas></div></div>
+                <div class="section"><h3>Time to First Token (TTFT)</h3><div class="chart-container"><canvas id="ttft-chart"></canvas></div></div>
+                <div class="section"><h3>Tools Usage</h3><table id="tools-table"><thead><tr><th>Tool</th><th>Calls</th><th>Tokens In</th><th>Tokens Out</th></tr></thead><tbody></tbody></table></div>
+                <div class="section"><h3>Skills</h3><table id="skills-table"><thead><tr><th>Skill</th><th>Loads</th></tr></thead><tbody></tbody></table></div>
+                <div class="section"><h3>Files Touched</h3><table id="files-table"><thead><tr><th>File</th><th>Reads</th><th>Edits</th><th>Creates</th><th>Tokens</th><th>Checksum</th><th>Last Updated</th></tr></thead><tbody></tbody></table></div>
+            `;
+            main.appendChild(div);
+        }
+
+        // ===== Init =====
+        loadSessions();
+    </script>
+</body>
+</html>

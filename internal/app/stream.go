@@ -223,7 +223,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	}
 	current := m.session.file.Session.Inference.Current
 	if current.Model != m.settings.Model {
-		m.session.pushModelSwitchMsg(modelBasename(current.Model), modelBasename(m.settings.Model))
+		m.session.pushModelSwitchMsg(current.Model, m.settings.Model)
 	}
 	if current.Thinking != m.settings.Thinking {
 		m.session.pushThinkingSwitchMsg(m.settings.Thinking)

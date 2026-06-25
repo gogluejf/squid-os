@@ -39,17 +39,26 @@ type SessionSkill struct {
 	Next    *string `json:"next"`
 }
 
+type InferenceConfig struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+	Thinking bool   `json:"thinking"`
+}
+
+type SessionInference struct {
+	Initial InferenceConfig `json:"initial"`
+	Current InferenceConfig `json:"current"`
+}
+
 type Session struct {
-	ID               string       `json:"id"`
-	Title            string       `json:"title"`
-	CreatedAt        string       `json:"created_at"`
-	UpdatedAt        string       `json:"updated_at"`
-	Provider         string       `json:"provider"`
-	Model            string       `json:"model"`
-	Thinking         bool         `json:"thinking"`
-	SystemPromptFile string       `json:"system_prompt_file"`
-	WorkingDir       string       `json:"working_dir"`
-	Skill            SessionSkill `json:"skill"`
+	ID               string           `json:"id"`
+	Title            string           `json:"title"`
+	CreatedAt        string           `json:"created_at"`
+	UpdatedAt        string           `json:"updated_at"`
+	Inference        SessionInference `json:"inference"`
+	SystemPromptFile string           `json:"system_prompt_file"`
+	WorkingDir       string           `json:"working_dir"`
+	Skill            SessionSkill     `json:"skill"`
 }
 
 type ContentMetrics struct {
@@ -214,12 +223,21 @@ func NewSessionFile(provider, model string, thinking bool, systemPrompt string, 
 	return SessionFile{
 		Version: 1,
 		Session: Session{
-			ID:               uuid.New().String(),
-			CreatedAt:        now,
-			UpdatedAt:        now,
-			Provider:         provider,
-			Model:            model,
-			Thinking:         thinking,
+			ID:        uuid.New().String(),
+			CreatedAt: now,
+			UpdatedAt: now,
+			Inference: SessionInference{
+				Initial: InferenceConfig{
+					Provider: provider,
+					Model:    model,
+					Thinking: thinking,
+				},
+				Current: InferenceConfig{
+					Provider: provider,
+					Model:    model,
+					Thinking: thinking,
+				},
+			},
 			SystemPromptFile: systemPrompt,
 			WorkingDir:       workingDir,
 		},

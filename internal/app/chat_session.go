@@ -53,7 +53,7 @@ func (cs *chatSession) clear(settings config.Settings, paths config.Paths, worki
 		InputTokens: countTokensApprox(envContent),
 	})
 
-	// Push current config internal message (collapsed: provider=model · thinking=on/off)
+	// Push initial config internal message (immutable after first user message).
 	cs.appendMsg(buildConfigMsg(settings.Provider, settings.Model, settings.Thinking))
 
 	// Push tools enabled internal message (collapsed: tools=names, expanded: name→description table)
@@ -88,19 +88,39 @@ func (cs *chatSession) updateSystemPromptMsg(oldFile, newFile string, paths conf
 
 // updateConfigMsg refreshes the existing config0 message in place with new values.
 // Like updateSystemPromptMsg — it updates the fixed-ID message, no history message pushed.
+// Once the session has started (first user message exists), config0 becomes frozen
+// and this function becomes a no-op.
 func (cs *chatSession) updateConfigMsg(provider, model string, thinking bool) {
+	if cs.hasUserMessage() {
+		return
+	}
+
 	for i := range cs.file.Messages {
 		if cs.file.Messages[i].ID == "config0" {
 			cs.file.Messages[i] = buildConfigMsg(provider, model, thinking)
-
-			// Sync session metadata
-			cs.file.Session.Provider = provider
-			cs.file.Session.Model = model
-			cs.file.Session.Thinking = thinking
-
+			cs.file.Session.Inference.Initial = config.InferenceConfig{Provider: provider, Model: model, Thinking: thinking}
+			cs.file.Session.Inference.Current = config.InferenceConfig{Provider: provider, Model: model, Thinking: thinking}
 			return
 		}
 	}
+}
+
+func (cs *chatSession) pushThinkingSwitchMsg(thinking bool) {
+	to := "off"
+	if thinking {
+		to = "on"
+	}
+	cs.appendMsg(config.Message{
+		ID:     fmt.Sprintf("msg_%d", len(cs.file.Messages)+1),
+		Role:   config.RoleInternal,
+		Text:   fmt.Sprintf("Switched thinking %s", to),
+		Label:  "Thinking Switched",
+		Params: map[string]string{"to": to},
+	})
+}
+
+func (cs *chatSession) commitCurrentInference(provider, model string, thinking bool) {
+	cs.file.Session.Inference.Current = config.InferenceConfig{Provider: provider, Model: model, Thinking: thinking}
 }
 
 // pushModelSwitchMsg pushes an internal message when the model is switched.
@@ -114,7 +134,7 @@ func (cs *chatSession) pushModelSwitchMsg(oldModel, newModel string) {
 	})
 }
 
-// buildConfigMsg creates an internal message showing current config state.
+// buildConfigMsg creates the immutable initial config message.
 // Collapsed: params "provider=... · model=... · thinking=on/off"
 // Expanded: multi-line detail.
 func buildConfigMsg(provider, model string, thinking bool) config.Message {
@@ -126,7 +146,7 @@ func buildConfigMsg(provider, model string, thinking bool) config.Message {
 	return config.Message{
 		ID:     "config0",
 		Role:   config.RoleInternal,
-		Label:  "Config",
+		Label:  "Init Config",
 		Params: map[string]string{"provider": provider, "model": model, "thinking": thinkStr},
 	}
 }

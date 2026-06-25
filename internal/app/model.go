@@ -110,11 +110,6 @@ func (m *Model) buildModelPicker(entries []chat.ModelEntry) {
 			}
 
 			// Normal model selection
-			name := modelBasename(entry.ID)
-			if m.settings.Model != entry.ID {
-				oldModel := modelBasename(m.settings.Model)
-				m.session.pushModelSwitchMsg(oldModel, name)
-			}
 			m.session.updateConfigMsg(entry.Provider, entry.ID, m.settings.Thinking)
 			m.settings.Model = entry.ID
 			m.settings.Provider = entry.Provider

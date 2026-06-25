@@ -196,13 +196,6 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Check for pending skill change (Next is a pointer: nil = no pending change)
-	if m.session.file.Session.Skill.Next != nil && *m.session.file.Session.Skill.Next != m.session.file.Session.Skill.Current {
-		(&m).injectSkillChangeSynthetic(m.session.file.Session.Skill.Current, *m.session.file.Session.Skill.Next)
-		m.session.file.Session.Skill.Current = *m.session.file.Session.Skill.Next
-		m.session.file.Session.Skill.Next = nil
-	}
-
 	if !m.incognito {
 		config.AddHistoryEntry(&m.history, text, m.settings.MaxHistory)
 		_ = config.SaveHistory(m.paths, m.history)
@@ -220,6 +213,25 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	}
 
 	m.session.appendMsg(userMsg)
+
+	// Commit all pending per-turn transitions immediately after the user message,
+	// so they belong to this turn and are removed together by destroy-last-sequence.
+	if m.session.file.Session.Skill.Next != nil && *m.session.file.Session.Skill.Next != m.session.file.Session.Skill.Current {
+		(&m).injectSkillChangeSynthetic(m.session.file.Session.Skill.Current, *m.session.file.Session.Skill.Next)
+		m.session.file.Session.Skill.Current = *m.session.file.Session.Skill.Next
+		m.session.file.Session.Skill.Next = nil
+	}
+	current := m.session.file.Session.Inference.Current
+	if current.Model != m.settings.Model {
+		m.session.pushModelSwitchMsg(modelBasename(current.Model), modelBasename(m.settings.Model))
+	}
+	if current.Thinking != m.settings.Thinking {
+		m.session.pushThinkingSwitchMsg(m.settings.Thinking)
+	}
+	if current.Provider != m.settings.Provider || current.Model != m.settings.Model || current.Thinking != m.settings.Thinking {
+		m.session.commitCurrentInference(m.settings.Provider, m.settings.Model, m.settings.Thinking)
+	}
+
 	m.session.undoStack = nil
 
 	m.textarea.SetValue("")

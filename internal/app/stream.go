@@ -222,8 +222,8 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 		m.session.file.Session.Skill.Next = nil
 	}
 	current := m.session.file.Session.Inference.Current
-	if current.Model != m.settings.Model {
-		m.session.pushModelSwitchMsg(current.Model, m.settings.Model)
+	if current.Model != m.settings.Model || current.Provider != m.settings.Provider {
+		m.session.pushModelSwitchMsg(current.Provider+"/"+current.Model, m.settings.Provider+"/"+m.settings.Model)
 	}
 	if current.Thinking != m.settings.Thinking {
 		m.session.pushThinkingSwitchMsg(m.settings.Thinking)

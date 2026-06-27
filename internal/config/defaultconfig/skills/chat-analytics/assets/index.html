@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat Analytics</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/assets/prism-tomorrow.min.css">
+    <script src="/assets/chart.umd.min.js"></script>
+    <script src="/assets/prism.min.js"></script>
+    <script src="/assets/prism-json.min.js"></script>
+    <script src="/assets/prism-bash.min.js"></script>
     <style>
         /* ===== Reset & Base ===== */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -289,6 +293,479 @@
         .badge-model { background: #3a6d8c; color: #fff; border-radius: 12px; padding: 3px 9px; font-weight: bold; }
         .badge-provider { background: #2d7a5e; color: #fff; border-radius: 12px; padding: 3px 9px; font-weight: bold; }
 
+        /* ===== Turn Side Panel ===== */
+        #turn-panel-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: rgba(0,0,0,0.3);
+            z-index: 998;
+        }
+        #turn-panel-overlay.active {
+            display: block;
+        }
+        #turn-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 960px;
+            max-width: 90vw;
+            height: 100vh;
+            background: var(--bg);
+            border-left: 1px solid var(--border);
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+            transform: translateX(100%);
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+        #turn-panel.active {
+            transform: translateX(0);
+        }
+        #turn-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            background: var(--nav);
+            flex-shrink: 0;
+        }
+        #turn-panel-header .header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 0;
+        }
+        #turn-panel-header h3 {
+            font-size: 14px;
+            color: var(--accent);
+            margin: 0;
+            white-space: nowrap;
+        }
+        .turn-nav-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            color: var(--accent);
+            font-size: 12px;
+            line-height: 1;
+            transition: background 0.15s, border-color 0.15s;
+            flex-shrink: 0;
+        }
+        .turn-nav-btn:hover {
+            background: rgba(86,156,214,0.15);
+            border-color: var(--accent);
+        }
+        .turn-nav-btn:disabled {
+            opacity: 0.3;
+            cursor: default;
+            background: transparent;
+            border-color: var(--border);
+        }
+        #turn-panel-header .turn-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #turn-panel-close {
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 18px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.15s;
+        }
+        #turn-panel-close:hover {
+            background: var(--card);
+            color: var(--text);
+        }
+        #turn-panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+        #turn-panel-body.loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* Turn timeline items */
+        .turn-bubble {
+            margin-bottom: 14px;
+            animation: bubbleIn 0.2s ease;
+            scroll-margin-top: 16px;
+        }
+        .turn-bubble.focused .bubble-content {
+            box-shadow: 0 0 0 2px rgba(86,156,214,0.9), 0 0 0 6px rgba(86,156,214,0.16);
+        }
+        @keyframes bubbleIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .turn-bubble.user {
+            display: flex;
+            justify-content: flex-start;
+        }
+        .turn-bubble.user .bubble-content {
+            background: #2d3b48;
+            border: 1px solid #3e5060;
+            border-radius: 12px 12px 12px 4px;
+            max-width: 90%;
+            padding: 10px 14px;
+        }
+        .turn-bubble.assistant {
+            display: flex;
+            justify-content: flex-end;
+        }
+        .turn-bubble.assistant .bubble-content {
+            background: #1e3a2f;
+            border: 1px solid #2a5a45;
+            border-radius: 12px 12px 4px 12px;
+            max-width: 92%;
+            padding: 10px 14px;
+        }
+        .turn-bubble.synthetic {
+            display: flex;
+            justify-content: center;
+        }
+        .turn-bubble.synthetic .bubble-content {
+            background: #3a2828;
+            border: 1px solid #5a3a3a;
+            border-radius: 8px;
+            max-width: 80%;
+            padding: 8px 12px;
+            text-align: center;
+            font-style: italic;
+            font-size: 12px;
+            color: #ff7b72;
+        }
+        /* Synthetic as tool-like (inside assistant) */
+        .turn-bubble.synthetic-tool {
+            display: flex;
+            justify-content: flex-end;
+        }
+        .turn-bubble.synthetic-tool .bubble-content {
+            background: #2a1e1e;
+            border: 1px solid #5a3a3a;
+            border-radius: 12px 12px 4px 12px;
+            max-width: 92%;
+            width: 100%;
+            padding: 10px 14px;
+        }
+        .synth-toggle {
+            background: rgba(244, 71, 71, 0.08) !important;
+            border-color: rgba(244, 71, 71, 0.25) !important;
+            color: var(--red) !important;
+        }
+        .synth-toggle:hover {
+            background: rgba(244, 71, 71, 0.15) !important;
+        }
+        .synth-params {
+            margin-bottom: 6px;
+        }
+        .synth-param-row {
+            display: flex;
+            gap: 6px;
+            padding: 2px 0;
+            font-size: 11px;
+        }
+        .synth-param-key {
+            color: var(--red);
+            font-family: monospace;
+            font-weight: 600;
+            min-width: 80px;
+        }
+        .synth-param-val {
+            color: var(--text);
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .bubble-id {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            font-family: monospace;
+        }
+        .bubble-text {
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .bubble-text code {
+            background: var(--code-bg);
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-family: Consolas, "SF Mono", "Fira Code", monospace;
+            font-size: 12px;
+        }
+        .bubble-metrics {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .bubble-metrics .metric {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .bubble-metrics .metric .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .dot-wait { background: #e06c75; }
+        .dot-think { background: #c678dd; }
+        .dot-text { background: #61afef; }
+        .dot-tool { background: #e5c07b; }
+        .dot-exec { background: #98c379; }
+
+        /* Expandable section (thinking, synthetic, tools) */
+        .expandable-section {
+            margin-top: 8px;
+        }
+        .expandable-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            padding: 6px 4px;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 11px;
+            color: var(--text-muted);
+            transition: background 0.15s;
+            user-select: none;
+            width: 100%;
+        }
+        .expandable-toggle:hover {
+            background: rgba(0,0,0,0.35);
+        }
+        .expandable-toggle .arrow {
+            display: inline-block;
+            transition: transform 0.15s;
+            font-size: 9px;
+        }
+        .expandable-toggle.open .arrow {
+            transform: rotate(90deg);
+        }
+        .expandable-toggle .section-icon {
+            font-size: 12px;
+        }
+        .expandable-toggle .section-label {
+            flex: 1;
+        }
+        .expandable-toggle .section-badge {
+            font-size: 10px;
+            padding: 1px 6px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 8px;
+        }
+        .expandable-content {
+            display: none;
+            margin-top: 6px;
+            padding: 8px;
+            background: rgba(0,0,0,0.15);
+            border-radius: 0 0 6px 6px;
+            border: 1px solid var(--border);
+            border-top: none;
+        }
+        .expandable-content.open {
+            display: block;
+        }
+        .expandable-text {
+            font-size: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: var(--text);
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* Tool item */
+        .tool-item {
+            margin-bottom: 8px;
+        }
+        .tool-item:last-child {
+            margin-bottom: 0;
+        }
+        .tool-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            padding: 6px 4px;
+            background: rgba(229, 192, 123, 0.08);
+            border: 1px solid rgba(229, 192, 123, 0.2);
+            border-radius: 6px;
+            font-size: 11px;
+            color: var(--warn);
+            transition: background 0.15s;
+            user-select: none;
+            width: 100%;
+        }
+        .tool-header:hover {
+            background: rgba(229, 192, 123, 0.15);
+        }
+        .tool-header .arrow {
+            display: inline-block;
+            transition: transform 0.15s;
+            font-size: 9px;
+            color: var(--text-muted);
+        }
+        .tool-header.open .arrow {
+            transform: rotate(90deg);
+        }
+        .tool-header .tool-icon {
+            font-size: 12px;
+        }
+        .tool-header .tool-name {
+            font-weight: 600;
+            font-family: monospace;
+        }
+        .tool-header .tool-badge {
+            font-size: 10px;
+            padding: 1px 6px;
+            background: rgba(229, 192, 123, 0.15);
+            border-radius: 8px;
+            color: var(--warn);
+        }
+        .tool-header .tool-badge-call {
+            color: var(--warn);
+        }
+        .tool-header .tool-badge-exec {
+            color: var(--success);
+        }
+        .tool-header .tool-status-ok {
+            color: var(--success);
+            font-size: 12px;
+            margin: 0 4px;
+        }
+        .tool-header .tool-status-error {
+            color: var(--red);
+            font-size: 12px;
+            margin: 0 4px;
+        }
+        .tool-body {
+            display: none;
+            margin-top: 4px;
+            padding: 8px;
+            background: rgba(0,0,0,0.15);
+            border-radius: 0 0 6px 6px;
+            border: 1px solid rgba(229, 192, 123, 0.15);
+            border-top: none;
+        }
+        .tool-body.open {
+            display: block;
+        }
+        .tool-args, .tool-result {
+            margin-bottom: 6px;
+        }
+        .tool-args-label, .tool-result-label, .tool-error-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 3px;
+        }
+        .tool-error-label {
+            color: var(--red);
+        }
+        .tool-snippet {
+            font-size: 11px;
+            font-family: Consolas, "SF Mono", "Fira Code", monospace;
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 6px 8px;
+            color: var(--text);
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+        .tool-snippet.error {
+            color: var(--red);
+            border-color: rgba(244, 71, 71, 0.3);
+        }
+        .tool-snippet code {
+            font-family: inherit;
+            font-size: inherit;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .tool-snippet[class*="language-"] {
+            margin: 0;
+        }
+
+        /* Turn divider */
+        .turn-divider {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 14px 0;
+            color: var(--text-muted);
+            font-size: 10px;
+        }
+        .turn-divider::before, .turn-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* Sequence stat banner */
+        .seq-banner {
+            background: rgba(86, 156, 214, 0.08);
+            border: 1px solid rgba(86, 156, 214, 0.2);
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 14px;
+            font-size: 11px;
+            color: var(--accent);
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+        .seq-banner span {
+            white-space: nowrap;
+        }
+        .seq-banner .seq-waiting {
+            color: var(--text-muted);
+        }
+        .seq-banner .seq-waiting strong {
+            color: var(--text);
+            font-weight: 600;
+        }
+
         /* ===== Responsive ===== */
         @media (max-width: 900px) {
         }
@@ -419,6 +896,14 @@
                 </div>
             </div>
 
+            <!-- Token Breakdown Chart -->
+            <div class="section">
+                <h3>Token Breakdown</h3>
+                <div class="chart-container">
+                    <canvas id="tokbreakdown-chart" style="height:80px; width:100%; display:block;"></canvas>
+                </div>
+            </div>
+
             <!-- Performance Chart -->
             <div class="section">
                 <h3>Performance (tokens/sec)</h3>
@@ -435,11 +920,19 @@
                 </div>
             </div>
 
+            <!-- Processing Time Chart -->
+            <div class="section">
+                <h3>Processing Time</h3>
+                <div class="chart-container">
+                    <canvas id="duration-chart"></canvas>
+                </div>
+            </div>
+
             <!-- Tools Table -->
             <div class="section">
                 <h3>Tools Usage</h3>
                 <table id="tools-table">
-                    <thead><tr><th>Tool</th><th>Calls</th><th>Tokens In</th><th>Tokens Out</th></tr></thead>
+                    <thead><tr><th>Tool</th><th>Calls</th><th>Tokens In</th><th>Tokens Out</th><th>Inference Time</th><th>Exec Time</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -448,9 +941,17 @@
             <div class="section">
                 <h3>Skills</h3>
                 <table id="skills-table">
-                    <thead><tr><th>Skill</th><th>Loads</th></tr></thead>
+                    <thead><tr><th>Skill</th><th>Loads</th><th>Tokens</th></tr></thead>
                     <tbody></tbody>
                 </table>
+            </div>
+
+            <!-- Skill Timeline -->
+            <div class="section">
+                <h3>Skill Timeline</h3>
+                <div class="chart-container">
+                    <canvas id="skilltimeline-chart" style="height:80px; width:100%; display:block;"></canvas>
+                </div>
             </div>
 
             <!-- Files Table -->
@@ -464,15 +965,36 @@
         </div>
     </div>
 
+    <!-- Turn Side Panel -->
+    <div id="turn-panel-overlay"></div>
+    <div id="turn-panel">
+        <div id="turn-panel-header">
+            <div class="header-left">
+                <h3 id="turn-panel-title">Turn</h3>
+                <button class="turn-nav-btn" id="turn-nav-prev" title="Previous turn" onclick="navigatePrev()" disabled>&lt;</button>
+                <button class="turn-nav-btn" id="turn-nav-next" title="Next turn" onclick="navigateNext()" disabled>&gt;</button>
+                <span class="turn-meta" id="turn-panel-meta"></span>
+            </div>
+            <div id="turn-panel-close" onclick="closeTurnPanel()">✕</div>
+        </div>
+        <div id="turn-panel-body" class="loading">Loading turn data...</div>
+    </div>
+
     <script>
         // ===== Globals =====
         let allSessions = [];
         let charts = {};
+        let currentDetailSession = null; // Current session filename in detail view
 
         // ===== Chart Defaults =====
-        Chart.defaults.color = '#999';
-        Chart.defaults.borderColor = '#3e3e42';
-        Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        if (window.Chart) {
+            if (Chart.defaults) {
+                Chart.defaults.color = '#999';
+                Chart.defaults.borderColor = '#3e3e42';
+                if (!Chart.defaults.font) Chart.defaults.font = {};
+                Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            }
+        }
 
         // ===== API Helper =====
         async function api(path) {
@@ -491,8 +1013,14 @@
         function fmtDur(ms) {
             if (ms < 1000) return ms + 'ms';
             if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
-            if (ms < 3600000) return (ms / 60000).toFixed(1) + 'm';
-            return (ms / 3600000).toFixed(1) + 'h';
+            if (ms < 3600000) {
+                const m = Math.floor(ms / 60000);
+                const s = Math.round((ms % 60000) / 1000);
+                return m + 'm ' + s + 's';
+            }
+            const h = Math.floor(ms / 3600000);
+            const m = Math.floor((ms % 3600000) / 60000);
+            return h + 'h ' + m + 'm';
         }
 
         function fmtDate(iso) {
@@ -588,7 +1116,7 @@
                 { label: 'Total Conversations', value: s.total_conversations, color: '' },
                 { label: 'Avg Input Tokens', value: fmtK(s.avg_input_tokens), color: 'var(--success)' },
                 { label: 'Avg Output Tokens', value: fmtK(s.avg_output_tokens), color: 'var(--success)' },
-                { label: 'Avg TTFT', value: s.avg_ttft_ms ? (s.avg_ttft_ms / 1000).toFixed(1) + 's' : 'N/A', color: '' },
+                { label: 'Avg TTFT', value: s.avg_ttft_ms ? fmtDur(s.avg_ttft_ms) : 'N/A', color: '' },
                 { label: 'Avg Speed', value: s.avg_speed_tok_per_sec ? s.avg_speed_tok_per_sec + ' tok/s' : 'N/A', color: '' },
                 { label: 'Avg Turns', value: s.avg_turns, color: 'var(--warn)' },
                 { label: 'Avg Tool Calls', value: s.avg_tool_calls, color: 'var(--accent)' },
@@ -843,6 +1371,7 @@
         }
 
         function renderDetail(filename, general, tally, timeline, tools, skills, files, perf) {
+            currentDetailSession = filename;
             rebuildDetailView();
             document.getElementById('detail-title').textContent = `Session Details: ${filename.replace('.chat.json', '')}`;
 
@@ -855,12 +1384,13 @@
                 `${fmtDate(general.created_at)} → ${fmtDate(general.updated_at)}`;
             document.getElementById('detail-turns').innerHTML = `${general.turns} <span style="color:var(--text-muted)">(${general.messages || general.total_messages || tally.total_messages || 0} msgs)</span>`;
             document.getElementById('detail-speed').textContent = general.avg_speed_tok_per_sec ? Math.round(general.avg_speed_tok_per_sec) + ' tok/s' : 'N/A';
-            const ttftTimeline = perf.ttft_timeline || [];
-            const totalTTFTms = ttftTimeline.reduce((s, p) => s + (p.ttft_ms || 0), 0);
-            if (totalTTFTms > 0) {
-                const avgTTFT = totalTTFTms / ttftTimeline.length;
+            const ttftTimeline = perf.timeline || [];
+            const totalTTFTms = ttftTimeline.reduce((s, p) => s + ((p.ttft_ms && p.ttft_ms > 0) ? p.ttft_ms : 0), 0);
+            const ttftCount = ttftTimeline.filter(p => p.ttft_ms && p.ttft_ms > 0).length;
+            if (ttftCount > 0) {
+                const avgTTFT = totalTTFTms / ttftCount;
                 document.getElementById('detail-total-ttft').textContent = fmtDur(totalTTFTms);
-                document.getElementById('detail-total-ttft-sub').textContent = 'Avg time to first token: ' + (avgTTFT / 1000).toFixed(2) + 's';
+                document.getElementById('detail-total-ttft-sub').textContent = 'Avg time to first token: ' + fmtDur(avgTTFT);
             } else {
                 document.getElementById('detail-total-ttft').textContent = 'N/A';
                 document.getElementById('detail-total-ttft-sub').textContent = '';
@@ -886,7 +1416,7 @@
                 tally.user_input || 0, tally.text || 0,
                 tally.thinking || 0,
                 tally.tool_call || 0, tally.tool_instruction || 0,
-                tally.tool_execution || 0,
+                tally.tool_execution || 0, tally.tool_definition || 0,
                 tally.system_prompt || 0, tally.synthetic || 0
             );
             const tallyItems = [
@@ -895,6 +1425,7 @@
                 { label: 'User Input', value: tally.user_input || 0, cls: 'fill-user' },
                 { label: 'Tool Execution', value: tally.tool_execution || 0, cls: 'fill-tool' },
                 { label: 'System Prompt', value: tally.system_prompt || 0, cls: 'fill-system' },
+                { label: 'Tool Def', value: tally.tool_definition || 0, cls: 'fill-system' },
                 { label: 'Synthetic', value: tally.synthetic || 0, cls: 'fill-synthetic' },
             ];
             const outputItems = [
@@ -946,6 +1477,11 @@
                                 ctx.restore();
                             }
                         });
+                    }
+                }, {
+                    id: 'turnClick',
+                    afterDraw(chart) {
+                        chart.canvas.style.cursor = 'pointer';
                     }
                 }],
                 data: {
@@ -1014,6 +1550,15 @@
                         },
                         y: { ticks: { color: '#999', callback: v => fmtK(v) }, grid: { color: '#3e3e42' }, title: { display: true, text: 'Tokens', color: '#999' } },
                     }
+                }
+            });
+            // Click handler for timeline chart
+            charts.timeline.canvas.addEventListener('click', function(e) {
+                const points = charts.timeline.getElementsAtEventForMode(e, 'nearest', { intersect: true }, false);
+                if (points && points.length > 0) {
+                    const idx = points[0].index;
+                    const msgId = tlData[idx]?.id;
+                    if (msgId) openTurnPanel(msgId, currentDetailSession);
                 }
             });
 
@@ -1086,6 +1631,9 @@
                                     const idx = items[0].dataIndex;
                                     const p = perfData[idx];
                                     return (p.id || '') + '\nCumulative: ' + (p.ctx_total || 0).toLocaleString() + ' tokens';
+                                },
+                                label: function(ctx) {
+                                    return 'Speed: ' + ctx.parsed.y.toFixed(1) + ' tok/s';
                                 }
                             }
                         }
@@ -1127,10 +1675,256 @@
                     }
                 }
             });
+            // Click handler for perf chart
+            charts.perf.canvas.style.cursor = 'pointer';
+            charts.perf.canvas.addEventListener('click', function(e) {
+                const points = charts.perf.getElementsAtEventForMode(e, 'nearest', { intersect: true }, false);
+                if (points && points.length > 0) {
+                    const idx = points[0].index;
+                    const msgId = perfData[idx]?.id;
+                    if (msgId) openTurnPanel(msgId, currentDetailSession);
+                }
+            });
+
+            // Duration Breakdown Chart
+            if (charts.duration) charts.duration.destroy();
+            const durData = tlData.filter(t => t.role === 'assistant' && (t.duration_ms || 0) > 0);
+            if (durData.length > 0) {
+                const totals = {
+                    ttft: durData.reduce((s, d) => s + (d.ttft_dur_ms || 0), 0),
+                    thinking: durData.reduce((s, d) => s + (d.thinking_dur_ms || 0), 0),
+                    text: durData.reduce((s, d) => s + (d.text_dur_ms || 0), 0),
+                    toolCall: durData.reduce((s, d) => s + (d.tool_call_dur_ms || 0), 0),
+                    toolExec: durData.reduce((s, d) => s + (d.tool_exec_dur_ms || 0), 0),
+                };
+                const totalDur = totals.ttft + totals.text + totals.thinking + totals.toolCall + totals.toolExec;
+                charts.duration = new Chart(document.getElementById('duration-chart').getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['Processing Time'],
+                        datasets: [
+                            { label: 'TTFT (Wait)', data: [totals.ttft], backgroundColor: '#e06c75' },
+                            { label: 'Thinking', data: [totals.thinking], backgroundColor: '#c678dd' },
+                            { label: 'Text Generation', data: [totals.text], backgroundColor: '#61afef' },
+                            { label: 'Tool Call Gen', data: [totals.toolCall], backgroundColor: '#e5c07b' },
+                            { label: 'Tool Execution', data: [totals.toolExec], backgroundColor: '#98c379' }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: { position: 'top', labels: { color: '#999', font: { size: 11 } } },
+                            tooltip: {
+                                callbacks: {
+                                    title: function() { return 'Processing Time Breakdown'; },
+                                    label: function(ctx) {
+                                        return ctx.dataset.label + ': ' + fmtDur(ctx.parsed.x);
+                                    },
+                                    afterLabel: function(ctx) {
+                                        const pct = totalDur > 0 ? ((ctx.parsed.x / totalDur) * 100).toFixed(1) : 0;
+                                        return pct + '% of processing';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                stacked: true,
+                                ticks: { color: '#999', callback: v => fmtDur(v) },
+                                grid: { color: '#3e3e42' },
+                                title: { display: true, text: 'Time', color: '#999' }
+                            },
+                            y: {
+                                stacked: true,
+                                ticks: { color: '#999', callback: () => fmtDur(totalDur) },
+                                grid: { color: '#3e3e42' },
+                                title: { display: true, text: 'Total', color: '#999' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Token Breakdown - Custom Canvas (single bar, messages stacked left to right)
+            if (charts.tokBreakdown) charts.tokBreakdown.destroy();
+            const tokData = tlData.filter(t => t.role === 'assistant');
+            if (tokData.length === 0) return;
+            const canvas = document.getElementById('tokbreakdown-chart');
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            const W = rect.width;
+            const H = rect.height;
+
+            // Collect system tokens from sys0, env0, tools0
+            let systemTok = 0;
+            tlData.forEach(m => {
+                if (m.id === 'sys0' || m.id === 'env0' || m.id === 'tools0') {
+                    systemTok += (m.input_tokens || 0);
+                }
+            });
+
+            const segColors = ['#5c6370', '#c678dd', '#61afef', '#e5c07b', '#98c379'];
+            const segKeys = ['user_input_tok', 'think_tok_b', 'text_tok_b', 'tool_instr_tok', 'tool_exec_tok'];
+            const segLabels = ['User Input', 'Thinking', 'Asst Text', 'Tool Call', 'Tool Result'];
+            const allSegLabels = ['System', 'User Input', 'Thinking', 'Asst Text', 'Tool Call', 'Tool Result'];
+            const allSegColors = ['#e06c75', '#5c6370', '#c678dd', '#61afef', '#e5c07b', '#98c379'];
+            let totalTokens = systemTok;
+            const allSegments = [];
+            // System segment first
+            if (systemTok > 0) {
+                allSegments.push({ msg: { id: 'system' }, segs: [{ val: systemTok, color: '#e06c75', label: 'System' }], total: systemTok });
+            }
+            tokData.forEach(m => {
+                const msgTok = segKeys.reduce((s, k) => s + (m[k] || 0), 0);
+                totalTokens += msgTok;
+                if (msgTok > 0) {
+                    const segs = segKeys.map((k, si) => ({ val: m[k] || 0, color: segColors[si], label: segLabels[si] }));
+                    allSegments.push({ msg: m, segs, total: msgTok });
+                }
+            });
+
+            const barY = 34;
+            const barH = Math.min(22, H - 60);
+            const barW = W - 20;
+            const x0 = 10;
+
+            ctx.clearRect(0, 0, W, H);
+
+            if (allSegments.length === 0 || totalTokens === 0) {
+                ctx.fillStyle = '#999';
+                ctx.font = '13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('No token data', W / 2, H / 2);
+                charts.tokBreakdown = { destroy: function() {} };
+                return;
+            }
+
+            // Legend - centered at top
+            const legendY = 14;
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'left';
+            const fontSize = 11;
+            const boxW = fontSize * 4 + 1;
+            const gap = 20;
+            const totalLegendW = allSegLabels.reduce((sum, label, i) => {
+                const tw = ctx.measureText(label).width;
+                return sum + boxW + 4 + tw + (i < allSegLabels.length - 1 ? gap : 0);
+            }, 0);
+            let lx = x0 + (barW - totalLegendW) / 2;
+            allSegLabels.forEach((label, si) => {
+                ctx.fillStyle = allSegColors[si];
+                ctx.fillRect(lx, legendY - 10, boxW, fontSize + 1);
+                ctx.fillStyle = '#999';
+                ctx.fillText(label, lx + boxW + 4, legendY);
+                const tw = ctx.measureText(label).width;
+                lx += boxW + 4 + tw + gap;
+            });
+
+            // Track segment positions for tooltip
+            const hitRegions = [];
+            let x = x0;
+            allSegments.forEach(seg => {
+                const segW = (seg.total / totalTokens) * barW;
+                let sx = x;
+                seg.segs.forEach(s => {
+                    if (s.val > 0) {
+                        const sw = (s.val / seg.total) * segW;
+                        ctx.fillStyle = s.color;
+                        ctx.fillRect(sx, barY, sw, barH);
+                        hitRegions.push({ x: sx, y: barY, w: sw, h: barH, seg: s, msg: seg.msg });
+                        sx += sw;
+                    }
+                });
+                x += segW;
+            });
+
+            // X-axis labels UNDER the bar
+            const labelY = barY + barH + 14;
+            ctx.fillStyle = '#999';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'center';
+            const numTicks = Math.min(8, Math.floor(barW / 70));
+            for (let i = 0; i <= numTicks; i++) {
+                const val = Math.round((totalTokens / numTicks) * i);
+                const tx = x0 + (val / totalTokens) * barW;
+                ctx.fillText(fmtK(val), tx, labelY);
+            }
+
+            // Axis line
+            ctx.strokeStyle = '#3e3e42';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x0, barY + barH + 2);
+            ctx.lineTo(x0 + barW, barY + barH + 2);
+            ctx.stroke();
+
+            charts.tokBreakdown = { destroy: function() {
+                canvas.onmousemove = null;
+                canvas.onmouseleave = null;
+                var tip = document.getElementById('tok-tooltip');
+                if (tip) tip.remove();
+            }};
+
+            // Click to open turn panel
+            canvas.onclick = function(e) {
+                var r = canvas.getBoundingClientRect();
+                var mx = e.clientX - r.left;
+                var my = e.clientY - r.top;
+                var found = null;
+                for (var hi = 0; hi < hitRegions.length; hi++) {
+                    var hr = hitRegions[hi];
+                    if (mx >= hr.x && mx <= hr.x + hr.w && my >= hr.y && my <= hr.y + hr.h) {
+                        found = hr;
+                        break;
+                    }
+                }
+                if (found && found.msg && found.msg.id) {
+                    openTurnPanel(found.msg.id, currentDetailSession);
+                }
+            };
+
+            // Tooltip
+            var tooltipEl = document.getElementById('tok-tooltip');
+            if (!tooltipEl) {
+                tooltipEl = document.createElement('div');
+                tooltipEl.id = 'tok-tooltip';
+                tooltipEl.style.cssText = 'position:fixed;pointer-events:none;background:#1a1a1e;border:1px solid #3e3e42;color:#ccc;padding:6px 10px;border-radius:6px;font-size:12px;font-family:monospace;z-index:9999;display:none;white-space:nowrap;';
+                document.body.appendChild(tooltipEl);
+            }
+            canvas.onmousemove = function(e) {
+                var r = canvas.getBoundingClientRect();
+                var mx = e.clientX - r.left;
+                var my = e.clientY - r.top;
+                var found = null;
+                for (var hi = 0; hi < hitRegions.length; hi++) {
+                    var hr = hitRegions[hi];
+                    if (mx >= hr.x && mx <= hr.x + hr.w && my >= hr.y && my <= hr.y + hr.h) {
+                        found = hr;
+                        break;
+                    }
+                }
+                if (found) {
+                    tooltipEl.innerHTML = found.msg.id + ' &middot; ' + found.seg.label + ': ' + fmtK(found.seg.val);
+                    tooltipEl.style.display = 'block';
+                    tooltipEl.style.left = (e.clientX + 12) + 'px';
+                    tooltipEl.style.top = (e.clientY - 28) + 'px';
+                } else {
+                    tooltipEl.style.display = 'none';
+                }
+            };
+            canvas.onmouseleave = function() { tooltipEl.style.display = 'none'; };
 
             // TTFT Chart
             if (charts.ttft) charts.ttft.destroy();
-            const ttftData = perf && perf.ttft_timeline ? perf.ttft_timeline : [];
+            const allPerfEntries = (perf && perf.timeline) || [];
+            // Filter to only entries that have ttft_ms
+            const ttftData = allPerfEntries.filter(p => p.ttft_ms != null && p.ttft_ms > 0);
             const ttftMarkerSet = new Set();
             let prevTTFTModel = null;
             ttftData.forEach((p, i) => {
@@ -1202,8 +1996,7 @@
                                 },
                                 label: function(ctx) {
                                     const ms = ctx.parsed.y;
-                                    const s = (ms / 1000).toFixed(2);
-                                    return 'TTFT: ' + ms + 'ms (' + s + 's)';
+                                    return 'TTFT: ' + fmtDur(ms);
                                 }
                             }
                         }
@@ -1245,14 +2038,23 @@
                             ticks: {
                                 color: '#999',
                                 callback: function(v) {
-                                    if (v >= 1000) return (v / 1000).toFixed(1) + 's';
-                                    return v + 'ms';
+                                    return fmtDur(v);
                                 }
                             },
                             grid: { color: '#3e3e42' },
                             title: { display: true, text: 'TTFT', color: '#999' }
                         },
                     }
+                }
+            });
+            // Click handler for TTFT chart
+            charts.ttft.canvas.style.cursor = 'pointer';
+            charts.ttft.canvas.addEventListener('click', function(e) {
+                const points = charts.ttft.getElementsAtEventForMode(e, 'nearest', { intersect: true }, false);
+                if (points && points.length > 0) {
+                    const idx = points[0].index;
+                    const msgId = ttftData[idx]?.id;
+                    if (msgId) openTurnPanel(msgId, currentDetailSession);
                 }
             });
 
@@ -1264,8 +2066,10 @@
                     <td style="color:var(--accent)">${data.calls}</td>
                     <td class="mono" style="color:var(--success)">${fmtK(data.tokens_in)}</td>
                     <td class="mono" style="color:var(--success)">${fmtK(data.tokens_out)}</td>
+                    <td class="mono">${fmtDur(data.inference_ms || 0)} ${data.calls > 1 ? '(' + fmtDur(Math.round((data.inference_ms || 0) / data.calls)) + ' avg)' : ''}</td>
+                    <td class="mono">${fmtDur(data.execution_ms || 0)} ${data.calls > 1 ? '(' + fmtDur(Math.round((data.execution_ms || 0) / data.calls)) + ' avg)' : ''}</td>
                 </tr>
-            `).join('') : '<tr><td colspan="4" style="color:var(--text-muted)">No tools used</td></tr>';
+            `).join('') : '<tr><td colspan="6" style="color:var(--text-muted)">No tools used</td></tr>';
 
             const skillsTbody = document.querySelector('#skills-table tbody');
             const skillEntries = Object.entries(skills.skills || {});
@@ -1273,8 +2077,153 @@
                 <tr>
                     <td class="mono">${name}</td>
                     <td>${data.loads}</td>
+                    <td class="mono" style="color:var(--success)">${fmtK(data.tokens || 0)}</td>
                 </tr>
-            `).join('') : '<tr><td colspan="2" style="color:var(--text-muted)">No skills loaded</td></tr>';
+            `).join('') : '<tr><td colspan="3" style="color:var(--text-muted)">No skills loaded</td></tr>';
+
+            // Skill Timeline Canvas
+            if (charts.skillTimeline) charts.skillTimeline.destroy();
+            const stlData = skills.timeline || [];
+            const skillTimelineSection = document.getElementById('skilltimeline-chart')?.closest('.section');
+            const hasSkillSegment = stlData.some(seg => seg.type === 'skill');
+            if (skillTimelineSection) skillTimelineSection.style.display = hasSkillSegment ? '' : 'none';
+            if (hasSkillSegment) {
+                const canvas = document.getElementById('skilltimeline-chart');
+                const ctx = canvas.getContext('2d');
+                const dpr = window.devicePixelRatio || 1;
+                const rect = canvas.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) return;
+                canvas.width = rect.width * dpr;
+                canvas.height = rect.height * dpr;
+                ctx.scale(dpr, dpr);
+                const W = rect.width;
+                const H = rect.height;
+
+                const skillNames = skillEntries.map(([n]) => n);
+                const skillColors = ['#569cd6', '#4ec9b0', '#d29922', '#bc8cff', '#f44747', '#79c0ff', '#ff7b72', '#ce9178', '#6a9955', '#dcdcaa'];
+                const notSkillColor = '#5c6370';
+                let totalSTokens = stlData.reduce((s, seg) => s + seg.tokens, 0);
+                if (totalSTokens === 0) return;
+
+                const barY = 34;
+                const barH = Math.min(22, H - 60);
+                const barW = W - 20;
+                const x0 = 10;
+                ctx.clearRect(0, 0, W, H);
+
+                // Legend
+                const legendY = 14;
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'left';
+                const fontSize = 11;
+                const boxW = fontSize * 4 + 1;
+                const gapL = 20;
+                const legendItems = [{ label: 'Not Skill', color: notSkillColor }];
+                skillNames.forEach((sn, si) => legendItems.push({ label: sn, color: skillColors[si % 10] }));
+                const totalLegendW = legendItems.reduce((sum, item, i) => {
+                    const tw = ctx.measureText(item.label).width;
+                    return sum + boxW + 4 + tw + (i < legendItems.length - 1 ? gapL : 0);
+                }, 0);
+                let lx = x0 + (barW - totalLegendW) / 2;
+                legendItems.forEach(item => {
+                    ctx.fillStyle = item.color;
+                    ctx.fillRect(lx, legendY - 10, boxW, fontSize + 1);
+                    ctx.fillStyle = '#999';
+                    ctx.fillText(item.label, lx + boxW + 4, legendY);
+                    lx += boxW + 4 + ctx.measureText(item.label).width + gapL;
+                });
+
+                // Draw bar + hit regions
+                const hitRegions = [];
+                let x = x0;
+                stlData.forEach(seg => {
+                    const segW = (seg.tokens / totalSTokens) * barW;
+                    if (seg.type === 'not_skill') {
+                        ctx.fillStyle = notSkillColor;
+                        ctx.fillRect(x, barY, segW, barH);
+                        hitRegions.push({ x: x, y: barY, w: segW, h: barH, label: 'Not Skill', msg: { id: 'context' }, val: seg.tokens });
+                    } else {
+                        const si = skillNames.indexOf(seg.name);
+                        ctx.fillStyle = skillColors[(si >= 0 ? si : 0) % 10];
+                        ctx.fillRect(x, barY, segW, barH);
+                        hitRegions.push({ x: x, y: barY, w: segW, h: barH, label: seg.name, msg: { id: seg.id || 'skill' }, val: seg.tokens });
+                    }
+                    x += segW;
+                });
+
+                // X-axis
+                const labelY = barY + barH + 14;
+                ctx.fillStyle = '#999';
+                ctx.font = '10px sans-serif';
+                ctx.textAlign = 'center';
+                const numTicks = Math.min(8, Math.floor(barW / 70));
+                for (let i = 0; i <= numTicks; i++) {
+                    const val = Math.round((totalSTokens / numTicks) * i);
+                    const tx = x0 + (val / totalSTokens) * barW;
+                    ctx.fillText(fmtK(val), tx, labelY);
+                }
+                ctx.strokeStyle = '#3e3e42';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x0, barY + barH + 2);
+                ctx.lineTo(x0 + barW, barY + barH + 2);
+                ctx.stroke();
+
+                charts.skillTimeline = { destroy: function() {
+                    canvas.onmousemove = null;
+                    canvas.onmouseleave = null;
+                    var tip = document.getElementById('skill-tooltip');
+                    if (tip) tip.remove();
+                }};
+
+                // Tooltip
+                var tooltipEl = document.getElementById('skill-tooltip');
+                if (!tooltipEl) {
+                    tooltipEl = document.createElement('div');
+                    tooltipEl.id = 'skill-tooltip';
+                    tooltipEl.style.cssText = 'position:fixed;pointer-events:none;background:#1a1a1e;border:1px solid #3e3e42;color:#ccc;padding:6px 10px;border-radius:6px;font-size:12px;font-family:monospace;z-index:9999;display:none;white-space:nowrap;';
+                    document.body.appendChild(tooltipEl);
+                }
+                // Click to open turn for skill timeline
+                canvas.onclick = function(e) {
+                    var r = canvas.getBoundingClientRect();
+                    var mx = e.clientX - r.left;
+                    var my = e.clientY - r.top;
+                    var found = null;
+                    for (var hi = 0; hi < hitRegions.length; hi++) {
+                        var hr = hitRegions[hi];
+                        if (mx >= hr.x && mx <= hr.x + hr.w && my >= hr.y && my <= hr.y + hr.h) {
+                            found = hr;
+                            break;
+                        }
+                    }
+                    if (found && found.msg && found.msg.id) {
+                        openTurnPanel(found.msg.id, currentDetailSession);
+                    }
+                };
+                canvas.onmousemove = function(e) {
+                    var r = canvas.getBoundingClientRect();
+                    var mx = e.clientX - r.left;
+                    var my = e.clientY - r.top;
+                    var found = null;
+                    for (var hi = 0; hi < hitRegions.length; hi++) {
+                        var hr = hitRegions[hi];
+                        if (mx >= hr.x && mx <= hr.x + hr.w && my >= hr.y && my <= hr.y + hr.h) {
+                            found = hr;
+                            break;
+                        }
+                    }
+                    if (found) {
+                        tooltipEl.innerHTML = found.msg.id + ' &middot; ' + found.label + ': ' + fmtK(found.val);
+                        tooltipEl.style.display = 'block';
+                        tooltipEl.style.left = (e.clientX + 12) + 'px';
+                        tooltipEl.style.top = (e.clientY - 28) + 'px';
+                    } else {
+                        tooltipEl.style.display = 'none';
+                    }
+                };
+                canvas.onmouseleave = function() { tooltipEl.style.display = 'none'; };
+            }
 
             const filesTbody = document.querySelector('#files-table tbody');
             const fileEntries = files.files || [];
@@ -1351,13 +2300,485 @@
                 </div>
                 <div class="section"><h3>Token Tally</h3><div id="token-tally"></div></div>
                 <div class="section"><h3>Token Timeline</h3><div class="chart-container"><canvas id="timeline-chart"></canvas></div></div>
+                <div class="section"><h3>Token Breakdown</h3><div class="chart-container"><canvas id="tokbreakdown-chart" style="height:80px; width:100%; display:block;"></canvas></div></div>
                 <div class="section"><h3>Performance (tokens/sec)</h3><div class="chart-container"><canvas id="perf-chart"></canvas></div></div>
                 <div class="section"><h3>Time to First Token (TTFT)</h3><div class="chart-container"><canvas id="ttft-chart"></canvas></div></div>
-                <div class="section"><h3>Tools Usage</h3><table id="tools-table"><thead><tr><th>Tool</th><th>Calls</th><th>Tokens In</th><th>Tokens Out</th></tr></thead><tbody></tbody></table></div>
-                <div class="section"><h3>Skills</h3><table id="skills-table"><thead><tr><th>Skill</th><th>Loads</th></tr></thead><tbody></tbody></table></div>
+                <div class="section"><h3>Processing Time</h3><div class="chart-container"><canvas id="duration-chart"></canvas></div></div>
+                <div class="section"><h3>Tools Usage</h3><table id="tools-table"><thead><tr><th>Tool</th><th>Calls</th><th>Tokens In</th><th>Tokens Out</th><th>Inference Time</th><th>Exec Time</th></tr></thead><tbody></tbody></table></div>
+                <div class="section"><h3>Skills</h3><table id="skills-table"><thead><tr><th>Skill</th><th>Loads</th><th>Tokens</th></tr></thead><tbody></tbody></table></div>
+                <div class="section"><h3>Skill Timeline</h3><div class="chart-container"><canvas id="skilltimeline-chart" style="height:80px; width:100%; display:block;"></canvas></div></div>
                 <div class="section"><h3>Files Touched</h3><table id="files-table"><thead><tr><th>File</th><th>Reads</th><th>Edits</th><th>Creates</th><th>Tokens</th><th>Checksum</th><th>Last Updated</th></tr></thead><tbody></tbody></table></div>
             `;
             main.appendChild(div);
+        }
+
+        // ===== Turn Panel =====
+        let currentTurnData = null; // Full turn data for prev/next nav
+        let currentTurnSession = null; // Current session filename
+        let currentFocusedMsgId = null; // Message that opened the panel or current focused message
+        
+        function openTurnPanel(msgId, sessionId) {
+            if (!sessionId) sessionId = currentDetailSession;
+            if (!sessionId) return;
+            
+            currentDetailSession = sessionId;
+            currentTurnSession = sessionId;
+            currentFocusedMsgId = msgId || null;
+            const panel = document.getElementById('turn-panel');
+            const overlay = document.getElementById('turn-panel-overlay');
+            const body = document.getElementById('turn-panel-body');
+            const title = document.getElementById('turn-panel-title');
+            const meta = document.getElementById('turn-panel-meta');
+            
+            title.textContent = 'Turn: ' + msgId;
+            meta.textContent = sessionId.replace('.chat.json', '');
+            body.className = 'loading';
+            body.innerHTML = '<div style="text-align:center;padding:40px">Loading turn data...</div>';
+            
+            panel.classList.add('active');
+            overlay.classList.add('active');
+            
+            fetch('/api/sessions/' + encodeURIComponent(sessionId.replace('.chat.json', '')) + '/turn?msg_id=' + encodeURIComponent(msgId))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        body.className = '';
+                        body.innerHTML = '<div class="loading">Error: ' + data.error + '</div>';
+                        return;
+                    }
+                    currentTurnData = data;
+                    renderTurnPanel(data);
+                })
+                .catch(e => {
+                    body.className = '';
+                    body.innerHTML = '<div class="loading">Error loading turn: ' + e.message + '</div>';
+                });
+        }
+        
+        function navigateTurn(msgId) {
+            if (msgId) {
+                currentFocusedMsgId = msgId;
+                openTurnPanel(msgId, currentTurnSession);
+            }
+        }
+        
+        function navigatePrev() {
+            const id = document.getElementById('turn-nav-prev').dataset.msgId;
+            navigateTurn(id);
+        }
+        
+        function navigateNext() {
+            const id = document.getElementById('turn-nav-next').dataset.msgId;
+            navigateTurn(id);
+        }
+        
+        function closeTurnPanel() {
+            document.getElementById('turn-panel').classList.remove('active');
+            document.getElementById('turn-panel-overlay').classList.remove('active');
+        }
+        
+        // Close panel when clicking overlay
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('turn-panel-overlay').addEventListener('click', closeTurnPanel);
+        });
+        
+        function renderTurnPanel(data) {
+            const body = document.getElementById('turn-panel-body');
+            const title = document.getElementById('turn-panel-title');
+            const meta = document.getElementById('turn-panel-meta');
+            const msgs = data.messages || [];
+            
+            if (msgs.length === 0) {
+                body.className = '';
+                body.innerHTML = '<div class="loading">No messages in turn</div>';
+                return;
+            }
+            
+            // Find the first user msg and the clicked msg for nav
+            const turnStartId = data.turn_start_msg_id;
+            const allUserMsgs = msgs.filter(m => m.role === 'user');
+            const firstUserId = allUserMsgs.length > 0 ? allUserMsgs[0].id : msgs[0].id;
+            
+            // Build prev/next IDs by looking at adjacent turns
+            const prevId = data.prev_msg_id;
+            const nextId = data.next_msg_id;
+            
+            title.textContent = 'Turn: ' + firstUserId;
+            
+            // Prev/Next buttons
+            const prevBtn = document.getElementById('turn-nav-prev');
+            const nextBtn = document.getElementById('turn-nav-next');
+            prevBtn.disabled = !prevId;
+            prevBtn.dataset.msgId = prevId || '';
+            nextBtn.disabled = !nextId;
+            nextBtn.dataset.msgId = nextId || '';
+            prevBtn.title = prevId ? 'Previous turn: ' + prevId : 'No previous turn';
+            nextBtn.title = nextId ? 'Next turn: ' + nextId : 'No next turn';
+            
+            meta.textContent = msgs.length + ' message' + (msgs.length > 1 ? 's' : '') + ' · ' + firstUserId;
+            
+            let html = '';
+            
+            // Compute aggregated turn stats across all assistant messages
+            let totalInputTokens = 0;
+            let totalOutputTokens = 0;
+            let totalDurationMs = 0;
+            let totalInferenceMs = 0;
+            let totalExecMs = 0;
+            let totalWaitingMs = 0;
+            
+            msgs.forEach(m => {
+                if (m.role === 'user') {
+                    totalInputTokens += (m.input_tokens || 0);
+                } else if (m.role === 'assistant') {
+                    totalOutputTokens += (m.output_tokens || 0);
+                    const dur = m.duration_ms || 0;
+                    totalDurationMs += dur;
+                    const textMs = (m.text_metrics || {}).inference_duration_ms || 0;
+                    const thinkMs = (m.thinking_metrics || {}).inference_duration_ms || 0;
+                    const toolCallMs = (m.tool_call_metrics || {}).inference_duration_ms || 0;
+                    const infMs = textMs + thinkMs + toolCallMs;
+                    let execMs = 0;
+                    (m.tool_calls || []).forEach(tc => {
+                        execMs += (tc.execution_duration_ms || 0);
+                    });
+                    totalInferenceMs += infMs;
+                    totalExecMs += execMs;
+                    if (m.time_to_first_token_ms && m.time_to_first_token_ms > 0) {
+                        totalWaitingMs += m.time_to_first_token_ms;
+                    }
+                } else if (m.role === 'synthetic') {
+                    totalInputTokens += (m.input_tokens || 0);
+                }
+            });
+            
+            // Use sequence_stat if available for more accurate totals
+            const seqMsg = msgs.find(m => m.role === 'assistant' && m.sequence_stat);
+            if (seqMsg && seqMsg.sequence_stat) {
+                const ss = seqMsg.sequence_stat;
+                totalInputTokens = ss.input_tokens || totalInputTokens;
+                totalOutputTokens = ss.output_tokens || totalOutputTokens;
+                totalDurationMs = ss.duration_ms || totalDurationMs;
+                totalInferenceMs = ss.inference_duration_ms || totalInferenceMs;
+                totalExecMs = ss.exec_dur_ms || totalExecMs;
+            }
+            
+            // Inference = text + thinking + tool_call_gen (from sequence_stat or aggregated)
+            
+            html += '<div class="seq-banner">';
+            html += '<span>📊 Output: <strong>' + fmtK(totalOutputTokens) + '</strong> tokens</span>';
+            if (totalInputTokens > 0) html += '<span>📥 Input: <strong>' + fmtK(totalInputTokens) + '</strong> tokens</span>';
+            html += '<span>⏱ Duration: <strong>' + fmtDur(totalDurationMs) + '</strong></span>';
+            if (totalWaitingMs > 0) html += '<span class="seq-waiting">( waiting <strong>' + fmtDur(totalWaitingMs) + '</strong> )</span>';
+            if (totalInferenceMs > 0) html += '<span>🧠 Inference: <strong>' + fmtDur(totalInferenceMs) + '</strong></span>';
+            if (totalExecMs > 0) html += '<span>🔧 Exec: <strong>' + fmtDur(totalExecMs) + '</strong></span>';
+            const avgSpeed = totalOutputTokens > 0 && totalInferenceMs > 0 ? Math.round(totalOutputTokens / (totalInferenceMs / 1000)) : 0;
+            if (avgSpeed > 0) html += '<span>🚀 ' + avgSpeed + ' tok/s</span>';
+            html += '</div>';
+            
+            // Then render messages
+            for (let i = 0; i < msgs.length; i++) {
+                const m = msgs[i];
+                
+                if (m.role === 'user') {
+                    html += renderUserBubble(m);
+                } else if (m.role === 'synthetic' || m.role === 'internal') {
+                    html += renderSyntheticBubble(m);
+                } else if (m.role === 'assistant') {
+                    html += renderAssistantBubble(m);
+                }
+            }
+            
+            body.className = '';
+            body.innerHTML = html;
+            
+            const focusEl = currentFocusedMsgId ? body.querySelector('[data-msg-id="' + cssEscape(currentFocusedMsgId) + '"]') : null;
+            if (focusEl) {
+                focusEl.classList.add('focused');
+                requestAnimationFrame(() => {
+                    focusEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+            } else {
+                body.scrollTop = 0;
+            }
+            
+            // Initialize expandable sections
+            initExpandableSections();
+            highlightCodeBlocks(body);
+        }
+        
+        function renderUserBubble(m) {
+            const txt = escapeHtml(m.text || '');
+            const inputTok = m.input_tokens || 0;
+            return '<div class="turn-bubble user" data-msg-id="' + escapeAttr(m.id) + '">' +
+                '<div class="bubble-content">' +
+                    '<div class="bubble-id">' + escapeHtml(m.id) + '</div>' +
+                    '<div class="bubble-text">' + (txt || '<em style="color:var(--text-muted)">Empty</em>') + '</div>' +
+                    (inputTok > 0 ? '<div class="bubble-metrics"><div class="metric"><span class="dot dot-text"></span> ' + fmtK(inputTok) + ' tok</div></div>' : '') +
+                '</div>' +
+            '</div>';
+        }
+        
+        function renderAssistantBubble(m) {
+            let html = '<div class="turn-bubble assistant" data-msg-id="' + escapeAttr(m.id) + '"><div class="bubble-content">';
+            html += '<div class="bubble-id">' + escapeHtml(m.id) + '</div>';
+            
+            // TTFT wait time
+            const ttft = m.time_to_first_token_ms;
+            if (ttft && ttft > 0) {
+                html += '<div class="bubble-metrics" style="margin-bottom:6px;border-top:none;padding-top:0">' +
+                    '<div class="metric"><span class="dot dot-wait"></span> waited ' + fmtDur(ttft) + '</div>' +
+                '</div>';
+            }
+            
+            // Thinking section (expandable)
+            if (m.thinking_text) {
+                const thinkMetrics = m.thinking_metrics || {};
+                const thinkTok = m.thinking_metrics ? (m.thinking_metrics.tokens || '') : '';
+                const thinkDur = m.thinking_metrics ? fmtDur(m.thinking_metrics.inference_duration_ms || 0) : '';
+                html += '<div class="expandable-section">' +
+                    '<div class="expandable-toggle" onclick="toggleExpand(this)">' +
+                        '<span class="arrow">▶</span>' +
+                        '<span class="section-icon">🧠</span>' +
+                        '<span class="section-label">Thinking</span>' +
+                        (thinkTok ? '<span class="section-badge">' + fmtK(thinkTok) + ' tok</span>' : '') +
+                        (thinkDur ? '<span class="section-badge">' + thinkDur + '</span>' : '') +
+                    '</div>' +
+                    '<div class="expandable-content">' +
+                        '<div class="expandable-text">' + escapeHtml(m.thinking_text) + '</div>' +
+                    '</div>' +
+                '</div>';
+            }
+            
+            // Main text
+            const txt = m.text || '';
+            if (txt) {
+                const textMetrics = m.text_metrics || {};
+                html += '<div class="bubble-text">' + escapeHtml(txt) + '</div>';
+                if (textMetrics.inference_duration_ms) {
+                    html += '<div class="bubble-metrics">' +
+                        '<div class="metric"><span class="dot dot-text"></span> ' + fmtDur(textMetrics.inference_duration_ms) + '</div>' +
+                        (textMetrics.tokens ? '<div class="metric"><span class="dot dot-text"></span> ' + fmtK(textMetrics.tokens) + ' tok</div>' : '') +
+                    '</div>';
+                }
+            }
+            
+            // Tool calls
+            if (m.tool_calls && m.tool_calls.length > 0) {
+                html += '<div class="expandable-section">';
+                for (let ti = 0; ti < m.tool_calls.length; ti++) {
+                    const tc = m.tool_calls[ti];
+                    const statusBadge = tc.error ? '⚠ error' : (tc.result ? '✓ ' + (tc.result.length > 20 ? (tc.result.length + ' chars') : tc.result.slice(0,20)) : '...');
+                    html += '<div class="tool-item">' +
+                        '<div class="tool-header" onclick="toggleTool(this)">' +
+                            '<span class="arrow">▶</span>' +
+                            '<span class="tool-icon">🔧</span>' +
+                            '<span class="tool-name">' + escapeHtml(tc.name) + '</span>' +
+                            (tc.error ? '<span class="tool-status-error">✕</span>' : '<span class="tool-status-ok">✔</span>') +
+                            '<span class="tool-badge tool-badge-call">↓ ' + (tc.instruction_tokens ? fmtK(tc.instruction_tokens) + ' tok' : '') + (tc.instruction_duration_ms ? ' · ' + fmtDur(tc.instruction_duration_ms) : '') + '</span>' +
+                            '<span class="tool-badge tool-badge-exec">↑ ' + (tc.execution_tokens ? fmtK(tc.execution_tokens) + ' tok' : '') + (tc.execution_duration_ms ? ' · ' + fmtDur(tc.execution_duration_ms) : '') + '</span>' +
+                        '</div>' +
+                        '<div class="tool-body">' +
+                            '<div class="tool-args">' +
+                                '<div class="tool-args-label">Arguments</div>' +
+                                renderCodeBlock(tc.arguments, detectToolContentLanguage(tc.arguments, tc.name)) +
+                            '</div>' +
+                            (tc.result ? '<div class="tool-result"><div class="tool-result-label">Result</div>' + renderCodeBlock(tc.result, detectToolContentLanguage(tc.result, tc.name), true) + '</div>' : '') +
+                            (tc.error ? '<div class="tool-error"><div class="tool-error-label">Error</div>' + renderCodeBlock(tc.error, 'bash', false, true) + '</div>' : '') +
+                            (tc.execution_duration_ms ? '<div class="bubble-metrics" style="border-top:none;padding-top:4px;margin-top:4px"><div class="metric"><span class="dot dot-exec"></span> exec ' + fmtDur(tc.execution_duration_ms) + '</div></div>' : '') +
+                        '</div>';
+                        
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                }
+            
+            // Stop reason
+            if (m.stop_reason) {
+                html += '<div class="bubble-metrics"><div class="metric" style="color:var(--text-muted)">stop: ' + escapeHtml(m.stop_reason) + '</div></div>';
+            }
+            
+            html += '</div></div>';
+            return html;
+        }
+        
+        function renderSyntheticBubble(m) {
+            const isInternal = m.role === 'internal';
+            const label = m.label || (isInternal ? 'internal' : 'synthetic');
+            const txt = m.text || '';
+            const params = m.params || {};
+            let icon = isInternal ? '⚙️' : '📋';
+            if (label === 'aborted') icon = '🛑';
+            else if (label.startsWith('skill_')) icon = '🔌';
+            else if (label === 'Model Switched') icon = '🔄';
+            
+            // Build params display
+            let paramsHtml = '';
+            const paramEntries = Object.entries(params).filter(([_, v]) => v !== null && v !== undefined && v !== '');
+            if (paramEntries.length > 0) {
+                paramsHtml = '<div class="synth-params">';
+                paramEntries.forEach(([k, v]) => {
+                    const valStr = typeof v === 'string' ? v : JSON.stringify(v);
+                    paramsHtml += '<div class="synth-param-row"><span class="synth-param-key">' + escapeHtml(k) + '</span><span class="synth-param-val">' + escapeHtml(valStr) + '</span></div>';
+                });
+                paramsHtml += '</div>';
+            }
+            
+            const titleParams = paramEntries.map(([k, v]) => {
+                const valStr = typeof v === 'string' ? v : JSON.stringify(v);
+                return escapeHtml(k) + '=' + escapeHtml(valStr);
+            }).join(' ');
+            
+            const inputTok = m.input_tokens || 0;
+            return '<div class="turn-bubble synthetic-tool" data-msg-id="' + escapeAttr(m.id) + '">' +
+                '<div class="bubble-content">' +
+                    '<div class="bubble-id">' + escapeHtml(m.id) + '</div>' +
+                    '<div class="expandable-section">' +
+                        '<div class="expandable-toggle synth-toggle" onclick="toggleExpand(this)">' +
+                            '<span class="arrow">▶</span>' +
+                            '<span class="section-icon">' + icon + '</span>' +
+                            '<span class="section-label">' + escapeHtml(label) + (titleParams ? ' <span class="mono" style="color:var(--text);font-weight:400">' + titleParams + '</span>' : '') + '</span>' +
+                            (inputTok > 0 ? '<span class="section-badge">' + fmtK(inputTok) + ' tok</span>' : '') +
+                        '</div>' +
+                        '<div class="expandable-content">' +
+                            (paramsHtml ? paramsHtml : '') +
+                            (txt ? '<div class="expandable-text">' + escapeHtml(txt) + '</div>' : '') +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+        }
+        
+        function toggleExpand(el) {
+            el.classList.toggle('open');
+            const content = el.nextElementSibling;
+            if (content) content.classList.toggle('open');
+        }
+        
+        function toggleTool(el) {
+            el.classList.toggle('open');
+            const body = el.nextElementSibling;
+            if (body) body.classList.toggle('open');
+        }
+        
+        function initExpandableSections() {
+            // Already handled by inline onclick handlers
+        }
+        
+        function formatJson(str) {
+            if (!str) return '';
+            try {
+                const obj = JSON.parse(str);
+                return JSON.stringify(obj, null, 2);
+            } catch {
+                return str;
+            }
+        }
+        
+        function isJsonString(str) {
+            if (!str || typeof str !== 'string') return false;
+            try {
+                JSON.parse(str);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+        
+        function detectToolContentLanguage(str, toolName) {
+            if (isJsonString(str)) return 'json';
+            if (toolName === 'bash' || toolName === 'functions.bash') return 'bash';
+            return 'bash';
+        }
+        
+        function renderCodeBlock(str, language, successTint, errorTint) {
+            const content = language === 'json' ? formatJson(str) : (str || '');
+            const extraStyle = successTint ? ' style="color:var(--success)"' : '';
+            const extraClass = errorTint ? ' error' : '';
+            return '<pre class="tool-snippet language-' + language + extraClass + '"' + extraStyle + '><code class="language-' + language + '">' + escapeHtml(content) + '</code></pre>';
+        }
+        
+        function highlightCodeBlocks(container) {
+            if (window.Prism && container) {
+                Prism.highlightAllUnder(container);
+            }
+        }
+        
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+        
+        function escapeAttr(str) {
+            return escapeHtml(str).replace(/"/g, '&quot;');
+        }
+        
+        function cssEscape(str) {
+            if (window.CSS && typeof window.CSS.escape === 'function') {
+                return window.CSS.escape(str);
+            }
+            return String(str).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+        }
+        
+        // ===== Chart Click Handlers =====
+        function makeChartClickableOnId() {
+            // Add click handlers to all chart canvases
+            // We check the chart tooltip data for message IDs
+            Object.keys(charts).forEach(chartKey => {
+                const chart = charts[chartKey];
+                if (!chart || !chart.canvas) return;
+                const canvas = chart.canvas;
+                if (canvas.dataset.turnClickHandled) return;
+                canvas.dataset.turnClickHandled = 'true';
+                canvas.style.cursor = 'pointer';
+                
+                canvas.addEventListener('click', function(e) {
+                    const points = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, false);
+                    if (points && points.length > 0) {
+                        const point = points[0];
+                        const tooltipTitle = chart.tooltip?._dataPoints?.[0];
+                        // Try to get the msg id from the chart's tooltip title callback data
+                        // We'll use a simpler approach: check if this chart is a timeline/perf/ttft
+                        extractAndOpenTurn(chart, point);
+                    }
+                });
+            });
+        }
+        
+        function extractAndOpenTurn(chart, point) {
+            const data = chart.data;
+            const idx = point.index;
+            let msgId = null;
+            
+            // Check tooltip data
+            if (chart.tooltip && chart.tooltip.getActiveElements && chart.tooltip.getActiveElements().length > 0) {
+                const active = chart.tooltip.getActiveElements()[0];
+                const dsIndex = active.datasetIndex;
+                const dataIndex = active.index;
+                // Try to extract from model label data
+                const pluginOpts = chart.options.plugins;
+                if (pluginOpts.tooltip && pluginOpts.tooltip.callbacks && pluginOpts.tooltip.callbacks.title) {
+                    const titleResult = pluginOpts.tooltip.callbacks.title([active]);
+                    if (titleResult && typeof titleResult === 'string' && titleResult.split('\n')[0].startsWith('msg_') || titleResult.split('\n')[0].startsWith('sys') || titleResult.split('\n')[0].startsWith('env') || titleResult.split('\n')[0].startsWith('tools') || titleResult.split('\n')[0].startsWith('config')) {
+                        msgId = titleResult.split('\n')[0].trim();
+                    }
+                }
+            }
+            
+            // Fallback: look for id in dataset data
+            if (!msgId && data.datasets) {
+                const ds = data.datasets[point.datasetIndex];
+                const raw = ds.data ? ds.data[point.index] : null;
+                if (raw && typeof raw === 'object' && raw.id) {
+                    msgId = raw.id;
+                }
+            }
+            
+            if (msgId) {
+                openTurnPanel(msgId, currentDetailSession);
+            }
         }
 
         // ===== Init =====

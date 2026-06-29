@@ -13,11 +13,11 @@ func normalizeOpenAICompatBaseURL(raw string, fallback string) string {
 		base = fallback
 	}
 	base = strings.TrimRight(base, "/")
-	if strings.HasSuffix(base, "/chat/completions") {
-		base = strings.TrimSuffix(base, "/chat/completions")
+	if before, ok := strings.CutSuffix(base, "/chat/completions"); ok {
+		base = before
 	}
-	if strings.HasSuffix(base, "/models") {
-		base = strings.TrimSuffix(base, "/models")
+	if before, ok := strings.CutSuffix(base, "/models"); ok {
+		base = before
 	}
 	if !strings.HasSuffix(base, "/v1") {
 		base += "/v1"

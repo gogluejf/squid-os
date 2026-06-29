@@ -171,15 +171,6 @@ type ToolCallEntry struct {
 	} `json:"execution,omitempty"`
 }
 
-// TotalExecutionTokens sums the execution tokens across a slice of ToolCallEntry.
-func TotalExecutionTokens(entries []ToolCallEntry) int {
-	var total int
-	for _, tc := range entries {
-		total += tc.Execution.Tokens
-	}
-	return total
-}
-
 type Message struct {
 	ID        string    `json:"id"`
 	Role      string    `json:"role"`
@@ -215,6 +206,21 @@ type Message struct {
 	// Rendered as styled chips next to the label, analogous to tool DisplayParam.
 	// Not sent to the API — metadata only.
 	Params map[string]string `json:"params,omitempty"`
+}
+
+// SessionInfo holds display metadata for a saved session.
+type SessionInfo struct {
+	Name    string
+	ModTime time.Time
+}
+
+// TotalExecutionTokens sums the execution tokens across a slice of ToolCallEntry.
+func TotalExecutionTokens(entries []ToolCallEntry) int {
+	var total int
+	for _, tc := range entries {
+		total += tc.Execution.Tokens
+	}
+	return total
 }
 
 // NewSessionFile creates a new empty session
@@ -271,12 +277,6 @@ func LoadSession(p Paths, name string) (SessionFile, error) {
 		return SessionFile{}, err
 	}
 	return sf, nil
-}
-
-// SessionInfo holds display metadata for a saved session.
-type SessionInfo struct {
-	Name    string
-	ModTime time.Time
 }
 
 // ListSessions returns available session info (name + modified time), sorted by most recently modified.

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -13,6 +14,8 @@ import (
 	"time"
 
 	"squid-os/internal/config"
+	"github.com/zendev-sh/goai/provider"
+	goai_openai "github.com/zendev-sh/goai/provider/openai"
 )
 
 const (
@@ -68,45 +71,57 @@ func (o *OpenAIProvider) StaticModels() []string {
 }
 func (o *OpenAIProvider) DefaultBaseURL() string               { return "https://api.openai.com" }
 func (o *OpenAIProvider) RequiresBaseURL() bool                { return false }
-
-func (o *OpenAIProvider) GetChatURL() string {
-	if o.creds().ActiveAuthMethod == config.AuthOAuth {
-		return "https://chatgpt.com/backend-api/codex/responses"
-	}
-	return "https://api.openai.com/v1/chat/completions"
-}
-
-func (o *OpenAIProvider) GetModelsURL() string {
-	if o.creds().ActiveAuthMethod == config.AuthAPIKey {
-		return "https://api.openai.com/v1/models"
-	}
-	return ""
-}
-
-func (o *OpenAIProvider) PrepareRequest(req *http.Request) error {
-	token := o.getCurrentToken()
-	if token == "" {
-		return fmt.Errorf("openai: no credentials configured")
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if o.creds().ActiveAuthMethod == config.AuthOAuth {
-		req.Header.Set("Originator", "opencode")
-		req.Header.Set("User-Agent", "squid-os")
-		if o.creds().OAuth != nil && o.creds().OAuth.AccountID != "" {
-			req.Header.Set("ChatGPT-Account-Id", o.creds().OAuth.AccountID)
-		}
-	}
+func (o *OpenAIProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
 	return nil
 }
 
-func (o *OpenAIProvider) IsExpired() bool {
-	if o.creds().OAuth == nil {
-		return false
+func (o *OpenAIProvider) BuildGoAIModel(model string) (provider.LanguageModel, bool, error) {
+	if model == "" {
+		model = "gpt-4o"
 	}
-	return time.Now().After(o.creds().OAuth.ExpiresAt.Add(-60 * time.Second))
+	var opts []goai_openai.Option
+	switch o.creds().ActiveAuthMethod {
+	case config.AuthAPIKey:
+		opts = append(opts, goai_openai.WithAPIKey(o.creds().APIKey))
+	case config.AuthOAuth:
+		if o.creds().OAuth == nil || o.creds().OAuth.AccessToken == "" {
+			return nil, false, fmt.Errorf("openai: no OAuth token configured")
+		}
+		ts := provider.CachedTokenSource(func(ctx context.Context) (*provider.Token, error) {
+			accessToken := o.creds().OAuth.AccessToken
+			if accessToken == "" {
+				// Try refresh
+				if err := o.refreshOAuth(); err != nil {
+					return nil, err
+				}
+				accessToken = o.creds().OAuth.AccessToken
+			}
+			return &provider.Token{
+				Value:     accessToken,
+				ExpiresAt: o.creds().OAuth.ExpiresAt,
+			}, nil
+		})
+		opts = append(opts, goai_openai.WithTokenSource(ts))
+		if o.creds().OAuth != nil && o.creds().OAuth.AccountID != "" {
+			opts = append(opts, goai_openai.WithHeaders(map[string]string{
+				"Originator":       "opencode",
+				"User-Agent":       "squid-os",
+				"ChatGPT-Account-Id": o.creds().OAuth.AccountID,
+			}))
+		} else {
+			opts = append(opts, goai_openai.WithHeaders(map[string]string{
+				"Originator": "opencode",
+				"User-Agent": "squid-os",
+			}))
+		}
+	}
+	if o.settings.BaseURL != "" {
+		opts = append(opts, goai_openai.WithBaseURL(o.settings.BaseURL))
+	}
+	return goai_openai.Chat(model, opts...), false, nil
 }
 
-func (o *OpenAIProvider) Refresh() error {
+func (o *OpenAIProvider) refreshOAuth() error {
 	if o.creds().OAuth == nil || o.creds().OAuth.RefreshToken == "" {
 		return fmt.Errorf("openai: no refresh token available")
 	}
@@ -151,6 +166,50 @@ func (o *OpenAIProvider) Refresh() error {
 	}
 	o.creds().OAuth.ExpiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 	return nil
+}
+
+func (o *OpenAIProvider) ListModels(ctx context.Context) ([]string, error) {
+	baseURL := o.settings.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.openai.com"
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	token := o.getCurrentToken()
+	if token == "" {
+		return nil, fmt.Errorf("openai: no credentials configured for model listing")
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("openai models endpoint returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	models := make([]string, 0, len(result.Data))
+	for _, m := range result.Data {
+		models = append(models, m.ID)
+	}
+	return models, nil
 }
 
 // --- Device auth ---

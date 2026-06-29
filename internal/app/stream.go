@@ -17,9 +17,7 @@ import (
 	"squid-os/internal/ui/component"
 )
 
-// partialTool holds the streaming-in-progress state for a single tool call.
-// It is the single source of truth — populated incrementally from ToolCallDelta
-// events and enriched with ID/Type from the ToolCalls flush event.
+// partialTool holds the streaming-in-progress UI state for a single tool call.
 type partialTool struct {
 	id      string
 	typeStr string
@@ -30,8 +28,7 @@ type partialTool struct {
 	doneAt  time.Time
 }
 
-// toStreamingToolCalls converts all partial tools with a non-empty name into
-// display-ready StreamingToolCall values for the streaming viewport.
+// toStreamingToolCalls converts partial tool state into display-ready values while streaming.
 func (ss *streamState) toStreamingToolCalls() []ui.StreamingToolCall {
 	var out []ui.StreamingToolCall
 	for _, p := range ss.partialTools {
@@ -64,10 +61,10 @@ type streamState struct {
 	cancelFn         context.CancelFunc
 	ch               <-chan chat.StreamEvent
 	userCancelled    bool
-	partialTools     []partialTool         // live state during arg streaming, indexed by tool call index
+	partialTools     []partialTool         // streaming and finalized tool state, indexed by tool call index
 	tokenCount       int                   // counter for throttling viewport updates
 	authorizationCtx *AuthorizationContext // non-nil when paused awaiting auth
-	pendingToolIndex int                   // index into partialTools being authorized
+	pendingToolIndex int                   // index into pendingTools being authorized
 	msgIdx           int                   // index of the saved assistant message with tool calls (-1 if none)
 }
 
@@ -237,7 +234,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.textarea.SetValue("")
 	m.textarea.Blur()
 
-	apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, m.session.file.Messages)
+	apiMsgs := chat.BuildGoAIMessages(m.paths, m.settings, m.session.file.Messages)
 	m.attachedImage = ""
 
 	(&m).setStreamMode()
@@ -288,6 +285,14 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	}
 
 	if event.Done {
+		if event.Text != "" {
+			m.stream.AddTextChunk(event.Text)
+		}
+		if event.Thinking != "" {
+			m.stream.AddThinkChunk(event.Thinking)
+		}
+		m.stream.inThinking = event.InThinking
+
 		if m.stream.userCancelled {
 			text, image, truncated := m.session.cancelTruncate()
 
@@ -376,14 +381,16 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		return nm, autoSaveCmd
 	}
 
-	// ToolCallDelta: accumulate per-tool state and update display.
+	// ToolCallDelta: restore partial streaming UI while keeping finalized ToolCalls as execution truth.
 	if event.ToolCallDelta != "" {
 		m.stream.AddToolCallChunk(event.ToolCallDelta)
 		for len(m.stream.partialTools) <= event.ToolCallIdx {
 			m.stream.partialTools = append(m.stream.partialTools, partialTool{})
 		}
-
 		p := &m.stream.partialTools[event.ToolCallIdx]
+		if event.ToolCallID != "" {
+			p.id = event.ToolCallID
+		}
 		if event.ToolCallName != "" {
 			p.name = event.ToolCallName
 		}
@@ -393,7 +400,6 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			p.firstAt = time.Now()
 		}
 		p.doneAt = time.Now()
-
 		if m.stream.inThinking {
 			m.stream.inThinking = false
 		}
@@ -401,21 +407,23 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		return m, waitForStreamEvent(m.stream.ch)
 	}
 
-	// ToolCalls flush: treat flushed tool calls as the canonical final state.
-	// They may arrive even if delta-time partial state was incomplete, so make
-	// sure partialTools is long enough and backfill missing fields, especially name.
-	// Args are already repaired in chat.flushToolCalls().
+	// ToolCalls event: finalize the existing partial tool state for execution.
 	if len(event.ToolCalls) > 0 {
 		for i, tc := range event.ToolCalls {
 			for len(m.stream.partialTools) <= i {
 				m.stream.partialTools = append(m.stream.partialTools, partialTool{})
 			}
-			m.stream.partialTools[i].id = tc.ID
-			m.stream.partialTools[i].typeStr = tc.Type
-			if m.stream.partialTools[i].name == "" {
-				m.stream.partialTools[i].name = tc.Name
+			p := &m.stream.partialTools[i]
+
+			p.id = tc.ID
+			p.typeStr = tc.Type
+			p.name = tc.Name
+			p.args = tc.ArgsJSON
+			p.chars = len(tc.ArgsJSON)
+			if p.firstAt.IsZero() {
+				p.firstAt = time.Now()
 			}
-			m.stream.partialTools[i].args = tc.ArgsJSON
+			p.doneAt = time.Now()
 		}
 	}
 	if event.Text != "" {
@@ -519,19 +527,20 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 	// After the loop we decide: inject if non-empty, saveAndResume otherwise.
 	var capturedInstructions string
 
-	for i := startIndex; i < len(partials); i++ {
-		p := partials[i]
+	for i := startIndex; i < len(entries); i++ {
+		entry := &entries[i]
+		toolName := entry.Instruction.Name
+		argsJSON := entry.Instruction.Arguments
 
-		tool := m.toolReg.Get(p.name)
+		tool := m.toolReg.Get(toolName)
 		if tool == nil {
-			entries[i].Execution.Status = tools.ResultStatusError
-			entries[i].Execution.Error = fmt.Sprintf("unknown tool: %s", p.name)
+			entry.Execution.Status = tools.ResultStatusError
+			entry.Execution.Error = fmt.Sprintf("unknown tool: %s", toolName)
 			continue
 		}
 
 		var args map[string]interface{}
-		if p.args != "" {
-			argsJSON := p.args
+		if argsJSON != "" {
 			if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 				// Try repairing malformed JSON before giving up
 				argsJSON, repaired := chat.RepairArgs(argsJSON)
@@ -576,7 +585,7 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 		}
 
 		// --- Gate 1: File change validation (BEFORE auth) ---
-		if p.name != "read_file" && p.name != "open" {
+		if toolName != "read_file" && toolName != "open" {
 			if pathVal, ok := args["path"].(string); ok {
 				resolvedPath := tools.ResolvePath(pathVal)
 				if err := tools.Validate(resolvedPath, sessionState); err != nil {
@@ -605,12 +614,12 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 				entries[i].Execution.Result = preview.Result
 				entries[i].Execution.Files = preview.Files
 				for j := range preview.Files {
-					preview.Files[j].ToolCallID = p.id
+					preview.Files[j].ToolCallID = entry.ID
 				}
 			} else {
 				entries[i].Execution.Status = tools.ResultStatusPending
 			}
-			for j := i + 1; j < len(partials); j++ {
+			for j := i + 1; j < len(entries); j++ {
 				entries[j].Execution.Status = tools.ResultStatusPending
 				entries[j].Execution.Error = "waiting: prior tool requires authorization"
 			}
@@ -619,10 +628,10 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 				isDestructive = tool.IsDestructive(args)
 			}
 			m.stream.authorizationCtx = &AuthorizationContext{
-				ToolName:      p.name,
+				ToolName:      toolName,
 				Args:          args,
-				ArgsJSON:      p.args,
-				DisplayValue:  tool.DisplayValue(p.args),
+				ArgsJSON:      argsJSON,
+				DisplayValue:  tool.DisplayValue(argsJSON),
 				IsDestructive: isDestructive,
 			}
 			m.stream.pendingToolIndex = i
@@ -653,19 +662,19 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 		entries[i].Execution.DurationMs = time.Since(resultStart).Milliseconds()
 
 		for j := range result.Files {
-			result.Files[j].ToolCallID = p.id
+			result.Files[j].ToolCallID = entry.ID
 		}
 		entries[i].Execution.Files = result.Files
 
 		tools.MergeEntries(result.Files, sessionState)
 
-		if p.name == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
+		if toolName == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
 			if pathVal, ok := args["path"].(string); ok {
 				m.applyWorkingDir(pathVal)
 			}
 		}
 
-		if p.name == "skill_load" && result.Status == tools.ResultStatusSuccess {
+		if toolName == "skill_load" && result.Status == tools.ResultStatusSuccess {
 			if name, ok := args["name"].(string); ok {
 				m.session.file.Session.Skill.Current = name
 				m.session.file.Session.Skill.Next = nil
@@ -716,7 +725,7 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 
 // startStream builds API messages from current session state and starts a new stream.
 func (m *Model) startStream() (tea.Model, tea.Cmd) {
-	apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, m.session.file.Messages)
+	apiMsgs := chat.BuildGoAIMessages(m.paths, m.settings, m.session.file.Messages)
 
 	m.setStreamMode()
 	m.toolReg = tools.GetRegistry()

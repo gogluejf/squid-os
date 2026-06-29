@@ -119,7 +119,6 @@ github.com/muesli/reflow/ansi
 github.com/muesli/reflow/indent
 github.com/muesli/reflow/padding
 github.com/muesli/reflow/wordwrap
-github.com/muesli/reflow/wrap
 # github.com/muesli/termenv v0.16.0
 ## explicit; go 1.17
 github.com/muesli/termenv
@@ -151,6 +150,17 @@ github.com/yuin/goldmark/util
 github.com/yuin/goldmark-emoji
 github.com/yuin/goldmark-emoji/ast
 github.com/yuin/goldmark-emoji/definition
+# github.com/zendev-sh/goai v0.8.5
+## explicit; go 1.25.0
+github.com/zendev-sh/goai
+github.com/zendev-sh/goai/internal/httpc
+github.com/zendev-sh/goai/internal/openaicompat
+github.com/zendev-sh/goai/internal/sse
+github.com/zendev-sh/goai/provider
+github.com/zendev-sh/goai/provider/compat
+github.com/zendev-sh/goai/provider/ollama
+github.com/zendev-sh/goai/provider/openai
+github.com/zendev-sh/goai/provider/vllm
 # golang.org/x/net v0.38.0
 ## explicit; go 1.23.0
 golang.org/x/net/html

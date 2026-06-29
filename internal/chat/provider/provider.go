@@ -1,27 +1,42 @@
 package provider
 
 import (
-	"net/http"
+	"context"
 	"sync"
 
 	"squid-os/internal/config"
+	goai_provider "github.com/zendev-sh/goai/provider"
 )
 
 // Provider is the unified interface for a provider.
-// It handles authentication, URL resolution, and exposes metadata.
+// It handles authentication, model construction, and exposes metadata.
 type Provider interface {
 	// Identity
 	Name() string
 	Dialect() config.Dialect
 
-	// Auth
-	PrepareRequest(req *http.Request) error
-	IsExpired() bool
-	Refresh() error
+	// Auth flow — generic, called by provider_setup.go
+	StartDeviceAuth() (string, string, error)
+	PollDeviceAuth() error
+	StartOAuth(redirectURI string) (string, error)
+	FinishOAuth(code, redirectURI string) error
+	GetCredentials() *config.ProviderCreds
+	GetDeviceAuthID() string
+	SetDeviceState(id, code string)
 
-	// Endpoints — reads from the provider's own settings
-	GetChatURL() string
-	GetModelsURL() string
+	// GoAI integration
+	// BuildGoAIModel returns a GoAI LanguageModel for the given model ID.
+	// The bool indicates whether the provider needs text-level think tag parsing
+	// (e.g. reasoning models that embed thinking in text content).
+	BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error)
+
+	// ListModels returns available model IDs via the provider's API.
+	ListModels(ctx context.Context) ([]string, error)
+
+	// RequestProviderOptions returns provider-specific GoAI request options.
+	// Most providers return nil. This is used for backend-specific request-shaping
+	// without leaking provider conditionals into engine.go.
+	RequestProviderOptions(model string, thinking bool) map[string]any
 
 	// Configuration
 	SupportedAuth() []config.AuthMethod

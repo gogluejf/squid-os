@@ -2,14 +2,18 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"squid-os/internal/config"
+	"github.com/zendev-sh/goai/provider"
+	goai_openai "github.com/zendev-sh/goai/provider/openai"
 )
 
 const (
@@ -66,43 +70,65 @@ func (o *CodexProvider) StaticModels() []string {
 }
 func (o *CodexProvider) DefaultBaseURL() string { return "https://chatgpt.com" }
 func (o *CodexProvider) RequiresBaseURL() bool  { return false }
-
-func (o *CodexProvider) GetChatURL() string {
+func (o *CodexProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
 	if o.creds().ActiveAuthMethod == config.AuthOAuth {
-		return "https://chatgpt.com/backend-api/codex/responses"
-	}
-	return "https://api.openai.com/v1/responses"
-}
-
-func (o *CodexProvider) GetModelsURL() string {
-	if o.creds().ActiveAuthMethod == config.AuthAPIKey {
-		return "https://api.openai.com/v1/models"
-	}
-	return ""
-}
-
-func (o *CodexProvider) PrepareRequest(req *http.Request) error {
-	token := o.getCurrentToken()
-	if token == "" {
-		return fmt.Errorf("codex: no credentials configured")
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Originator", "opencode")
-	req.Header.Set("User-Agent", "squid-os")
-	if o.creds().OAuth != nil && o.creds().OAuth.AccountID != "" {
-		req.Header.Set("ChatGPT-Account-Id", o.creds().OAuth.AccountID)
+		return map[string]any{"store": false}
 	}
 	return nil
 }
 
-func (o *CodexProvider) IsExpired() bool {
-	if o.creds().OAuth == nil {
-		return false
+func (o *CodexProvider) BuildGoAIModel(model string) (provider.LanguageModel, bool, error) {
+	if model == "" {
+		model = "gpt-5.4"
 	}
-	return time.Now().After(o.creds().OAuth.ExpiresAt.Add(-60 * time.Second))
+	var opts []goai_openai.Option
+	switch o.creds().ActiveAuthMethod {
+	case config.AuthAPIKey:
+		opts = append(opts, goai_openai.WithAPIKey(o.creds().APIKey))
+		baseURL := o.settings.BaseURL
+		if baseURL == "" {
+			baseURL = "https://api.openai.com/v1"
+		}
+		opts = append(opts, goai_openai.WithBaseURL(strings.TrimRight(baseURL, "/")))
+	case config.AuthOAuth:
+		if o.creds().OAuth == nil || o.creds().OAuth.AccessToken == "" {
+			return nil, false, fmt.Errorf("codex: no OAuth token configured")
+		}
+		ts := provider.CachedTokenSource(func(ctx context.Context) (*provider.Token, error) {
+			accessToken := o.creds().OAuth.AccessToken
+			if accessToken == "" {
+				if err := o.refreshOAuth(); err != nil {
+					return nil, err
+				}
+				accessToken = o.creds().OAuth.AccessToken
+			}
+			return &provider.Token{
+				Value:     accessToken,
+				ExpiresAt: o.creds().OAuth.ExpiresAt,
+			}, nil
+		})
+		opts = append(opts, goai_openai.WithTokenSource(ts))
+		headers := map[string]string{
+			"Originator": "opencode",
+			"User-Agent": "squid-os",
+		}
+		if o.creds().OAuth != nil && o.creds().OAuth.AccountID != "" {
+			headers["ChatGPT-Account-Id"] = o.creds().OAuth.AccountID
+		}
+		opts = append(opts, goai_openai.WithHeaders(headers))
+		baseURL := o.settings.BaseURL
+		if baseURL == "" {
+			baseURL = "https://chatgpt.com/backend-api/codex"
+		}
+		opts = append(opts, goai_openai.WithBaseURL(strings.TrimRight(baseURL, "/")))
+	default:
+		return nil, false, fmt.Errorf("codex: unsupported auth method: %s", o.creds().ActiveAuthMethod)
+	}
+	// Codex/Qwen-like reasoning path can embed thinking in text content.
+	return goai_openai.Chat(model, opts...), true, nil
 }
 
-func (o *CodexProvider) Refresh() error {
+func (o *CodexProvider) refreshOAuth() error {
 	if o.creds().OAuth == nil || o.creds().OAuth.RefreshToken == "" {
 		return fmt.Errorf("codex: no refresh token available")
 	}
@@ -150,6 +176,60 @@ func (o *CodexProvider) Refresh() error {
 		o.creds().OAuth.AccountID = extractChatGPTAccountID(tokenResp.AccessToken)
 	}
 	return nil
+}
+
+func (o *CodexProvider) ListModels(ctx context.Context) ([]string, error) {
+	token := o.getCurrentToken()
+	if token == "" {
+		return nil, fmt.Errorf("codex: no credentials configured for model listing")
+	}
+
+	switch o.creds().ActiveAuthMethod {
+	case config.AuthOAuth:
+		// Subscription-backed Codex/ChatGPT backend does not expose a clean API-models
+		// endpoint we can rely on here. Use curated static models that reflect the
+		// subscription-facing provider behavior instead of API-billed OpenAI models.
+		return o.StaticModels(), nil
+	case config.AuthAPIKey:
+		baseURL := o.settings.BaseURL
+		if baseURL == "" {
+			baseURL = "https://api.openai.com"
+		}
+		req, err := http.NewRequestWithContext(ctx, "GET", strings.TrimRight(baseURL, "/")+"/v1/models", nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("codex models endpoint returned %d: %s", resp.StatusCode, string(body))
+		}
+
+		var result struct {
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return nil, err
+		}
+
+		models := make([]string, 0, len(result.Data))
+		for _, m := range result.Data {
+			models = append(models, m.ID)
+		}
+		return models, nil
+	default:
+		return nil, fmt.Errorf("codex: unsupported auth method: %s", o.creds().ActiveAuthMethod)
+	}
 }
 
 // --- Device auth ---

@@ -1,9 +1,15 @@
 package provider
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 
 	"squid-os/internal/config"
+	goai_provider "github.com/zendev-sh/goai/provider"
+	"github.com/zendev-sh/goai/provider/compat"
 )
 
 func init() {
@@ -29,28 +35,66 @@ func (l *LiteLLMProvider) SupportedAuth() []config.AuthMethod   { return []confi
 func (l *LiteLLMProvider) StaticModels() []string               { return nil }
 func (l *LiteLLMProvider) DefaultBaseURL() string               { return "http://localhost:4000" }
 func (l *LiteLLMProvider) RequiresBaseURL() bool                { return true }
-
-func (l *LiteLLMProvider) GetChatURL() string {
-	base := l.settings.BaseURL
-	if base == "" {
-		base = l.DefaultBaseURL()
-	}
-	return base + "/v1/chat/completions"
+func (l *LiteLLMProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
+	return nil
 }
 
-func (l *LiteLLMProvider) GetModelsURL() string {
-	base := l.settings.BaseURL
-	if base == "" {
-		base = l.DefaultBaseURL()
+func (l *LiteLLMProvider) StartDeviceAuth() (string, string, error)    { return "", "", fmt.Errorf("litellm: device auth not supported") }
+func (l *LiteLLMProvider) PollDeviceAuth() error                       { return fmt.Errorf("litellm: device auth not supported") }
+func (l *LiteLLMProvider) StartOAuth(redirectURI string) (string, error) { return "", fmt.Errorf("litellm: OAuth not supported") }
+func (l *LiteLLMProvider) FinishOAuth(code, redirectURI string) error    { return fmt.Errorf("litellm: OAuth not supported") }
+func (l *LiteLLMProvider) GetCredentials() *config.ProviderCreds          { return l.settings.Credentials }
+func (l *LiteLLMProvider) GetDeviceAuthID() string                        { return "" }
+func (l *LiteLLMProvider) SetDeviceState(id, code string)                 {}
+
+func (l *LiteLLMProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {
+	if model == "" {
+		return nil, false, fmt.Errorf("litellm: no model configured")
 	}
-	return base + "/v1/models"
+	base := normalizeOpenAICompatBaseURL(l.settings.BaseURL, l.DefaultBaseURL())
+	var opts []compat.Option
+	opts = append(opts, compat.WithProviderID("litellm"), compat.WithBaseURL(base))
+	if l.settings.Credentials != nil && l.settings.Credentials.ActiveAuthMethod == config.AuthAPIKey && l.settings.Credentials.APIKey != "" {
+		opts = append(opts, compat.WithHeaders(map[string]string{
+			"x-litellm-api-key": l.settings.Credentials.APIKey,
+		}))
+	}
+	return compat.Chat(model, opts...), false, nil
 }
 
-func (l *LiteLLMProvider) PrepareRequest(req *http.Request) error {
+func (l *LiteLLMProvider) ListModels(ctx context.Context) ([]string, error) {
+	base := normalizeOpenAICompatBaseURL(l.settings.BaseURL, l.DefaultBaseURL())
+	req, err := http.NewRequestWithContext(ctx, "GET", base+"/models", nil)
+	if err != nil {
+		return nil, err
+	}
 	if l.settings.Credentials != nil && l.settings.Credentials.ActiveAuthMethod == config.AuthAPIKey && l.settings.Credentials.APIKey != "" {
 		req.Header.Set("x-litellm-api-key", l.settings.Credentials.APIKey)
 	}
-	return nil
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("litellm models endpoint returned %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+
+	models := make([]string, 0, len(result.Data))
+	for _, m := range result.Data {
+		models = append(models, m.ID)
+	}
+	return models, nil
 }
-func (l *LiteLLMProvider) IsExpired() bool { return false }
-func (l *LiteLLMProvider) Refresh() error  { return nil }

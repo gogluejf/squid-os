@@ -29,7 +29,7 @@ func Run(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 			ImagePath: imagePath,
 		},
 	}
-	msgs := chat.BuildAPIMessages(paths, settings, messages)
+	msgs := chat.BuildGoAIMessages(paths, settings, messages)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

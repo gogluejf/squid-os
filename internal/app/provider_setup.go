@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -39,17 +40,15 @@ func (m *Model) ensureProviderConfigured() (bool, tea.Cmd) {
 	}
 
 	p := provider.Lookup(s.Name, s)
-	if p != nil && p.IsExpired() {
-		if err := p.Refresh(); err != nil {
-			return true, m.showModelPicker()
-		}
-		// Refresh succeeded — save updated creds
-		if openai, ok := p.(*provider.OpenAIProvider); ok {
-			s.Credentials = openai.GetCredentials()
-			m.saveSettings(*s)
-		} else if codex, ok := p.(*provider.CodexProvider); ok {
-			s.Credentials = codex.GetCredentials()
-			m.saveSettings(*s)
+	if p != nil {
+		// Refresh OAuth tokens that are near expiry — done via the
+		// provider's CachedTokenSource in BuildGoAIModel. For now, check
+		// the credential expiry directly.
+		if s.Credentials != nil && s.Credentials.ActiveAuthMethod == config.AuthOAuth && s.Credentials.OAuth != nil {
+			if time.Now().After(s.Credentials.OAuth.ExpiresAt.Add(-60 * time.Second)) {
+				// Token near expiry — will be refreshed lazily by CachedTokenSource
+				// in BuildGoAIModel. No need to block here.
+			}
 		}
 	}
 
@@ -130,9 +129,9 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 		steps["baseURL"] = component.SequenceStep{
 			Key: "baseURL",
 			Component: &component.Prompt{
-				Title:       fmt.Sprintf("Configure %s", s.Name),
-				Description: "Enter the base URL of your inference provider",
-				Label:       "Base URL: ",
+				Title: fmt.Sprintf("Configure %s", s.Name),
+				Description: "Enter the provider base URL. For OpenAI-compatible servers like vLLM/LiteLLM, use the API root (usually ending in /v1), not the full /chat/completions URL.",
+				Label: "Base URL: ",
 				DefaultValue: defaultURL,
 			},
 			OnAdvance: func(ctx any, r map[string]any) string {
@@ -202,33 +201,20 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 		OnEnter: func(ctx any, r map[string]any) {
 			step := steps["oauthURL"]
 			if q, ok := step.Component.(*component.Question); ok {
-				var devAuth any
-				switch s.Name {
-				case config.ProviderOpenAICodex:
-					devAuth = provider.NewCodexProvider(nil)
-				default:
-					devAuth = provider.NewOpenAIProvider(nil)
+				devAuth := provider.Lookup(s.Name, &config.ProviderSettings{Name: s.Name, Credentials: &config.ProviderCreds{}})
+				if devAuth == nil {
+					q.Description = fmt.Sprintf("Could not initialize auth flow for provider: %s", s.Name)
+					return
 				}
-				switch o := devAuth.(type) {
-				case *provider.OpenAIProvider:
-					visitURL, userCode, err := o.StartDeviceAuth()
-					if err != nil {
-						q.Description = fmt.Sprintf("Could not start device auth: %v", err)
-						return
-					}
-					q.Description = fmt.Sprintf("Visit this URL on any device (phone, laptop) and enter the code:\n\n  Code: %s\n  URL:  %s\n\nThen click below when you've entered it.", userCode, visitURL)
-					r["oauthDeviceAuthID"] = o.GetDeviceAuthID()
-					r["oauthUserCode"] = userCode
-				case *provider.CodexProvider:
-					visitURL, userCode, err := o.StartDeviceAuth()
-					if err != nil {
-						q.Description = fmt.Sprintf("Could not start device auth: %v", err)
-						return
-					}
-					q.Description = fmt.Sprintf("Visit this URL on any device (phone, laptop) and enter the code:\n\n  Code: %s\n  URL:  %s\n\nThen click below when you've entered it.", userCode, visitURL)
-					r["oauthDeviceAuthID"] = o.GetDeviceAuthID()
-					r["oauthUserCode"] = userCode
+				visitURL, userCode, err := devAuth.StartDeviceAuth()
+				if err != nil {
+					q.Description = fmt.Sprintf("Could not start device auth: %v", err)
+					return
 				}
+				q.Description = fmt.Sprintf("Visit this URL on any device (phone, laptop) and enter the code:\n\n  Code: %s\n  URL:  %s\n\nThen click below when you've entered it.", userCode, visitURL)
+				r["oauthProvider"] = devAuth
+				r["oauthDeviceAuthID"] = devAuth.GetDeviceAuthID()
+				r["oauthUserCode"] = userCode
 			}
 			steps["oauthURL"] = step
 		},
@@ -248,39 +234,24 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 		OnEnter: func(ctx any, r map[string]any) {
 			step := steps["oauthCode"]
 			if q, ok := step.Component.(*component.Question); ok {
+				devAuth, ok := r["oauthProvider"].(provider.Provider)
+				if !ok || devAuth == nil {
+					q.Description = "Error: device auth state lost"
+					return
+				}
 				deviceAuthID, hasID := r["oauthDeviceAuthID"].(string)
 				userCode, hasCode := r["oauthUserCode"].(string)
 				if !hasID || !hasCode {
 					q.Description = "Error: device auth state lost"
 					return
 				}
-				var devAuth any
-				switch s.Name {
-				case config.ProviderOpenAICodex:
-					devAuth = provider.NewCodexProvider(nil)
-				default:
-					devAuth = provider.NewOpenAIProvider(nil)
+				devAuth.SetDeviceState(deviceAuthID, userCode)
+				if err := devAuth.PollDeviceAuth(); err != nil {
+					q.Description = fmt.Sprintf("Authorization failed: %v", err)
+					r["oauthError"] = err.Error()
+					return
 				}
-				var creds *config.ProviderCreds
-				switch o := devAuth.(type) {
-				case *provider.OpenAIProvider:
-					o.SetDeviceState(deviceAuthID, userCode)
-					if err := o.PollDeviceAuth(); err != nil {
-						q.Description = fmt.Sprintf("Authorization failed: %v", err)
-						r["oauthError"] = err.Error()
-						return
-					}
-					creds = o.GetCredentials()
-				case *provider.CodexProvider:
-					o.SetDeviceState(deviceAuthID, userCode)
-					if err := o.PollDeviceAuth(); err != nil {
-						q.Description = fmt.Sprintf("Authorization failed: %v", err)
-						r["oauthError"] = err.Error()
-						return
-					}
-					creds = o.GetCredentials()
-				}
-				r["oauthCreds"] = creds
+				r["oauthCreds"] = devAuth.GetCredentials()
 				q.Description = "Authorization successful!"
 			}
 			steps["oauthCode"] = step

@@ -1,26 +1,23 @@
 package chat
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"squid-os/internal/chat/adapter"
 	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
 	"squid-os/internal/log"
 	"squid-os/internal/tools"
-	"slices"
 	"strings"
 	"time"
 
 	jsonrepair "github.com/kaptinlin/jsonrepair"
+	goai "github.com/zendev-sh/goai"
+	goai_provider "github.com/zendev-sh/goai/provider"
 )
 
-// StreamEvent is sent for each SSE chunk during inference
+// StreamEvent is sent for each chunk during inference.
 type StreamEvent struct {
 	Text          string     // visible delta text
 	Thinking      string     // thinking delta text
@@ -32,8 +29,7 @@ type StreamEvent struct {
 	ToolCallDelta string     // incremental arg fragment for timing/token tracking
 	ToolCallIdx   int        // tool call index this delta belongs to
 	ToolCallName  string     // accumulated name so far for this tool call
-	ToolCallID    string     // tool call ID from adapter
-	ToolCallType  string     // tool call type from adapter
+	ToolCallID    string     // tool call ID when available
 }
 
 // ToolCall represents a single tool call from the model.
@@ -48,7 +44,7 @@ type ToolCall struct {
 	ArgsJSON string // raw JSON string of arguments, for internal use
 }
 
-// ChatMessage is an OpenAI-compatible message for the API request
+// ChatMessage is a message for the API request (will be converted to GoAI provider.Message).
 type ChatMessage struct {
 	Role       string      `json:"role"`
 	Content    interface{} `json:"content,omitempty"`
@@ -69,59 +65,25 @@ type ImageURL struct {
 	URL string `json:"url"`
 }
 
-// toolDefinition is the OpenAI-compatible tool definition sent in the request
+// toolDefinition is the OpenAI-compatible tool definition sent in the request.
 type toolDefinition struct {
 	Type     string      `json:"type"`
 	Function functionDef `json:"function"`
 }
 
-// functionDef controls key ordering: name, description, parameters
+// functionDef controls key ordering: name, description, parameters.
 type functionDef struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Parameters  json.RawMessage `json:"parameters"`
 }
 
-// chatRequest is the OpenAI-compatible request body
-type chatRequest struct {
-	Model              string                 `json:"model"`
-	Stream             bool                   `json:"stream"`
-	Messages           []ChatMessage          `json:"messages"`
-	Tools              []toolDefinition       `json:"tools,omitempty"`       // available tools
-	ToolChoice         interface{}            `json:"tool_choice,omitempty"` // "auto" | "none" | "required" | {"type":"function","function":{"name":"..."}}
-	ChatTemplateKwargs map[string]interface{} `json:"chat_template_kwargs,omitempty"`
-}
-
-// sseChoice is the delta within a streaming response chunk
-type sseChoice struct {
-	Delta struct {
-		Content   string          `json:"content"`
-		ToolCalls []toolCallDelta `json:"tool_calls,omitempty"`
-	} `json:"delta"`
-	FinishReason *string `json:"finish_reason"`
-}
-
-// toolCallDelta represents a single tool call in a delta chunk
-type toolCallDelta struct {
-	ID       string                 `json:"id,omitempty"`
-	Type     string                 `json:"type,omitempty"`
-	Index    int                    `json:"index"`
-	Function map[string]interface{} `json:"function,omitempty"`
-}
-
-// sseResponse is a single SSE data payload
-type sseResponse struct {
-	Choices []sseChoice `json:"choices"`
-}
-
-// Engine manages chat inference against a provider endpoint
+// Engine manages chat inference against a provider endpoint.
 type Engine struct {
 	settings *config.ProviderSettings
 	Model    string
 	Thinking bool
 	provider provider.Provider
-	adapter  adapter.APIAdapter
-	client   *http.Client
 }
 
 func NewEngine(settings *config.ProviderSettings, model string, thinking bool) *Engine {
@@ -130,23 +92,12 @@ func NewEngine(settings *config.ProviderSettings, model string, thinking bool) *
 	}
 
 	p := provider.Lookup(settings.Name, settings)
-	var a adapter.APIAdapter
-	switch p.Dialect() {
-	case config.DialectOpenAICodex:
-		a = &adapter.CodexAdapter{}
-	default:
-		a = &adapter.ChatCompletionsAdapter{}
-	}
 
 	return &Engine{
 		settings: settings,
 		Model:    model,
 		Thinking: thinking,
 		provider: p,
-		adapter:  a,
-		client: &http.Client{
-			Timeout: 0,
-		},
 	}
 }
 
@@ -175,7 +126,7 @@ func MarshalToolsJSON(ts []tools.Tool) ([]byte, error) {
 // Stream sends the chat request and returns a channel of StreamEvents.
 // Cancel via the context. The channel is closed when done.
 // Pass nil for toolDefs if no tools are available.
-func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []tools.Tool) <-chan StreamEvent {
+func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, toolDefs []tools.Tool) <-chan StreamEvent {
 	ch := make(chan StreamEvent, 64)
 
 	if e.settings == nil {
@@ -184,334 +135,380 @@ func (e *Engine) Stream(ctx context.Context, messages []ChatMessage, toolDefs []
 		return ch
 	}
 
+	if e.provider == nil {
+		ch <- StreamEvent{Error: fmt.Errorf("unknown provider: %s", e.settings.Name)}
+		close(ch)
+		return ch
+	}
+
 	go func() {
 		defer close(ch)
 
-		// Serialize messages to JSON for the adapter
-		messagesJSON, err := json.Marshal(messages)
+		// Build GoAI LanguageModel from provider
+		langModel, parseThinking, err := e.provider.BuildGoAIModel(e.Model)
 		if err != nil {
-			ch <- StreamEvent{Error: fmt.Errorf("marshal messages: %w", err)}
+			ch <- StreamEvent{Error: fmt.Errorf("build model: %w", err)}
 			return
 		}
 
-		// Build request body using adapter
-		body, err := e.adapter.BuildBody(e.Model, messagesJSON, toolDefs, e.Thinking)
+		// Convert our tools to GoAI tools (no Execute — we handle execution ourselves)
+		var goaiTools []goai.Tool
+		for _, t := range toolDefs {
+			goaiTools = append(goaiTools, goai.Tool{
+				Name:        t.Name,
+				Description: t.Description,
+				InputSchema: t.Schema,
+			})
+		}
+
+		// Call StreamText with MaxSteps(1) so our app controls the tool loop
+		providerOptions := e.provider.RequestProviderOptions(e.Model, e.Thinking)
+		streamOpts := []goai.Option{
+			goai.WithMessages(messages...),
+			goai.WithTools(goaiTools...),
+			goai.WithMaxSteps(1),
+		}
+		if providerOptions != nil {
+			streamOpts = append(streamOpts, goai.WithProviderOptions(providerOptions))
+		}
+
+		stream, err := goai.StreamText(ctx, langModel, streamOpts...)
 		if err != nil {
-			ch <- StreamEvent{Error: fmt.Errorf("marshal request: %w", err)}
+			ch <- StreamEvent{Error: fmt.Errorf("stream init: %w", err)}
 			return
 		}
 
-		var prettyBody bytes.Buffer
-		json.Indent(&prettyBody, body, "", "  ")
-		f, _ := os.Create("/tmp/squid-os-debug.json")
-		defer f.Close()
-		f.Write(prettyBody.Bytes())
-
-		req, err := http.NewRequestWithContext(ctx, "POST", e.provider.GetChatURL(), bytes.NewReader(body))
-		if err != nil {
-			// Return: Failed to create HTTP request
-			ch <- StreamEvent{Error: fmt.Errorf("create request: %w", err)}
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		if e.provider != nil {
-			if err := e.provider.PrepareRequest(req); err != nil {
-				ch <- StreamEvent{Error: fmt.Errorf("provider auth: %w", err)}
-				return
-			}
-		}
-
-		resp, err := e.client.Do(req)
-		if err != nil {
-			if ctx.Err() != nil {
-				// Return: Context cancelled (user pressed cancel)
-				ch <- StreamEvent{Done: true}
-				return
-			}
-			// Return: Network/API error (connection failed, timeout, etc.)
-			ch <- StreamEvent{Error: fmt.Errorf("request failed: %w", err)}
-			return
-		}
-
-		// Handle non-OK response with 401 retry logic
-		if resp.StatusCode != http.StatusOK {
-			// Handle 401 — try token refresh and retry once
-			if resp.StatusCode == http.StatusUnauthorized && e.provider != nil {
-				refreshErr := e.provider.Refresh()
-				if refreshErr == nil {
-					// Refresh succeeded — retry with new token
-					retryBodyFn := req.GetBody
-					if retryBodyFn != nil {
-						bodyReader, brErr := retryBodyFn()
-						if brErr == nil {
-							req2, rqErr := http.NewRequestWithContext(ctx, "POST", e.provider.GetChatURL(), bodyReader)
-							if rqErr == nil {
-								req2.Header.Set("Content-Type", "application/json")
-								authErr := e.provider.PrepareRequest(req2)
-								if authErr == nil {
-									resp.Body.Close()
-									resp, err = e.client.Do(req2)
-									if err != nil {
-										ch <- StreamEvent{Error: fmt.Errorf("retry request failed: %w", err)}
-										return
-									}
-								}
-							}
-						}
-					}
-				}
-				// If we didn't get a new OK response, return re-auth error
-				if resp == nil || resp.StatusCode != http.StatusOK {
-					ch <- StreamEvent{Error: fmt.Errorf("provider authentication failed — reconfigure provider settings (use command /model)")}
-					return
-				}
-			} else {
-				// Non-401 error — parse and return
-				var errorResp struct {
-					Error struct {
-						Message string      `json:"message"`
-						Type    string      `json:"type"`
-						Code    interface{} `json:"code"`
-					} `json:"error"`
-				}
-				if jsonErr := json.NewDecoder(resp.Body).Decode(&errorResp); jsonErr == nil && errorResp.Error.Message != "" {
-					ch <- StreamEvent{Error: fmt.Errorf("API error [%d]: %s", resp.StatusCode, errorResp.Error.Message)}
-				} else {
-					ch <- StreamEvent{Error: fmt.Errorf("API returned %d", resp.StatusCode)}
-				}
-				return
-			}
-		}
-
-		// Stream processing
-		defer resp.Body.Close()
+		// Process chunks from the raw stream.
+		// Providers flagged by BuildGoAIModel(...)=parseThinkingFromText use the
+		// local ThinkParser because their reasoning is embedded inline in text
+		// content (e.g. Qwen via compat/openai-like transport). Providers that
+		// emit native ChunkReasoning are passed through directly.
 		parser := &ThinkParser{}
-		// Qwen quirk: when thinking enabled but hidden, model may emit
-		// reasoning before any <think> open tag
-		if e.Thinking {
+		if e.Thinking && parseThinking {
+			// Qwen-style providers may emit hidden reasoning text before an
+			// explicit <think> tag arrives, so preserve the legacy bootstrap.
 			parser.InThink = true
 		}
 
-		// Buffer for accumulating tool call deltas.
-		// Primary key is tool index when provided (chat completions).
-		// For adapters like Codex/Responses that provide call_id but no index,
-		// assign a stable synthetic index per call_id.
-		toolBuffers := make(map[int]*toolCallBuffer)
-		toolCallIDToIdx := make(map[string]int)
-		nextSyntheticToolIdx := 0
+		// Accumulate partial tool deltas for streaming UI timing.
+		toolBuffers := make(map[int]*toolAccum)
+		nextIdx := 0
+		var stopReason string
+		// Route: either raw chunks (for tool deltas) or just result
+		chunkStream := stream.Stream()
 
-		scanner := bufio.NewScanner(resp.Body)
-		// Increase buffer for large chunks
-		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
-		for scanner.Scan() {
+		for chunk := range chunkStream {
 			if ctx.Err() != nil {
-				// Return: Context cancelled during stream (user pressed cancel)
 				ch <- StreamEvent{Done: true}
 				return
 			}
 
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data: ") && !strings.HasPrefix(line, "data:") {
-				continue
-			}
+			logChunk := fmt.Sprintf("type=%s text=%q tool_name=%q tool_call_id=%q tool_input=%q finish_reason=%q err=%v metadata=%v", chunk.Type, chunk.Text, chunk.ToolName, chunk.ToolCallID, chunk.ToolInput, chunk.FinishReason, chunk.Error, chunk.Metadata)
+			log.LogSSEChunk(logChunk)
 
-			payload := strings.TrimPrefix(line, "data: ")
-			payload = strings.TrimPrefix(payload, "data:")
-			payload = strings.TrimSpace(payload)
+			switch chunk.Type {
+			case goai_provider.ChunkText:
+				if parseThinking {
+					// Provider emits reasoning inline in text content — split it locally.
+					result := parser.Process(chunk.Text)
+					if result.Text != "" || result.Thinking != "" {
+						ch <- StreamEvent{
+							Text:       result.Text,
+							Thinking:   result.Thinking,
+							InThinking: parser.InThink,
+						}
+					}
+				} else {
+					// Native provider text chunk — not in think-tag parsing mode.
+					ch <- StreamEvent{Text: chunk.Text, InThinking: false}
+				}
 
-			log.LogSSEChunk(line)
+			case goai_provider.ChunkReasoning:
+				// Native reasoning support from provider/GoAI.
+				ch <- StreamEvent{Thinking: chunk.Text, InThinking: true}
 
-			if payload == "[DONE]" {
-				// Return: Server sent explicit [DONE] marker
-				// Flush any remaining buffered content
-				result := parser.Flush()
-				if result.Text != "" || result.Thinking != "" {
+			case goai_provider.ChunkToolCallStreamStart:
+				idx := nextIdx
+				if ci, ok := chunk.Metadata["index"].(int); ok {
+					idx = ci
+					if idx >= nextIdx {
+						nextIdx = idx + 1
+					}
+				} else {
+					nextIdx = idx + 1
+				}
+				toolBuffers[idx] = &toolAccum{}
+
+			case goai_provider.ChunkToolCallDelta:
+				idx := -1
+				if ci, ok := chunk.Metadata["index"].(int); ok {
+					idx = ci
+				}
+				if idx < 0 && len(chunk.ToolInput) > 0 {
+					idx = nextIdx - 1
+				}
+				if buf, ok := toolBuffers[idx]; ok {
+					if chunk.ToolName != "" && buf.nameBuf.Len() == 0 {
+						buf.nameBuf.WriteString(chunk.ToolName)
+					}
+					if chunk.ToolCallID != "" && buf.id == "" {
+						buf.id = chunk.ToolCallID
+					}
+					if chunk.ToolInput != "" {
+						buf.argsBuf.WriteString(chunk.ToolInput)
+					}
 					ch <- StreamEvent{
-						Text:       result.Text,
-						Thinking:   result.Thinking,
-						InThinking: parser.InThink,
-					}
-				}
-				// Flush any remaining tool calls
-				if len(toolBuffers) > 0 {
-					tc := flushToolCalls(toolBuffers)
-					ch <- StreamEvent{ToolCalls: tc}
-				}
-				ch <- StreamEvent{Done: true}
-				return
-			}
-
-			// Use adapter to parse SSE event
-			evt := e.adapter.ParseSSE(payload)
-			if evt == nil {
-				continue
-			}
-
-			// Handle done event
-			if evt.Done {
-				result := parser.Flush()
-				if result.Text != "" || result.Thinking != "" {
-					ch <- StreamEvent{
-						Text:       result.Text,
-						Thinking:   result.Thinking,
-						InThinking: parser.InThink,
-					}
-				}
-				// Flush any remaining tool calls — the Codex backend doesn't
-				// set stop_reason on response.completed, so always flush if
-				// there are buffered tool calls.
-				stopReason := evt.StopReason
-				if len(toolBuffers) > 0 {
-					tc := flushToolCalls(toolBuffers)
-					ch <- StreamEvent{ToolCalls: tc}
-					// Ensure downstream (stream.go) knows to enter tool execution.
-					// Codex backend doesn't set stop_reason, so we infer it.
-					if stopReason == "" {
-						stopReason = "tool_calls"
-					}
-				}
-				ch <- StreamEvent{Done: true, StopReason: stopReason}
-				return
-			}
-
-			// Handle tool call deltas from adapter
-			if evt.ToolCallDelta != "" || evt.ToolCallName != "" {
-				// Flush parser carry before tool call deltas
-				result := parser.Flush()
-				if result.Text != "" || result.Thinking != "" {
-					ch <- StreamEvent{
-						Text:       result.Text,
-						Thinking:   result.Thinking,
-						InThinking: parser.InThink,
-					}
-				}
-
-				// Choose a stable buffer key per tool call.
-				// ChatCompletions adapters provide ToolCallIdx.
-				// Codex/Responses provides ToolCallID but no index, so map call_id
-				// to a stable local index for the duration of the stream.
-				idx := evt.ToolCallIdx
-				if evt.ToolCallID != "" {
-					mappedIdx, ok := toolCallIDToIdx[evt.ToolCallID]
-					if !ok {
-						mappedIdx = nextSyntheticToolIdx
-						toolCallIDToIdx[evt.ToolCallID] = mappedIdx
-						nextSyntheticToolIdx++
-					}
-					idx = mappedIdx
-				}
-				buf, ok := toolBuffers[idx]
-				if !ok {
-					buf = &toolCallBuffer{}
-					toolBuffers[idx] = buf
-				}
-				if evt.ToolCallID != "" {
-					buf.ID = evt.ToolCallID
-				}
-				if evt.ToolCallType != "" {
-					buf.Type = evt.ToolCallType
-				}
-				if evt.ToolCallName != "" {
-					buf.NameBuf.WriteString(evt.ToolCallName)
-				}
-				if evt.ToolCallDelta != "" {
-					buf.ArgsBuf.WriteString(evt.ToolCallDelta)
-					ch <- StreamEvent{
-						ToolCallDelta: evt.ToolCallDelta,
+						ToolCallDelta: chunk.ToolInput,
 						ToolCallIdx:   idx,
-						ToolCallName:  buf.NameBuf.String(),
+						ToolCallName:  buf.nameBuf.String(),
+						ToolCallID:    buf.id,
 					}
 				}
-				continue
-			}
 
-			// Handle text/thinking content
-			if evt.Text != "" || evt.Thinking != "" {
-				// For thinking events, use the parser to handle think blocks
-				if evt.Thinking != "" {
-					result := parser.Process(evt.Thinking)
-					if result.Text != "" || result.Thinking != "" {
-						ch <- StreamEvent{
-							Text:       result.Text,
-							Thinking:   result.Thinking,
-							InThinking: parser.InThink,
-						}
-					}
-				} else if evt.Text != "" {
-					result := parser.Process(evt.Text)
-					if result.Text != "" || result.Thinking != "" {
-						ch <- StreamEvent{
-							Text:       result.Text,
-							Thinking:   result.Thinking,
-							InThinking: parser.InThink,
-						}
-					}
+			case goai_provider.ChunkToolCall:
+				tc := goaiToInternalToolCall(chunk)
+				idx := nextIdx - 1
+				if ci, ok := chunk.Metadata["index"].(int); ok {
+					idx = ci
 				}
-			}
-		}
+				if idx < 0 {
+					idx = 0
+				}
+				if _, ok := toolBuffers[idx]; !ok {
+					toolBuffers[idx] = &toolAccum{}
+				}
+				toolBuffers[idx].id = tc.ID
+				toolBuffers[idx].nameBuf.Reset()
+				toolBuffers[idx].argsBuf.Reset()
+				toolBuffers[idx].nameBuf.WriteString(tc.Name)
+				toolBuffers[idx].argsBuf.WriteString(tc.ArgsJSON)
+				ch <- StreamEvent{ToolCalls: []ToolCall{tc}}
 
-		if err := scanner.Err(); err != nil {
-			if ctx.Err() != nil {
-				// Return: Context cancelled during scanner error check
-				ch <- StreamEvent{Done: true}
+			case goai_provider.ChunkStepFinish:
+				stopReason = string(chunk.FinishReason)
+				if stopReason == "" && len(toolBuffers) > 0 {
+					stopReason = "tool_calls"
+				}
+
+			case goai_provider.ChunkFinish:
+				stopReason = string(chunk.FinishReason)
+				finalFlush := parser.Flush()
+				if stopReason == "" && len(toolBuffers) > 0 {
+					stopReason = "tool_calls"
+				}
+				ch <- StreamEvent{
+					Text:       finalFlush.Text,
+					Thinking:   finalFlush.Thinking,
+					InThinking: parser.InThink,
+					Done:       true,
+					StopReason: stopReason,
+				}
+				return
+
+			case goai_provider.ChunkError:
+				ch <- StreamEvent{Error: chunk.Error}
 				return
 			}
-			// Return: Scanner error (malformed SSE, read error)
-			ch <- StreamEvent{Error: fmt.Errorf("read stream: %w", err)}
-			return
 		}
 
-		// Return: Stream ended naturally without [DONE] marker
+		// Stream channel closed without ChunkFinish — emit one terminal text/thinking flush event.
 		result := parser.Flush()
-		if result.Text != "" || result.Thinking != "" {
-			ch <- StreamEvent{
-				Text:       result.Text,
-				Thinking:   result.Thinking,
-				InThinking: parser.InThink,
-			}
+		if len(toolBuffers) > 0 && stopReason == "" {
+			stopReason = "tool_calls"
 		}
-		if len(toolBuffers) > 0 {
-			tc := flushToolCalls(toolBuffers)
-			ch <- StreamEvent{ToolCalls: tc}
+		ch <- StreamEvent{
+			Text:       result.Text,
+			Thinking:   result.Thinking,
+			InThinking: parser.InThink,
+			Done:       true,
+			StopReason: stopReason,
 		}
-		ch <- StreamEvent{Done: true}
 	}()
 
 	return ch
 }
 
-// toolCallBuffer accumulates tool call deltas by index during streaming.
-type toolCallBuffer struct {
-	ID      string
-	Type    string
-	NameBuf strings.Builder
-	ArgsBuf strings.Builder
+// BuildGoAIMessages converts config.Message history to GoAI provider.Message.
+func BuildGoAIMessages(paths config.Paths, settings config.Settings, messages []config.Message) []goai_provider.Message {
+	var out []goai_provider.Message
+
+	// Collect all system messages and concatenate with \n\n, preserving old behavior.
+	var sysParts []string
+	for _, msg := range messages {
+		if msg.Role == config.RoleSystem {
+			sysParts = append(sysParts, msg.Text)
+		}
+	}
+	if len(sysParts) > 0 {
+		out = append(out, goai_provider.Message{
+			Role: goai_provider.RoleSystem,
+			Content: []goai_provider.Part{
+				{Type: goai_provider.PartText, Text: strings.Join(sysParts, "\n\n")},
+			},
+		})
+	}
+
+	for _, msg := range messages {
+		switch msg.Role {
+		case config.RoleSystem, config.RoleInternal:
+			continue
+		case config.RoleUser:
+			if msg.ImagePath != "" {
+				parts, err := BuildMultimodalContent(msg.Text, msg.ImagePath)
+				if err == nil {
+					var goaiParts []goai_provider.Part
+					for _, p := range parts {
+						switch p.Type {
+						case "text":
+							goaiParts = append(goaiParts, goai_provider.Part{Type: goai_provider.PartText, Text: p.Text})
+						case "image_url":
+							if p.ImageURL != nil {
+								goaiParts = append(goaiParts, goai_provider.Part{Type: goai_provider.PartImage, URL: p.ImageURL.URL})
+							}
+						}
+					}
+					out = append(out, goai_provider.Message{Role: goai_provider.RoleUser, Content: goaiParts})
+					continue
+				}
+			}
+			out = append(out, goai_provider.Message{
+				Role:    goai_provider.RoleUser,
+				Content: []goai_provider.Part{{Type: goai_provider.PartText, Text: msg.Text}},
+			})
+		case config.RoleAssistant:
+			var parts []goai_provider.Part
+			if msg.ThinkingText != "" {
+				parts = append(parts, goai_provider.Part{Type: goai_provider.PartReasoning, Text: msg.ThinkingText})
+			}
+			if msg.Text != "" {
+				parts = append(parts, goai_provider.Part{Type: goai_provider.PartText, Text: msg.Text})
+			}
+			for _, tc := range msg.ToolCalls {
+				args := tc.Instruction.Arguments
+				args, _ = RepairArgs(args)
+				parts = append(parts, goai_provider.Part{
+					Type:       goai_provider.PartToolCall,
+					ToolCallID: tc.ID,
+					ToolName:   tc.Instruction.Name,
+					ToolInput:  json.RawMessage(args),
+				})
+			}
+			if len(parts) > 0 {
+				out = append(out, goai_provider.Message{Role: goai_provider.RoleAssistant, Content: parts})
+			}
+			for _, tc := range msg.ToolCalls {
+				if tc.Execution.Status == "" {
+					continue
+				}
+				content := tc.Execution.Result
+				if tc.Execution.Status == tools.ResultStatusError && tc.Execution.Error != "" {
+					content = tc.Execution.Error
+				}
+				out = append(out, goai_provider.Message{
+					Role: goai_provider.RoleTool,
+					Content: []goai_provider.Part{{
+						Type:       goai_provider.PartToolResult,
+						ToolCallID: tc.ID,
+						ToolName:   tc.Instruction.Name,
+						ToolOutput: content,
+					}},
+				})
+			}
+		case config.RoleSynthetic:
+			out = append(out, goai_provider.Message{
+				Role:    goai_provider.RoleAssistant,
+				Content: []goai_provider.Part{{Type: goai_provider.PartText, Text: msg.Text}},
+			})
+		}
+	}
+
+	_ = paths
+	_ = settings
+	return out
+}
+
+// mergeResponseMessages merges GoAI response messages back into config.Message history
+// while preserving the metadata already tracked in config.Message.
+func mergeResponseMessages(result *goai.TextResult, messages []config.Message) []config.Message {
+	if result == nil || len(result.ResponseMessages) == 0 {
+		return messages
+	}
+
+	merged := append([]config.Message(nil), messages...)
+	for _, rm := range result.ResponseMessages {
+		msg := config.Message{
+			ID:        fmt.Sprintf("msg_%d", len(merged)+1),
+			CreatedAt: time.Now(),
+		}
+		switch rm.Role {
+		case goai_provider.RoleAssistant:
+			msg.Role = config.RoleAssistant
+		case goai_provider.RoleTool:
+			msg.Role = config.RoleSynthetic
+		default:
+			continue
+		}
+		for _, p := range rm.Content {
+			switch p.Type {
+			case goai_provider.PartText:
+				msg.Text += p.Text
+			case goai_provider.PartReasoning:
+				msg.ThinkingText += p.Text
+			case goai_provider.PartToolCall:
+				entry := config.ToolCallEntry{ID: p.ToolCallID, Type: "function"}
+				entry.Instruction.Name = p.ToolName
+				entry.Instruction.Arguments = string(p.ToolInput)
+				msg.ToolCalls = append(msg.ToolCalls, entry)
+			case goai_provider.PartToolResult:
+				if msg.Text == "" {
+					msg.Text = p.ToolOutput
+				}
+			}
+		}
+		if msg.Text != "" || msg.ThinkingText != "" || len(msg.ToolCalls) > 0 {
+			merged = append(merged, msg)
+		}
+	}
+	return merged
+}
+
+// goaiToInternalToolCall converts a GoAI StreamChunk tool call to our internal format.
+func goaiToInternalToolCall(chunk goai_provider.StreamChunk) ToolCall {
+	return ToolCall{
+		ID:   chunk.ToolCallID,
+		Type: "function",
+		Name: chunk.ToolName,
+		Function: struct {
+			Name string `json:"name"`
+			Args string `json:"arguments"`
+		}{Name: chunk.ToolName, Args: chunk.ToolInput},
+		ArgsJSON: chunk.ToolInput,
+	}
+}
+
+// toolAccum tracks buffered tool call deltas.
+type toolAccum struct {
+	nameBuf strings.Builder
+	argsBuf strings.Builder
+	id      string
 }
 
 // RepairArgs attempts to fix malformed JSON from the model's streamed arguments.
 // Returns the repaired string and whether it is now valid JSON.
-// If repair fails completely, returns a sanitized version that is safe to embed
-// in API requests (won't cause HTTP 400 from invalid escape sequences).
 func RepairArgs(args string) (string, bool) {
 	if args == "" {
 		return args, false
 	}
-	// Fast path: already valid
 	var check map[string]interface{}
 	if json.Unmarshal([]byte(args), &check) == nil {
 		return args, true
 	}
-	// Try repair
 	repaired, err := jsonrepair.Repair(args)
 	if err == nil && repaired != "" {
 		if json.Unmarshal([]byte(repaired), &check) == nil {
 			return repaired, true
 		}
 	}
-	// jsonrepair failed or produced unparseable output.
-	// Try closing an unclosed brace.
 	t := strings.TrimSpace(args)
 	if len(t) > 0 && t[0] == '{' && t[len(t)-1] != '}' {
 		closed := args + "}"
@@ -519,48 +516,10 @@ func RepairArgs(args string) (string, bool) {
 			return closed, true
 		}
 	}
-	// Completely unrepairable. Return a safe placeholder so it doesn't
-	// break API requests when embedded in BuildAPIMessages.
 	return `{"_error": "malformed JSON from model, original args discarded"}`, false
 }
 
-// flushToolCalls converts buffered tool call deltas into ToolCall structs.
-// Order is by ascending stable index so app-side positional merge stays aligned
-// with delta-time partialTools accumulation.
-func flushToolCalls(buffers map[int]*toolCallBuffer) []ToolCall {
-	keys := make([]int, 0, len(buffers))
-	for k := range buffers {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-
-	result := make([]ToolCall, 0, len(keys))
-	for _, i := range keys {
-		buf := buffers[i]
-		if buf == nil {
-			continue
-		}
-		name := buf.NameBuf.String()
-		args := buf.ArgsBuf.String()
-
-		// Repair potentially malformed JSON from the model
-		args, _ = RepairArgs(args)
-
-		result = append(result, ToolCall{
-			ID:   buf.ID,
-			Type: buf.Type,
-			Function: struct {
-				Name string `json:"name"`
-				Args string `json:"arguments"`
-			}{Name: name, Args: args},
-			Name:     name,
-			ArgsJSON: args,
-		})
-	}
-	return result
-}
-
-// FetchModels queries /v1/models endpoint and returns model IDs
+// FetchModels queries /v1/models endpoint and returns model IDs.
 func FetchModels(ctx context.Context, modelsURL string) ([]string, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, "GET", modelsURL, nil)

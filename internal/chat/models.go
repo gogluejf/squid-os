@@ -2,13 +2,9 @@ package chat
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
@@ -84,13 +80,8 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 				mu.Unlock()
 			}
 
-			// 2. If there's a models URL, fetch and append (deduplicate)
-			modelsURL := p.GetModelsURL()
-			if modelsURL == "" {
-				return
-			}
-
-			entries, err := fetchModelsDetail(ctx, modelsURL, p)
+			// 2. Fetch models via the provider's ListModels
+			modelIDs, err := p.ListModels(ctx)
 			if err != nil {
 				mu.Lock()
 				if isAuthError(err) {
@@ -123,9 +114,9 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 					existing[e.ID] = true
 				}
 			}
-			for _, e := range entries {
-				if !existing[e.ID] {
-					models = append(models, e)
+			for _, id := range modelIDs {
+				if !existing[id] {
+					models = append(models, ModelEntry{ID: id, Provider: name})
 				}
 			}
 			mu.Unlock()
@@ -168,57 +159,6 @@ func ModelIDs(entries []ModelEntry) []string {
 		ids[i] = e.ID
 	}
 	return ids
-}
-
-// fetchModelsDetail fetches models using the provider's auth implementation.
-func fetchModelsDetail(ctx context.Context, modelsURL string, provider provider.Provider) ([]ModelEntry, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, "GET", modelsURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if provider != nil {
-		if err := provider.PrepareRequest(req); err != nil {
-			return nil, err
-		}
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("models endpoint returned %d", resp.StatusCode)
-	}
-
-	var result struct {
-		Data []struct {
-			ID            string `json:"id"`
-			MaxModelLen   *int   `json:"max_model_len"`
-			ContextLength *int   `json:"context_length"`
-			MaxTokens     *int   `json:"max_tokens"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	entries := make([]ModelEntry, 0, len(result.Data))
-	for _, m := range result.Data {
-		ctxLen := 0
-		if m.MaxModelLen != nil {
-			ctxLen = *m.MaxModelLen
-		} else if m.ContextLength != nil {
-			ctxLen = *m.ContextLength
-		} else if m.MaxTokens != nil {
-			ctxLen = *m.MaxTokens
-		}
-		entries = append(entries, ModelEntry{ID: m.ID, Provider: provider.Name(), ContextLength: ctxLen})
-	}
-	return entries, nil
 }
 
 // isAuthError returns true if the error indicates an authentication failure.

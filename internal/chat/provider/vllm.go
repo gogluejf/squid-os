@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"squid-os/internal/config"
+
 	goai_provider "github.com/zendev-sh/goai/provider"
 	"github.com/zendev-sh/goai/provider/vllm"
 )
@@ -29,23 +30,31 @@ func newVLLMProvider(settings *config.ProviderSettings) *VLLMProvider {
 	return &VLLMProvider{settings: settings}
 }
 
-func (v *VLLMProvider) Name() string                          { return config.ProviderVLLM }
-func (v *VLLMProvider) Dialect() config.Dialect               { return config.DialectOpenAICompatible }
-func (v *VLLMProvider) SupportedAuth() []config.AuthMethod    { return []config.AuthMethod{config.AuthNone, config.AuthAPIKey} }
-func (v *VLLMProvider) StaticModels() []string                { return nil }
-func (v *VLLMProvider) DefaultBaseURL() string                { return "http://localhost:8000" }
-func (v *VLLMProvider) RequiresBaseURL() bool                 { return true }
+func (v *VLLMProvider) Name() string            { return config.ProviderVLLM }
+func (v *VLLMProvider) Dialect() config.Dialect { return config.DialectOpenAICompatible }
+func (v *VLLMProvider) SupportedAuth() []config.AuthMethod {
+	return []config.AuthMethod{config.AuthNone, config.AuthAPIKey}
+}
+func (v *VLLMProvider) StaticModels() []string { return nil }
+func (v *VLLMProvider) DefaultBaseURL() string { return "http://localhost:8000" }
+func (v *VLLMProvider) RequiresBaseURL() bool  { return true }
 func (v *VLLMProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
 	return nil
 }
 
-func (v *VLLMProvider) StartDeviceAuth() (string, string, error)    { return "", "", fmt.Errorf("vllm: device auth not supported") }
-func (v *VLLMProvider) PollDeviceAuth() error                       { return fmt.Errorf("vllm: device auth not supported") }
-func (v *VLLMProvider) StartOAuth(redirectURI string) (string, error) { return "", fmt.Errorf("vllm: OAuth not supported") }
-func (v *VLLMProvider) FinishOAuth(code, redirectURI string) error    { return fmt.Errorf("vllm: OAuth not supported") }
-func (v *VLLMProvider) GetCredentials() *config.ProviderCreds          { return v.settings.Credentials }
-func (v *VLLMProvider) GetDeviceAuthID() string                        { return "" }
-func (v *VLLMProvider) SetDeviceState(id, code string)                 {}
+func (v *VLLMProvider) StartDeviceAuth() (string, string, error) {
+	return "", "", fmt.Errorf("vllm: device auth not supported")
+}
+func (v *VLLMProvider) PollDeviceAuth() error { return fmt.Errorf("vllm: device auth not supported") }
+func (v *VLLMProvider) StartOAuth(redirectURI string) (string, error) {
+	return "", fmt.Errorf("vllm: OAuth not supported")
+}
+func (v *VLLMProvider) FinishOAuth(code, redirectURI string) error {
+	return fmt.Errorf("vllm: OAuth not supported")
+}
+func (v *VLLMProvider) GetCredentials() *config.ProviderCreds { return v.settings.Credentials }
+func (v *VLLMProvider) GetDeviceAuthID() string               { return "" }
+func (v *VLLMProvider) SetDeviceState(id, code string)        {}
 
 func (v *VLLMProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {
 	if model == "" {

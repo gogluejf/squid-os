@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
 	"squid-os/internal/log"
 	"squid-os/internal/tools"
 	"strings"
-	"time"
 
 	jsonrepair "github.com/kaptinlin/jsonrepair"
 	goai "github.com/zendev-sh/goai"
@@ -42,6 +40,13 @@ type ToolCall struct {
 	} `json:"function,omitempty"`
 	Name     string // for internal use, not serialized to JSON
 	ArgsJSON string // raw JSON string of arguments, for internal use
+}
+
+// toolAccum tracks buffered tool call deltas.
+type toolAccum struct {
+	nameBuf strings.Builder
+	argsBuf strings.Builder
+	id      string
 }
 
 // ChatMessage is a message for the API request (will be converted to GoAI provider.Message).
@@ -427,51 +432,6 @@ func BuildGoAIMessages(paths config.Paths, settings config.Settings, messages []
 	return out
 }
 
-// mergeResponseMessages merges GoAI response messages back into config.Message history
-// while preserving the metadata already tracked in config.Message.
-func mergeResponseMessages(result *goai.TextResult, messages []config.Message) []config.Message {
-	if result == nil || len(result.ResponseMessages) == 0 {
-		return messages
-	}
-
-	merged := append([]config.Message(nil), messages...)
-	for _, rm := range result.ResponseMessages {
-		msg := config.Message{
-			ID:        fmt.Sprintf("msg_%d", len(merged)+1),
-			CreatedAt: time.Now(),
-		}
-		switch rm.Role {
-		case goai_provider.RoleAssistant:
-			msg.Role = config.RoleAssistant
-		case goai_provider.RoleTool:
-			msg.Role = config.RoleSynthetic
-		default:
-			continue
-		}
-		for _, p := range rm.Content {
-			switch p.Type {
-			case goai_provider.PartText:
-				msg.Text += p.Text
-			case goai_provider.PartReasoning:
-				msg.ThinkingText += p.Text
-			case goai_provider.PartToolCall:
-				entry := config.ToolCallEntry{ID: p.ToolCallID, Type: "function"}
-				entry.Instruction.Name = p.ToolName
-				entry.Instruction.Arguments = string(p.ToolInput)
-				msg.ToolCalls = append(msg.ToolCalls, entry)
-			case goai_provider.PartToolResult:
-				if msg.Text == "" {
-					msg.Text = p.ToolOutput
-				}
-			}
-		}
-		if msg.Text != "" || msg.ThinkingText != "" || len(msg.ToolCalls) > 0 {
-			merged = append(merged, msg)
-		}
-	}
-	return merged
-}
-
 // goaiToInternalToolCall converts a GoAI StreamChunk tool call to our internal format.
 func goaiToInternalToolCall(chunk goai_provider.StreamChunk) ToolCall {
 	return ToolCall{
@@ -484,13 +444,6 @@ func goaiToInternalToolCall(chunk goai_provider.StreamChunk) ToolCall {
 		}{Name: chunk.ToolName, Args: chunk.ToolInput},
 		ArgsJSON: chunk.ToolInput,
 	}
-}
-
-// toolAccum tracks buffered tool call deltas.
-type toolAccum struct {
-	nameBuf strings.Builder
-	argsBuf strings.Builder
-	id      string
 }
 
 // RepairArgs attempts to fix malformed JSON from the model's streamed arguments.
@@ -517,40 +470,6 @@ func RepairArgs(args string) (string, bool) {
 		}
 	}
 	return `{"_error": "malformed JSON from model, original args discarded"}`, false
-}
-
-// FetchModels queries /v1/models endpoint and returns model IDs.
-func FetchModels(ctx context.Context, modelsURL string) ([]string, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, "GET", modelsURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("models endpoint returned %d", resp.StatusCode)
-	}
-
-	var result struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-
-	models := make([]string, 0, len(result.Data))
-	for _, m := range result.Data {
-		models = append(models, m.ID)
-	}
-	return models, nil
 }
 
 // BuildAPIMessages converts Message to ChatMessages for the API.

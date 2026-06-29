@@ -2,3 +2,5 @@
 /plans/
 __debug_*
 squid-os
+/squid-os
+/squid-os-*

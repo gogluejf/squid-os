@@ -39,7 +39,11 @@ func (v *VLLMProvider) StaticModels() []string { return nil }
 func (v *VLLMProvider) DefaultBaseURL() string { return "http://localhost:8000" }
 func (v *VLLMProvider) RequiresBaseURL() bool  { return true }
 func (v *VLLMProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
-	return nil
+	return map[string]any{
+		"chat_template_kwargs": map[string]any{
+			"enable_thinking": thinking,
+		},
+	}
 }
 
 func (v *VLLMProvider) StartDeviceAuth() (string, string, error) {
@@ -66,7 +70,10 @@ func (v *VLLMProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel
 	if v.settings.Credentials != nil && v.settings.Credentials.ActiveAuthMethod == config.AuthAPIKey && v.settings.Credentials.APIKey != "" {
 		opts = append(opts, vllm.WithAPIKey(v.settings.Credentials.APIKey))
 	}
-	return vllm.Chat(model, opts...), false, nil
+	// vLLM is commonly used here with Qwen-style models that can emit reasoning
+	// inline in normal text rather than as native reasoning chunks. Return true so
+	// engine can enable text reasoning parsing when the global setting allows it.
+	return vllm.Chat(model, opts...), true, nil
 }
 
 func (v *VLLMProvider) ListModels(ctx context.Context) ([]string, error) {

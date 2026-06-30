@@ -72,7 +72,10 @@ func (o *OpenAIProvider) StaticModels() []string {
 func (o *OpenAIProvider) DefaultBaseURL() string               { return "https://api.openai.com" }
 func (o *OpenAIProvider) RequiresBaseURL() bool                { return false }
 func (o *OpenAIProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
-	return nil
+	if !thinking {
+		return nil
+	}
+	return map[string]any{"reasoning_effort": "medium"}
 }
 
 func (o *OpenAIProvider) BuildGoAIModel(model string) (provider.LanguageModel, bool, error) {

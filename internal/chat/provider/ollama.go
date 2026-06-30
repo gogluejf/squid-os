@@ -36,10 +36,8 @@ func (o *OllamaProvider) StaticModels() []string           { return nil }
 func (o *OllamaProvider) DefaultBaseURL() string           { return "http://localhost:11434" }
 func (o *OllamaProvider) RequiresBaseURL() bool            { return true }
 func (o *OllamaProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
-	if thinking {
-		return map[string]any{"think": true}
-	}
-	return nil
+	// GoAI Ollama expects the native "think" request field to always be present.
+	return map[string]any{"think": thinking}
 }
 
 func (o *OllamaProvider) StartDeviceAuth() (string, string, error)    { return "", "", fmt.Errorf("ollama: device auth not supported") }

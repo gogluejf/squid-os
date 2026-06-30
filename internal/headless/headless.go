@@ -42,11 +42,6 @@ func Run(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		cancel()
 	}()
 
-	parser := &chat.ThinkParser{}
-	if settings.Thinking {
-		parser.InThink = true
-	}
-
 	ch := engine.Stream(ctx, msgs, nil)
 
 	for event := range ch {

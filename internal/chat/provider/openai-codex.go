@@ -71,10 +71,17 @@ func (o *CodexProvider) StaticModels() []string {
 func (o *CodexProvider) DefaultBaseURL() string { return "https://chatgpt.com" }
 func (o *CodexProvider) RequiresBaseURL() bool  { return false }
 func (o *CodexProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
-	if o.creds().ActiveAuthMethod == config.AuthOAuth {
-		return map[string]any{"store": false}
+	opts := map[string]any{}
+	if thinking {
+		opts["reasoning_effort"] = "medium"
 	}
-	return nil
+	if o.creds().ActiveAuthMethod == config.AuthOAuth {
+		opts["store"] = false
+	}
+	if len(opts) == 0 {
+		return nil
+	}
+	return opts
 }
 
 func (o *CodexProvider) BuildGoAIModel(model string) (provider.LanguageModel, bool, error) {

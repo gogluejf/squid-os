@@ -175,7 +175,7 @@ func (m Model) buildFooterData() ui.FooterData {
 		TotalInputTokens:  sessionIn,
 		TotalOutTokens:    sessionOut + streamOut,
 		Streaming:         m.stream.active,
-		ThinkingOn:        m.settings.Thinking,
+		ThinkingOn:        m.settings.Thinking.Enabled,
 		AuthorizationMode: m.settings.Authorization,
 		TokPerSec:         m.stream.metrics.AvgTokenPerSec(),
 		ContextWindow:     m.settings.ContextWindow,

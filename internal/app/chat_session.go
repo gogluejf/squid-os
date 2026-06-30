@@ -90,7 +90,7 @@ func (cs *chatSession) updateSystemPromptMsg(oldFile, newFile string, paths conf
 // Like updateSystemPromptMsg — it updates the fixed-ID message, no history message pushed.
 // Once the session has started (first user message exists), config0 becomes frozen
 // and this function becomes a no-op.
-func (cs *chatSession) updateConfigMsg(provider, model string, thinking bool) {
+func (cs *chatSession) updateConfigMsg(provider, model string, thinking config.ThinkingConfig) {
 	if cs.hasUserMessage() {
 		return
 	}
@@ -105,9 +105,9 @@ func (cs *chatSession) updateConfigMsg(provider, model string, thinking bool) {
 	}
 }
 
-func (cs *chatSession) pushThinkingSwitchMsg(thinking bool) {
+func (cs *chatSession) pushThinkingSwitchMsg(thinking config.ThinkingConfig) {
 	to := "off"
-	if thinking {
+	if thinking.Enabled {
 		to = "on"
 	}
 	cs.appendMsg(config.Message{
@@ -119,7 +119,7 @@ func (cs *chatSession) pushThinkingSwitchMsg(thinking bool) {
 	})
 }
 
-func (cs *chatSession) commitCurrentInference(provider, model string, thinking bool) {
+func (cs *chatSession) commitCurrentInference(provider, model string, thinking config.ThinkingConfig) {
 	cs.file.Session.Inference.Current = config.InferenceConfig{Provider: provider, Model: model, Thinking: thinking}
 }
 
@@ -137,9 +137,9 @@ func (cs *chatSession) pushModelSwitchMsg(oldModel, newModel string) {
 // buildConfigMsg creates the immutable initial config message.
 // Collapsed: params "provider=... · model=... · thinking=on/off"
 // Expanded: multi-line detail.
-func buildConfigMsg(provider, model string, thinking bool) config.Message {
+func buildConfigMsg(provider, model string, thinking config.ThinkingConfig) config.Message {
 	thinkStr := "off"
-	if thinking {
+	if thinking.Enabled {
 		thinkStr = "on"
 	}
 

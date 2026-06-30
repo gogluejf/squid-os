@@ -87,11 +87,11 @@ type functionDef struct {
 type Engine struct {
 	settings *config.ProviderSettings
 	Model    string
-	Thinking bool
+	Thinking config.ThinkingConfig
 	provider provider.Provider
 }
 
-func NewEngine(settings *config.ProviderSettings, model string, thinking bool) *Engine {
+func NewEngine(settings *config.ProviderSettings, model string, thinking config.ThinkingConfig) *Engine {
 	if settings == nil {
 		return &Engine{settings: nil}
 	}
@@ -167,7 +167,7 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 		}
 
 		// Call StreamText with MaxSteps(1) so our app controls the tool loop
-		providerOptions := e.provider.RequestProviderOptions(e.Model, e.Thinking)
+		providerOptions := e.provider.RequestProviderOptions(e.Model, e.Thinking.Enabled)
 		streamOpts := []goai.Option{
 			goai.WithMessages(messages...),
 			goai.WithTools(goaiTools...),
@@ -184,12 +184,13 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 		}
 
 		// Process chunks from the raw stream.
-		// Providers flagged by BuildGoAIModel(...)=parseThinkingFromText use the
-		// local ThinkParser because their reasoning is embedded inline in text
-		// content (e.g. Qwen via compat/openai-like transport). Providers that
-		// emit native ChunkReasoning are passed through directly.
+		// Inline reasoning parsing is only enabled when:
+		// 1. thinking is requested,
+		// 2. user enables parse_reasoning_from_text,
+		// 3. provider/backend indicates it may return reasoning inline in text.
+		useTextReasoningParser := e.Thinking.Enabled && parseThinking && e.settings != nil && e.Thinking.ParseReasoningFromText
 		parser := &ThinkParser{}
-		if e.Thinking && parseThinking {
+		if useTextReasoningParser {
 			// Qwen-style providers may emit hidden reasoning text before an
 			// explicit <think> tag arrives, so preserve the legacy bootstrap.
 			parser.InThink = true
@@ -213,7 +214,7 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 
 			switch chunk.Type {
 			case goai_provider.ChunkText:
-				if parseThinking {
+				if useTextReasoningParser {
 					// Provider emits reasoning inline in text content — split it locally.
 					result := parser.Process(chunk.Text)
 					if result.Text != "" || result.Thinking != "" {

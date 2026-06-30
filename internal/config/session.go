@@ -40,9 +40,9 @@ type SessionSkill struct {
 }
 
 type InferenceConfig struct {
-	Provider string `json:"provider"`
-	Model    string `json:"model"`
-	Thinking bool   `json:"thinking"`
+	Provider string         `json:"provider"`
+	Model    string         `json:"model"`
+	Thinking ThinkingConfig `json:"thinking"`
 }
 
 type SessionInference struct {
@@ -224,7 +224,7 @@ func TotalExecutionTokens(entries []ToolCallEntry) int {
 }
 
 // NewSessionFile creates a new empty session
-func NewSessionFile(provider, model string, thinking bool, systemPrompt string, workingDir string) SessionFile {
+func NewSessionFile(provider, model string, thinking ThinkingConfig, systemPrompt string, workingDir string) SessionFile {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return SessionFile{
 		Version: 1,

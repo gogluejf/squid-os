@@ -36,7 +36,11 @@ func (l *LiteLLMProvider) StaticModels() []string               { return nil }
 func (l *LiteLLMProvider) DefaultBaseURL() string               { return "http://localhost:4000" }
 func (l *LiteLLMProvider) RequiresBaseURL() bool                { return true }
 func (l *LiteLLMProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
-	return nil
+	return map[string]any{
+		"chat_template_kwargs": map[string]any{
+			"enable_thinking": thinking,
+		},
+	}
 }
 
 func (l *LiteLLMProvider) StartDeviceAuth() (string, string, error)    { return "", "", fmt.Errorf("litellm: device auth not supported") }

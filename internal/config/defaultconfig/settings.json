@@ -1,7 +1,10 @@
 {
   "provider": "",
   "model": "",
-  "thinking": false,
+  "thinking": {
+    "enabled": false,
+    "parse_reasoning_from_text": false
+  },
   "system_prompt_file": "default.md",
   "max_history": 500,
   "last_session_name": "",

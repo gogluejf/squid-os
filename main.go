@@ -67,9 +67,9 @@ func run(cmd *cobra.Command, args []string) error {
 	// Apply CLI flag overrides
 	switch flagThinking {
 	case "on":
-		settings.Thinking = true
+		settings.Thinking.Enabled = true
 	case "off":
-		settings.Thinking = false
+		settings.Thinking.Enabled = false
 	}
 	if flagSystem != "" {
 		settings.SystemPromptFile = flagSystem

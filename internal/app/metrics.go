@@ -184,11 +184,23 @@ func (m StreamMetrics) TimeToFirstToken() time.Duration {
 	return t.Sub(m.Start)
 }
 
+// LastActivity returns the most recent time any token arrived.
+func (m StreamMetrics) LastActivity() time.Time {
+	latest := m.textDoneAt
+	if !m.thinkingDoneAt.IsZero() && m.thinkingDoneAt.After(latest) {
+		latest = m.thinkingDoneAt
+	}
+	if !m.toolCallDoneAt.IsZero() && m.toolCallDoneAt.After(latest) {
+		latest = m.toolCallDoneAt
+	}
+	return latest
+}
+
 // AvgTokenPerSec returns the average tokens per second during actual
 // inference time (excludes idle gaps and time-to-first-token).
 func (m StreamMetrics) AvgTokenPerSec() float64 {
 	d := m.InferenceDuration()
-	if d < 50*time.Millisecond { // first token is nano to inference, so we create a buffer to avoid divide and get crazy numbers
+	if d < 100*time.Millisecond { // first token is nano to inference, so we create a buffer to avoid divide and get crazy numbers
 		return 0
 	}
 	return float64(m.TotalOutputTokens()) / d.Seconds()

@@ -1,7 +1,10 @@
 package app
 
 import (
+	"math"
+	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -9,6 +12,30 @@ import (
 	"squid-os/internal/style"
 	"squid-os/internal/ui"
 )
+
+// jitterTokenRate returns a slightly animated token rate during stalls.
+// If tokens are flowing (last activity < 100ms ago), returns the real value.
+// If stalled, randomizes the first decimal (±0.3 of the value, min ±0.1, max ±0.9) for visual liveliness.
+// Only applied while stream is active.
+func jitterTokenRate(tps float64, lastActivity time.Time, active bool) float64 {
+	if tps <= 0 || !active {
+		return tps
+	}
+	if time.Since(lastActivity) < 100*time.Millisecond {
+		return tps
+	}
+	rounded := math.Floor(tps*10) / 10
+	// Jitter range: 30% of the value, clamped between 0.1 and 0.9
+	jitterRange := rounded * 0.3
+	if jitterRange < 0.1 {
+		jitterRange = 0.1
+	}
+	if jitterRange > 0.9 {
+		jitterRange = 0.9
+	}
+	jitter := (rand.Float64()*2 - 1) * jitterRange
+	return rounded + jitter
+}
 
 // View is the top-level Bubble Tea render function — assembles all visible
 // sections into a single string for the terminal.
@@ -132,7 +159,6 @@ func (m *Model) updateViewportContent() {
 			ThinkingDur:      m.stream.metrics.ThinkingDuration(),
 			TextTokens:       m.stream.metrics.TextTokens(),
 			TextDur:          m.stream.metrics.TextDuration(),
-			TokPerSec:        m.stream.metrics.AvgTokenPerSec(),
 			Waiting:          !m.stream.metrics.HasFirstToken(),
 			PendingTools:     m.stream.toStreamingToolCalls(),
 		}))
@@ -177,7 +203,7 @@ func (m Model) buildFooterData() ui.FooterData {
 		Streaming:         m.stream.active,
 		ThinkingOn:        m.settings.Thinking.Enabled,
 		AuthorizationMode: m.settings.Authorization,
-		TokPerSec:         m.stream.metrics.AvgTokenPerSec(),
+		TokPerSec:         jitterTokenRate(m.stream.metrics.AvgTokenPerSec(), m.stream.metrics.LastActivity(), m.stream.active),
 		ContextWindow:     m.settings.ContextWindow,
 		WorkingDir:        m.workingDir,
 		Skill:             m.session.file.Session.Skill,
@@ -197,7 +223,7 @@ func (m *Model) buildLiveSeqStat() (*config.SequenceStat, string) {
 		OutputTokens:         m.stream.metrics.TotalOutputTokens(),
 		DurationMs:           m.stream.stopwatch.Elapsed().Milliseconds(),
 		InferenceDuractionMs: m.stream.metrics.InferenceDuration().Milliseconds(),
-		AvgTokensPerSec:      m.stream.metrics.AvgTokenPerSec(),
+		AvgTokensPerSec:      jitterTokenRate(m.stream.metrics.AvgTokenPerSec(), m.stream.metrics.LastActivity(), m.stream.active),
 	}
 
 	seqIdx := config.FindSequenceHeadIdx(m.session.file.Messages)

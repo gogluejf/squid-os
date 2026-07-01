@@ -555,7 +555,6 @@ type StreamingViewData struct {
 	ThinkingDur    time.Duration
 	TextTokens     int
 	TextDur        time.Duration
-	TokPerSec      float64
 	Waiting        bool // true when no first token has arrived yet
 
 	// Pending tool calls (streaming, before execution)

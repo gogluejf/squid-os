@@ -188,7 +188,7 @@ func (m StreamMetrics) TimeToFirstToken() time.Duration {
 // inference time (excludes idle gaps and time-to-first-token).
 func (m StreamMetrics) AvgTokenPerSec() float64 {
 	d := m.InferenceDuration()
-	if d < 100*time.Millisecond {
+	if d < 50*time.Millisecond { // first token is nano to inference, so we create a buffer to avoid divide and get crazy numbers
 		return 0
 	}
 	return float64(m.TotalOutputTokens()) / d.Seconds()

@@ -204,6 +204,7 @@ func (m Model) buildFooterData() ui.FooterData {
 		ThinkingOn:        m.settings.Thinking.Enabled,
 		AuthorizationMode: m.settings.Authorization,
 		TokPerSec:         jitterTokenRate(m.stream.metrics.AvgTokenPerSec(), m.stream.metrics.LastActivity(), m.stream.active),
+		SeqDurMs:    func() int64 { if m.stream.active { ss, _ := m.buildLiveSeqStat(); return ss.DurationMs } else { return 0 } }(),
 		ContextWindow:     m.settings.ContextWindow,
 		WorkingDir:        m.workingDir,
 		Skill:             m.session.file.Session.Skill,

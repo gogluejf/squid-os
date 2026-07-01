@@ -20,6 +20,7 @@ type FooterData struct {
 	TotalInputTokens  int
 	TotalOutTokens    int
 	TokPerSec         float64
+	SeqDurMs          int64 // live sequence duration shown during streaming
 	Streaming         bool
 	ThinkingOn        bool   // thinking mode on/off (always visible)
 	AuthorizationMode string // "auto", "ask-on-write", "ask-for-all"
@@ -48,8 +49,6 @@ func RenderFooter(data FooterData, width int) string {
 	// ── Line 1: command hints (left) + model label (right) ─────────────
 	left1 := " " + style.FooterKeyStyle.Render("/") + style.FooterDimStyle.Render("cmd") +
 		style.FooterDimStyle.Render("  ") +
-		style.FooterKeyStyle.Render("ctrl+l") + style.FooterDimStyle.Render(" load") +
-		style.FooterDimStyle.Render("  ") +
 		style.FooterKeyStyle.Render("ctrl+h") + style.FooterDimStyle.Render(" help")
 
 	modelLabel := style.FooterValueStyle.Render(data.Model)
@@ -62,6 +61,11 @@ func RenderFooter(data FooterData, width int) string {
 
 	// ── Line 2: [thinking: on/off] (left) + tok/s · ↓out[↑in] · [tok/total] · context bar % (right) ──
 	var parts []string
+
+	if data.Streaming && data.SeqDurMs > 0 {
+		parts = append(parts, style.FooterDimStyle.Render(formatDuration(data.SeqDurMs)))
+	}
+
 	if data.Streaming && data.TokPerSec > 0 {
 		parts = append(parts, style.FooterValueStyle.Render(fmt.Sprintf("%.1f tok/s", data.TokPerSec)))
 	}

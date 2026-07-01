@@ -196,7 +196,7 @@ func (m *Model) buildLiveSeqStat() (*config.SequenceStat, string) {
 	live := &config.SequenceStat{
 		OutputTokens:         m.stream.metrics.TotalOutputTokens(),
 		DurationMs:           m.stream.metrics.Duration().Milliseconds(),
-		InferenceDuractionMs: (m.stream.metrics.TextDuration() + m.stream.metrics.ThinkingDuration() + m.stream.metrics.ToolCallDuration()).Milliseconds(),
+		InferenceDuractionMs: m.stream.metrics.InferenceDuration().Milliseconds(),
 		AvgTokensPerSec:      m.stream.metrics.AvgTokenPerSec(),
 	}
 

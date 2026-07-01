@@ -161,9 +161,18 @@ func (m StreamMetrics) TotalOutputTokens() int {
 	return countTokensApproxInt(m.thinkingChars + m.textChars + m.toolCallChars)
 }
 
-// Duration returns the total elapsed time since the stream started.
+// InferenceDuration returns the actual processing time — the sum of text,
+// thinking, and tool call durations. Excludes idle gaps between categories
+// and time spent waiting for the first token.
+func (m StreamMetrics) InferenceDuration() time.Duration {
+	return m.TextDuration() + m.ThinkingDuration() + m.ToolCallDuration()
+}
+
+// Duration returns the honest wall-clock time from start to the end of
+// inference: TimeToFirstToken + InferenceDuration. This excludes idle
+// gaps after tokens stop arriving. ( during prompt etc)
 func (m StreamMetrics) Duration() time.Duration {
-	return time.Since(m.Start)
+	return m.TimeToFirstToken() + m.InferenceDuration()
 }
 
 // TimeToFirstToken returns the earliest time from stream start to any first token.
@@ -175,17 +184,14 @@ func (m StreamMetrics) TimeToFirstToken() time.Duration {
 	return t.Sub(m.Start)
 }
 
-// AvgTokenPerSec returns the average tokens per second since the first token arrived.
+// AvgTokenPerSec returns the average tokens per second during actual
+// inference time (excludes idle gaps and time-to-first-token).
 func (m StreamMetrics) AvgTokenPerSec() float64 {
-	t := m.firstTokenAt()
-	if t.IsZero() {
+	d := m.InferenceDuration()
+	if d <= 0 {
 		return 0
 	}
-	elapsed := time.Since(t).Seconds()
-	if elapsed <= 0 {
-		return 0
-	}
-	return float64(m.TotalOutputTokens()) / elapsed
+	return float64(m.TotalOutputTokens()) / d.Seconds()
 }
 
 // countTokensApproxInt estimates token count from a character count.

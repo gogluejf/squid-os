@@ -31,13 +31,19 @@ type partialTool struct {
 // toStreamingToolCalls converts partial tool state into display-ready values while streaming.
 func (ss *streamState) toStreamingToolCalls() []ui.StreamingToolCall {
 	var out []ui.StreamingToolCall
-	for _, p := range ss.partialTools {
+	for i, p := range ss.partialTools {
 		if p.name == "" {
 			continue
 		}
 		dur := time.Duration(0)
 		if !p.firstAt.IsZero() {
-			dur = p.doneAt.Sub(p.firstAt)
+			end := p.doneAt
+			// Live clock for the active (last) tool — doneAt freezes during server pauses.
+			// Safe: display-only, never persists.
+			if end.IsZero() || i == len(ss.partialTools)-1 {
+				end = time.Now()
+			}
+			dur = end.Sub(p.firstAt)
 		}
 		out = append(out, ui.StreamingToolCall{
 			Name:      p.name,

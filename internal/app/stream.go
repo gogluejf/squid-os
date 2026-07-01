@@ -15,6 +15,7 @@ import (
 	"squid-os/internal/tools"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
+	"squid-os/internal/util"
 )
 
 // partialTool holds the streaming-in-progress UI state for a single tool call.
@@ -72,6 +73,7 @@ type streamState struct {
 	authorizationCtx *AuthorizationContext // non-nil when paused awaiting auth
 	pendingToolIndex int                   // index into pendingTools being authorized
 	msgIdx           int                   // index of the saved assistant message with tool calls (-1 if none)
+	stopwatch        util.Stopwatch        // live display timer for the assistant header
 }
 
 // AddTextChunk appends text and updates metrics.
@@ -109,6 +111,7 @@ func (ss *streamState) reset() {
 	ss.authorizationCtx = nil
 	ss.pendingToolIndex = -1
 	ss.msgIdx = -1
+	ss.stopwatch = util.Stopwatch{}
 }
 
 // needsAuthorization checks the current authorization mode and tool destructiveness
@@ -130,11 +133,13 @@ func (m *Model) setStreamMode() {
 	m.stream.active = true
 	m.stream.metrics.Start = time.Now()
 	m.mode = ModeStreaming
+	m.stream.stopwatch.Start()
 	m.textarea.Placeholder = "ctrl+c to cancel..."
 }
 
 // setAuthMode builds a Question component for tool authorization and sets it as the active component.
 func (m *Model) setAuthMode() tea.Cmd {
+	m.stream.stopwatch.Pause()
 	ctx := m.stream.authorizationCtx
 
 	// Description: tool-name · display-value (truncation handled by Question render)
@@ -150,6 +155,7 @@ func (m *Model) setAuthMode() tea.Cmd {
 		ShowInput:   true,
 		OnConfirm: func(selection int, instructions string, ctx any) tea.Cmd {
 			m := ctx.(*Model)
+			m.stream.stopwatch.Resume()
 			m.stream.authorizationCtx.Result = AuthResult{
 				Approved:     selection == 0,
 				Instructions: instructions,
@@ -159,6 +165,7 @@ func (m *Model) setAuthMode() tea.Cmd {
 		},
 		OnCancel: func(ctx any) tea.Cmd {
 			m := ctx.(*Model)
+			m.stream.stopwatch.Resume()
 			m.stream.authorizationCtx.Result = AuthResult{
 				Approved:     false,
 				Instructions: "",

@@ -760,7 +760,11 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 // the render cache for the saved assistant message at msgIdx.
 func (m *Model) flushToolMessage(msgIdx int) {
 	msg := &m.session.file.Messages[msgIdx]
-	msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds()
+	execDurMs := int64(0)
+	for _, tc := range msg.ToolCalls {
+		execDurMs += tc.Execution.DurationMs
+	}
+	msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds() + execDurMs
 	msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
 	recomputeSequenceStats(m.session.file.Messages)
 	m.session.invalidateRenderFrom(msgIdx)

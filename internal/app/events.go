@@ -14,14 +14,14 @@ type streamEventMsg chat.StreamEvent
 
 // streamTickMsg fires periodically while streaming to keep the live timer
 // in the message header animated even when no tokens are arriving yet.
-type streamTickMsg struct{}
+type streamTickMsg struct{ id string }
 
 // streamTickCmd schedules the next tick while streaming is active.
 // Uses 200ms to avoid overwhelming the UI thread with SetContent() calls
 // on large viewports during heavy streaming.
-func streamTickCmd() tea.Cmd {
+func streamTickCmd(id string) tea.Cmd {
 	return tea.Tick(200*time.Millisecond, func(_ time.Time) tea.Msg {
-		return streamTickMsg{}
+		return streamTickMsg{id: id}
 	})
 }
 

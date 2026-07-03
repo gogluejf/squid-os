@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -58,6 +60,7 @@ func (ss *streamState) toStreamingToolCalls() []ui.StreamingToolCall {
 
 // streamState bundles all transient fields for an active inference stream.
 type streamState struct {
+	id               string
 	text             string
 	thinking         string
 	inThinking       bool
@@ -130,6 +133,7 @@ func (m Model) needsAuthorization(tool *tools.Tool, args map[string]interface{})
 // setStreamMode initializes the stream state for a new request.
 func (m *Model) setStreamMode() {
 	m.stream.reset()
+	m.stream.id = uuid.NewString()
 	m.stream.active = true
 	m.stream.metrics.Start = time.Now()
 	m.mode = ModeStreaming
@@ -264,7 +268,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.stream.ch = ch
 
 	m.updateViewportContent()
-	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd())
+	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd(m.stream.id))
 }
 
 // handleStreamEvent processes a single token, thinking chunk, error, or done signal
@@ -754,7 +758,7 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 	m.stream.ch = ch
 
 	m.updateViewportContent()
-	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd())
+	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd(m.stream.id))
 }
 
 // flushToolMessage updates metrics, recomputes sequence stats, and invalidates

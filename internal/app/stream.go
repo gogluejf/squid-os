@@ -160,7 +160,7 @@ func (m *Model) setAuthMode() tea.Cmd {
 				Approved:     selection == 0,
 				Instructions: instructions,
 			}
-			_, cmd := m.resumeToolExecution(nil, 0)
+			_, cmd := m.resumeToolExecution()
 			return cmd
 		},
 		OnCancel: func(ctx any) tea.Cmd {
@@ -170,7 +170,7 @@ func (m *Model) setAuthMode() tea.Cmd {
 				Approved:     false,
 				Instructions: "",
 			}
-			_, cmd := m.resumeToolExecution(nil, 0)
+			_, cmd := m.resumeToolExecution()
 			return cmd
 		},
 	}
@@ -369,7 +369,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		if event.StopReason == "tool_calls" && len(m.stream.partialTools) > 0 {
 			(&m).stream.active = false // inference done, entering tool execution
 			_ = avgTokenPerSec
-			return (&m).resumeToolExecution(nil, 0)
+			return (&m).resumeToolExecution()
 		}
 
 		// Normal completion: save assistant message
@@ -481,7 +481,7 @@ func buildInstructionEntry(p partialTool) config.ToolCallEntry {
 // Then execute. The assistant message is saved before the loop starts with
 // initial metrics, and mutated in place as tools execute. After the loop:
 // finalize remaining metrics, optionally append user message, start stream.
-func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex int) (tea.Model, tea.Cmd) {
+func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 	partials := m.stream.partialTools
 
 	if m.session.file.FileState == nil {
@@ -490,50 +490,51 @@ func (m *Model) resumeToolExecution(entries []config.ToolCallEntry, startIndex i
 	sessionState := m.session.file.FileState
 
 	var msgIdx int
+	var entries []config.ToolCallEntry
+	var startIndex int
 
 	// First call: build all instruction entries and save eagerly.
 	// Resume after auth: fetch entries from the already-saved message.
-	if entries == nil {
-		if m.stream.authorizationCtx != nil {
-			// Resuming after auth — entries already live in the saved message.
-			msgIdx = m.stream.msgIdx
-			startIndex = m.stream.pendingToolIndex
-			entries = m.session.file.Messages[msgIdx].ToolCalls
-		} else {
-			// Initial call from handleStreamEvent: build and save before the loop.
-			entries = make([]config.ToolCallEntry, len(partials))
-			for i, p := range partials {
-				entries[i] = buildInstructionEntry(p)
-				entries[i].Execution.Status = tools.ResultStatusPending
-			}
 
-			// Save eagerly with all metrics known at stream end.
-			// Only InputTokens (tool execution result tokens) is unknown — finalized after loop.
-			msgIdx = m.appendAssistantMsg(config.Message{
-				ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-				Role:               config.RoleAssistant,
-				CreatedAt:          m.stream.metrics.Start,
-				ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
-				ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
-				Text:               strings.TrimLeft(m.stream.text, "\n"),
-				TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
-				ToolCalls:          entries,
-				ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), InferenceDuractionMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
-				TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
-				OutputTokens:       m.stream.metrics.TotalOutputTokens(),
-				DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
-				TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
-				StopReason:         "tool_calls",
-				// InputTokens = 0 — finalized after loop
-			})
-
-			// Store msgIdx for auth resume.
-			m.stream.msgIdx = msgIdx
-
-			// entries now shares the underlying array with the saved message's ToolCalls,
-			// so mutations to entries[i] are mutations to the persisted message.
-			startIndex = 0
+	if m.stream.authorizationCtx != nil {
+		// Resuming after auth — entries already live in the saved message.
+		msgIdx = m.stream.msgIdx
+		startIndex = m.stream.pendingToolIndex
+		entries = m.session.file.Messages[msgIdx].ToolCalls
+	} else {
+		// Initial call from handleStreamEvent: build and save before the loop.
+		entries = make([]config.ToolCallEntry, len(partials))
+		for i, p := range partials {
+			entries[i] = buildInstructionEntry(p)
+			entries[i].Execution.Status = tools.ResultStatusPending
 		}
+
+		// Save eagerly with all metrics known at stream end.
+		// Only InputTokens (tool execution result tokens) is unknown — finalized after loop.
+		msgIdx = m.appendAssistantMsg(config.Message{
+			ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+			Role:               config.RoleAssistant,
+			CreatedAt:          m.stream.metrics.Start,
+			ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
+			ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
+			Text:               strings.TrimLeft(m.stream.text, "\n"),
+			TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
+			ToolCalls:          entries,
+			ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), InferenceDuractionMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
+			TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
+			OutputTokens:       m.stream.metrics.TotalOutputTokens(),
+			DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
+			TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
+			StopReason:         "tool_calls",
+			// InputTokens = 0 — finalized after loop
+		})
+
+		// Store msgIdx for auth resume.
+		m.stream.msgIdx = msgIdx
+
+		// entries now shares the underlying array with the saved message's ToolCalls,
+		// so mutations to entries[i] are mutations to the persisted message.
+		startIndex = 0
 	}
 
 	// Captured from auth result if the user provided instructions (approved + instructions).

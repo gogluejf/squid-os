@@ -12,18 +12,19 @@ import (
 	"time"
 
 	"squid-os/internal/config"
+
 	"github.com/zendev-sh/goai/provider"
 	goai_openai "github.com/zendev-sh/goai/provider/openai"
 )
 
 const (
-	codexClientID         = "app_EMoamEEZ73f0CkXaXp7hrann"
-	codexAuthURL          = "https://auth.openai.com/oauth/authorize"
-	codexTokenURL         = "https://auth.openai.com/oauth/token"
-	codexDeviceAuth       = "https://auth.openai.com/api/accounts/deviceauth/usercode"
-	codexDeviceCode       = "https://auth.openai.com/api/accounts/deviceauth/token"
-	codexDeviceUser       = "https://auth.openai.com/codex/device"
-	codexDeviceCallback   = "https://auth.openai.com/deviceauth/callback"
+	codexClientID       = "app_EMoamEEZ73f0CkXaXp7hrann"
+	codexAuthURL        = "https://auth.openai.com/oauth/authorize"
+	codexTokenURL       = "https://auth.openai.com/oauth/token"
+	codexDeviceAuth     = "https://auth.openai.com/api/accounts/deviceauth/usercode"
+	codexDeviceCode     = "https://auth.openai.com/api/accounts/deviceauth/token"
+	codexDeviceUser     = "https://auth.openai.com/codex/device"
+	codexDeviceCallback = "https://auth.openai.com/deviceauth/callback"
 )
 
 func init() {
@@ -51,7 +52,7 @@ func NewCodexProvider(settings *config.ProviderSettings) *CodexProvider {
 
 // --- Provider interface ---
 
-func (o *CodexProvider) Name() string { return config.ProviderOpenAICodex }
+func (o *CodexProvider) Name() string            { return config.ProviderOpenAICodex }
 func (o *CodexProvider) Dialect() config.Dialect { return config.DialectOpenAICodex }
 func (o *CodexProvider) SupportedAuth() []config.AuthMethod {
 	return []config.AuthMethod{config.AuthOAuth, config.AuthAPIKey}
@@ -131,8 +132,8 @@ func (o *CodexProvider) BuildGoAIModel(model string) (provider.LanguageModel, bo
 	default:
 		return nil, false, fmt.Errorf("codex: unsupported auth method: %s", o.creds().ActiveAuthMethod)
 	}
-	// Codex/Qwen-like reasoning path can embed thinking in text content.
-	return goai_openai.Chat(model, opts...), true, nil
+
+	return goai_openai.Chat(model, opts...), false, nil
 }
 
 func (o *CodexProvider) refreshOAuth() error {
@@ -370,16 +371,16 @@ func (o *CodexProvider) StartOAuth(redirectURI string) (string, error) {
 	o.state = state
 
 	params := url.Values{
-		"client_id":                 {codexClientID},
-		"response_type":             {"code"},
-		"code_challenge":            {challenge},
-		"code_challenge_method":     {"S256"},
-		"redirect_uri":              {redirectURI},
-		"state":                     {state},
-		"scope":                     {"openid profile email offline_access"},
-		"codex_cli_simplified_flow": {"true"},
+		"client_id":                  {codexClientID},
+		"response_type":              {"code"},
+		"code_challenge":             {challenge},
+		"code_challenge_method":      {"S256"},
+		"redirect_uri":               {redirectURI},
+		"state":                      {state},
+		"scope":                      {"openid profile email offline_access"},
+		"codex_cli_simplified_flow":  {"true"},
 		"id_token_add_organizations": {"true"},
-		"originator":                {"opencode"},
+		"originator":                 {"opencode"},
 	}
 
 	return codexAuthURL + "?" + params.Encode(), nil
@@ -447,10 +448,10 @@ func (o *CodexProvider) GetCredentials() *config.ProviderCreds {
 	return &creds
 }
 
-func (o *CodexProvider) CodeVerifier() string           { return o.codeVerifier }
-func (o *CodexProvider) SetCodeVerifier(v string)       { o.codeVerifier = v }
-func (o *CodexProvider) State() string                  { return o.state }
-func (o *CodexProvider) GetDeviceAuthID() string        { return o.deviceAuthID }
+func (o *CodexProvider) CodeVerifier() string     { return o.codeVerifier }
+func (o *CodexProvider) SetCodeVerifier(v string) { o.codeVerifier = v }
+func (o *CodexProvider) State() string            { return o.state }
+func (o *CodexProvider) GetDeviceAuthID() string  { return o.deviceAuthID }
 func (o *CodexProvider) SetDeviceState(id, code string) {
 	o.deviceAuthID = id
 	o.userCode = code

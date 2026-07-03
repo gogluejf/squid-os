@@ -56,13 +56,13 @@ func (m Model) View() string {
 
 	// Component overlay (between viewport and input)
 	switch m.mode {
-		case ModeComponent:
-			if m.activeComponent != nil {
-				sections = append(sections, m.activeComponent.Render(m.width))
-			}
-		case ModeHistorySearch:
-			sections = append(sections, m.historySearch.Render(m.width))
+	case ModeComponent:
+		if m.activeComponent != nil {
+			sections = append(sections, m.activeComponent.Render(m.width))
 		}
+	case ModeHistorySearch:
+		sections = append(sections, m.historySearch.Render(m.width))
+	}
 
 	// Status line: notification (left) + attachment chip (right)
 	// Skip notification when in history search mode (the search overlay replaces it)
@@ -204,10 +204,17 @@ func (m Model) buildFooterData() ui.FooterData {
 		ThinkingOn:        m.settings.Thinking.Enabled,
 		AuthorizationMode: m.settings.Authorization,
 		TokPerSec:         jitterTokenRate(m.stream.metrics.AvgTokenPerSec(), m.stream.metrics.LastActivity(), m.stream.active),
-		SeqDurMs:    func() int64 { if m.stream.active { ss, _ := m.buildLiveSeqStat(); return ss.DurationMs } else { return 0 } }(),
-		ContextWindow:     m.settings.ContextWindow,
-		WorkingDir:        m.workingDir,
-		Skill:             m.session.file.Session.Skill,
+		SeqDurMs: func() int64 {
+			if m.stream.active {
+				ss, _ := m.buildLiveSeqStat()
+				return ss.DurationMs
+			} else {
+				return 0
+			}
+		}(),
+		ContextWindow: m.settings.ContextWindow,
+		WorkingDir:    m.workingDir,
+		Skill:         m.session.file.Session.Skill,
 	}
 }
 
@@ -236,5 +243,3 @@ func (m *Model) buildLiveSeqStat() (*config.SequenceStat, string) {
 	base.Add(live)
 	return &base, m.session.file.Messages[seqIdx].ID
 }
-
-

@@ -67,6 +67,7 @@ func (o *CodexProvider) StaticModels() []string {
 		"gpt-5.3-codex",
 		"gpt-5.4",
 		"gpt-5.4-mini",
+		"gpt-5.5",
 	}
 }
 func (o *CodexProvider) DefaultBaseURL() string { return "https://chatgpt.com" }

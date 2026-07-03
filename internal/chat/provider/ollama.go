@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -32,7 +33,7 @@ func newOllamaProvider(settings *config.ProviderSettings) *OllamaProvider {
 func (o *OllamaProvider) Name() string                     { return config.ProviderOllama }
 func (o *OllamaProvider) Dialect() config.Dialect          { return config.DialectOpenAICompatible }
 func (o *OllamaProvider) SupportedAuth() []config.AuthMethod { return []config.AuthMethod{config.AuthNone} }
-func (o *OllamaProvider) StaticModels() []string           { return nil }
+func (o *OllamaProvider) StaticModels() []ModelEntry           { return nil }
 func (o *OllamaProvider) DefaultBaseURL() string           { return "http://localhost:11434" }
 func (o *OllamaProvider) RequiresBaseURL() bool            { return true }
 func (o *OllamaProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
@@ -66,7 +67,7 @@ func (o *OllamaProvider) BuildGoAIModel(model string) (goai_provider.LanguageMod
 	return ollama.Chat(model, ollama.WithBaseURL(base)), false, nil
 }
 
-func (o *OllamaProvider) ListModels(ctx context.Context) ([]string, error) {
+func (o *OllamaProvider) ListModels(ctx context.Context) ([]ModelEntry, error) {
 	base := o.settings.BaseURL
 	if base == "" {
 		base = o.DefaultBaseURL()
@@ -96,9 +97,54 @@ func (o *OllamaProvider) ListModels(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 
-	models := make([]string, 0, len(result.Data))
+	models := make([]ModelEntry, 0, len(result.Data))
 	for _, m := range result.Data {
-		models = append(models, m.ID)
+		models = append(models, ModelEntry{ID: m.ID})
 	}
 	return models, nil
+}
+
+func (o *OllamaProvider) ModelDetails(ctx context.Context, modelID string) *ModelEntry {
+	base := o.settings.BaseURL
+	if base == "" {
+		base = o.DefaultBaseURL()
+	}
+	payload, err := json.Marshal(map[string]string{"model": modelID})
+	if err != nil {
+		return &ModelEntry{ID: modelID, Provider: config.ProviderOllama}
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", base+"/api/show", bytes.NewReader(payload))
+	if err != nil {
+		return &ModelEntry{ID: modelID, Provider: config.ProviderOllama}
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return &ModelEntry{ID: modelID, Provider: config.ProviderOllama}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return &ModelEntry{ID: modelID, Provider: config.ProviderOllama}
+	}
+
+	var result struct {
+		ModelInfo map[string]interface{} `json:"model_info"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return &ModelEntry{ID: modelID, Provider: config.ProviderOllama}
+	}
+
+	entry := &ModelEntry{ID: modelID, Provider: config.ProviderOllama}
+
+	if result.ModelInfo != nil {
+		if ctxLen, ok := result.ModelInfo["llama.context_length"]; ok {
+			if v, ok := ctxLen.(float64); ok {
+				entry.ContextLength = int(v)
+			}
+		}
+	}
+	return entry
 }

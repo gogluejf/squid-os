@@ -35,7 +35,7 @@ func (v *VLLMProvider) Dialect() config.Dialect { return config.DialectOpenAICom
 func (v *VLLMProvider) SupportedAuth() []config.AuthMethod {
 	return []config.AuthMethod{config.AuthNone, config.AuthAPIKey}
 }
-func (v *VLLMProvider) StaticModels() []string { return nil }
+func (v *VLLMProvider) StaticModels() []ModelEntry { return nil }
 func (v *VLLMProvider) DefaultBaseURL() string { return "http://localhost:8000" }
 func (v *VLLMProvider) RequiresBaseURL() bool  { return true }
 func (v *VLLMProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
@@ -76,7 +76,7 @@ func (v *VLLMProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel
 	return vllm.Chat(model, opts...), true, nil
 }
 
-func (v *VLLMProvider) ListModels(ctx context.Context) ([]string, error) {
+func (v *VLLMProvider) ListModels(ctx context.Context) ([]ModelEntry, error) {
 	base := normalizeOpenAICompatBaseURL(v.settings.BaseURL, v.DefaultBaseURL())
 	req, err := http.NewRequestWithContext(ctx, "GET", base+"/models", nil)
 	if err != nil {
@@ -99,16 +99,24 @@ func (v *VLLMProvider) ListModels(ctx context.Context) ([]string, error) {
 
 	var result struct {
 		Data []struct {
-			ID string `json:"id"`
+			ID          string `json:"id"`
+			MaxModelLen int    `json:"max_model_len"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
 
-	models := make([]string, 0, len(result.Data))
+	models := make([]ModelEntry, 0, len(result.Data))
 	for _, m := range result.Data {
-		models = append(models, m.ID)
+		models = append(models, ModelEntry{
+			ID:            m.ID,
+			ContextLength: m.MaxModelLen,
+		})
 	}
 	return models, nil
+}
+
+func (v *VLLMProvider) ModelDetails(ctx context.Context, modelID string) *ModelEntry {
+	return &ModelEntry{ID: modelID, Provider: config.ProviderVLLM}
 }

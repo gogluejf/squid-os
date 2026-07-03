@@ -57,17 +57,17 @@ func (o *CodexProvider) Dialect() config.Dialect { return config.DialectOpenAICo
 func (o *CodexProvider) SupportedAuth() []config.AuthMethod {
 	return []config.AuthMethod{config.AuthOAuth, config.AuthAPIKey}
 }
-func (o *CodexProvider) StaticModels() []string {
-	return []string{
-		"gpt-5.1-codex",
-		"gpt-5.1-codex-max",
-		"gpt-5.1-codex-mini",
-		"gpt-5.2",
-		"gpt-5.2-codex",
-		"gpt-5.3-codex",
-		"gpt-5.4",
-		"gpt-5.4-mini",
-		"gpt-5.5",
+func (o *CodexProvider) StaticModels() []ModelEntry {
+	return []ModelEntry{
+		{ID: "gpt-5.1-codex", ContextLength: 400_000},
+		{ID: "gpt-5.1-codex-max", ContextLength: 400_000},
+		{ID: "gpt-5.1-codex-mini", ContextLength: 400_000},
+		{ID: "gpt-5.2", ContextLength: 400_000},
+		{ID: "gpt-5.2-codex", ContextLength: 400_000},
+		{ID: "gpt-5.3", ContextLength: 256_000},
+		{ID: "gpt-5.4", ContextLength: 400_000},
+		{ID: "gpt-5.4-mini", ContextLength: 400_000},
+		{ID: "gpt-5.5", ContextLength: 256_000},
 	}
 }
 func (o *CodexProvider) DefaultBaseURL() string { return "https://chatgpt.com" }
@@ -187,7 +187,7 @@ func (o *CodexProvider) refreshOAuth() error {
 	return nil
 }
 
-func (o *CodexProvider) ListModels(ctx context.Context) ([]string, error) {
+func (o *CodexProvider) ListModels(ctx context.Context) ([]ModelEntry, error) {
 	token := o.getCurrentToken()
 	if token == "" {
 		return nil, fmt.Errorf("codex: no credentials configured for model listing")
@@ -231,14 +231,18 @@ func (o *CodexProvider) ListModels(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 
-		models := make([]string, 0, len(result.Data))
+		models := make([]ModelEntry, 0, len(result.Data))
 		for _, m := range result.Data {
-			models = append(models, m.ID)
+			models = append(models, ModelEntry{ID: m.ID})
 		}
 		return models, nil
 	default:
 		return nil, fmt.Errorf("codex: unsupported auth method: %s", o.creds().ActiveAuthMethod)
 	}
+}
+
+func (o *CodexProvider) ModelDetails(ctx context.Context, modelID string) *ModelEntry {
+	return &ModelEntry{ID: modelID, Provider: config.ProviderOpenAICodex}
 }
 
 // --- Device auth ---

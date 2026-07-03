@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/chat"
+	"squid-os/internal/chat/provider"
 )
 
 // streamEventMsg wraps a StreamEvent for the Bubble Tea message loop
@@ -26,7 +27,7 @@ func streamTickCmd() tea.Cmd {
 
 // contextRefreshMsg silently updates the context window from a background scan
 type contextRefreshMsg struct {
-	models []chat.ModelEntry
+	models []provider.ModelEntry
 }
 
 // waitForStreamEvent blocks on the stream channel and returns the next event as a Tea message.

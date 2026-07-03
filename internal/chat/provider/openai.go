@@ -14,19 +14,20 @@ import (
 	"time"
 
 	"squid-os/internal/config"
+
 	"github.com/zendev-sh/goai/provider"
 	goai_openai "github.com/zendev-sh/goai/provider/openai"
 )
 
 const (
-	openaiClientID        = "app_EMoamEEZ73f0CkXaXp7hrann"
-	openaiIssuer          = "https://auth.openai.com"
-	openaiAuthURL         = "https://auth.openai.com/oauth/authorize"
-	openaiTokenURL        = "https://auth.openai.com/oauth/token"
-	openaiDeviceAuth      = "https://auth.openai.com/api/accounts/deviceauth/usercode"
-	openaiDeviceCode      = "https://auth.openai.com/api/accounts/deviceauth/token"
-	openaiDeviceUser      = "https://auth.openai.com/codex/device"
-	openaiDeviceCallback  = "https://auth.openai.com/deviceauth/callback"
+	openaiClientID       = "app_EMoamEEZ73f0CkXaXp7hrann"
+	openaiIssuer         = "https://auth.openai.com"
+	openaiAuthURL        = "https://auth.openai.com/oauth/authorize"
+	openaiTokenURL       = "https://auth.openai.com/oauth/token"
+	openaiDeviceAuth     = "https://auth.openai.com/api/accounts/deviceauth/usercode"
+	openaiDeviceCode     = "https://auth.openai.com/api/accounts/deviceauth/token"
+	openaiDeviceUser     = "https://auth.openai.com/codex/device"
+	openaiDeviceCallback = "https://auth.openai.com/deviceauth/callback"
 )
 
 func init() {
@@ -54,23 +55,26 @@ func NewOpenAIProvider(settings *config.ProviderSettings) *OpenAIProvider {
 
 // --- Provider interface ---
 
-func (o *OpenAIProvider) Name() string                         { return config.ProviderOpenAI }
-func (o *OpenAIProvider) Dialect() config.Dialect              { return config.DialectOpenAICompatible }
-func (o *OpenAIProvider) SupportedAuth() []config.AuthMethod   { return []config.AuthMethod{config.AuthAPIKey, config.AuthOAuth} }
-func (o *OpenAIProvider) StaticModels() []string {
-	return []string{
-		"gpt-4o",
-		"gpt-4o-mini",
-		"gpt-4.1",
-		"gpt-4.1-mini",
-		"gpt-4.5",
-		"gpt-5",
-		"gpt-5.4",
-		"gpt-5.4-mini",
+func (o *OpenAIProvider) Name() string            { return config.ProviderOpenAI }
+func (o *OpenAIProvider) Dialect() config.Dialect { return config.DialectOpenAICompatible }
+func (o *OpenAIProvider) SupportedAuth() []config.AuthMethod {
+	return []config.AuthMethod{config.AuthAPIKey, config.AuthOAuth}
+}
+func (o *OpenAIProvider) StaticModels() []ModelEntry {
+	return []ModelEntry{
+		{ID: "gpt-5.1-codex", ContextLength: 400_000},
+		{ID: "gpt-5.1-codex-max", ContextLength: 400_000},
+		{ID: "gpt-5.1-codex-mini", ContextLength: 400_000},
+		{ID: "gpt-5.2", ContextLength: 1_050_000},
+		{ID: "gpt-5.2-codex", ContextLength: 400_000},
+		{ID: "gpt-5.3-codex", ContextLength: 400_000},
+		{ID: "gpt-5.4", ContextLength: 1_050_000},
+		{ID: "gpt-5.4-mini", ContextLength: 1_050_000},
+		{ID: "gpt-5.5", ContextLength: 1_050_000},
 	}
 }
-func (o *OpenAIProvider) DefaultBaseURL() string               { return "https://api.openai.com" }
-func (o *OpenAIProvider) RequiresBaseURL() bool                { return false }
+func (o *OpenAIProvider) DefaultBaseURL() string { return "https://api.openai.com" }
+func (o *OpenAIProvider) RequiresBaseURL() bool  { return false }
 func (o *OpenAIProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
 	if !thinking {
 		return nil
@@ -107,8 +111,8 @@ func (o *OpenAIProvider) BuildGoAIModel(model string) (provider.LanguageModel, b
 		opts = append(opts, goai_openai.WithTokenSource(ts))
 		if o.creds().OAuth != nil && o.creds().OAuth.AccountID != "" {
 			opts = append(opts, goai_openai.WithHeaders(map[string]string{
-				"Originator":       "opencode",
-				"User-Agent":       "squid-os",
+				"Originator":         "opencode",
+				"User-Agent":         "squid-os",
 				"ChatGPT-Account-Id": o.creds().OAuth.AccountID,
 			}))
 		} else {
@@ -171,7 +175,7 @@ func (o *OpenAIProvider) refreshOAuth() error {
 	return nil
 }
 
-func (o *OpenAIProvider) ListModels(ctx context.Context) ([]string, error) {
+func (o *OpenAIProvider) ListModels(ctx context.Context) ([]ModelEntry, error) {
 	baseURL := o.settings.BaseURL
 	if baseURL == "" {
 		baseURL = "https://api.openai.com"
@@ -208,9 +212,9 @@ func (o *OpenAIProvider) ListModels(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 
-	models := make([]string, 0, len(result.Data))
+	models := make([]ModelEntry, 0, len(result.Data))
 	for _, m := range result.Data {
-		models = append(models, m.ID)
+		models = append(models, ModelEntry{ID: m.ID})
 	}
 	return models, nil
 }
@@ -344,16 +348,16 @@ func (o *OpenAIProvider) StartOAuth(redirectURI string) (string, error) {
 	o.state = state
 
 	params := url.Values{
-		"client_id":                 {openaiClientID},
-		"response_type":             {"code"},
-		"code_challenge":            {challenge},
-		"code_challenge_method":     {"S256"},
-		"redirect_uri":              {redirectURI},
-		"state":                     {state},
-		"scope":                     {"openid profile email offline_access"},
-		"codex_cli_simplified_flow": {"true"},
+		"client_id":                  {openaiClientID},
+		"response_type":              {"code"},
+		"code_challenge":             {challenge},
+		"code_challenge_method":      {"S256"},
+		"redirect_uri":               {redirectURI},
+		"state":                      {state},
+		"scope":                      {"openid profile email offline_access"},
+		"codex_cli_simplified_flow":  {"true"},
 		"id_token_add_organizations": {"true"},
-		"originator":                {"opencode"},
+		"originator":                 {"opencode"},
 	}
 
 	return openaiAuthURL + "?" + params.Encode(), nil
@@ -419,10 +423,10 @@ func (o *OpenAIProvider) GetCredentials() *config.ProviderCreds {
 	return &creds
 }
 
-func (o *OpenAIProvider) CodeVerifier() string   { return o.codeVerifier }
+func (o *OpenAIProvider) CodeVerifier() string     { return o.codeVerifier }
 func (o *OpenAIProvider) SetCodeVerifier(v string) { o.codeVerifier = v }
-func (o *OpenAIProvider) State() string           { return o.state }
-func (o *OpenAIProvider) GetDeviceAuthID() string { return o.deviceAuthID }
+func (o *OpenAIProvider) State() string            { return o.state }
+func (o *OpenAIProvider) GetDeviceAuthID() string  { return o.deviceAuthID }
 func (o *OpenAIProvider) SetDeviceState(id, code string) {
 	o.deviceAuthID = id
 	o.userCode = code
@@ -470,4 +474,8 @@ func generateState() string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func (o *OpenAIProvider) ModelDetails(ctx context.Context, modelID string) *ModelEntry {
+	return &ModelEntry{ID: modelID, Provider: config.ProviderOpenAI}
 }

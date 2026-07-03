@@ -1,4 +1,4 @@
-package chat
+package provider
 
 import (
 	"context"
@@ -6,11 +6,10 @@ import (
 	"strings"
 	"sync"
 
-	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
 )
 
-// ModelEntry represents a discovered model with its provider
+// ModelEntry represents a discovered model with its provider.
 type ModelEntry struct {
 	ID            string
 	Provider      string
@@ -27,7 +26,7 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 		wg     sync.WaitGroup
 	)
 
-	for _, name := range provider.All() {
+	for _, name := range All() {
 		wg.Add(1)
 		go func(name string) {
 			defer wg.Done()
@@ -50,7 +49,7 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 				s.Name = name
 			}
 
-			if !provider.IsConfigured(&s) {
+			if !IsConfigured(&s) {
 				mu.Lock()
 				models = append(models, ModelEntry{
 					ID:          "<not configured>",
@@ -61,7 +60,7 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 				return
 			}
 
-			p := provider.Lookup(name, &s)
+			p := Lookup(name, &s)
 			if p == nil {
 				mu.Lock()
 				models = append(models, ModelEntry{
@@ -74,14 +73,15 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 			}
 
 			// 1. Add static models — always available
-			for _, id := range p.StaticModels() {
+			for _, entry := range p.StaticModels() {
+				entry.Provider = name
 				mu.Lock()
-				models = append(models, ModelEntry{ID: id, Provider: name})
+				models = append(models, entry)
 				mu.Unlock()
 			}
 
 			// 2. Fetch models via the provider's ListModels
-			modelIDs, err := p.ListModels(ctx)
+			listEntries, err := p.ListModels(ctx)
 			if err != nil {
 				mu.Lock()
 				if isAuthError(err) {
@@ -114,9 +114,10 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 					existing[e.ID] = true
 				}
 			}
-			for _, id := range modelIDs {
-				if !existing[id] {
-					models = append(models, ModelEntry{ID: id, Provider: name})
+			for _, entry := range listEntries {
+				if !existing[entry.ID] {
+					entry.Provider = name
+					models = append(models, entry)
 				}
 			}
 			mu.Unlock()
@@ -152,7 +153,7 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 	return models
 }
 
-// ModelIDs extracts just the IDs from model entries
+// ModelIDs extracts just the IDs from model entries.
 func ModelIDs(entries []ModelEntry) []string {
 	ids := make([]string, len(entries))
 	for i, e := range entries {

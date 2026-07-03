@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"squid-os/internal/chat"
+	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
 )
 
@@ -146,7 +146,7 @@ func formatContextLength(ctxLen int) string {
 
 // refreshContextWindow looks up the current model in the entries and updates
 // settings.ContextWindow, then persists to disk.
-func (m *Model) refreshContextWindow(entries []chat.ModelEntry) {
+func (m *Model) refreshContextWindow(entries []provider.ModelEntry) {
 	for _, e := range entries {
 		if e.ID == m.settings.Model && e.Provider == m.settings.Provider {
 			if e.ContextLength != m.settings.ContextWindow {

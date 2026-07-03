@@ -27,11 +27,17 @@ type Provider interface {
 	// GoAI integration
 	// BuildGoAIModel returns a GoAI LanguageModel for the given model ID.
 	// The bool indicates whether the provider needs text-level think tag parsing
-	// (e.g. reasoning models that embed thinking in text content).
+	// (e.g. reasoning models that embed thinking in normal text rather than as native reasoning chunks).
 	BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error)
 
-	// ListModels returns available model IDs via the provider's API.
-	ListModels(ctx context.Context) ([]string, error)
+	// ListModels returns available model entries via the provider's API.
+	// Each entry includes the model ID and optional context length.
+	ListModels(ctx context.Context) ([]ModelEntry, error)
+
+	// ModelDetails attempts to resolve additional metadata for a model
+	// (e.g. context length) from the provider. Always returns a non-nil entry
+	// with at least ID and Provider set.
+	ModelDetails(ctx context.Context, modelID string) *ModelEntry
 
 	// RequestProviderOptions returns provider-specific GoAI request options.
 	// Most providers return nil. This is used for backend-specific request-shaping
@@ -40,7 +46,7 @@ type Provider interface {
 
 	// Configuration
 	SupportedAuth() []config.AuthMethod
-	StaticModels() []string
+	StaticModels() []ModelEntry
 	DefaultBaseURL() string
 
 	// RequiresBaseURL returns true if this provider needs a user-provided

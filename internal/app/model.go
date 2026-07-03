@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"squid-os/internal/chat"
+	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
@@ -15,7 +15,7 @@ import (
 
 // modelsLoadedMsg signals that model scanning completed.
 type modelsLoadedMsg struct {
-	models []chat.ModelEntry
+	models []provider.ModelEntry
 }
 
 // scanModelsCmd launches an async model scan and returns the result as a modelsLoadedMsg.
@@ -23,7 +23,7 @@ func (m Model) scanModelsCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		models := chat.ScanModels(ctx, m.endpoints)
+		models := provider.ScanModels(ctx, m.endpoints)
 		return modelsLoadedMsg{models: models}
 	}
 }
@@ -44,7 +44,7 @@ func (m *Model) showModelPicker() tea.Cmd {
 }
 
 // buildModelPicker constructs the Picker from a model entry list and sets it on the model.
-func (m *Model) buildModelPicker(entries []chat.ModelEntry) {
+func (m *Model) buildModelPicker(entries []provider.ModelEntry) {
 	items := make([]component.PickerItem, 0, len(entries))
 	for _, e := range entries {
 		if e.NeedsConfig {
@@ -87,7 +87,7 @@ func (m *Model) buildModelPicker(entries []chat.ModelEntry) {
 			}
 
 			// Check if this is a sentinel (NeedsConfig) entry
-			var entry *chat.ModelEntry
+			var entry *provider.ModelEntry
 			for i := range entries {
 				if entries[i].ID == modelID || (entries[i].NeedsConfig && entries[i].Provider == modelID) {
 					entry = &entries[i]
@@ -110,10 +110,23 @@ func (m *Model) buildModelPicker(entries []chat.ModelEntry) {
 			}
 
 			// Normal model selection
+			// Try to resolve context length if we don't have it yet
+			contextLength := entry.ContextLength
+			if contextLength == 0 && !entry.NeedsConfig {
+				if p := provider.Lookup(entry.Provider, config.ResolveProviderSettings(m.endpoints, entry.Provider)); p != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					detail := p.ModelDetails(ctx, entry.ID)
+					cancel()
+					if detail != nil && detail.ContextLength > 0 {
+						contextLength = detail.ContextLength
+					}
+				}
+			}
+
 			m.session.updateConfigMsg(entry.Provider, entry.ID, m.settings.Thinking)
 			m.settings.Model = entry.ID
 			m.settings.Provider = entry.Provider
-			m.settings.ContextWindow = entry.ContextLength
+			m.settings.ContextWindow = contextLength
 			m.session.invalidateRenderAll()
 			_ = config.SaveSettings(m.paths, m.settings)
 			m.setNotification(ui.NotificationInfo, "switched to model: "+modelBasename(m.settings.Model))

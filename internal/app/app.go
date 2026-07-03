@@ -11,7 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"squid-os/internal/chat"
+	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
 	"squid-os/internal/skills"
 	"squid-os/internal/tools"
@@ -36,7 +36,7 @@ type Model struct {
 	historySearch ui.HistorySearchOverlay
 
 	// Pickers
-	modelEntries []chat.ModelEntry
+	modelEntries []provider.ModelEntry
 	pickerPayload interface{}
 
 	// Active component (Picker, Prompt, or Question overlay)
@@ -180,7 +180,7 @@ func (m *Model) refreshContextCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		models := chat.ScanModels(ctx, m.endpoints)
+		models := provider.ScanModels(ctx, m.endpoints)
 		return contextRefreshMsg{models: models}
 	}
 }

@@ -32,7 +32,7 @@ func newLiteLLMProvider(settings *config.ProviderSettings) *LiteLLMProvider {
 func (l *LiteLLMProvider) Name() string                         { return config.ProviderLiteLLM }
 func (l *LiteLLMProvider) Dialect() config.Dialect              { return config.DialectOpenAICompatible }
 func (l *LiteLLMProvider) SupportedAuth() []config.AuthMethod   { return []config.AuthMethod{config.AuthNone, config.AuthAPIKey} }
-func (l *LiteLLMProvider) StaticModels() []string               { return nil }
+func (l *LiteLLMProvider) StaticModels() []ModelEntry               { return nil }
 func (l *LiteLLMProvider) DefaultBaseURL() string               { return "http://localhost:4000" }
 func (l *LiteLLMProvider) RequiresBaseURL() bool                { return true }
 func (l *LiteLLMProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
@@ -66,7 +66,7 @@ func (l *LiteLLMProvider) BuildGoAIModel(model string) (goai_provider.LanguageMo
 	return compat.Chat(model, opts...), false, nil
 }
 
-func (l *LiteLLMProvider) ListModels(ctx context.Context) ([]string, error) {
+func (l *LiteLLMProvider) ListModels(ctx context.Context) ([]ModelEntry, error) {
 	base := normalizeOpenAICompatBaseURL(l.settings.BaseURL, l.DefaultBaseURL())
 	req, err := http.NewRequestWithContext(ctx, "GET", base+"/models", nil)
 	if err != nil {
@@ -89,16 +89,24 @@ func (l *LiteLLMProvider) ListModels(ctx context.Context) ([]string, error) {
 
 	var result struct {
 		Data []struct {
-			ID string `json:"id"`
+			ID          string `json:"id"`
+			MaxModelLen int    `json:"max_model_len"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
 
-	models := make([]string, 0, len(result.Data))
+	models := make([]ModelEntry, 0, len(result.Data))
 	for _, m := range result.Data {
-		models = append(models, m.ID)
+		models = append(models, ModelEntry{
+			ID:            m.ID,
+			ContextLength: m.MaxModelLen,
+		})
 	}
 	return models, nil
+}
+
+func (l *LiteLLMProvider) ModelDetails(ctx context.Context, modelID string) *ModelEntry {
+	return &ModelEntry{ID: modelID, Provider: config.ProviderLiteLLM}
 }

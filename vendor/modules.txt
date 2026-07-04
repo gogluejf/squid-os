@@ -160,12 +160,19 @@ github.com/zendev-sh/goai/internal/sse
 github.com/zendev-sh/goai/provider
 github.com/zendev-sh/goai/provider/anthropic
 github.com/zendev-sh/goai/provider/compat
+github.com/zendev-sh/goai/provider/deepinfra
+github.com/zendev-sh/goai/provider/deepseek
 github.com/zendev-sh/goai/provider/fireworks
 github.com/zendev-sh/goai/provider/google
+github.com/zendev-sh/goai/provider/groq
+github.com/zendev-sh/goai/provider/minimax
 github.com/zendev-sh/goai/provider/ollama
 github.com/zendev-sh/goai/provider/openai
 github.com/zendev-sh/goai/provider/openrouter
+github.com/zendev-sh/goai/provider/requesty
+github.com/zendev-sh/goai/provider/together
 github.com/zendev-sh/goai/provider/vllm
+github.com/zendev-sh/goai/provider/xai
 # golang.org/x/net v0.38.0
 ## explicit; go 1.23.0
 golang.org/x/net/html

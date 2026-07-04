@@ -36,6 +36,13 @@ const (
 	ProviderGemini      = "gemini"
 	ProviderOpenRouter  = "openrouter"
 	ProviderFireworks   = "fireworks"
+	ProviderXAI         = "xai"
+	ProviderGroq        = "groq"
+	ProviderDeepSeek    = "deepseek"
+	ProviderMiniMax     = "minimax"
+	ProviderTogether    = "together"
+	ProviderDeepInfra   = "deepinfra"
+	ProviderRequesty    = "requesty"
 )
 
 // ProviderSettings holds what the user configured for a provider — stored in endpoints.json.

@@ -1,0 +1,550 @@
+// Package azure provides an Azure OpenAI language model implementation for GoAI.
+//
+// Azure delegates to the OpenAI provider with a custom HTTP transport that
+// rewrites URLs to Azure's deployment-based format and injects Azure auth.
+// This matches Vercel AI SDK's pattern where @ai-sdk/azure creates an
+// OpenAIChatLanguageModel with a custom URL builder.
+//
+// Usage:
+//
+//	model := azure.Chat("gpt-4o",
+//		azure.WithAPIKey("your-api-key"),
+//		azure.WithEndpoint("https://your-resource.openai.azure.com"),
+//	)
+//	result, err := goai.GenerateText(ctx, model, goai.WithPrompt("Hello"))
+package azure
+
+import (
+	"cmp"
+	"context"
+	"fmt"
+	"maps"
+	"net/http"
+	"os"
+	"strings"
+
+	"github.com/zendev-sh/goai/provider"
+	"github.com/zendev-sh/goai/provider/anthropic"
+	"github.com/zendev-sh/goai/provider/openai"
+)
+
+var (
+	_ provider.LanguageModel = (*chatCompletionsModel)(nil)
+	_ provider.CapableModel  = (*chatCompletionsModel)(nil)
+)
+
+const defaultAPIVersion = "2025-03-01-preview"
+
+// Option configures the Azure OpenAI provider.
+type Option func(*options)
+
+type options struct {
+	apiKey                 string
+	tokenSource            provider.TokenSource
+	endpoint               string
+	headers                map[string]string
+	httpClient             *http.Client
+	apiVersion             string
+	useDeploymentBasedURLs bool
+}
+
+// WithAPIKey sets the Azure API key.
+func WithAPIKey(key string) Option {
+	return func(o *options) {
+		o.apiKey = key
+	}
+}
+
+// WithTokenSource sets a dynamic token source (e.g. Managed Identity).
+func WithTokenSource(ts provider.TokenSource) Option {
+	return func(o *options) {
+		o.tokenSource = ts
+	}
+}
+
+// WithEndpoint sets the Azure OpenAI endpoint URL.
+func WithEndpoint(endpoint string) Option {
+	return func(o *options) {
+		o.endpoint = endpoint
+	}
+}
+
+// WithHeaders sets additional HTTP headers sent with every request.
+func WithHeaders(h map[string]string) Option {
+	return func(o *options) {
+		o.headers = h
+	}
+}
+
+// WithHTTPClient sets a custom HTTP client for all requests.
+func WithHTTPClient(c *http.Client) Option {
+	return func(o *options) {
+		o.httpClient = c
+	}
+}
+
+// WithAPIVersion sets the Azure OpenAI API version used in the
+// `api-version` query parameter. Defaults to "2025-03-01-preview".
+//
+// IMPORTANT: api-version is ONLY honoured on the legacy deployment-based
+// path (opt in via WithDeploymentBasedURLs(true)). Azure's v1 GA spec
+// removed the parameter ("v1 API simplifies authentication, removes the
+// need for dated `api-version` parameters"); sending it on the v1 path
+// is rejected by spec-strict resources with "API version not supported".
+// Preview features on the v1 path opt in via custom headers
+// (e.g. `aoai-evals: preview`) or via path segments containing `alpha`/
+// `beta`, not via api-version.
+//
+// Reference:
+// https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle
+func WithAPIVersion(v string) Option {
+	return func(o *options) {
+		o.apiVersion = v
+	}
+}
+
+// WithDeploymentBasedURLs enables the legacy deployment-based URL format:
+//
+//	{endpoint}/openai/deployments/{model}{path}?api-version={version}
+//
+// instead of the v1 GA format:
+//
+//	{endpoint}/openai/v1{path}
+//
+// This matches Vercel AI SDK's useDeploymentBasedUrls option.
+// When enabled, ALL requests (including Responses API) use deployment-based URLs.
+//
+// Use this when:
+//   - Your Azure resource doesn't yet expose the v1 GA path.
+//   - You need to pin a specific dated api-version (only honoured on this path).
+//   - You're talking to a spec-strict resource that rejects the v1 GA path
+//     for a particular model deployment (observed for some GPT-5 deployments).
+func WithDeploymentBasedURLs(enabled bool) Option {
+	return func(o *options) {
+		o.useDeploymentBasedURLs = enabled
+	}
+}
+
+// resolveOptions applies defaults and environment variable fallbacks.
+func resolveOptions(o *options) {
+	// Resolve endpoint from env if not set.
+	if o.endpoint == "" {
+		o.endpoint = os.Getenv("AZURE_OPENAI_ENDPOINT")
+	}
+	if o.endpoint == "" {
+		if r := os.Getenv("AZURE_RESOURCE_NAME"); r != "" {
+			o.endpoint = fmt.Sprintf("https://%s.openai.azure.com", r)
+		}
+	}
+	// Resolve API key from env if not set.
+	if o.apiKey == "" && o.tokenSource == nil {
+		o.apiKey = cmp.Or(os.Getenv("AZURE_OPENAI_API_KEY"), os.Getenv("AZURE_API_KEY"))
+	}
+	// Default API version.
+	o.apiVersion = cmp.Or(o.apiVersion, defaultAPIVersion)
+}
+
+// buildHTTPClient creates an HTTP client with the Azure transport that rewrites
+// URLs and injects auth. Shared between Chat() and Image().
+func buildHTTPClient(o *options, modelID string) *http.Client {
+	baseTransport := http.DefaultTransport
+	if o.httpClient != nil && o.httpClient.Transport != nil {
+		baseTransport = o.httpClient.Transport
+	}
+
+	azureTransport := &azureRoundTripper{
+		base:                   baseTransport,
+		endpoint:               strings.TrimRight(o.endpoint, "/"),
+		apiKey:                 o.apiKey,
+		tokenSource:            o.tokenSource,
+		headers:                o.headers,
+		deployID:               strings.ReplaceAll(modelID, "/", "-"),
+		apiVersion:             o.apiVersion,
+		useDeploymentBasedURLs: o.useDeploymentBasedURLs,
+	}
+
+	return &http.Client{Transport: azureTransport}
+}
+
+// Chat creates an Azure language model for the given model/deployment ID.
+//
+// For OpenAI models (GPT, o-series): delegates to openai.Chat() with a custom
+// HTTP transport that rewrites URLs to Azure's format and injects Azure auth.
+//
+// For Claude models: delegates to anthropic.Chat() using Azure's Anthropic
+// endpoint (https://{resource}.services.ai.azure.com/anthropic). Azure hosts
+// Claude via a separate API that speaks the Anthropic Messages protocol, not
+// OpenAI Chat Completions.
+func Chat(modelID string, opts ...Option) provider.LanguageModel {
+	o := options{}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	resolveOptions(&o)
+
+	// Claude models on Azure use the Anthropic Messages API at a different
+	// endpoint than OpenAI models. Detect and delegate accordingly.
+	if strings.Contains(strings.ToLower(modelID), "claude") {
+		return buildAnthropicModel(&o, modelID)
+	}
+
+	// Non-OpenAI models on Azure (Cohere, DeepSeek, Grok, Llama, Mistral, Phi,
+	// Kimi, etc.) use the Azure AI Services endpoint, not the OpenAI endpoint.
+	// Route them to https://{resource}.services.ai.azure.com/models/chat/completions.
+	if !isOpenAIModel(modelID) {
+		return buildAIServicesModel(&o, modelID)
+	}
+
+	// Codex and pro model variants only work via Responses API on the
+	// cognitiveservices endpoint (deployment-based Chat Completions returns
+	// "unsupported operation"). Route them separately.
+	if o.useDeploymentBasedURLs && isResponsesOnlyModel(modelID) {
+		return buildCognitiveServicesModel(&o, modelID)
+	}
+
+	httpClient := buildHTTPClient(&o, modelID)
+
+	// Delegate to openai.Chat which handles Chat Completions vs Responses API routing.
+	// Provide a dummy API key so the OpenAI provider doesn't error on auth --
+	// azureRoundTripper replaces the Authorization header with Azure auth.
+	openaiOpts := []openai.Option{
+		openai.WithHTTPClient(httpClient),
+		openai.WithAPIKey("azure-delegated"),
+		// Use a placeholder base URL -- azureRoundTripper rewrites it.
+		openai.WithBaseURL("https://azure-placeholder"),
+	}
+
+	model := openai.Chat(modelID, openaiOpts...)
+
+	// Deployment-based URLs don't support the Responses API on most Azure
+	// resources (returns 404). Force Chat Completions to avoid silent failures.
+	if o.useDeploymentBasedURLs {
+		return &chatCompletionsModel{inner: model}
+	}
+
+	return model
+}
+
+// isOpenAIModel returns true if the model ID is an OpenAI-native model
+// (GPT, o-series, codex, chatgpt) that supports the Responses API.
+func isOpenAIModel(modelID string) bool {
+	id := strings.ToLower(modelID)
+	// Strip provider prefix (e.g., "openai/gpt-4o" → "gpt-4o").
+	if idx := strings.LastIndex(id, "/"); idx >= 0 {
+		id = id[idx+1:]
+	}
+	switch {
+	case strings.HasPrefix(id, "gpt-"):
+		return true
+	case len(id) >= 2 && id[0] == 'o' && id[1] >= '0' && id[1] <= '9':
+		return true // o1, o3, o4, etc.
+	case strings.HasPrefix(id, "codex"):
+		return true
+	case strings.HasPrefix(id, "chatgpt"):
+		return true
+	case strings.HasPrefix(id, "computer-use"):
+		return true
+	default:
+		return false
+	}
+}
+
+// chatCompletionsModel wraps a LanguageModel to force Chat Completions API
+// by injecting useResponsesAPI=false into ProviderOptions.
+type chatCompletionsModel struct {
+	inner provider.LanguageModel
+}
+
+func (m *chatCompletionsModel) ModelID() string { return m.inner.ModelID() }
+
+func (m *chatCompletionsModel) Capabilities() provider.ModelCapabilities {
+	return provider.ModelCapabilitiesOf(m.inner)
+}
+
+func (m *chatCompletionsModel) DoGenerate(ctx context.Context, params provider.GenerateParams) (*provider.GenerateResult, error) {
+	if params.PromptCaching {
+		fmt.Fprintf(os.Stderr, "goai: azure: WithPromptCaching is not supported and will be ignored\n")
+	}
+	forceChatCompletions(&params)
+	return m.inner.DoGenerate(ctx, params)
+}
+
+func (m *chatCompletionsModel) DoStream(ctx context.Context, params provider.GenerateParams) (*provider.StreamResult, error) {
+	if params.PromptCaching {
+		fmt.Fprintf(os.Stderr, "goai: azure: WithPromptCaching is not supported and will be ignored\n")
+	}
+	forceChatCompletions(&params)
+	return m.inner.DoStream(ctx, params)
+}
+
+func forceChatCompletions(params *provider.GenerateParams) {
+	// Copy the map to avoid mutating the caller's ProviderOptions.
+	newOpts := maps.Clone(params.ProviderOptions)
+	if newOpts == nil {
+		newOpts = make(map[string]any, 1)
+	}
+	newOpts["useResponsesAPI"] = false
+	// Strip Responses-API-only parameters that Chat Completions rejects.
+	delete(newOpts, "reasoning_summary")
+	delete(newOpts, "text_verbosity")
+	params.ProviderOptions = newOpts
+}
+
+// extractResourceName gets the Azure resource name from env or endpoint URL.
+func extractResourceName(o *options) string {
+	if r := os.Getenv("AZURE_RESOURCE_NAME"); r != "" {
+		return r
+	}
+	if o.endpoint != "" {
+		ep := strings.TrimPrefix(o.endpoint, "https://")
+		ep = strings.TrimPrefix(ep, "http://")
+		if idx := strings.Index(ep, "."); idx > 0 {
+			return ep[:idx]
+		}
+	}
+	return ""
+}
+
+// buildAnthropicModel creates an Anthropic provider pointing at Azure's
+// Anthropic endpoint: https://{resource}.services.ai.azure.com/anthropic
+func buildAnthropicModel(o *options, modelID string) provider.LanguageModel {
+	resourceName := extractResourceName(o)
+	anthropicEndpoint := fmt.Sprintf("https://%s.services.ai.azure.com/anthropic", resourceName)
+
+	anthropicOpts := []anthropic.Option{anthropic.WithBaseURL(anthropicEndpoint)}
+	if o.apiKey != "" {
+		anthropicOpts = append(anthropicOpts, anthropic.WithAPIKey(o.apiKey))
+	}
+	if o.tokenSource != nil {
+		anthropicOpts = append(anthropicOpts, anthropic.WithTokenSource(o.tokenSource))
+	}
+	if o.httpClient != nil {
+		anthropicOpts = append(anthropicOpts, anthropic.WithHTTPClient(o.httpClient))
+	}
+	if len(o.headers) > 0 {
+		anthropicOpts = append(anthropicOpts, anthropic.WithHeaders(o.headers))
+	}
+	return anthropic.Chat(modelID, anthropicOpts...)
+}
+
+// defaultAIServicesAPIVersion is used for Azure AI Services (non-OpenAI, non-Anthropic models).
+const defaultAIServicesAPIVersion = "2024-05-01-preview"
+
+// buildAIServicesModel creates an OpenAI-compat model pointing at Azure AI Services
+// endpoint: https://{resource}.services.ai.azure.com/models
+// This endpoint hosts non-OpenAI, non-Anthropic models (DeepSeek, Llama, Phi, Grok,
+// Cohere, Mistral, Kimi, etc.) using standard OpenAI Chat Completions format.
+func buildAIServicesModel(o *options, modelID string) provider.LanguageModel {
+	resourceName := extractResourceName(o)
+	baseURL := fmt.Sprintf("https://%s.services.ai.azure.com/models", resourceName)
+
+	baseTransport := http.DefaultTransport
+	if o.httpClient != nil && o.httpClient.Transport != nil {
+		baseTransport = o.httpClient.Transport
+	}
+
+	transport := &aiServicesRoundTripper{
+		base:        baseTransport,
+		apiKey:      o.apiKey,
+		tokenSource: o.tokenSource,
+		headers:     o.headers,
+		apiVersion:  defaultAIServicesAPIVersion,
+	}
+
+	httpClient := &http.Client{Transport: transport}
+
+	openaiOpts := []openai.Option{
+		openai.WithHTTPClient(httpClient),
+		openai.WithAPIKey("azure-delegated"),
+		openai.WithBaseURL(baseURL),
+	}
+
+	model := openai.Chat(modelID, openaiOpts...)
+	return &chatCompletionsModel{inner: model}
+}
+
+// isResponsesOnlyModel returns true for Azure model variants that only work via
+// the Responses API on cognitiveservices.azure.com. These models return
+// "unsupported operation" on deployment-based Chat Completions.
+func isResponsesOnlyModel(modelID string) bool {
+	id := strings.ToLower(modelID)
+	return strings.Contains(id, "-codex") || strings.HasSuffix(id, "-pro")
+}
+
+// cognitiveServicesAPIVersion is used for the cognitiveservices.azure.com Responses API.
+const cognitiveServicesAPIVersion = "2025-04-01-preview"
+
+// buildCognitiveServicesModel creates an OpenAI model pointing at the Azure
+// Cognitive Services endpoint: https://{resource}.cognitiveservices.azure.com/openai
+// Codex/pro models only support Responses API, not Chat Completions.
+func buildCognitiveServicesModel(o *options, modelID string) provider.LanguageModel {
+	resourceName := extractResourceName(o)
+	baseURL := fmt.Sprintf("https://%s.cognitiveservices.azure.com/openai", resourceName)
+
+	baseTransport := http.DefaultTransport
+	if o.httpClient != nil && o.httpClient.Transport != nil {
+		baseTransport = o.httpClient.Transport
+	}
+
+	transport := &aiServicesRoundTripper{
+		base:        baseTransport,
+		apiKey:      o.apiKey,
+		tokenSource: o.tokenSource,
+		headers:     o.headers,
+		apiVersion:  cognitiveServicesAPIVersion,
+	}
+
+	httpClient := &http.Client{Transport: transport}
+
+	// openai.Chat defaults to Responses API which is what codex/pro models need.
+	return openai.Chat(modelID, openai.WithHTTPClient(httpClient), openai.WithAPIKey("azure-delegated"), openai.WithBaseURL(baseURL))
+}
+
+// aiServicesRoundTripper injects Azure auth headers and api-version query parameter
+// for the Azure AI Services endpoint. Unlike azureRoundTripper, it does NOT rewrite
+// the URL path -- the OpenAI provider already builds the correct /chat/completions path.
+type aiServicesRoundTripper struct {
+	base        http.RoundTripper
+	apiKey      string
+	tokenSource provider.TokenSource
+	headers     map[string]string
+	apiVersion  string
+}
+
+func (t *aiServicesRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	newReq := req.Clone(req.Context())
+
+	// Add api-version query parameter.
+	q := newReq.URL.Query()
+	q.Set("api-version", t.apiVersion)
+	newReq.URL.RawQuery = q.Encode()
+
+	// Replace OpenAI auth with Azure auth.
+	newReq.Header.Del("Authorization")
+	if t.apiKey != "" {
+		newReq.Header.Set("api-key", t.apiKey)
+	} else if t.tokenSource != nil {
+		token, err := t.tokenSource.Token(req.Context())
+		if err != nil {
+			return nil, fmt.Errorf("azure: resolving auth token: %w", err)
+		}
+		newReq.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	// Inject custom headers.
+	for k, v := range t.headers {
+		newReq.Header.Set(k, v)
+	}
+
+	return t.base.RoundTrip(newReq)
+}
+
+// Image creates an Azure OpenAI image model (DALL-E) for the given deployment ID.
+//
+// Internally delegates to openai.Image() with a custom HTTP transport that
+// rewrites URLs to Azure's format and injects Azure auth. This matches
+// Vercel AI SDK's azure.image() which delegates to OpenAIImageModel.
+func Image(modelID string, opts ...Option) provider.ImageModel {
+	o := options{}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	resolveOptions(&o)
+
+	httpClient := buildHTTPClient(&o, modelID)
+
+	openaiOpts := []openai.Option{
+		openai.WithHTTPClient(httpClient),
+		openai.WithAPIKey("azure-delegated"),
+		openai.WithBaseURL("https://azure-placeholder"),
+	}
+
+	return openai.Image(modelID, openaiOpts...)
+}
+
+// azureRoundTripper rewrites OpenAI API URLs to Azure URLs and injects
+// Azure authentication headers.
+//
+// Default (useDeploymentBasedURLs=false, matches Vercel default):
+//
+//	{endpoint}/openai/v1{path}?api-version={version}
+//
+// Legacy (useDeploymentBasedURLs=true):
+//
+//	{endpoint}/openai/deployments/{model}{path}?api-version={version}
+type azureRoundTripper struct {
+	base                   http.RoundTripper
+	endpoint               string
+	apiKey                 string
+	tokenSource            provider.TokenSource
+	headers                map[string]string
+	deployID               string
+	apiVersion             string
+	useDeploymentBasedURLs bool
+}
+
+func (t *azureRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Extract the API path suffix from the OpenAI URL.
+	path := req.URL.Path
+	switch {
+	case strings.HasSuffix(path, "/chat/completions"):
+		path = "/chat/completions"
+	case strings.HasSuffix(path, "/responses"):
+		path = "/responses"
+	case strings.HasSuffix(path, "/images/generations"):
+		path = "/images/generations"
+	}
+
+	var azureURL string
+	if t.useDeploymentBasedURLs {
+		// Legacy deployment-based format for ALL endpoints. Azure
+		// requires `?api-version=` on this path.
+		azureURL = fmt.Sprintf("%s/openai/deployments/%s%s?api-version=%s",
+			t.endpoint, t.deployID, path, t.apiVersion)
+	} else {
+		// v1 GA format (model in body). Per Azure's v1 API spec the
+		// `api-version` query parameter is removed on this path:
+		//   "v1 API simplifies authentication, removes the need for
+		//    dated `api-version` parameters"
+		// Sending it anyway is rejected by spec-strict resources with
+		// "API version not supported" (observed live on gpt-5.5).
+		// Preview features on the v1 path opt-in via custom headers
+		// (e.g. `aoai-evals: preview`) or via path segments containing
+		// `alpha`/`beta`, not via `api-version`. See:
+		//   https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle
+		// Callers that still need a specific dated api-version should
+		// use WithDeploymentBasedURLs(true) to opt back into the
+		// legacy deployment-based path which honours api-version.
+		azureURL = fmt.Sprintf("%s/openai/v1%s",
+			t.endpoint, path)
+	}
+
+	// Clone the request with the new URL.
+	newReq := req.Clone(req.Context())
+	parsed, err := req.URL.Parse(azureURL)
+	if err != nil {
+		return nil, fmt.Errorf("azure: invalid URL: %w", err)
+	}
+	newReq.URL = parsed
+	newReq.Host = parsed.Host
+
+	// Replace OpenAI auth with Azure auth.
+	// API key uses Azure's api-key header; TokenSource uses Bearer (Managed Identity, etc.).
+	newReq.Header.Del("Authorization")
+	if t.apiKey != "" {
+		newReq.Header.Set("api-key", t.apiKey)
+	} else if t.tokenSource != nil {
+		token, tokenErr := t.tokenSource.Token(req.Context())
+		if tokenErr != nil {
+			return nil, fmt.Errorf("azure: resolving auth token: %w", tokenErr)
+		}
+		newReq.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	// Inject Azure-specific headers.
+	for k, v := range t.headers {
+		newReq.Header.Set(k, v)
+	}
+
+	return t.base.RoundTrip(newReq)
+}

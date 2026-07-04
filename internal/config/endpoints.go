@@ -43,6 +43,18 @@ const (
 	ProviderTogether    = "together"
 	ProviderDeepInfra   = "deepinfra"
 	ProviderRequesty    = "requesty"
+	ProviderCohere      = "cohere"
+	ProviderMistral     = "mistral"
+	ProviderPerplexity  = "perplexity"
+	ProviderCerebras    = "cerebras"
+	ProviderNVIDIA      = "nvidia"
+	ProviderRunPod      = "runpod"
+	ProviderFPTCloud    = "fptcloud"
+	ProviderCloudflare  = "cloudflare"
+	ProviderLlamaCpp    = "llamacpp"
+	ProviderAzure       = "azure"
+	ProviderBedrock     = "bedrock"
+	ProviderVertex      = "vertex"
 )
 
 // ProviderSettings holds what the user configured for a provider — stored in endpoints.json.

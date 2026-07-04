@@ -153,13 +153,18 @@ github.com/yuin/goldmark-emoji/definition
 # github.com/zendev-sh/goai v0.8.5
 ## explicit; go 1.25.0
 github.com/zendev-sh/goai
+github.com/zendev-sh/goai/internal/gemini
 github.com/zendev-sh/goai/internal/httpc
 github.com/zendev-sh/goai/internal/openaicompat
 github.com/zendev-sh/goai/internal/sse
 github.com/zendev-sh/goai/provider
+github.com/zendev-sh/goai/provider/anthropic
 github.com/zendev-sh/goai/provider/compat
+github.com/zendev-sh/goai/provider/fireworks
+github.com/zendev-sh/goai/provider/google
 github.com/zendev-sh/goai/provider/ollama
 github.com/zendev-sh/goai/provider/openai
+github.com/zendev-sh/goai/provider/openrouter
 github.com/zendev-sh/goai/provider/vllm
 # golang.org/x/net v0.38.0
 ## explicit; go 1.23.0

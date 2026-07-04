@@ -32,6 +32,10 @@ const (
 	ProviderOpenAI      = "openai"
 	ProviderOpenAICodex = "openai-codex"
 	ProviderLiteLLM     = "litellm"
+	ProviderAnthropic   = "anthropic"
+	ProviderGemini      = "gemini"
+	ProviderOpenRouter  = "openrouter"
+	ProviderFireworks   = "fireworks"
 )
 
 // ProviderSettings holds what the user configured for a provider — stored in endpoints.json.

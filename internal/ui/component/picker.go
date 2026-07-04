@@ -342,8 +342,9 @@ func (p *Picker) Render(width int) string {
 	}
 
 	var visible []PickerItem
+	start := 0
 	if len(items) > itemSlots {
-		start := p.Selected - (itemSlots / 2)
+		start = p.Selected - (itemSlots / 2)
 		if start < 0 {
 			start = 0
 		}
@@ -402,16 +403,8 @@ func (p *Picker) Render(width int) string {
 	// Separator blank line after title/description
 	lines = append(lines, " ")
 
-	var globalStart int
-	if len(items) > itemSlots {
-		globalStart = p.Selected - (itemSlots / 2)
-		if globalStart < 0 {
-			globalStart = 0
-		}
-	}
-
 	for i, item := range visible {
-		isSelected := (globalStart + i) == p.Selected
+		isSelected := (start + i) == p.Selected
 		lines = append(lines, p.renderRow(item, isSelected, width))
 	}
 

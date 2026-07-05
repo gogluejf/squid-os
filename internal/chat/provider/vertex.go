@@ -37,7 +37,10 @@ func (p *VertexProvider) StaticModels() []ModelEntry {
 func (p *VertexProvider) DefaultBaseURL() string { return "" }
 func (p *VertexProvider) RequiresBaseURL() bool  { return false }
 func (p *VertexProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
-	return nil
+	if !thinking {
+		return nil
+	}
+	return map[string]any{"reasoning_effort": "medium"}
 }
 func (p *VertexProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {
 	if model == "" {

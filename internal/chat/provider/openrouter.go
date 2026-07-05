@@ -52,8 +52,10 @@ func (o *OpenRouterProvider) RequestProviderOptions(model string, thinking bool)
 	if !thinking {
 		return nil
 	}
-	// OpenRouter passes thinking as a provider option that gets forwarded to the underlying model.
-	return map[string]any{"reasoning": map[string]any{"enabled": true}}
+	return map[string]any{
+		"include_reasoning": true,
+		"reasoning":         map[string]any{"effort": "medium"},
+	}
 }
 
 func (o *OpenRouterProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {

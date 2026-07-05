@@ -38,7 +38,10 @@ func (p *CohereProvider) StaticModels() []ModelEntry { return nil }
 func (p *CohereProvider) DefaultBaseURL() string     { return "https://api.cohere.com/v2" }
 func (p *CohereProvider) RequiresBaseURL() bool      { return false }
 func (p *CohereProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
-	return nil
+	if !thinking {
+		return nil
+	}
+	return map[string]any{"thinking": map[string]any{"type": "enabled", "budgetTokens": 4096}}
 }
 
 func (p *CohereProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {

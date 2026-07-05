@@ -57,7 +57,7 @@ func (a *AnthropicProvider) RequestProviderOptions(model string, thinking bool) 
 	if !thinking {
 		return nil
 	}
-	return map[string]any{"thinking": map[string]any{"type": "enabled"}}
+	return map[string]any{"thinking": map[string]any{"type": "enabled", "budgetTokens": 4096}}
 }
 
 func (a *AnthropicProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {

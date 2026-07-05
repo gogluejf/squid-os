@@ -67,7 +67,7 @@ func (o *CodexProvider) StaticModels() []ModelEntry {
 		{ID: "gpt-5.3", ContextLength: 256_000},
 		{ID: "gpt-5.4", ContextLength: 400_000},
 		{ID: "gpt-5.4-mini", ContextLength: 400_000},
-		{ID: "gpt-5.5", ContextLength: 256_000},
+		{ID: "gpt-5.5", ContextLength: 1_050_000},
 	}
 }
 func (o *CodexProvider) DefaultBaseURL() string { return "https://chatgpt.com" }

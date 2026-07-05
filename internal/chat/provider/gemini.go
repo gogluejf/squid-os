@@ -57,9 +57,10 @@ func (g *GeminiProvider) DefaultBaseURL() string { return "https://generativelan
 func (g *GeminiProvider) RequiresBaseURL() bool  { return false }
 func (g *GeminiProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
 	if !thinking {
-		return nil
+		// GoAI Gemini defaults thinking on for Gemini 2.5+/3.x unless explicitly disabled.
+		return map[string]any{"google": map[string]any{"thinkingConfig": false}}
 	}
-	return map[string]any{"thinking": map[string]any{"type": "enabled"}}
+	return map[string]any{"google": map[string]any{"thinkingConfig": map[string]any{"includeThoughts": true}}}
 }
 
 func (g *GeminiProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {

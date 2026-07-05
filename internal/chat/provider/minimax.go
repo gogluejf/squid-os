@@ -58,7 +58,7 @@ func (p *MiniMaxProvider) RequestProviderOptions(model string, thinking bool) ma
 	if !thinking {
 		return nil
 	}
-	return map[string]any{"thinking": map[string]any{"type": "enabled"}}
+	return map[string]any{"thinking": map[string]any{"type": "enabled", "budgetTokens": 4096}}
 }
 
 func (p *MiniMaxProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {

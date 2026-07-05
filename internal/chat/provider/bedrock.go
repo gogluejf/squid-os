@@ -38,7 +38,7 @@ func (p *BedrockProvider) RequestProviderOptions(model string, thinking bool) ma
 	if !thinking {
 		return nil
 	}
-	return map[string]any{"reasoningConfig": map[string]any{"type": "enabled", "budgetTokens": 1024}}
+	return map[string]any{"reasoningConfig": map[string]any{"type": "enabled", "budgetTokens": 4096, "maxReasoningEffort": "medium"}}
 }
 func (p *BedrockProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {
 	if model == "" {

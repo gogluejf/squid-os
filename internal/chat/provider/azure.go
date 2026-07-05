@@ -36,7 +36,10 @@ func (p *AzureProvider) StaticModels() []ModelEntry { return nil }
 func (p *AzureProvider) DefaultBaseURL() string     { return "" }
 func (p *AzureProvider) RequiresBaseURL() bool      { return true }
 func (p *AzureProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
-	return nil
+	if !thinking {
+		return nil
+	}
+	return map[string]any{"reasoning_effort": "medium"}
 }
 func (p *AzureProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {
 	if model == "" {

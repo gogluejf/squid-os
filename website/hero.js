@@ -98,13 +98,17 @@
     var t = now - start;
     ctx.clearRect(0, 0, W, H);
 
+    /* pops stay inside the content column, not the full-bleed hero */
+    var zw = Math.min(1100, W * 0.92);
+    var zx = (W - zw) / 2;
+
     minis.forEach(function (m) {
       var lt = t - m.t0;
       if (lt < 0 || lt > m.life) return;
       var flicker = Math.random() > 0.18 ? 1 : 0.25;
       /* glitch harder while popping in/out */
       var g = (lt < 90 || m.life - lt < 110) ? 0.8 : 0.15;
-      drawSprite(m.x * W - SBOX.w * m.cell / 2, m.y * H - SBOX.h * m.cell / 2, m.cell, flicker, g);
+      drawSprite(zx + m.x * zw - SBOX.w * m.cell / 2, m.y * H - SBOX.h * m.cell / 2, m.cell, flicker, g);
     });
 
     /* the 8-bit squid is already flashing behind the apparition while it

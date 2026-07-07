@@ -75,6 +75,11 @@ a:hover { color: var(--orange-soft); }
 
 .site-nav a:hover { color: var(--gold); }
 
+.site-nav .btn-primary,
+.site-nav .btn-primary:hover {
+  color: var(--bg-deeper);
+}
+
 /* ── Buttons ── */
 .btn {
   display: inline-block;

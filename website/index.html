@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Squid OS — Operate your entire OS with AI</title>
+<meta name="description" content="One conversational interface for your projects, files, documents, applications, and workflows. Squid OS is a fast, local-AI-first agent for your whole operating system.">
+<meta property="og:title" content="Squid OS — Operate your entire OS with AI">
+<meta property="og:description" content="One conversational interface for your entire operating system. Built in Go, optimized for local AI.">
+<meta property="og:image" content="assets/squid-logo-full.png">
+<link rel="icon" type="image/png" href="assets/squid-mark.png">
+<link rel="preload" as="image" href="assets/squid-apparition.jpg">
+<link rel="stylesheet" href="style.css">
+<script>
+/* decide before first paint whether the hero boot animation runs */
+(function () {
+  var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduced) document.documentElement.classList.add('hero-anim');
+})();
+</script>
+<style>
+  /* ── Hero load animation (index only) ── */
+  #heroCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* while the boot animation runs, hero elements start hidden;
+     html.hero-anim is set by the tiny head script before first paint */
+  html.hero-anim .hero .mark,
+  html.hero-anim .hero h1,
+  html.hero-anim .hero .sub,
+  html.hero-anim .hero .actions {
+    opacity: 0;
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  html.hero-anim .hero .sub,
+  html.hero-anim .hero .actions { transform: translateY(14px); }
+
+  html.hero-anim .hero .show { opacity: 1 !important; transform: none !important; }
+
+  /* the title fades in over the same long window as the logo — in sync */
+  html.hero-anim .hero h1 { transition: opacity 1.7s ease; }
+
+  /* the logo crossfades in slowly while the pixel squid dissolves — zen;
+     starts earlier and lasts longer, finishing at the same moment */
+  html.hero-anim .hero .mark { transition: opacity 1.7s ease; }
+
+  /* ── apparition: the deep-sea squid strikes like thunder during the pause ── */
+  #apparition {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    background: #190a2b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  #apparition img {
+    max-height: 100%;
+    max-width: 100%;
+    /* soft edge blend into the band color */
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10%, #000 90%, transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 10%, #000 90%, transparent 100%);
+  }
+
+  /* fast thunder flickers (identical tempo), then a camera-flash decay:
+     collapses fast, and the last few percent linger in a long tail */
+  #apparition.strike { animation: thunder 1.9s linear forwards; }
+
+  @keyframes thunder {
+    0%    { opacity: 1; filter: brightness(1.9); }
+    2.4%  { opacity: 1; filter: brightness(1.9); }
+    2.5%  { opacity: 0; }
+    4.5%  { opacity: 0; }
+    4.6%  { opacity: 1; filter: brightness(2.3); }
+    7.1%  { opacity: 1; filter: brightness(2.1); }
+    7.2%  { opacity: 0; }
+    8.9%  { opacity: 0; }
+    9%    { opacity: 1; filter: brightness(2.5); }  /* main strike */
+    15.3% { opacity: 1; filter: brightness(1.1); }  /* hot decay, fast */
+    26%   { opacity: 0.45; filter: brightness(1); } /* exponential falloff… */
+    42%   { opacity: 0.2; }
+    63%   { opacity: 0.08; }                        /* …whisper tail */
+    100%  { opacity: 0; }
+  }
+
+  /* white glitch states for the title reveal */
+  .hero h1.white, .hero h1.white span {
+    background: none;
+    -webkit-text-fill-color: #fff;
+    color: #fff;
+  }
+
+  .hero h1.g1 { text-shadow: -5px 0 rgba(224, 64, 80, 0.75), 5px 0 rgba(64, 160, 216, 0.75); transform: translateX(3px); }
+  .hero h1.g2 { text-shadow: 5px 0 rgba(224, 64, 80, 0.75), -5px 0 rgba(64, 160, 216, 0.75); transform: translateX(-3px); }
+
+  /* ── Hero ── */
+  .hero {
+    position: relative;
+    padding: 110px 0 90px;
+    text-align: center;
+    background:
+      radial-gradient(ellipse 900px 480px at 50% -10%, rgba(240, 137, 18, 0.12), transparent 70%),
+      var(--bg);
+  }
+
+  .hero img.mark { height: 150px; margin-bottom: 28px; filter: drop-shadow(0 12px 34px rgba(240, 137, 18, 0.35)); }
+
+  .hero h1 {
+    font-size: clamp(2.3rem, 5.5vw, 3.7rem);
+    letter-spacing: -1px;
+    margin: 0 auto 20px;
+    max-width: 800px;
+  }
+
+  .hero h1 span {
+    background: linear-gradient(135deg, var(--gold) 0%, var(--orange) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .hero .sub {
+    font-size: 1.15rem;
+    color: var(--text-dim);
+    max-width: 640px;
+    margin: 0 auto 38px;
+  }
+
+  .hero .actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+
+  /* ── CTA ── */
+  .cta {
+    text-align: center;
+    padding: 110px 0;
+    background:
+      radial-gradient(ellipse 700px 380px at 50% 110%, rgba(240, 137, 18, 0.12), transparent 70%),
+      var(--bg-deep);
+  }
+
+  .cta h2 { font-size: clamp(1.8rem, 3.6vw, 2.5rem); color: var(--gold); margin-bottom: 16px; }
+  .cta p { color: var(--text-dim); max-width: 560px; margin: 0 auto 34px; font-size: 1.08rem; }
+  .cta .actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<!-- ═══ Header ═══ -->
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img src="assets/squid-logo.png" alt="Squid OS logo">
+    </a>
+    <nav class="site-nav">
+      <a class="nav-link" href="why.html">Why</a>
+      <a class="nav-link" href="skills.html">Skills</a>
+      <a class="nav-link" href="local-ai.html">Local AI</a>
+      <a class="nav-link" href="architecture.html">Architecture</a>
+      <a href="https://github.com/gogluejf/squid-os" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn btn-primary btn-sm" href="download.html">Download</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ═══ Hero ═══ -->
+<section class="hero">
+  <div id="apparition"><img src="assets/squid-apparition.jpg" alt=""></div>
+  <canvas id="heroCanvas"></canvas>
+  <div class="wrap">
+    <img class="mark fx" src="assets/squid-mark.png" alt="Squid OS">
+    <h1 class="fx">Operate your entire OS <span>with AI</span></h1>
+    <p class="sub fx">One conversational interface for your projects, files, documents, applications, and workflows. Coding is only part of your day — Squid OS is built for everything else too.</p>
+    <div class="actions fx">
+      <a class="btn btn-primary" href="download.html">Download</a>
+      <a class="btn btn-ghost" href="https://github.com/gogluejf/squid-os" target="_blank" rel="noopener">View on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 1 · Whole OS ═══ -->
+<section class="section alt">
+  <div class="wrap split">
+    <div class="split-text fx">
+      <div class="kicker">One workspace</div>
+      <h2>Your whole OS, not just your code</h2>
+      <p class="lead">Modern coding agents stop at your repository. <strong>Your work doesn't.</strong></p>
+      <br>
+      <p class="lead">Squid OS operates across your entire environment, letting you move seamlessly between projects, documents, terminal sessions, applications, and system tasks — all from a single conversation.</p>
+    </div>
+    <div class="split-media fx">
+      <div class="term">
+        <div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="term-title">squid-os — ~/</span></div>
+        <div class="term-body">
+<span class="p">❯</span> <span class="hl">open the Q3 report and summarize the action items</span><br>
+<span class="ac">⚡ tool</span>&nbsp; fs.read&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ~/Documents/q3-report.md<br>
+<span class="ac">⚡ tool</span>&nbsp; app.launch&nbsp;&nbsp; obsidian ~/notes/actions.md<br>
+<span class="ok">✓</span> 4 action items extracted → actions.md<br>
+<span class="p">❯</span> <span class="hl">switch to rig-stack and check the failing tests</span><br>
+<span class="ac">⚡ tool</span>&nbsp; project.switch&nbsp; ~/src/rig-stack<br>
+<span class="cursor"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 2 · Control ═══ -->
+<section class="section">
+  <div class="wrap split rev">
+    <div class="split-text fx">
+      <div class="kicker">Full visibility</div>
+      <h2>You control the agent, not the other way around</h2>
+      <p class="lead">AI shouldn't disappear behind a progress spinner.</p>
+      <br>
+      <p class="lead">Every action, tool call, and decision stays visible and under your control. Interrupt instantly, inspect what happened, understand the cost, and stay in control of your machine from start to finish.</p>
+    </div>
+    <div class="split-media fx">
+      <div class="term">
+        <div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="term-title">tool inspector</span></div>
+        <div class="term-body">
+<span class="ac">⚡</span> shell.run&nbsp;&nbsp; go test ./internal/...&nbsp;&nbsp;&nbsp; <span class="ac">[running]</span><br>
+&nbsp;&nbsp;└ <span class="cm">inspect · cancel (esc) · always-allow</span><br>
+<span class="ok">✓</span> fs.write&nbsp;&nbsp;&nbsp; internal/app/stream.go&nbsp;&nbsp;&nbsp; <span class="ok">+42</span> <span class="rd">−7</span>&nbsp; <span class="hl">[undo]</span><br>
+<span class="ok">✓</span> shell.run&nbsp;&nbsp; git diff --stat&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 120ms<br>
+<span class="cm">─────────────────────────────────</span><br>
+tokens in <span class="hl">8.4k</span> · out <span class="hl">1.2k</span> · <span class="hl">$0.004</span> · <span class="ac">96 tok/s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 3 · Fast iteration ═══ -->
+<section class="section alt">
+  <div class="wrap split">
+    <div class="split-text fx">
+      <div class="kicker">Native Go TUI</div>
+      <h2>Built for fast iteration</h2>
+      <p class="lead">Ideas shouldn't wait for your tools.</p>
+      <br>
+      <p class="lead">Designed as a native Go TUI, Squid OS removes friction with instant conversation switching, fast cancellation, keyboard-first workflows, and an interface that keeps up with the speed you think.</p>
+    </div>
+    <div class="split-media fx">
+      <div class="term">
+        <div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="term-title">sessions</span></div>
+        <div class="term-body">
+<span class="p">❯</span> sessions<br>
+&nbsp;&nbsp;<span class="ac">▸ rig-stack — gpu scheduler refactor</span>&nbsp;&nbsp;&nbsp;&nbsp; <span class="cm">2m ago</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;squid-os — context compression&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="cm">1h ago</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;notes — blog draft&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="cm">3h ago</span><br>
+<span class="cm">esc cancel · ctrl+r resume · tab switch</span><br>
+<span class="rd">✕</span> stream cancelled <span class="cm">(0.3s)</span> — input restored, edit &amp; resend
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 4 · Local AI ═══ -->
+<section class="section">
+  <div class="wrap split rev">
+    <div class="split-text fx">
+      <div class="kicker">Local first</div>
+      <h2>Optimized for local AI</h2>
+      <p class="lead">Built from day one for fast local inference without sacrificing support for cloud providers.</p>
+      <br>
+      <p class="lead">Whether you're running a local GPU or using your favorite hosted model, Squid OS is optimized for responsiveness, token efficiency, and long-running conversations.</p>
+      <br>
+      <a href="local-ai.html">Learn more about local AI →</a>
+    </div>
+    <div class="split-media fx">
+      <div class="term">
+        <div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="term-title">metrics</span></div>
+        <div class="term-body">
+model&nbsp; <span class="hl">qwen3-32b</span> @ <span class="ac">ollama · local</span><br>
+ttft <span class="ok">84ms</span>&nbsp;&nbsp; <span class="bar-track"><span class="bar-fill" style="width:82%"></span></span>&nbsp; <span class="ac">128 tok/s</span><br>
+ctx <span class="hl">38k/128k</span> · gpu <span class="hl">91%</span> · stream <span class="ok">stable</span><br>
+<span class="p">❯</span> <span class="hl">switch to a cloud model</span><br>
+<span class="ac">⚡ provider.switch</span>&nbsp; anthropic<br>
+same workflow, zero changes <span class="ok">✓</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 5 · Skills ═══ -->
+<section class="section alt">
+  <div class="wrap split">
+    <div class="split-text fx">
+      <div class="kicker">Skills</div>
+      <h2>Teach your computer once. Reuse it forever.</h2>
+      <p class="lead">Planning a feature. Reviewing a pull request. Investigating production issues. Preparing a release. Instead of solving these with longer prompts, Squid OS solves them with <strong>Skills</strong>.</p>
+      <br>
+      <p class="lead">Skills package knowledge, workflows, and deterministic logic into reusable building blocks that every project can share. Version them with Git and make your operating system smarter with every workflow you automate.</p>
+      <br>
+      <a href="skills.html">Explore Skills →</a>
+    </div>
+    <div class="split-media fx">
+      <div class="term">
+        <div class="term-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="term-title">skills</span></div>
+        <div class="term-body">
+<span class="p">❯</span> <span class="hl">/plan payment-retry feature</span><br>
+<span class="ac">⚡ skill</span>&nbsp; plan&nbsp; <span class="cm">v12 · git:main</span><br>
+&nbsp;&nbsp;1. read existing retry logic&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="ok">✓</span><br>
+&nbsp;&nbsp;2. draft plan → plans/payment-retry.md&nbsp; <span class="ok">✓</span><br>
+&nbsp;&nbsp;3. review checkpoints with you&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="ac">…</span><br>
+<span class="p">❯</span> <span class="hl">edit the skill to always add rollback steps</span><br>
+<span class="ok">✓</span> skills/plan/SKILL.md updated — <span class="ac">reusable everywhere</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 6-9 · Cards ═══ -->
+<section class="section">
+  <div class="wrap">
+    <div class="kicker fx">Engineered for long sessions</div>
+    <h2 class="fx">Fast today. Still fast six hours in.</h2>
+    <div class="cards">
+      <div class="card fx">
+        <h3>Context that scales</h3>
+        <p>Squid OS continuously compresses repetitive execution history, preserving what matters while reducing wasted tokens. Stay in the same conversation for hours without carrying unnecessary baggage.</p>
+        <div class="term mini"><div class="term-body">ctx <span class="rd">142k</span> → <span class="ok">38k</span> compressed · <span class="cm">same conversation, 6h</span></div></div>
+      </div>
+      <div class="card fx">
+        <h3>Transparency by default</h3>
+        <p>Inspect every inference, token count, execution time, reasoning stream, and tool call. Learn how your models behave, compare providers, and optimize your workflows with complete visibility.</p>
+        <div class="term mini"><div class="term-body">inference <span class="hl">#214</span> · <span class="hl">1.9s</span> · <span class="hl">4.1k in / 620 out</span> · <span class="ac">reasoning ▸</span></div></div>
+      </div>
+      <div class="card fx">
+        <h3>Git for everything that matters</h3>
+        <p>Code isn't the only thing worth versioning. Keep your Skills, memories, documents, prompts, and workflows under Git so every part of your AI workspace is traceable, recoverable, and easy to share.</p>
+        <div class="term mini"><div class="term-body"><span class="p">❯</span> git status&nbsp; <span class="ac">skills/ M</span> · <span class="ok">memory/ A</span> · <span class="ac">prompts/ M</span></div></div>
+      </div>
+      <div class="card fx">
+        <h3>Extensible without forks</h3>
+        <p>Your workflow shouldn't depend on modifying Squid OS itself. Extend it in your preferred language, integrate existing tools, and build new capabilities without maintaining a custom fork.</p>
+        <div class="term mini"><div class="term-body"><span class="p">❯</span> squid-os ext install github-review&nbsp; <span class="ok">✓ ready</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 10 · Models ═══ -->
+<section class="section alt">
+  <div class="wrap" style="text-align:center">
+    <div class="kicker fx">Bring your own models</div>
+    <h2 class="fx">Works with your favorite models</h2>
+    <p class="lead fx" style="margin: 0 auto;">Run locally with Ollama, vLLM, or LiteLLM, connect to leading cloud providers, or use your ChatGPT subscription. Squid OS provides one consistent experience regardless of where your models run.</p>
+    <div class="chips fx" style="justify-content:center">
+      <span class="chip hot">Ollama</span>
+      <span class="chip hot">vLLM</span>
+      <span class="chip hot">LiteLLM</span>
+      <span class="chip hot">llama.cpp</span>
+      <span class="chip">Anthropic</span>
+      <span class="chip">OpenAI</span>
+      <span class="chip">Gemini</span>
+      <span class="chip">OpenRouter</span>
+      <span class="chip">Fireworks</span>
+      <span class="chip">ChatGPT subscription</span>
+      <a class="chip" href="local-ai.html">+ 18 more →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ CTA ═══ -->
+<section class="cta">
+  <div class="wrap">
+    <h2 class="fx">Ready to take control of your AI workspace?</h2>
+    <p class="fx">Operate your projects, documents, applications, and entire operating system through one conversational interface.</p>
+    <div class="actions fx">
+      <a class="btn btn-primary" href="download.html">Download Squid OS</a>
+      <a class="btn btn-ghost" href="https://github.com/gogluejf/squid-os" target="_blank" rel="noopener">View on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Footer ═══ -->
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <img src="assets/squid-mark.png" alt="Squid OS">
+        <p>One conversational interface for your entire operating system. Built in Go, optimized for local AI.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="download.html">Download</a></li>
+          <li><a href="https://github.com/gogluejf/squid-os#readme" target="_blank" rel="noopener">Documentation</a></li>
+          <li><a href="examples.html">Examples</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Community</h4>
+        <ul>
+          <li><a href="https://github.com/gogluejf/squid-os" target="_blank" rel="noopener">GitHub</a></li>
+          <li><a href="https://www.linkedin.com/in/renejf/" target="_blank" rel="noopener">LinkedIn</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Learn</h4>
+        <ul>
+          <li><a href="why.html">Why Squid OS exists</a></li>
+          <li><a href="skills.html">Skills</a></li>
+          <li><a href="local-ai.html">Local AI</a></li>
+          <li><a href="architecture.html">Architecture</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Jean-Francois Rene · <a href="https://github.com/gogluejf/squid-os/blob/master/LICENSE" target="_blank" rel="noopener">MIT License</a></span>
+      <span>"Squid OS" and the Squid OS logo are <a href="https://github.com/gogluejf/squid-os/blob/master/TRADEMARKS.md" target="_blank" rel="noopener">trademarks</a> of Jean-Francois Rene.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="hero.js"></script>
+</body>
+</html>

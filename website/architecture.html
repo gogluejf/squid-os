@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Architecture — Squid OS</title>
+<meta name="description" content="Simple systems scale. Squid OS keeps the harness small, predictable, and reliable — powered by Go and GoAI.">
+<link rel="icon" type="image/png" href="assets/squid-mark.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img src="assets/squid-logo.png" alt="Squid OS logo">
+    </a>
+    <nav class="site-nav">
+      <a class="nav-link" href="why.html">Why</a>
+      <a class="nav-link" href="skills.html">Skills</a>
+      <a class="nav-link" href="local-ai.html">Local AI</a>
+      <a class="nav-link" href="architecture.html">Architecture</a>
+      <a href="https://github.com/gogluejf/squid-os" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn btn-primary btn-sm" href="download.html">Download</a>
+    </nav>
+  </div>
+</header>
+
+<section class="page-hero">
+  <div class="wrap">
+    <div class="kicker">Architecture</div>
+    <h1>Simple systems scale</h1>
+    <p class="sub">Squid OS is intentionally opinionated.</p>
+  </div>
+</section>
+
+<article class="article">
+  <div class="wrap prose">
+    <p>Instead of relying on massive prompts and hundreds of specialized tools, Squid OS keeps the harness <strong>small, predictable, and reliable</strong>.</p>
+    <p>Deterministic work belongs in software, not in repeated LLM inference. That's why Skills are central to the architecture, why the toolset stays intentionally small, and why long conversations are continuously compressed to keep context focused and efficient.</p>
+    <blockquote>Powered by Go and GoAI, Squid OS is built for speed, transparency, and complete control over the agent execution loop.</blockquote>
+
+    <h2>The principles</h2>
+    <p><strong>Small harness.</strong> A compact, predictable toolset the model can actually master — instead of hundreds of tools it half-understands.</p>
+    <p><strong>Deterministic where possible.</strong> Repeatable workflows live in Skills and code, not in ever-longer prompts.</p>
+    <p><strong>Compressed context.</strong> Execution history is continuously compacted so long sessions stay fast, cheap, and focused.</p>
+    <p><strong>Full control of the loop.</strong> Built in Go with GoAI, every step of the agent execution loop is owned, observable, and interruptible.</p>
+  </div>
+</article>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <img src="assets/squid-mark.png" alt="Squid OS">
+        <p>One conversational interface for your entire operating system. Built in Go, optimized for local AI.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="download.html">Download</a></li>
+          <li><a href="https://github.com/gogluejf/squid-os#readme" target="_blank" rel="noopener">Documentation</a></li>
+          <li><a href="examples.html">Examples</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Community</h4>
+        <ul>
+          <li><a href="https://github.com/gogluejf/squid-os" target="_blank" rel="noopener">GitHub</a></li>
+          <li><a href="https://www.linkedin.com/in/renejf/" target="_blank" rel="noopener">LinkedIn</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Learn</h4>
+        <ul>
+          <li><a href="why.html">Why Squid OS exists</a></li>
+          <li><a href="skills.html">Skills</a></li>
+          <li><a href="local-ai.html">Local AI</a></li>
+          <li><a href="architecture.html">Architecture</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Jean-Francois Rene · <a href="https://github.com/gogluejf/squid-os/blob/master/LICENSE" target="_blank" rel="noopener">MIT License</a></span>
+      <span>"Squid OS" and the Squid OS logo are <a href="https://github.com/gogluejf/squid-os/blob/master/TRADEMARKS.md" target="_blank" rel="noopener">trademarks</a> of Jean-Francois Rene.</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Download — Squid OS</title>
+<meta name="description" content="Install Squid OS on Linux, macOS, or Windows. Clone, run install.sh, and take control of your AI workspace.">
+<link rel="icon" type="image/png" href="assets/squid-mark.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img src="assets/squid-logo.png" alt="Squid OS logo">
+    </a>
+    <nav class="site-nav">
+      <a class="nav-link" href="why.html">Why</a>
+      <a class="nav-link" href="skills.html">Skills</a>
+      <a class="nav-link" href="local-ai.html">Local AI</a>
+      <a class="nav-link" href="architecture.html">Architecture</a>
+      <a href="https://github.com/gogluejf/squid-os" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn btn-primary btn-sm" href="download.html">Download</a>
+    </nav>
+  </div>
+</header>
+
+<section class="page-hero">
+  <div class="wrap">
+    <div class="kicker">Download</div>
+    <h1>Get Squid OS</h1>
+    <p class="sub">Built for Linux, macOS, and Windows.</p>
+  </div>
+</section>
+
+<article class="article">
+  <div class="wrap prose">
+    <h2 style="margin-top:0">Quick install</h2>
+    <p>Clone the repository and run the installer:</p>
+    <pre class="code"><span class="cm"># clone and install</span>
+<span class="p">$</span> git clone https://github.com/gogluejf/squid-os
+<span class="p">$</span> cd squid-os
+<span class="p">$</span> ./install.sh</pre>
+
+    <h2>Build manually</h2>
+    <p>Squid OS is a single Go binary — building from source is just as simple:</p>
+    <pre class="code"><span class="cm"># requires Go</span>
+<span class="p">$</span> go build
+<span class="p">$</span> ./squid-os</pre>
+
+    <h2>Next steps</h2>
+    <p>The <a href="https://github.com/gogluejf/squid-os#readme" target="_blank" rel="noopener">README</a> covers configuration, providers, and every feature in detail. Point Squid OS at your local Ollama, vLLM, or LiteLLM endpoint — or connect a cloud provider — and start talking to your operating system.</p>
+  </div>
+</article>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <img src="assets/squid-mark.png" alt="Squid OS">
+        <p>One conversational interface for your entire operating system. Built in Go, optimized for local AI.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="download.html">Download</a></li>
+          <li><a href="https://github.com/gogluejf/squid-os#readme" target="_blank" rel="noopener">Documentation</a></li>
+          <li><a href="examples.html">Examples</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Community</h4>
+        <ul>
+          <li><a href="https://github.com/gogluejf/squid-os" target="_blank" rel="noopener">GitHub</a></li>
+          <li><a href="https://www.linkedin.com/in/renejf/" target="_blank" rel="noopener">LinkedIn</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Learn</h4>
+        <ul>
+          <li><a href="why.html">Why Squid OS exists</a></li>
+          <li><a href="skills.html">Skills</a></li>
+          <li><a href="local-ai.html">Local AI</a></li>
+          <li><a href="architecture.html">Architecture</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 Jean-Francois Rene · <a href="https://github.com/gogluejf/squid-os/blob/master/LICENSE" target="_blank" rel="noopener">MIT License</a></span>
+      <span>"Squid OS" and the Squid OS logo are <a href="https://github.com/gogluejf/squid-os/blob/master/TRADEMARKS.md" target="_blank" rel="noopener">trademarks</a> of Jean-Francois Rene.</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

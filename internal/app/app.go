@@ -36,7 +36,7 @@ type Model struct {
 	historySearch ui.HistorySearchOverlay
 
 	// Pickers
-	modelEntries []provider.ModelEntry
+	modelEntries  []provider.ModelEntry
 	pickerPayload interface{}
 
 	// Active component (Picker, Prompt, or Question overlay)

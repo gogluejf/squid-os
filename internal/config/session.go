@@ -224,7 +224,7 @@ func TotalExecutionTokens(entries []ToolCallEntry) int {
 }
 
 // NewSessionFile creates a new empty session
-func NewSessionFile(provider, model string, thinking ThinkingConfig, systemPrompt string, workingDir string) SessionFile {
+func NewSessionFile(inf InferenceConfig, systemPrompt string, workingDir string) SessionFile {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return SessionFile{
 		Version: 1,
@@ -233,16 +233,8 @@ func NewSessionFile(provider, model string, thinking ThinkingConfig, systemPromp
 			CreatedAt: now,
 			UpdatedAt: now,
 			Inference: SessionInference{
-				Initial: InferenceConfig{
-					Provider: provider,
-					Model:    model,
-					Thinking: thinking,
-				},
-				Current: InferenceConfig{
-					Provider: provider,
-					Model:    model,
-					Thinking: thinking,
-				},
+				Initial: inf,
+				Current: inf,
 			},
 			SystemPromptFile: systemPrompt,
 			WorkingDir:       workingDir,

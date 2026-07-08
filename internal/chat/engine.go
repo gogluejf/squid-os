@@ -334,8 +334,8 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 	return ch
 }
 
-// BuildGoAIMessages converts config.Message history to GoAI provider.Message.
-func BuildGoAIMessages(paths config.Paths, settings config.Settings, messages []config.Message) []goai_provider.Message {
+// BuildAPIMessages converts config.Message history to GoAI provider.Message.
+func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []config.Message) []goai_provider.Message {
 	var out []goai_provider.Message
 
 	// Collect all system messages and concatenate with \n\n, preserving old behavior.
@@ -471,97 +471,4 @@ func RepairArgs(args string) (string, bool) {
 		}
 	}
 	return `{"_error": "malformed JSON from model, original args discarded"}`, false
-}
-
-// BuildAPIMessages converts Message to ChatMessages for the API.
-// This function centralizes message building logic used by both headless and TUI modes.
-//
-// System prompt: all RoleSystem messages are concatenated with \n\n into a single system message.
-//
-// TODO: Tools are loaded from current engine config (tools.GetTools()), not from
-// session messages. This means if tools change between sessions, the saved
-// tools_definition internal message will not match the actual tools sent in
-// the API request. Fix later.
-func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []config.Message) []ChatMessage {
-	var msgs []ChatMessage
-
-	// Collect all system messages and concatenate with \n\n
-	var sysParts []string
-	for _, msg := range messages {
-		if msg.Role == config.RoleSystem {
-			sysParts = append(sysParts, msg.Text)
-		}
-	}
-	if len(sysParts) > 0 {
-		msgs = append(msgs, ChatMessage{Role: "system", Content: strings.Join(sysParts, "\n\n")})
-	}
-
-	// Convert display messages to API messages
-	for _, msg := range messages {
-		// Skip system and internal messages — system is handled above, internal is metadata only
-		switch msg.Role {
-		case config.RoleSystem, config.RoleInternal:
-			continue
-		}
-
-		switch msg.Role {
-		case config.RoleUser:
-			if msg.ImagePath != "" {
-				parts, err := BuildMultimodalContent(msg.Text, msg.ImagePath)
-				if err == nil {
-					msgs = append(msgs, ChatMessage{Role: "user", Content: parts})
-				} else {
-					msgs = append(msgs, ChatMessage{Role: "user", Content: msg.Text})
-				}
-			} else {
-				msgs = append(msgs, ChatMessage{Role: "user", Content: msg.Text})
-			}
-		case config.RoleAssistant:
-			cm := ChatMessage{Role: "assistant", Content: msg.Text}
-			if len(msg.ToolCalls) > 0 {
-				cm.ToolCalls = make([]ToolCall, len(msg.ToolCalls))
-				for i, tc := range msg.ToolCalls {
-					args := tc.Instruction.Arguments
-					// Repair malformed arguments stored from previous turns
-					args, _ = RepairArgs(args)
-					cm.ToolCalls[i] = ToolCall{
-						ID:   tc.ID,
-						Type: tc.Type,
-						Function: struct {
-							Name string `json:"name"`
-							Args string `json:"arguments"`
-						}{Name: tc.Instruction.Name, Args: args},
-						Name:     tc.Instruction.Name,
-						ArgsJSON: args,
-					}
-				}
-				if msg.Text == "" {
-					cm.Content = ""
-				}
-			}
-			msgs = append(msgs, cm)
-			// Generate tool role messages for any executed tool calls
-			for _, tc := range msg.ToolCalls {
-				if tc.Execution.Status == "" {
-					continue
-				}
-				content := tc.Execution.Result
-				if tc.Execution.Status == "error" && tc.Execution.Error != "" {
-					content = tc.Execution.Error
-				}
-				msgs = append(msgs, ChatMessage{
-					Role:       "tool",
-					ToolCallID: tc.ID,
-					Content:    content,
-					Name:       tc.Instruction.Name,
-				})
-			}
-		case config.RoleSynthetic:
-			// Internal messages (e.g. stream aborted) become a synthetic assistant
-			// message for the API so the model knows the previous turn was interrupted.
-			msgs = append(msgs, ChatMessage{Role: "assistant", Content: msg.Text})
-		}
-	}
-
-	return msgs
 }

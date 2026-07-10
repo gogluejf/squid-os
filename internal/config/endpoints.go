@@ -64,11 +64,21 @@ type ProviderSettings struct {
 	Credentials *ProviderCreds `json:"credentials,omitempty"`
 }
 
+// AuthStatus indicates the credential state for persistence purposes.
+type AuthStatus string
+
+const (
+	AuthStatusOK       AuthStatus = ""           // default, no action needed
+	AuthStatusFailed   AuthStatus = "failed"     // auth failed, show sentinel
+	AuthStatusRefreshed AuthStatus = "refreshed" // token was refreshed, needs saving
+)
+
 // ProviderCreds holds the active credentials for a provider.
 type ProviderCreds struct {
 	ActiveAuthMethod AuthMethod  `json:"active_auth_method"`
 	APIKey           string      `json:"api_key,omitempty"`
 	OAuth            *OAuthCreds `json:"oauth,omitempty"`
+	AuthStatus       AuthStatus  `json:"auth_status,omitempty"` // OK, failed, or refreshed
 }
 
 // OAuthCreds holds OAuth2 tokens for a provider.
@@ -133,4 +143,17 @@ func SaveEndpoints(p Paths, e EndpointsConfig) error {
 		return err
 	}
 	return os.WriteFile(p.EndpointsFile(), data, 0644)
+}
+
+// SaveProviderSettings loads the full endpoints config, updates a single provider's
+// settings by name (using the live pointer), and writes back.
+func SaveProviderSettings(p Paths, settings *ProviderSettings) error {
+	e := LoadEndpoints(p)
+	for i := range e.Providers {
+		if e.Providers[i].Name == settings.Name {
+			e.Providers[i] = *settings
+			break
+		}
+	}
+	return SaveEndpoints(p, e)
 }

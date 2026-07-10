@@ -105,10 +105,12 @@ func (o *CodexProvider) BuildGoAIModel(model string) (provider.LanguageModel, bo
 		}
 		ts := provider.CachedTokenSource(func(ctx context.Context) (*provider.Token, error) {
 			accessToken := o.creds().OAuth.AccessToken
-			if accessToken == "" {
+			if accessToken == "" || (!o.creds().OAuth.ExpiresAt.IsZero() && time.Now().After(o.creds().OAuth.ExpiresAt)) {
 				if err := o.refreshOAuth(); err != nil {
+					o.creds().AuthStatus = config.AuthStatusFailed
 					return nil, err
 				}
+				o.creds().AuthStatus = config.AuthStatusRefreshed
 				accessToken = o.creds().OAuth.AccessToken
 			}
 			return &provider.Token{

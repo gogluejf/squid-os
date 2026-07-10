@@ -96,11 +96,13 @@ func (o *OpenAIProvider) BuildGoAIModel(model string) (provider.LanguageModel, b
 		}
 		ts := provider.CachedTokenSource(func(ctx context.Context) (*provider.Token, error) {
 			accessToken := o.creds().OAuth.AccessToken
-			if accessToken == "" {
-				// Try refresh
+			if accessToken == "" || (!o.creds().OAuth.ExpiresAt.IsZero() && time.Now().After(o.creds().OAuth.ExpiresAt)) {
+				// Token is empty or expired — attempt refresh
 				if err := o.refreshOAuth(); err != nil {
+					o.creds().AuthStatus = config.AuthStatusFailed
 					return nil, err
 				}
+				o.creds().AuthStatus = config.AuthStatusRefreshed
 				accessToken = o.creds().OAuth.AccessToken
 			}
 			return &provider.Token{

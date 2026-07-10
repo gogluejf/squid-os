@@ -23,11 +23,27 @@ type StreamEvent struct {
 	Done          bool       // stream finished
 	StopReason    string     // from the final chunk
 	Error         error      // non-nil on error
+	IsAuthError   bool       // true when Error is an authentication failure (401/expired)
 	ToolCalls     []ToolCall // non-nil when model requests tool calls (flush at end)
 	ToolCallDelta string     // incremental arg fragment for timing/token tracking
 	ToolCallIdx   int        // tool call index this delta belongs to
 	ToolCallName  string     // accumulated name so far for this tool call
 	ToolCallID    string     // tool call ID when available
+}
+
+// isAuthFailure returns true if the error message indicates an authentication failure.
+func isAuthFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "401") ||
+		strings.Contains(msg, "unauthorized") ||
+		strings.Contains(msg, "invalidapi") ||
+		strings.Contains(msg, "invalid_api") ||
+		strings.Contains(msg, "invalid token") ||
+		strings.Contains(msg, "token expired") ||
+		strings.Contains(msg, "no credentials")
 }
 
 // ToolCall represents a single tool call from the model.
@@ -152,7 +168,7 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 		// Build GoAI LanguageModel from provider
 		langModel, parseThinking, err := e.provider.BuildGoAIModel(e.Model)
 		if err != nil {
-			ch <- StreamEvent{Error: fmt.Errorf("build model: %w", err)}
+			ch <- StreamEvent{Error: fmt.Errorf("build model: %w", err), IsAuthError: isAuthFailure(err)}
 			return
 		}
 
@@ -179,7 +195,7 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 
 		stream, err := goai.StreamText(ctx, langModel, streamOpts...)
 		if err != nil {
-			ch <- StreamEvent{Error: fmt.Errorf("stream init: %w", err)}
+			ch <- StreamEvent{Error: fmt.Errorf("stream init: %w", err), IsAuthError: isAuthFailure(err)}
 			return
 		}
 
@@ -312,7 +328,7 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 				return
 
 			case goai_provider.ChunkError:
-				ch <- StreamEvent{Error: chunk.Error}
+				ch <- StreamEvent{Error: chunk.Error, IsAuthError: isAuthFailure(chunk.Error)}
 				return
 			}
 		}

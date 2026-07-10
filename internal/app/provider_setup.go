@@ -377,6 +377,9 @@ func (m *Model) onProviderConfigComplete(s *config.ProviderSettings, results map
 		}
 	}
 
+	// Clear any previous auth-failed status on successful configuration
+	s.Credentials.AuthStatus = config.AuthStatusOK
+
 	// Save
 	m.saveSettings(*s)
 	m.setNotification(ui.NotificationInfo, fmt.Sprintf("Configured provider: %s", s.Name))

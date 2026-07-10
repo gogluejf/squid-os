@@ -259,6 +259,12 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	(&m).clearNotification()
 
 	providerSettings := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
+	// If the provider refreshed its token since the last save, persist it now.
+	if providerSettings != nil && providerSettings.Credentials != nil &&
+		providerSettings.Credentials.AuthStatus == config.AuthStatusRefreshed {
+		providerSettings.Credentials.AuthStatus = config.AuthStatusOK
+		config.SaveProviderSettings(m.paths, providerSettings)
+	}
 	engine := chat.NewEngine(providerSettings, m.settings.Model, m.settings.Thinking)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -283,15 +289,34 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			m.attachedImage = image
 		}
 
-		errText := "Stream error: " + event.Error.Error()
-		m.session.appendMsg(config.Message{
-			ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-			Role:        config.RoleSynthetic,
-			CreatedAt:   time.Now(),
-			Text:        errText,
-			Label:       "stream error",
-			TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(errText)},
-		})
+		if event.IsAuthError {
+			// Auth failure: save credentials (AuthStatus is already set to "failed" by the provider)
+			// and invalidate model cache.
+			providerSettings := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
+			if providerSettings != nil {
+				config.SaveProviderSettings(m.paths, providerSettings)
+			}
+			m.modelEntries = nil
+			errText := "Authentication failed — use /model to re-authenticate"
+			m.session.appendMsg(config.Message{
+				ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+				Role:        config.RoleSynthetic,
+				CreatedAt:   time.Now(),
+				Text:        errText,
+				Label:       "auth error",
+				TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(errText)},
+			})
+		} else {
+			errText := "Stream error: " + event.Error.Error()
+			m.session.appendMsg(config.Message{
+				ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+				Role:        config.RoleSynthetic,
+				CreatedAt:   time.Now(),
+				Text:        errText,
+				Label:       "stream error",
+				TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(errText)},
+			})
+		}
 
 		nm, autoSaveCmd := m.autoSave()
 		m = nm
@@ -749,6 +774,11 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 	m.toolReg = tools.GetRegistry()
 
 	providerSettings := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
+	if providerSettings != nil && providerSettings.Credentials != nil &&
+		providerSettings.Credentials.AuthStatus == config.AuthStatusRefreshed {
+		providerSettings.Credentials.AuthStatus = config.AuthStatusOK
+		config.SaveProviderSettings(m.paths, providerSettings)
+	}
 	engine := chat.NewEngine(providerSettings, m.settings.Model, m.settings.Thinking)
 
 	ctx, cancel := context.WithCancel(context.Background())

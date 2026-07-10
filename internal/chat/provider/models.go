@@ -60,6 +60,24 @@ func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEn
 				return
 			}
 
+			// If the provider was marked as auth-failed (persisted), show sentinel immediately.
+			if s.Credentials.AuthStatus == config.AuthStatusFailed {
+				mu.Lock()
+				label := "<auth failed>"
+				if s.Credentials.ActiveAuthMethod == config.AuthOAuth {
+					label = "<auth expired>"
+				} else if s.Credentials.ActiveAuthMethod == config.AuthAPIKey {
+					label = "<key invalid>"
+				}
+				models = append(models, ModelEntry{
+					ID:          label,
+					Provider:    name,
+					NeedsConfig: true,
+				})
+				mu.Unlock()
+				return
+			}
+
 			p := Lookup(name, &s)
 			if p == nil {
 				mu.Lock()

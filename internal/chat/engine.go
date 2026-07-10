@@ -335,7 +335,7 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 }
 
 // BuildAPIMessages converts config.Message history to GoAI provider.Message.
-func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []config.Message) []goai_provider.Message {
+func BuildAPIMessages(messages []config.Message) []goai_provider.Message {
 	var out []goai_provider.Message
 
 	// Collect all system messages and concatenate with \n\n, preserving old behavior.
@@ -428,8 +428,6 @@ func BuildAPIMessages(paths config.Paths, settings config.Settings, messages []c
 		}
 	}
 
-	_ = paths
-	_ = settings
 	return out
 }
 

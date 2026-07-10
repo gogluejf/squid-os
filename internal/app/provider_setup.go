@@ -129,9 +129,9 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 		steps["baseURL"] = component.SequenceStep{
 			Key: "baseURL",
 			Component: &component.Prompt{
-				Title: fmt.Sprintf("Configure %s", s.Name),
-				Description: "Enter the provider base URL. For OpenAI-compatible servers like vLLM/LiteLLM, use the API root (usually ending in /v1), not the full /chat/completions URL.",
-				Label: "Base URL: ",
+				Title:        fmt.Sprintf("Configure %s", s.Name),
+				Description:  "Enter the provider base URL. For OpenAI-compatible servers like vLLM/LiteLLM, use the API root (usually ending in /v1), not the full /chat/completions URL.",
+				Label:        "Base URL: ",
 				DefaultValue: defaultURL,
 			},
 			OnAdvance: func(ctx any, r map[string]any) string {
@@ -155,8 +155,8 @@ func (m *Model) buildAuthWizard(s *config.ProviderSettings) *component.Sequence 
 		steps["authPick"] = component.SequenceStep{
 			Key: "authPick",
 			Component: &component.Picker{
-				Title:        fmt.Sprintf("Auth method for %s", s.Name),
-				Description:  "Choose how to authenticate",
+				Title:       fmt.Sprintf("Auth method for %s", s.Name),
+				Description: "Choose how to authenticate",
 				Items: func() []component.PickerItem {
 					items := make([]component.PickerItem, len(methodLabels))
 					for i, label := range methodLabels {

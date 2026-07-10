@@ -251,7 +251,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.textarea.SetValue("")
 	m.textarea.Blur()
 
-	apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, m.session.file.Messages)
+	apiMsgs := chat.BuildAPIMessages(m.session.file.Messages)
 	m.attachedImage = ""
 
 	(&m).setStreamMode()
@@ -743,7 +743,7 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 
 // startStream builds API messages from current session state and starts a new stream.
 func (m *Model) startStream() (tea.Model, tea.Cmd) {
-	apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, m.session.file.Messages)
+	apiMsgs := chat.BuildAPIMessages(m.session.file.Messages)
 
 	m.setStreamMode()
 	m.toolReg = tools.GetRegistry()

@@ -247,11 +247,11 @@ func (m Model) handleHistorySearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.setChatMode()
 
 	case key.Matches(msg, keys.HistorySearch), key.Matches(msg, keys.Up), key.Matches(msg, keys.Down):
-		// Ctrl+R and Up → previous match, Down → next match
+		// Ctrl+R and Up move older through reverse-search results; Down moves newer.
 		if key.Matches(msg, keys.Down) {
-			m.historySearch.NextMatch()
-		} else {
 			m.historySearch.PrevMatch()
+		} else {
+			m.historySearch.NextMatch()
 		}
 		m.textarea.SetValue(m.historySearch.SelectedText())
 		m.autoSizeTextarea()

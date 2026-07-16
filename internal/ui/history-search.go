@@ -38,24 +38,21 @@ func (hs *HistorySearchOverlay) Filter(filter string) {
 		hs.filtered = hs.Items
 	} else {
 		f := strings.ToLower(filter)
-		seen := make(map[string]struct{}, len(hs.filtered))
-		hs.filtered = hs.filtered[:0]
+		seen := make(map[string]struct{}, len(hs.Items))
+		filtered := make([]string, 0, len(hs.Items))
 		// Iterate in reverse so we keep the LAST (most recent) occurrence of duplicates
 		for i := len(hs.Items) - 1; i >= 0; i-- {
 			item := hs.Items[i]
 			if strings.Contains(strings.ToLower(item), f) {
 				if _, ok := seen[item]; !ok {
 					seen[item] = struct{}{}
-					hs.filtered = append(hs.filtered, item)
+					filtered = append(filtered, item)
 				}
 			}
 		}
+		hs.filtered = filtered
 	}
-	if len(hs.filtered) > 0 {
-		hs.MatchIdx = len(hs.filtered) - 1
-	} else {
-		hs.MatchIdx = 0
-	}
+	hs.MatchIdx = 0
 }
 
 // FilteredItems returns the cached filtered results.
@@ -74,7 +71,7 @@ func (hs *HistorySearchOverlay) SelectedText() string {
 	return hs.filtered[hs.MatchIdx]
 }
 
-// NextMatch cycles to the next match (forward through filtered results)
+// NextMatch cycles to the next match in display order (newer to older for reverse search).
 func (hs *HistorySearchOverlay) NextMatch() {
 	if len(hs.filtered) == 0 {
 		return
@@ -82,7 +79,7 @@ func (hs *HistorySearchOverlay) NextMatch() {
 	hs.MatchIdx = (hs.MatchIdx + 1) % len(hs.filtered)
 }
 
-// PrevMatch cycles to the previous match (backward through filtered results)
+// PrevMatch cycles to the previous match in display order (older to newer for reverse search).
 func (hs *HistorySearchOverlay) PrevMatch() {
 	if len(hs.filtered) == 0 {
 		return

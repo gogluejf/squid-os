@@ -19,8 +19,9 @@ var Bash = Tool{
 	DisplayParam: "command",
 	Style:        style.ToolStyle(),
 	IsDestructive: func(args map[string]interface{}) bool {
-		d, ok := args["destructive"].(bool)
-		return ok && d
+		d, _ := args["destructive"].(bool)
+		cmd, _ := args["command"].(string)
+		return d || IsBashCommandDestructive(cmd)
 	},
 	Schema: []byte(`{
 	"type": "object",

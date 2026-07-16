@@ -4,14 +4,19 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
+
+	"squid-os/internal/config"
 )
 
+var testHistoryTime = time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+
 func TestHistorySearchOrdersMatchesNewestFirst(t *testing.T) {
-	hs := NewHistorySearchOverlay([]string{
+	hs := NewHistorySearchOverlay(entries(
 		"oldest git status",
 		"middle git diff",
 		"newest git commit",
-	})
+	))
 
 	hs.Filter("git")
 
@@ -24,13 +29,13 @@ func TestHistorySearchOrdersMatchesNewestFirst(t *testing.T) {
 }
 
 func TestHistorySearchFindsThreeMatchesAmongTwentyNewestFirst(t *testing.T) {
-	items := make([]string, 20)
+	items := make([]config.HistoryEntry, 20)
 	for i := range items {
-		items[i] = fmt.Sprintf("record %02d", i+1)
+		items[i] = entry(fmt.Sprintf("record %02d", i+1))
 	}
-	items[3] = "deploy old"
-	items[10] = "deploy middle"
-	items[18] = "deploy new"
+	items[3] = entry("deploy old")
+	items[10] = entry("deploy middle")
+	items[18] = entry("deploy new")
 
 	hs := NewHistorySearchOverlay(items)
 	hs.Filter("deploy")
@@ -45,11 +50,11 @@ func TestHistorySearchFindsThreeMatchesAmongTwentyNewestFirst(t *testing.T) {
 }
 
 func TestHistorySearchIsCaseInsensitive(t *testing.T) {
-	hs := NewHistorySearchOverlay([]string{
+	hs := NewHistorySearchOverlay(entries(
 		"Git Status",
 		"git diff",
 		"GIT commit",
-	})
+	))
 
 	hs.Filter("git")
 
@@ -61,7 +66,7 @@ func TestHistorySearchIsCaseInsensitive(t *testing.T) {
 }
 
 func TestHistorySearchNoMatches(t *testing.T) {
-	hs := NewHistorySearchOverlay([]string{"git status", "go test"})
+	hs := NewHistorySearchOverlay(entries("git status", "go test"))
 
 	hs.Filter("missing")
 	hs.NextMatch()
@@ -75,11 +80,11 @@ func TestHistorySearchNoMatches(t *testing.T) {
 }
 
 func TestHistorySearchNextMatchMovesToOlderResultAndUpdatesNumber(t *testing.T) {
-	hs := NewHistorySearchOverlay([]string{
+	hs := NewHistorySearchOverlay(entries(
 		"oldest git status",
 		"middle git diff",
 		"newest git commit",
-	})
+	))
 
 	hs.Filter("git")
 	assertSelected(t, &hs, "newest git commit", 0)
@@ -95,7 +100,7 @@ func TestHistorySearchNextMatchMovesToOlderResultAndUpdatesNumber(t *testing.T) 
 }
 
 func TestHistorySearchNextMatchWrapsToNewest(t *testing.T) {
-	hs := NewHistorySearchOverlay([]string{"oldest git", "middle git", "newest git"})
+	hs := NewHistorySearchOverlay(entries("oldest git", "middle git", "newest git"))
 
 	hs.Filter("git")
 	hs.NextMatch()
@@ -107,7 +112,7 @@ func TestHistorySearchNextMatchWrapsToNewest(t *testing.T) {
 }
 
 func TestHistorySearchPrevMatchWrapsToOldest(t *testing.T) {
-	hs := NewHistorySearchOverlay([]string{"oldest git", "middle git", "newest git"})
+	hs := NewHistorySearchOverlay(entries("oldest git", "middle git", "newest git"))
 
 	hs.Filter("git")
 	hs.PrevMatch()
@@ -117,12 +122,12 @@ func TestHistorySearchPrevMatchWrapsToOldest(t *testing.T) {
 }
 
 func TestHistorySearchFilterResetStartsAtFirstMatch(t *testing.T) {
-	hs := NewHistorySearchOverlay([]string{
+	hs := NewHistorySearchOverlay(entries(
 		"oldest git",
 		"middle git",
 		"newest git",
 		"newest commit",
-	})
+	))
 
 	hs.Filter("git")
 	hs.NextMatch()
@@ -134,11 +139,11 @@ func TestHistorySearchFilterResetStartsAtFirstMatch(t *testing.T) {
 }
 
 func TestHistorySearchKeepsMostRecentDuplicate(t *testing.T) {
-	hs := NewHistorySearchOverlay([]string{
+	hs := NewHistorySearchOverlay(entries(
 		"git status",
 		"git diff",
 		"git status",
-	})
+	))
 
 	hs.Filter("git")
 
@@ -165,7 +170,7 @@ func TestHistorySearchNilHistoryIsSafe(t *testing.T) {
 }
 
 func TestHistorySearchRenderWithEmptyFilterHidesCount(t *testing.T) {
-	hs := NewHistorySearchOverlay([]string{"git status", "git diff"})
+	hs := NewHistorySearchOverlay(entries("git status", "git diff"))
 
 	rendered := hs.Render(120)
 	if strings.Contains(rendered, "/2") {
@@ -177,7 +182,7 @@ func TestHistorySearchRenderWithEmptyFilterHidesCount(t *testing.T) {
 }
 
 func TestHistorySearchSelectedTextClampsOutOfRangeIndex(t *testing.T) {
-	hs := NewHistorySearchOverlay([]string{"oldest git", "middle git", "newest git"})
+	hs := NewHistorySearchOverlay(entries("oldest git", "middle git", "newest git"))
 
 	hs.Filter("git")
 	hs.MatchIdx = 99
@@ -185,14 +190,37 @@ func TestHistorySearchSelectedTextClampsOutOfRangeIndex(t *testing.T) {
 	assertSelected(t, &hs, "oldest git", 2)
 }
 
-func assertItems(t *testing.T, got, want []string) {
+func TestHistorySearchRenderShowsSelectedDate(t *testing.T) {
+	hs := NewHistorySearchOverlay([]config.HistoryEntry{{
+		Text:      "git status",
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+	}})
+
+	hs.Filter("git")
+
+	assertRenderContains(t, &hs, "2 hours ago")
+}
+
+func entries(texts ...string) []config.HistoryEntry {
+	items := make([]config.HistoryEntry, 0, len(texts))
+	for _, text := range texts {
+		items = append(items, entry(text))
+	}
+	return items
+}
+
+func entry(text string) config.HistoryEntry {
+	return config.HistoryEntry{Text: text, CreatedAt: testHistoryTime}
+}
+
+func assertItems(t *testing.T, got []config.HistoryEntry, want []string) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf("len(filtered) = %d, want %d; got %#v", len(got), len(want), got)
 	}
 	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("filtered[%d] = %q, want %q; got %#v", i, got[i], want[i], got)
+		if got[i].Text != want[i] {
+			t.Fatalf("filtered[%d] = %q, want %q; got %#v", i, got[i].Text, want[i], got)
 		}
 	}
 }

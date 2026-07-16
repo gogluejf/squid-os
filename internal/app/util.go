@@ -34,7 +34,7 @@ func (m Model) historyUp() (Model, tea.Cmd) {
 	if m.historyIdx != -1 {
 		if m.historyIdx > 0 {
 			m.historyIdx--
-			m.textarea.SetValue(m.history.Entries[m.historyIdx])
+			m.textarea.SetValue(m.history.Entries[m.historyIdx].Text)
 			m.autoSizeTextarea()
 		}
 		return m, nil
@@ -57,7 +57,7 @@ func (m Model) historyUp() (Model, tea.Cmd) {
 	m.draft = m.textarea.Value()
 	m.historyIdx = len(m.history.Entries) - 1
 	if m.historyIdx >= 0 {
-		m.textarea.SetValue(m.history.Entries[m.historyIdx])
+		m.textarea.SetValue(m.history.Entries[m.historyIdx].Text)
 		m.autoSizeTextarea()
 	}
 	return m, nil
@@ -73,7 +73,7 @@ func (m Model) historyDown() (Model, tea.Cmd) {
 	if m.historyIdx != -1 {
 		if m.historyIdx < len(m.history.Entries)-1 {
 			m.historyIdx++
-			m.textarea.SetValue(m.history.Entries[m.historyIdx])
+			m.textarea.SetValue(m.history.Entries[m.historyIdx].Text)
 			m.autoSizeTextarea()
 		} else {
 			// At end of history, restore draft

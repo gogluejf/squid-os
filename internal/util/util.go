@@ -25,7 +25,15 @@ func Truncate(s string, maxLen int) string {
 
 // FriendlyModDate returns a human-readable relative time string for a modified date.
 func FriendlyModDate(t time.Time) string {
-	ago := time.Since(t)
+	return FriendlyHistoryDate(t, time.Now())
+}
+
+// FriendlyHistoryDate returns a compact history timestamp label relative to now.
+func FriendlyHistoryDate(t, now time.Time) string {
+	ago := now.Sub(t)
+	if ago < 0 {
+		ago = 0
+	}
 	switch {
 	case ago < time.Minute:
 		return "just now"
@@ -47,8 +55,19 @@ func FriendlyModDate(t time.Time) string {
 			return "yesterday"
 		}
 		return fmt.Sprintf("%d days ago", d)
-	default:
+	case ago < 30*24*time.Hour:
+		w := int(ago.Hours() / (24 * 7))
+		if w < 1 {
+			w = 1
+		}
+		if w == 1 {
+			return "1 week ago"
+		}
+		return fmt.Sprintf("%d weeks ago", w)
+	case t.Year() == now.Year():
 		return t.Format("Jan 2")
+	default:
+		return t.Format("Jan 2, 2006")
 	}
 }
 

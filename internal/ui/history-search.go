@@ -3,8 +3,11 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"squid-os/internal/config"
 	"squid-os/internal/style"
+	"squid-os/internal/util"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -14,11 +17,11 @@ type HistorySearchOverlay struct {
 	filterStr string
 	MatchIdx  int
 	Visible   bool
-	Items     []string
-	filtered  []string
+	Items     []config.HistoryEntry
+	filtered  []config.HistoryEntry
 }
 
-func NewHistorySearchOverlay(items []string) HistorySearchOverlay {
+func NewHistorySearchOverlay(items []config.HistoryEntry) HistorySearchOverlay {
 	return HistorySearchOverlay{
 		Items:    items,
 		filtered: items,
@@ -39,13 +42,13 @@ func (hs *HistorySearchOverlay) Filter(filter string) {
 	} else {
 		f := strings.ToLower(filter)
 		seen := make(map[string]struct{}, len(hs.Items))
-		filtered := make([]string, 0, len(hs.Items))
-		// Iterate in reverse so we keep the LAST (most recent) occurrence of duplicates
+		filtered := make([]config.HistoryEntry, 0, len(hs.Items))
+		// Iterate in reverse so we keep the LAST (most recent) occurrence of duplicates.
 		for i := len(hs.Items) - 1; i >= 0; i-- {
 			item := hs.Items[i]
-			if strings.Contains(strings.ToLower(item), f) {
-				if _, ok := seen[item]; !ok {
-					seen[item] = struct{}{}
+			if strings.Contains(strings.ToLower(item.Text), f) {
+				if _, ok := seen[item.Text]; !ok {
+					seen[item.Text] = struct{}{}
 					filtered = append(filtered, item)
 				}
 			}
@@ -56,19 +59,28 @@ func (hs *HistorySearchOverlay) Filter(filter string) {
 }
 
 // FilteredItems returns the cached filtered results.
-func (hs *HistorySearchOverlay) FilteredItems() []string {
+func (hs *HistorySearchOverlay) FilteredItems() []config.HistoryEntry {
 	return hs.filtered
 }
 
-// SelectedText returns the currently selected item text, or empty string if no matches
+// SelectedText returns the currently selected item text, or empty string if no matches.
 func (hs *HistorySearchOverlay) SelectedText() string {
-	if len(hs.filtered) == 0 {
+	entry, ok := hs.SelectedEntry()
+	if !ok {
 		return ""
+	}
+	return entry.Text
+}
+
+// SelectedEntry returns the currently selected item, or false if no matches.
+func (hs *HistorySearchOverlay) SelectedEntry() (config.HistoryEntry, bool) {
+	if len(hs.filtered) == 0 {
+		return config.HistoryEntry{}, false
 	}
 	if hs.MatchIdx >= len(hs.filtered) {
 		hs.MatchIdx = len(hs.filtered) - 1
 	}
-	return hs.filtered[hs.MatchIdx]
+	return hs.filtered[hs.MatchIdx], true
 }
 
 // NextMatch cycles to the next match in display order (newer to older for reverse search).
@@ -87,7 +99,7 @@ func (hs *HistorySearchOverlay) PrevMatch() {
 	hs.MatchIdx = (hs.MatchIdx - 1 + len(hs.filtered)) % len(hs.filtered)
 }
 
-// Reset clears the history search state
+// Reset clears the history search state.
 func (hs *HistorySearchOverlay) Reset() {
 	hs.filterStr = ""
 	hs.MatchIdx = 0
@@ -130,9 +142,9 @@ func (hs *HistorySearchOverlay) Render(width int) string {
 	case 0:
 		suffix = " (no matches) (esc to exit)"
 	case 1:
-		suffix = " (esc to exit)"
+		suffix = fmt.Sprintf(" · %s · (esc to exit)", hs.selectedDateLabel())
 	default:
-		suffix = fmt.Sprintf(" (%d/%d) (ctrl+r for next, esc to exit)", idx+1, total)
+		suffix = fmt.Sprintf(" (%d/%d) · %s · (ctrl+r for next, esc to exit)", idx+1, total, hs.selectedDateLabel())
 	}
 
 	// Style only the filter text portion with bold white on dark background
@@ -144,4 +156,12 @@ func (hs *HistorySearchOverlay) Render(width int) string {
 
 	// Construct: prefix + styled_filter + dim_suffix
 	return style.StatusLineStyle.Width(width).Render(prefix + filterStyled + dimSuffix)
+}
+
+func (hs *HistorySearchOverlay) selectedDateLabel() string {
+	entry, ok := hs.SelectedEntry()
+	if !ok || entry.CreatedAt.IsZero() {
+		return "unknown date"
+	}
+	return util.FriendlyHistoryDate(entry.CreatedAt, time.Now())
 }

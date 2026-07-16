@@ -108,7 +108,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			if err != nil {
 				return
 			}
-			m.session.LoadFromDoc(sf)
+			m.session = NewUISessionFromDoc(sf)
 			if sf.Session.WorkingDir != "" {
 				m.applyWorkingDir(sf.Session.WorkingDir)
 			}
@@ -128,7 +128,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			if err != nil {
 				return m.setChatMode()
 			}
-			m.session.LoadFromDoc(sf)
+			m.session = NewUISessionFromDoc(sf)
 			m.sessionSnapshot = nil
 			m.setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
 			return m.setChatMode()

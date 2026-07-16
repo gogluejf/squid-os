@@ -20,20 +20,22 @@ type Session struct {
 
 // SessionConfig carries initial session settings for CLI, subagents, and TUI.
 type SessionConfig struct {
-	Provider         string
-	Model            string
-	Thinking         config.ThinkingConfig
-	SystemPromptFile string
-	Tools            []string
-	Skills           []string
-	WorkingDir       string
-	DebugEnabled     bool
+	Provider            string
+	Model               string
+	Thinking            config.ThinkingConfig
+	SystemPromptFile    string
+	Tools               []string
+	Skills              []string
+	WorkingDir          string
+	MaxToolResultTokens int
+	DebugEnabled        bool
 }
 
 // NewSession creates a pure session with initial system/environment/config/tool messages.
 func NewSession(cfg SessionConfig, paths config.Paths) *Session {
 	inf := config.InferenceConfig{Provider: cfg.Provider, Model: cfg.Model, Thinking: cfg.Thinking}
 	doc := config.NewSessionDoc(inf, cfg.SystemPromptFile, cfg.WorkingDir, cfg.Tools, cfg.Skills)
+	doc.Session.MaxToolResultTokens = cfg.MaxToolResultTokens
 	s := &Session{Doc: doc}
 
 	sysContent := config.LoadSystemPrompt(paths, cfg.SystemPromptFile)

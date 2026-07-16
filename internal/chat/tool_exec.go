@@ -34,10 +34,11 @@ type AuthDecision struct {
 }
 
 type ToolExecOptions struct {
-	AuthorizationMode string
-	Decision          *AuthDecision
-	MsgIdx            int
-	StartIndex        int
+	AuthorizationMode   string
+	MaxToolResultTokens int
+	Decision            *AuthDecision
+	MsgIdx              int
+	StartIndex          int
 }
 
 type ToolExecResult struct {
@@ -206,8 +207,14 @@ func ExecuteTools(s *Session, toolReg *tools.Registry, opts ToolExecOptions) Too
 	}
 
 doExecute:
+	maxToolResultTokens := opts.MaxToolResultTokens
+	if maxToolResultTokens <= 0 {
+		maxToolResultTokens = s.Doc.Session.MaxToolResultTokens
+	}
+
 	resultStart := time.Now()
 	result := tool.Execute(args)
+	result = enforceToolResultTokenLimit(result, maxToolResultTokens)
 	entries[i].Execution.Status = result.Status
 	entries[i].Execution.Result = result.Result
 	entries[i].Execution.Error = result.Error
@@ -275,6 +282,29 @@ func nextToolAction(i, total int) ToolExecAction {
 		return ToolExecDone
 	}
 	return ToolExecContinue
+}
+
+func enforceToolResultTokenLimit(result tools.ToolResult, maxTokens int) tools.ToolResult {
+	if maxTokens <= 0 {
+		maxTokens = 15000
+	}
+
+	content := result.Result
+	if result.Status == tools.ResultStatusError {
+		content = result.Error
+	}
+
+	tokens := CountTokensApproxString(content)
+	if tokens <= maxTokens {
+		return result
+	}
+
+	msg := fmt.Sprintf("Tool result too large: estimated %d tokens exceeds max_tool_result_tokens=%d. Refine the command or redirect output to a file.", tokens, maxTokens)
+	return tools.ToolResult{
+		Status: tools.ResultStatusError,
+		Error:  msg,
+		Files:  result.Files,
+	}
 }
 
 func shouldAuthorize(mode string, tool *tools.Tool, args map[string]interface{}) bool {

@@ -257,10 +257,11 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 
 	for {
 		result := chat.ExecuteTools(m.session.Session, m.toolReg, chat.ToolExecOptions{
-			AuthorizationMode: m.settings.ValidateAuthorization(),
-			Decision:          decision,
-			MsgIdx:            msgIdx,
-			StartIndex:        startIndex,
+			AuthorizationMode:   m.settings.ValidateAuthorization(),
+			MaxToolResultTokens: m.settings.MaxToolResultTokens,
+			Decision:            decision,
+			MsgIdx:              msgIdx,
+			StartIndex:          startIndex,
 		})
 		decision = nil
 

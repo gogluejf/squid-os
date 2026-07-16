@@ -18,14 +18,15 @@ func Run(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	}
 
 	s := chat.NewSession(chat.SessionConfig{
-		Provider:         settings.Provider,
-		Model:            settings.Model,
-		Thinking:         settings.Thinking,
-		SystemPromptFile: settings.SystemPromptFile,
-		Tools:            nil,
-		Skills:           nil,
-		WorkingDir:       "",
-		DebugEnabled:     settings.DebugEnabled,
+		Provider:            settings.Provider,
+		Model:               settings.Model,
+		Thinking:            settings.Thinking,
+		SystemPromptFile:    settings.SystemPromptFile,
+		Tools:               nil,
+		Skills:              nil,
+		WorkingDir:          "",
+		MaxToolResultTokens: settings.MaxToolResultTokens,
+		DebugEnabled:        settings.DebugEnabled,
 	}, paths)
 	s.Append(chat.NewUserMessage(fmt.Sprintf("msg_%d", len(s.Doc.Messages)+1), prompt, imagePath))
 

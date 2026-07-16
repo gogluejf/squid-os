@@ -20,29 +20,22 @@ func NewUISession(cfg chat.SessionConfig, paths config.Paths) *UISession {
 	return &UISession{Session: chat.NewSession(cfg, paths)}
 }
 
-func UISessionFromDoc(sd config.SessionDoc) *UISession {
+func NewUISessionFromDoc(sd config.SessionDoc) *UISession {
 	return &UISession{Session: chat.LoadSession(sd)}
 }
 
 func NewUISessionFromSettings(settings config.Settings, paths config.Paths, workingDir string) *UISession {
 	return NewUISession(chat.SessionConfig{
-		Provider:         settings.Provider,
-		Model:            settings.Model,
-		Thinking:         settings.Thinking,
-		SystemPromptFile: settings.SystemPromptFile,
-		Tools:            availableToolNames(),
-		Skills:           availableSkillNames(),
-		WorkingDir:       workingDir,
-		DebugEnabled:     settings.DebugEnabled,
+		Provider:            settings.Provider,
+		Model:               settings.Model,
+		Thinking:            settings.Thinking,
+		SystemPromptFile:    settings.SystemPromptFile,
+		Tools:               availableToolNames(),
+		Skills:              availableSkillNames(),
+		WorkingDir:          workingDir,
+		MaxToolResultTokens: settings.MaxToolResultTokens,
+		DebugEnabled:        settings.DebugEnabled,
 	}, paths)
-}
-
-func (u *UISession) LoadFromDoc(sd config.SessionDoc) {
-	u.Session = chat.LoadSession(sd)
-	u.renderedMessages = nil
-	u.renderedWidth = 0
-	u.undoStack = nil
-	u.UIStream.reset()
 }
 
 func (u *UISession) destroyLastSequence() (userText, userImage string) {

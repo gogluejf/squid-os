@@ -61,16 +61,17 @@ type SessionSkills struct {
 }
 
 type SessionMeta struct {
-	ID               string           `json:"id"`
-	Title            string           `json:"title"`
-	CreatedAt        string           `json:"created_at"`
-	UpdatedAt        string           `json:"updated_at"`
-	Inference        SessionInference `json:"inference"`
-	SystemPromptFile string           `json:"system_prompt_file"`
-	WorkingDir       string           `json:"working_dir"`
-	Skill            SessionSkill     `json:"skill"`
-	Tools            SessionTools     `json:"tools,omitempty"`
-	Skills           SessionSkills    `json:"skills,omitempty"`
+	ID                  string           `json:"id"`
+	Title               string           `json:"title"`
+	CreatedAt           string           `json:"created_at"`
+	UpdatedAt           string           `json:"updated_at"`
+	Inference           SessionInference `json:"inference"`
+	SystemPromptFile    string           `json:"system_prompt_file"`
+	WorkingDir          string           `json:"working_dir"`
+	MaxToolResultTokens int              `json:"max_tool_result_tokens,omitempty"`
+	Skill               SessionSkill     `json:"skill"`
+	Tools               SessionTools     `json:"tools,omitempty"`
+	Skills              SessionSkills    `json:"skills,omitempty"`
 }
 
 type ContentMetrics struct {
@@ -241,9 +242,10 @@ func NewSessionDoc(inf InferenceConfig, systemPrompt string, workingDir string, 
 	return SessionDoc{
 		Version: 1,
 		Session: SessionMeta{
-			ID:        uuid.New().String(),
-			CreatedAt: now,
-			UpdatedAt: now,
+			ID:                  uuid.New().String(),
+			CreatedAt:           now,
+			UpdatedAt:           now,
+			MaxToolResultTokens: 0,
 			Inference: SessionInference{
 				Initial: inf,
 				Current: inf,

@@ -93,7 +93,7 @@ func ShortStat(dir string) string {
 		Background(bg).
 		Foreground(lipgloss.Color("209"))
 
-	label := dimStyle.Render("git ") + orangeStyle.Render(hash)
+	label := dimStyle.Render("[git: ") + orangeStyle.Render(hash)
 
 	if insertions > 0 || deletions > 0 {
 		parts := []string{label}
@@ -114,10 +114,10 @@ func ShortStat(dir string) string {
 			parts = append(parts, delStyle.Render(fmt.Sprintf(" -%d", deletions)))
 		}
 
-		return dir + " " + dimStyle.Render("(") + strings.Join(parts, "") + dimStyle.Render(")")
+		return dir + " " + strings.Join(parts, "") + dimStyle.Render("]")
 	}
 
-	return dir + " " + dimStyle.Render("(") + label + dimStyle.Render(")")
+	return dir + " " + label + dimStyle.Render("]")
 }
 
 // --- Cached version for hot-path (footer) use ---

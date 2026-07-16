@@ -80,8 +80,7 @@ func RenderFooter(data FooterData, width int) string {
 
 	// ── Line 1: status chips + command hints (left) + model label (right) ─────────────
 	left1 := " " + authLabel + skillLabel + thinkLabel + style.FooterDimStyle.Render(",  ") +
-		style.FooterKeyStyle.Render("/") + style.FooterDimStyle.Render("cmd") +
-		style.FooterDimStyle.Render("  ") +
+		style.FooterKeyStyle.Render("/") + style.FooterDimStyle.Render("cmd ") +
 		style.FooterKeyStyle.Render("ctrl+h") + style.FooterDimStyle.Render(" help")
 
 	modelLabel := style.FooterValueStyle.Render(data.Model)
@@ -111,9 +110,11 @@ func RenderFooter(data FooterData, width int) string {
 	tokLabel += style.FooterDimStyle.Render("]")
 	parts = append(parts, tokLabel)
 
-	ctxBar := renderContextBar(data.TotalTokens, data.ContextWindow)
-	if ctxBar != "" {
-		parts = append(parts, ctxBar)
+	if width >= 120 {
+		ctxBar := renderContextBar(data.TotalTokens, data.ContextWindow)
+		if ctxBar != "" {
+			parts = append(parts, ctxBar)
+		}
 	}
 
 	right2 := sep + strings.Join(parts, sep)

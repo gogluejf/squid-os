@@ -45,30 +45,22 @@ func parseShortstat(output string) (int, int) {
 }
 
 // ShortStat returns a color-coded git status string for the given directory.
-// Format for a git repo:
-//
-//	"~/path (git a1b2c3d +12 -5)"
-//	- "git" word in orange (same as inline code)
-//	- hash in orange (same as inline code)
-//	- insertions in light green, deletions in light red
-//	- if no uncommitted changes: "~/path (git a1b2c3d)"
-//
-// For non-git directories, returns the path unchanged.
-// The output is pre-styled with lipgloss (ready to render in footer).
-func ShortStat(dir string) string {
+// The optional showLabel flag controls whether the "git: " label is included.
+func ShortStat(dir string, showLabels ...bool) string {
 	if dir == "" || !HasGit(dir) {
 		return dir
 	}
-
-	// Get short hash of last commit
-	hash := gitCmd(dir, "rev-parse", "--short", "HEAD")
-	if hash == "" {
-		return dir // no commits yet
+	showLabel := true
+	if len(showLabels) > 0 {
+		showLabel = showLabels[0]
 	}
 
-	// Get unstaged changes
+	hash := gitCmd(dir, "rev-parse", "--short", "HEAD")
+	if hash == "" {
+		return dir
+	}
+
 	unstaged := gitCmd(dir, "diff", "--shortstat")
-	// Get staged changes
 	staged := gitCmd(dir, "diff", "--cached", "--shortstat")
 
 	insertions, deletions := 0, 0
@@ -83,9 +75,7 @@ func ShortStat(dir string) string {
 		deletions += d
 	}
 
-	// Build styled output
 	bg := lipgloss.Color(style.P.BgFooter)
-
 	dimStyle := lipgloss.NewStyle().
 		Background(bg).
 		Foreground(lipgloss.Color(style.P.TextDim))
@@ -93,13 +83,16 @@ func ShortStat(dir string) string {
 		Background(bg).
 		Foreground(lipgloss.Color("209"))
 
-	label := dimStyle.Render("[git: ") + orangeStyle.Render(hash)
+	prefix := "[git: "
+	if !showLabel {
+		prefix = "["
+	}
+	label := dimStyle.Render(prefix) + orangeStyle.Render(hash)
 
 	if insertions > 0 || deletions > 0 {
 		parts := []string{label}
 
 		if insertions > 0 {
-			// Light green for insertions
 			insStyle := lipgloss.NewStyle().
 				Background(bg).
 				Foreground(lipgloss.Color("114"))
@@ -107,7 +100,6 @@ func ShortStat(dir string) string {
 		}
 
 		if deletions > 0 {
-			// Light red for deletions
 			delStyle := lipgloss.NewStyle().
 				Background(bg).
 				Foreground(lipgloss.Color("203"))
@@ -124,9 +116,14 @@ func ShortStat(dir string) string {
 
 const shortStatTTL = 2 * time.Second
 
+type shortStatCacheKey struct {
+	dir       string
+	showLabel bool
+}
+
 var (
 	shortStatCacheMu sync.Mutex
-	shortStatCache   = map[string]struct {
+	shortStatCache   = map[shortStatCacheKey]struct {
 		value time.Time
 		text  string
 	}{}
@@ -134,11 +131,16 @@ var (
 
 // CachedShortStat returns the git shortstat string for the given directory,
 // cached for shortStatTTL to avoid spawning git processes on every render tick.
-func CachedShortStat(dir string) string {
+func CachedShortStat(dir string, showLabels ...bool) string {
+	showLabel := true
+	if len(showLabels) > 0 {
+		showLabel = showLabels[0]
+	}
+	key := shortStatCacheKey{dir: dir, showLabel: showLabel}
 	now := time.Now()
 
 	shortStatCacheMu.Lock()
-	entry, ok := shortStatCache[dir]
+	entry, ok := shortStatCache[key]
 	if ok && now.Sub(entry.value) < shortStatTTL {
 		cached := entry.text
 		shortStatCacheMu.Unlock()
@@ -146,10 +148,10 @@ func CachedShortStat(dir string) string {
 	}
 	shortStatCacheMu.Unlock()
 
-	result := ShortStat(dir)
+	result := ShortStat(dir, showLabel)
 
 	shortStatCacheMu.Lock()
-	shortStatCache[dir] = struct {
+	shortStatCache[key] = struct {
 		value time.Time
 		text  string
 	}{value: now, text: result}

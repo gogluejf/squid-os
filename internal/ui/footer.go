@@ -46,12 +46,16 @@ func RenderFooter(data FooterData, width int) string {
 
 	sep := style.FooterDimStyle.Render(" · ")
 
-	// Thinking indicator — always visible, white text on footer bg.
+	// Thinking indicator — hide the label word on narrow footers.
+	thinkPrefix := "think: "
+	if width < 80 {
+		thinkPrefix = ""
+	}
 	var thinkLabel string
 	if data.ThinkingOn {
-		thinkLabel = style.FooterDimStyle.Render("[think: ") + style.FooterValueStyle.Render("on") + style.FooterDimStyle.Render("]")
+		thinkLabel = style.FooterDimStyle.Render("["+thinkPrefix) + style.FooterValueStyle.Render("on") + style.FooterDimStyle.Render("]")
 	} else {
-		thinkLabel = style.FooterDimStyle.Render("[think: off]")
+		thinkLabel = style.FooterDimStyle.Render("[" + thinkPrefix + "off]")
 	}
 
 	// Authorization mode indicator — only the mode name is colored, brackets stay default.
@@ -61,29 +65,37 @@ func RenderFooter(data FooterData, width int) string {
 		Foreground(lipgloss.Color(authColor))
 	authLabel := style.FooterDimStyle.Render("[") + modeStyle.Render(data.AuthorizationMode) + style.FooterDimStyle.Render("]")
 
-	// Skill indicator — always shown; value colored with skill color.
+	// Skill indicator — hide the label word on narrow footers.
+	skillPrefix := "skill: "
+	if width < 80 {
+		skillPrefix = ""
+	}
 	var skillLabel string
 	skillStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(style.P.BgFooter)).
 		Foreground(lipgloss.Color(style.P.TextSkill))
 	if data.Skill.Next != nil {
 		if *data.Skill.Next != "" {
-			skillLabel = style.FooterDimStyle.Render("[skill: ") + skillStyle.Render(*data.Skill.Next) + style.FooterDimStyle.Render("]")
+			skillLabel = style.FooterDimStyle.Render("["+skillPrefix) + skillStyle.Render(*data.Skill.Next) + style.FooterDimStyle.Render("]")
 		} else {
-			skillLabel = style.FooterDimStyle.Render("[skill: none]")
+			skillLabel = style.FooterDimStyle.Render("[" + skillPrefix + "none]")
 		}
 	} else if data.Skill.Current != "" {
-		skillLabel = style.FooterDimStyle.Render("[skill: ") + skillStyle.Render(data.Skill.Current) + style.FooterDimStyle.Render("]")
+		skillLabel = style.FooterDimStyle.Render("["+skillPrefix) + skillStyle.Render(data.Skill.Current) + style.FooterDimStyle.Render("]")
 	} else {
-		skillLabel = style.FooterDimStyle.Render("[skill: none]")
+		skillLabel = style.FooterDimStyle.Render("[" + skillPrefix + "none]")
 	}
 
 	// ── Line 1: status chips + command hints (left) + model label (right) ─────────────
-	left1 := " " + authLabel + skillLabel + thinkLabel + style.FooterDimStyle.Render(",  ") +
+	statusChips := skillLabel + thinkLabel
+	left1 := " " + authLabel + statusChips + sep +
 		style.FooterKeyStyle.Render("/") + style.FooterDimStyle.Render("cmd ") +
 		style.FooterKeyStyle.Render("ctrl+h") + style.FooterDimStyle.Render(" help")
 
 	modelLabel := style.FooterValueStyle.Render(data.Model)
+	if width >= 120 && data.Provider != "" {
+		modelLabel = style.FooterDimStyle.Render(data.Provider+"/") + modelLabel
+	}
 
 	gap1 := width - lipgloss.Width(left1) - lipgloss.Width(modelLabel)
 	if gap1 < 1 {
@@ -121,7 +133,7 @@ func RenderFooter(data FooterData, width int) string {
 
 	var curDirLabel string
 	if data.WorkingDir != "" {
-		curDirLabel = style.FooterValueStyle.Render(util.FriendlyPath(git.CachedShortStat(data.WorkingDir)))
+		curDirLabel = style.FooterValueStyle.Render(util.FriendlyPath(git.CachedShortStat(data.WorkingDir, width >= 80)))
 	}
 	left2 := style.FooterValueStyle.Render(" ") + curDirLabel
 

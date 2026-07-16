@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"squid-os/internal/config/defaultconfig"
+	"squid-os/defaultconfig"
 )
 
 // InitConfig unpacks the embedded default config tree into the target directory

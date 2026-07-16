@@ -6,6 +6,8 @@ import (
 	"squid-os/internal/log"
 )
 
+const MinSpeedInferenceDuration = 150 * time.Millisecond
+
 // StreamMetrics owns all timing and token-count metrics for an active inference stream.
 // Text/thinking accumulation lives in StreamState; this type owns the derived metrics.
 type StreamMetrics struct {
@@ -162,7 +164,7 @@ func (m StreamMetrics) LastActivity() time.Time {
 
 func (m StreamMetrics) AvgTokenPerSec() float64 {
 	d := m.InferenceDuration()
-	if d < 100*time.Millisecond {
+	if d < MinSpeedInferenceDuration {
 		return 0
 	}
 	return float64(m.TotalOutputTokens()) / d.Seconds()

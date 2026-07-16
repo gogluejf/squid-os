@@ -206,7 +206,7 @@ func RecomputeSequenceStats(messages []config.Message) {
 			stat.ExecDurMs += tc.Execution.DurationMs
 		}
 	}
-	if stat.InferenceDuractionMs > 0 {
+	if stat.InferenceDuractionMs >= MinSpeedInferenceDuration.Milliseconds() {
 		stat.AvgTokensPerSec = float64(stat.OutputTokens) / float64(stat.InferenceDuractionMs) * 1000.0
 	}
 	head.SequenceStat = stat

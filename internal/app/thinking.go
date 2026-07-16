@@ -11,7 +11,7 @@ import (
 func (m Model) toggleThinking() (Model, tea.Cmd) {
 	m.settings.Thinking.Enabled = !m.settings.Thinking.Enabled
 	_ = config.SaveSettings(m.paths, m.settings)
-	(&m).session.updateConfigMsg(m.settings.Provider, m.settings.Model, m.settings.Thinking)
+	(&m).session.PushConfigChange(m.settings.Provider, m.settings.Model, m.settings.Thinking)
 	(&m).session.invalidateRenderAll()
 	if m.settings.Thinking.Enabled {
 		(&m).setNotification(ui.NotificationInfo, "thinking on")

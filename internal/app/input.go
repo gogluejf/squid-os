@@ -202,10 +202,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Cancel):
-		if m.stream.cancelFn != nil {
-			m.stream.userCancelled = true
-			m.stream.cancelFn()
-		}
+		m.session.Stream.Cancel("Stream aborted by user")
 		return m, nil
 
 	case key.Matches(msg, keys.Expand):

@@ -42,11 +42,9 @@ type Model struct {
 	// Active component (Picker, Prompt, or Question overlay)
 	activeComponent component.Component
 
-	// Session + messages (bundled)
-	session chatSession
-
-	// Stream state (bundled)
-	stream streamState
+	// Session + TUI session state
+	session         *UISession
+	sessionSnapshot *UISession
 
 	// Tools registry (survives across stream resets)
 	toolReg *tools.Registry
@@ -63,10 +61,9 @@ type Model struct {
 	draft      string
 
 	// Misc
-	attachedImage   string
-	notification    ui.Notification
-	incognito       bool
-	sessionSnapshot *chatSession
+	attachedImage string
+	notification  ui.Notification
+	incognito     bool
 
 	// Global expand/collapse state for thinking and tool results (NOT persisted)
 	expanded bool
@@ -74,7 +71,7 @@ type Model struct {
 
 // New creates a new app Model. Pass a non-nil initialSession to pre-load a session,
 // and incognito=true to start in incognito mode.
-func New(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, history config.History, initialSession *config.SessionFile, incognito bool) Model {
+func New(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, history config.History, initialSession *config.SessionDoc, incognito bool) Model {
 	// Initialize skill registry early so LoadEnvironment() picks up skills.
 	if err := skills.InitRegistry(paths.Skills); err != nil {
 		// Non-fatal: log but don't crash
@@ -100,10 +97,10 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 
 	vp := viewport.New(80, 20)
 
-	var sess chatSession
+	var sess *UISession
 	var notification ui.Notification
 	if initialSession != nil {
-		sess.setFrom(*initialSession)
+		sess = UISessionFromDoc(*initialSession)
 		// Show friendly notification for auto-load
 		notification = ui.Notification{
 			Level:   ui.NotificationInfo,
@@ -114,7 +111,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 			wd = initialSession.Session.WorkingDir
 		}
 	} else {
-		sess.clear(settings, paths, wd)
+		sess = NewUISessionFromSettings(settings, paths, wd)
 		// Fresh session — clear LastSessionName so auto-save doesn't overwrite the previous session
 		if settings.LastSessionName != "" {
 			settings.LastSessionName = ""
@@ -160,7 +157,7 @@ func (m *Model) setComponent(c component.Component) {
 func (m *Model) applyWorkingDir(path string) {
 	m.workingDir = path
 	tools.SetWorkingDir(path)
-	m.session.file.Session.WorkingDir = path
+	m.session.Doc.Session.WorkingDir = path
 }
 
 // Init starts the cursor blink command and refreshes the context window.

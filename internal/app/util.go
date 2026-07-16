@@ -157,5 +157,3 @@ func (m *Model) refreshContextWindow(entries []provider.ModelEntry) {
 		}
 	}
 }
-
-

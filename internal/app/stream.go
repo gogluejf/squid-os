@@ -1,8 +1,6 @@
 package app
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -17,105 +15,7 @@ import (
 	"squid-os/internal/tools"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
-	"squid-os/internal/util"
 )
-
-// partialTool holds the streaming-in-progress UI state for a single tool call.
-type partialTool struct {
-	id      string
-	typeStr string
-	name    string
-	args    string
-	chars   int
-	firstAt time.Time
-	doneAt  time.Time
-}
-
-// toStreamingToolCalls converts partial tool state into display-ready values while streaming.
-func (ss *streamState) toStreamingToolCalls() []ui.StreamingToolCall {
-	var out []ui.StreamingToolCall
-	for i, p := range ss.partialTools {
-		if p.name == "" {
-			continue
-		}
-		dur := time.Duration(0)
-		if !p.firstAt.IsZero() {
-			end := p.doneAt
-			// Live clock for the active (last) tool — doneAt freezes during server pauses.
-			// Safe: display-only, never persists.
-			if end.IsZero() || i == len(ss.partialTools)-1 {
-				end = time.Now()
-			}
-			dur = end.Sub(p.firstAt)
-		}
-		out = append(out, ui.StreamingToolCall{
-			Name:      p.name,
-			Arguments: p.args,
-			Tokens:    countTokensApproxInt(p.chars),
-			Duration:  dur,
-		})
-	}
-	return out
-}
-
-// streamState bundles all transient fields for an active inference stream.
-type streamState struct {
-	id               string
-	text             string
-	thinking         string
-	inThinking       bool
-	active           bool
-	markdown         string // glamour cache for completed lines
-	markdownEnd      int
-	metrics          StreamMetrics
-	cancelFn         context.CancelFunc
-	ch               <-chan chat.StreamEvent
-	userCancelled    bool
-	partialTools     []partialTool         // streaming and finalized tool state, indexed by tool call index
-	tokenCount       int                   // counter for throttling viewport updates
-	authorizationCtx *AuthorizationContext // non-nil when paused awaiting auth
-	pendingToolIndex int                   // index into pendingTools being authorized
-	msgIdx           int                   // index of the saved assistant message with tool calls (-1 if none)
-	stopwatch        util.Stopwatch        // live display timer for the assistant header
-}
-
-// AddTextChunk appends text and updates metrics.
-func (ss *streamState) AddTextChunk(text string) {
-	ss.text += text
-	ss.metrics.addTextChars(text)
-}
-
-// AddThinkChunk appends thinking text and updates metrics.
-func (ss *streamState) AddThinkChunk(think string) {
-	ss.thinking += think
-	ss.metrics.addThinkChars(think)
-}
-
-// AddToolCallChunk tracks tool call argument streaming for timing/token metrics.
-func (ss *streamState) AddToolCallChunk(delta string) {
-	ss.metrics.addToolCallChars(delta)
-}
-
-// reset clears all stream state before a new request.
-func (ss *streamState) reset() {
-	ss.text = ""
-	ss.thinking = ""
-	ss.inThinking = false
-	ss.active = false
-	ss.markdown = ""
-	ss.markdownEnd = -1
-	ss.metrics = StreamMetrics{}
-	ss.cancelFn = nil
-	ss.ch = nil
-	ss.userCancelled = false
-	ss.partialTools = nil
-
-	ss.tokenCount = 0
-	ss.authorizationCtx = nil
-	ss.pendingToolIndex = -1
-	ss.msgIdx = -1
-	ss.stopwatch = util.Stopwatch{}
-}
 
 // needsAuthorization checks the current authorization mode and tool destructiveness
 // to determine if user confirmation is required before execution.
@@ -132,19 +32,20 @@ func (m Model) needsAuthorization(tool *tools.Tool, args map[string]interface{})
 
 // setStreamMode initializes the stream state for a new request.
 func (m *Model) setStreamMode() {
-	m.stream.reset()
-	m.stream.id = uuid.NewString()
-	m.stream.active = true
-	m.stream.metrics.Start = time.Now()
+	m.session.Stream.Reset()
+	m.session.UIStream.reset()
+	m.session.UIStream.ID = uuid.NewString()
+	m.session.Stream.Active = true
+	m.session.Stream.Metrics.Start = time.Now()
 	m.mode = ModeStreaming
-	m.stream.stopwatch.Start()
+	m.session.UIStream.Stopwatch.Start()
 	m.textarea.Placeholder = "ctrl+c to cancel..."
 }
 
 // setAuthMode builds a Question component for tool authorization and sets it as the active component.
 func (m *Model) setAuthMode() tea.Cmd {
-	m.stream.stopwatch.Pause()
-	ctx := m.stream.authorizationCtx
+	m.session.UIStream.Stopwatch.Pause()
+	ctx := m.session.UIStream.AuthorizationCtx
 
 	// Description: tool-name · display-value (truncation handled by Question render)
 	var description string
@@ -159,8 +60,8 @@ func (m *Model) setAuthMode() tea.Cmd {
 		ShowInput:   true,
 		OnConfirm: func(selection int, instructions string, ctx any) tea.Cmd {
 			m := ctx.(*Model)
-			m.stream.stopwatch.Resume()
-			m.stream.authorizationCtx.Result = AuthResult{
+			m.session.UIStream.Stopwatch.Resume()
+			m.session.UIStream.AuthorizationCtx.Result = AuthResult{
 				Approved:     selection == 0,
 				Instructions: instructions,
 			}
@@ -169,8 +70,8 @@ func (m *Model) setAuthMode() tea.Cmd {
 		},
 		OnCancel: func(ctx any) tea.Cmd {
 			m := ctx.(*Model)
-			m.stream.stopwatch.Resume()
-			m.stream.authorizationCtx.Result = AuthResult{
+			m.session.UIStream.Stopwatch.Resume()
+			m.session.UIStream.AuthorizationCtx.Result = AuthResult{
 				Approved:     false,
 				Instructions: "",
 			}
@@ -218,7 +119,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.draft = ""
 
 	userMsg := config.Message{
-		ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+		ID:          fmt.Sprintf("msg_%d", len(m.session.Doc.Messages)+1),
 		Role:        config.RoleUser,
 		CreatedAt:   time.Now(),
 		Text:        text,
@@ -226,624 +127,212 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 		InputTokens: countTokensApprox(text),
 	}
 
-	m.session.appendMsg(userMsg)
+	m.session.Append(userMsg)
 
 	// Commit all pending per-turn transitions immediately after the user message,
 	// so they belong to this turn and are removed together by destroy-last-sequence.
-	if m.session.file.Session.Skill.Next != nil && *m.session.file.Session.Skill.Next != m.session.file.Session.Skill.Current {
-		(&m).injectSkillChangeSynthetic(m.session.file.Session.Skill.Current, *m.session.file.Session.Skill.Next)
-		m.session.file.Session.Skill.Current = *m.session.file.Session.Skill.Next
-		m.session.file.Session.Skill.Next = nil
+	if m.session.Doc.Session.Skill.Next != nil && *m.session.Doc.Session.Skill.Next != m.session.Doc.Session.Skill.Current {
+		(&m).injectSkillChangeSynthetic(m.session.Doc.Session.Skill.Current, *m.session.Doc.Session.Skill.Next)
+		m.session.Doc.Session.Skill.Current = *m.session.Doc.Session.Skill.Next
+		m.session.Doc.Session.Skill.Next = nil
 	}
-	current := m.session.file.Session.Inference.Current
+	current := m.session.Doc.Session.Inference.Current
 	if current.Model != m.settings.Model || current.Provider != m.settings.Provider {
-		m.session.pushModelSwitchMsg(current.Provider+"/"+current.Model, m.settings.Provider+"/"+m.settings.Model)
+		m.session.PushModelSwitch(current.Provider+"/"+current.Model, m.settings.Provider+"/"+m.settings.Model)
 	}
 	if current.Thinking != m.settings.Thinking {
-		m.session.pushThinkingSwitchMsg(m.settings.Thinking)
+		m.session.PushThinkingSwitch(m.settings.Thinking)
 	}
 	if current.Provider != m.settings.Provider || current.Model != m.settings.Model || current.Thinking != m.settings.Thinking {
-		m.session.commitCurrentInference(m.settings.Provider, m.settings.Model, m.settings.Thinking)
+		m.session.SetInference(config.InferenceConfig{Provider: m.settings.Provider, Model: m.settings.Model, Thinking: m.settings.Thinking})
 	}
 
 	m.session.undoStack = nil
 
 	m.textarea.SetValue("")
 	m.textarea.Blur()
-
-	apiMsgs := chat.BuildAPIMessages(m.session.file.Messages)
 	m.attachedImage = ""
-
-	(&m).setStreamMode()
-	(&m).toolReg = tools.GetRegistry()
 	(&m).clearNotification()
 
-	providerSettings := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
-	// If the provider refreshed its token since the last save, persist it now.
-	if providerSettings != nil && providerSettings.Credentials != nil &&
-		providerSettings.Credentials.AuthStatus == config.AuthStatusRefreshed {
-		providerSettings.Credentials.AuthStatus = config.AuthStatusOK
-		config.SaveProviderSettings(m.paths, providerSettings)
-	}
-	engine := chat.NewEngine(providerSettings, m.settings.Model, m.settings.Thinking)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	m.stream.cancelFn = cancel
-
-	ch := engine.Stream(ctx, apiMsgs, tools.GetTools())
-	m.stream.ch = ch
-
-	m.updateViewportContent()
-	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd(m.stream.id))
+	return (&m).startStream()
 }
 
 // handleStreamEvent processes a single token, thinking chunk, error, or done signal
-// from the active inference stream.
+// from the active inference stream by delegating pure processing to chat.ProcessStreamEvent
+// and handling TUI side effects here.
 func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
-	if event.Error != nil {
-		(&m).setNotification(ui.NotificationError, event.Error.Error())
+	result := chat.ProcessStreamEvent(m.session.Session, event)
 
-		text, image, _ := m.session.cancelTruncate()
+	switch result.Action {
+	case chat.LoopError:
+		msg := "stream error"
+		if result.Error != nil {
+			msg = result.Error.Error()
+		}
+
+		text, image, truncated := m.session.CancelTruncate()
 		if text != "" {
 			m.textarea.SetValue(text)
 			m.attachedImage = image
 		}
 
-		if event.IsAuthError {
-			// Auth failure: save credentials (AuthStatus is already set to "failed" by the provider)
-			// and invalidate model cache.
-			providerSettings := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
-			if providerSettings != nil {
-				config.SaveProviderSettings(m.paths, providerSettings)
-			}
+		if result.IsAuthError {
+			_ = config.PersistProviderAuthState(m.paths, m.endpoints, m.session.CurrentInference().Provider)
 			m.modelEntries = nil
-			errText := "Authentication failed — use /model to re-authenticate"
-			m.session.appendMsg(config.Message{
-				ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-				Role:        config.RoleSynthetic,
-				CreatedAt:   time.Now(),
-				Text:        errText,
-				Label:       "auth error",
-				TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(errText)},
-			})
+			msg = "Authentication failed — use /model to re-authenticate"
+			result.MsgIdx = chat.AppendAuthErrorMessage(m.session.Session)
+		} else if result.SilentFailure {
+			_ = config.PersistRefreshedProvider(m.paths, m.endpoints, m.session.CurrentInference().Provider)
+			result.MsgIdx = chat.AppendSilentFailureMessage(m.session.Session)
 		} else {
-			errText := "Stream error: " + event.Error.Error()
-			m.session.appendMsg(config.Message{
-				ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-				Role:        config.RoleSynthetic,
-				CreatedAt:   time.Now(),
-				Text:        errText,
-				Label:       "stream error",
-				TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(errText)},
-			})
+			_ = config.PersistRefreshedProvider(m.paths, m.endpoints, m.session.CurrentInference().Provider)
+			result.MsgIdx = chat.AppendStreamErrorMessage(m.session.Session, result.Error)
+		}
+		(&m).setNotification(ui.NotificationError, msg)
+
+		if truncated {
+			m.session.invalidateRenderFrom(len(m.session.Doc.Messages))
 		}
 
 		nm, autoSaveCmd := m.autoSave()
 		m = nm
-
-		m.stream.reset()
+		m.session.Stream.Reset()
+		m.session.UIStream.reset()
 		(&m).setChatMode()
 		return m, autoSaveCmd
-	}
 
-	if event.Done {
-		if event.Text != "" {
-			m.stream.AddTextChunk(event.Text)
-		}
-		if event.Thinking != "" {
-			m.stream.AddThinkChunk(event.Thinking)
-		}
-		m.stream.inThinking = event.InThinking
+	case chat.LoopToolCalls:
+		return (&m).resumeToolExecution()
 
-		if m.stream.userCancelled {
-			text, image, truncated := m.session.cancelTruncate()
-
+	case chat.LoopDone:
+		_ = config.PersistRefreshedProvider(m.paths, m.endpoints, m.session.CurrentInference().Provider)
+		if result.Cancelled {
+			text, image, truncated := m.session.CancelTruncate()
 			if truncated {
+				m.session.invalidateRenderFrom(len(m.session.Doc.Messages))
 				if text != "" {
 					m.textarea.SetValue(text)
 					m.attachedImage = image
 				}
 			} else {
-				text := "Stream aborted by user"
-				m.session.appendMsg(config.Message{
-					ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-					Role:        config.RoleSynthetic,
-					CreatedAt:   time.Now(),
-					Text:        text,
-					Label:       "aborted",
-					TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(text)},
-				})
+				result.MsgIdx = chat.AppendStreamCancelledMessage(m.session.Session)
 			}
-
 			(&m).setNotification(ui.NotificationInfo, "stream cancelled")
-
-			m.stream.reset()
-			(&m).setChatMode()
-			nm, autoSaveCmd := m.autoSave()
-			return nm, autoSaveCmd
 		}
-
-		// Detect silent failure: stream ended with no content and no stop reason.
-		hasContent := m.stream.text != "" || m.stream.thinking != "" || len(m.stream.partialTools) > 0
-		if !hasContent && event.StopReason == "" {
-			(&m).setNotification(ui.NotificationError, "stream ended unexpectedly — server may be overloaded")
-
-			text, image, _ := m.session.cancelTruncate()
-			if text != "" {
-				m.textarea.SetValue(text)
-				m.attachedImage = image
-			}
-
-			errText := "Stream ended unexpectedly — server may be overloaded (VRAM / model loading)"
-			m.session.appendMsg(config.Message{
-				ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-				Role:        config.RoleSynthetic,
-				CreatedAt:   time.Now(),
-				Text:        errText,
-				Label:       "stream error",
-				TextMetrics: config.ContentMetrics{Tokens: countTokensApprox(errText)},
-			})
-
-			nm, autoSaveCmd := m.autoSave()
-			m = nm
-
-			m.stream.reset()
-			(&m).setChatMode()
-			return nm, autoSaveCmd
-		}
-
-		avgTokenPerSec := m.stream.metrics.AvgTokenPerSec()
-
-		// Tool calls: end the stream, save eagerly, start execution
-		if event.StopReason == "tool_calls" && len(m.stream.partialTools) > 0 {
-			(&m).stream.active = false // inference done, entering tool execution
-			_ = avgTokenPerSec
-			return (&m).resumeToolExecution()
-		}
-
-		// Normal completion: save assistant message
-		_ = (&m).appendAssistantMsg(config.Message{
-			ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-			Role:               config.RoleAssistant,
-			CreatedAt:          m.stream.metrics.Start,
-			ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
-			ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
-			Text:               strings.TrimLeft(m.stream.text, "\n"),
-			TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
-			TokensPerSecond:    avgTokenPerSec,
-			OutputTokens:       m.stream.metrics.TotalOutputTokens(),
-			DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
-			TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
-			StopReason:         event.StopReason,
-		})
-
-		m.stream.reset()
+		m.session.Stream.Reset()
+		m.session.UIStream.reset()
 		(&m).setChatMode()
 		nm, autoSaveCmd := m.autoSave()
 		return nm, autoSaveCmd
+
+	case chat.LoopContinue:
+		if event.ToolCallDelta != "" {
+			m.updateViewportContent()
+			return m, waitForStreamEvent(m.session.UIStream.Ch)
+		}
+		m.session.UIStream.TokenCount++
+		if m.session.UIStream.TokenCount%3 == 0 {
+			m.updateViewportContent()
+		}
+		return m, waitForStreamEvent(m.session.UIStream.Ch)
 	}
 
-	// ToolCallDelta: restore partial streaming UI while keeping finalized ToolCalls as execution truth.
-	if event.ToolCallDelta != "" {
-		m.stream.AddToolCallChunk(event.ToolCallDelta)
-		for len(m.stream.partialTools) <= event.ToolCallIdx {
-			m.stream.partialTools = append(m.stream.partialTools, partialTool{})
-		}
-		p := &m.stream.partialTools[event.ToolCallIdx]
-		if event.ToolCallID != "" {
-			p.id = event.ToolCallID
-		}
-		if event.ToolCallName != "" {
-			p.name = event.ToolCallName
-		}
-		p.args += event.ToolCallDelta
-		p.chars += len(event.ToolCallDelta)
-		if p.firstAt.IsZero() {
-			p.firstAt = time.Now()
-		}
-		p.doneAt = time.Now()
-		if m.stream.inThinking {
-			m.stream.inThinking = false
-		}
-		m.updateViewportContent()
-		return m, waitForStreamEvent(m.stream.ch)
-	}
-
-	// ToolCalls event: finalize the existing partial tool state for execution.
-	if len(event.ToolCalls) > 0 {
-		for i, tc := range event.ToolCalls {
-			for len(m.stream.partialTools) <= i {
-				m.stream.partialTools = append(m.stream.partialTools, partialTool{})
-			}
-			p := &m.stream.partialTools[i]
-
-			p.id = tc.ID
-			p.typeStr = tc.Type
-			p.name = tc.Name
-			p.args = tc.ArgsJSON
-			p.chars = len(tc.ArgsJSON)
-			if p.firstAt.IsZero() {
-				p.firstAt = time.Now()
-			}
-			p.doneAt = time.Now()
-		}
-	}
-	if event.Text != "" {
-		m.stream.AddTextChunk(event.Text)
-	}
-	if event.Thinking != "" {
-		m.stream.AddThinkChunk(event.Thinking)
-	}
-
-	m.stream.inThinking = event.InThinking
-	m.stream.tokenCount++
-	if m.stream.tokenCount%3 == 0 {
-		m.updateViewportContent()
-	}
-	return m, waitForStreamEvent(m.stream.ch)
+	return m, waitForStreamEvent(m.session.UIStream.Ch)
 }
 
-// buildInstructionEntry creates a ToolCallEntry with Instruction populated, Execution empty.
-func buildInstructionEntry(p partialTool) config.ToolCallEntry {
-	dur := p.doneAt.Sub(p.firstAt).Milliseconds()
-	return config.ToolCallEntry{
-		ID:   p.id,
-		Type: p.typeStr,
-		Instruction: struct {
-			Name       string `json:"name"`
-			Arguments  string `json:"arguments"`
-			Tokens     int    `json:"tokens,omitempty"`
-			DurationMs int64  `json:"duration_ms,omitempty"`
-		}{Name: p.name, Arguments: p.args, Tokens: countTokensApprox(p.args), DurationMs: dur},
-	}
-}
-
-// resumeToolExecution runs the single tool-execution loop from startIndex.
-// On first call from handleStreamEvent, entries is nil (will be built and saved).
-// On resume after auth response, entries is nil (will be fetched from saved message).
-//
-// Single loop, three gates:
-//  1. Apply collected auth result (from resume after user response)
-//  2. Auth gate — pause and yield if confirmation needed
-//  3. File change gate — cancel remaining if file was modified externally
-//
-// Then execute. The assistant message is saved before the loop starts with
-// initial metrics, and mutated in place as tools execute. After the loop:
-// finalize remaining metrics, optionally append user message, start stream.
+// resumeToolExecution runs or resumes pure tool execution and handles TUI side effects.
 func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
-	partials := m.stream.partialTools
-
-	if m.session.file.FileState == nil {
-		m.session.file.FileState = make(map[string]config.FileStateEntry)
-	}
-	sessionState := m.session.file.FileState
-
-	var msgIdx int
-	var entries []config.ToolCallEntry
-	var startIndex int
-
-	// First call: build all instruction entries and save eagerly.
-	// Resume after auth: fetch entries from the already-saved message.
-
-	if m.stream.authorizationCtx != nil {
-		// Resuming after auth — entries already live in the saved message.
-		msgIdx = m.stream.msgIdx
-		startIndex = m.stream.pendingToolIndex
-		entries = m.session.file.Messages[msgIdx].ToolCalls
-	} else {
-		// Initial call from handleStreamEvent: build and save before the loop.
-		entries = make([]config.ToolCallEntry, len(partials))
-		for i, p := range partials {
-			entries[i] = buildInstructionEntry(p)
-			entries[i].Execution.Status = tools.ResultStatusPending
+	msgIdx := -1
+	startIndex := 0
+	var decision *chat.AuthDecision
+	if m.session.UIStream.AuthorizationCtx != nil {
+		msgIdx = m.session.UIStream.MsgIdx
+		startIndex = m.session.UIStream.PendingToolIndex
+		decision = &chat.AuthDecision{
+			Approved:     m.session.UIStream.AuthorizationCtx.Result.Approved,
+			Instructions: m.session.UIStream.AuthorizationCtx.Result.Instructions,
 		}
+		m.session.UIStream.AuthorizationCtx = nil
+	}
 
-		// Save eagerly with all metrics known at stream end.
-		// Only InputTokens (tool execution result tokens) is unknown — finalized after loop.
-		msgIdx = m.appendAssistantMsg(config.Message{
-			ID:                 fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-			Role:               config.RoleAssistant,
-			CreatedAt:          m.stream.metrics.Start,
-			ThinkingText:       strings.TrimLeft(m.stream.thinking, "\n"),
-			ThinkingMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ThinkingTokens(), InferenceDuractionMs: m.stream.metrics.ThinkingDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstThinkingToken().Milliseconds()},
-			Text:               strings.TrimLeft(m.stream.text, "\n"),
-			TextMetrics:        config.ContentMetrics{Tokens: m.stream.metrics.TextTokens(), InferenceDuractionMs: m.stream.metrics.TextDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstTextToken().Milliseconds()},
-			ToolCalls:          entries,
-			ToolCallMetrics:    config.ContentMetrics{Tokens: m.stream.metrics.ToolCallTokens(), InferenceDuractionMs: m.stream.metrics.ToolCallDuration().Milliseconds(), TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToolCallToken().Milliseconds()},
-			TokensPerSecond:    m.stream.metrics.AvgTokenPerSec(),
-			OutputTokens:       m.stream.metrics.TotalOutputTokens(),
-			DurationTimeMs:     m.stream.metrics.Duration().Milliseconds(),
-			TimeToFirstTokenMs: m.stream.metrics.TimeToFirstToken().Milliseconds(),
-			StopReason:         "tool_calls",
-			// InputTokens = 0 — finalized after loop
+	for {
+		result := chat.ExecuteTools(m.session.Session, m.toolReg, chat.ToolExecOptions{
+			AuthorizationMode: m.settings.ValidateAuthorization(),
+			Decision:          decision,
+			MsgIdx:            msgIdx,
+			StartIndex:        startIndex,
 		})
+		decision = nil
 
-		// Store msgIdx for auth resume.
-		m.stream.msgIdx = msgIdx
-
-		// entries now shares the underlying array with the saved message's ToolCalls,
-		// so mutations to entries[i] are mutations to the persisted message.
-		startIndex = 0
-	}
-
-	// Captured from auth result if the user provided instructions (approved + instructions).
-	// After the loop we decide: inject if non-empty, saveAndResume otherwise.
-	var capturedInstructions string
-
-	for i := startIndex; i < len(entries); i++ {
-		entry := &entries[i]
-		toolName := entry.Instruction.Name
-		argsJSON := entry.Instruction.Arguments
-
-		tool := m.toolReg.Get(toolName)
-		if tool == nil {
-			entry.Execution.Status = tools.ResultStatusError
-			entry.Execution.Error = fmt.Sprintf("unknown tool: %s", toolName)
-			continue
+		if result.MsgIdx >= 0 {
+			m.session.invalidateRenderFrom(result.MsgIdx)
+		}
+		if result.WorkingDir != "" {
+			m.applyWorkingDir(result.WorkingDir)
+		}
+		if result.LoadedSkill != "" {
+			m.session.Doc.Session.Skill.Current = result.LoadedSkill
+			m.session.Doc.Session.Skill.Next = nil
 		}
 
-		var args map[string]interface{}
-		if argsJSON != "" {
-			if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-				// Try repairing malformed JSON before giving up
-				argsJSON, repaired := chat.RepairArgs(argsJSON)
-				if repaired {
-					if err2 := json.Unmarshal([]byte(argsJSON), &args); err2 != nil {
-						err = err2
-					}
-				}
-				if args == nil {
-					entries[i].Execution.Status = tools.ResultStatusError
-					entries[i].Execution.Error = fmt.Sprintf("malformed tool arguments from model: %v", err)
-					for j := i + 1; j < len(entries); j++ {
-						entries[j].Execution.Status = tools.ResultStatusError
-						entries[j].Execution.Error = "cancelled: prior tool had malformed arguments"
-					}
-					break
-				}
+		switch result.Action {
+		case chat.ToolExecNeedAuth:
+			m.session.UIStream.AuthorizationCtx = &AuthorizationContext{
+				ToolName:      result.AuthRequest.ToolName,
+				Args:          result.AuthRequest.Args,
+				ArgsJSON:      result.AuthRequest.ArgsJSON,
+				DisplayValue:  result.AuthRequest.DisplayValue,
+				IsDestructive: result.AuthRequest.IsDestructive,
 			}
-		}
-
-		// --- Apply previously collected auth result (from resume after user response) ---
-		if m.stream.authorizationCtx != nil && m.stream.pendingToolIndex == i {
-			result := m.stream.authorizationCtx.Result
-			m.stream.authorizationCtx = nil
-
-			if result.Instructions != "" {
-				capturedInstructions = result.Instructions
-			}
-
-			if !result.Approved {
-				// Rejected — cancel this tool and all remaining, break.
-				entries[i].Execution.Status = tools.ResultStatusError
-				entries[i].Execution.Error = "rejected by user — tool was not executed, don't retry."
-				for j := i + 1; j < len(entries); j++ {
-					entries[j].Execution.Status = tools.ResultStatusError
-					entries[j].Execution.Error = "cancelled: previous tool was not approved"
-				}
-				break
-			}
-			// Approved (with or without instructions) — skip the auth gate, fall through to execute.
-			goto doExecute
-		}
-
-		// --- Gate 1: File change validation (BEFORE auth) ---
-		if toolName != "read_file" && toolName != "open" {
-			if pathVal, ok := args["path"].(string); ok {
-				resolvedPath := tools.ResolvePath(pathVal)
-				if err := tools.Validate(resolvedPath, sessionState); err != nil {
-					entries[i].Execution.Status = tools.ResultStatusError
-					entries[i].Execution.Error = fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again uisng the tool \"read_file\" and retry your command.", resolvedPath)
-					for j := i + 1; j < len(entries); j++ {
-						entries[j].Execution.Status = tools.ResultStatusError
-						entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"
-					}
-					break
-				}
-			}
-		}
-
-		// --- Gate 2: Authorization ---
-		if m.needsAuthorization(tool, args) {
-			// Run on-demand preview before showing the auth question.
-			if tool.Preview != nil {
-				preview := tool.Preview(args)
-				if preview.Status == tools.ResultStatusError {
-					entries[i].Execution.Status = tools.ResultStatusError
-					entries[i].Execution.Error = preview.Error
-					continue
-				}
-				entries[i].Execution.Status = tools.ResultStatusPending
-				entries[i].Execution.Result = preview.Result
-				entries[i].Execution.Files = preview.Files
-				for j := range preview.Files {
-					preview.Files[j].ToolCallID = entry.ID
-				}
-			} else {
-				entries[i].Execution.Status = tools.ResultStatusPending
-			}
-			for j := i + 1; j < len(entries); j++ {
-				entries[j].Execution.Status = tools.ResultStatusPending
-				entries[j].Execution.Error = "waiting: prior tool requires authorization"
-			}
-			isDestructive := false
-			if tool.IsDestructive != nil {
-				isDestructive = tool.IsDestructive(args)
-			}
-			m.stream.authorizationCtx = &AuthorizationContext{
-				ToolName:      toolName,
-				Args:          args,
-				ArgsJSON:      argsJSON,
-				DisplayValue:  tool.DisplayValue(argsJSON),
-				IsDestructive: isDestructive,
-			}
-			m.stream.pendingToolIndex = i
+			m.session.UIStream.PendingToolIndex = result.ToolIndex
+			m.session.UIStream.MsgIdx = result.MsgIdx
 			m.setAuthMode()
-			m.flushToolMessage(msgIdx)
 			m.updateViewportContent()
 			nm, autoSaveCmd := m.autoSave()
 			if autoSaveCmd != nil {
 				return nm, autoSaveCmd
 			}
 			return m, nil
-		}
 
-		// --- Execute the tool ---
-	doExecute:
+		case chat.ToolExecContinue:
+			m.updateViewportContent()
+			msgIdx = result.MsgIdx
+			startIndex = result.NextIndex
+			continue
 
-		resultStart := time.Now()
-		result := tool.Execute(args)
-		entries[i].Execution.Status = result.Status
-		entries[i].Execution.Result = result.Result
-		entries[i].Execution.Error = result.Error
+		case chat.ToolExecDone:
+			m.session.UIStream.AuthorizationCtx = nil
+			if result.CapturedUserText != "" {
+				userMsg := config.Message{
+					ID:        fmt.Sprintf("msg_%d", len(m.session.Doc.Messages)+1),
+					Role:      config.RoleUser,
+					CreatedAt: time.Now(),
+					Text:      result.CapturedUserText,
+				}
 
-		content := result.Result
-		if result.Status == tools.ResultStatusError {
-			content = result.Error
-		}
-		entries[i].Execution.Tokens = countTokensApprox(content)
-		entries[i].Execution.DurationMs = time.Since(resultStart).Milliseconds()
-
-		for j := range result.Files {
-			result.Files[j].ToolCallID = entry.ID
-		}
-		entries[i].Execution.Files = result.Files
-
-		tools.MergeEntries(result.Files, sessionState)
-
-		if toolName == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
-			if pathVal, ok := args["path"].(string); ok {
-				m.applyWorkingDir(pathVal)
+				m.session.Append(userMsg)
 			}
-		}
-
-		if toolName == "skill_load" && result.Status == tools.ResultStatusSuccess {
-			if name, ok := args["name"].(string); ok {
-				m.session.file.Session.Skill.Current = name
-				m.session.file.Session.Skill.Next = nil
+			nm, autoSaveCmd := m.autoSave()
+			m.session.Stream.Reset()
+			m.session.UIStream.reset()
+			m.updateViewportContent()
+			if autoSaveCmd != nil {
+				nextModel, nextCmd := nm.startStream()
+				return nextModel, tea.Batch(nextCmd, autoSaveCmd)
 			}
+			return m.startStream()
 		}
-
-		// After execution: if user provided instructions, cancel remaining and stop.
-		if capturedInstructions != "" {
-			for j := i + 1; j < len(entries); j++ {
-				entries[j].Execution.Status = tools.ResultStatusError
-				entries[j].Execution.Error = "cancelled: user provided instructions before this tool could execute"
-			}
-			break
-		}
-
-		// Flush metrics and update viewport after each tool.
-		m.flushToolMessage(msgIdx)
-		m.updateViewportContent()
 	}
-
-	// --- Loop done ---
-	m.stream.authorizationCtx = nil
-
-	// Final pass: ensure metrics reflect complete state (covers early breaks
-	// where the last loop iteration didn't reach the incremental update).
-	m.flushToolMessage(msgIdx)
-
-	if capturedInstructions != "" {
-		userMsg := config.Message{
-			ID:        fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
-			Role:      config.RoleUser,
-			CreatedAt: time.Now(),
-			Text:      capturedInstructions,
-		}
-		m.session.appendMsg(userMsg)
-	}
-
-	nm, autoSaveCmd := m.autoSave()
-
-	m.stream.reset()
-	m.updateViewportContent()
-	if autoSaveCmd != nil {
-		nextModel, nextCmd := nm.startStream()
-		return nextModel, tea.Batch(nextCmd, autoSaveCmd)
-	}
-	return m.startStream()
 }
 
 // startStream builds API messages from current session state and starts a new stream.
 func (m *Model) startStream() (tea.Model, tea.Cmd) {
-	apiMsgs := chat.BuildAPIMessages(m.session.file.Messages)
-
 	m.setStreamMode()
 	m.toolReg = tools.GetRegistry()
 
-	providerSettings := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
-	if providerSettings != nil && providerSettings.Credentials != nil &&
-		providerSettings.Credentials.AuthStatus == config.AuthStatusRefreshed {
-		providerSettings.Credentials.AuthStatus = config.AuthStatusOK
-		config.SaveProviderSettings(m.paths, providerSettings)
-	}
-	engine := chat.NewEngine(providerSettings, m.settings.Model, m.settings.Thinking)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	m.stream.cancelFn = cancel
-
-	ch := engine.Stream(ctx, apiMsgs, tools.GetTools())
-	m.stream.ch = ch
+	ch := chat.StartStream(m.session.Session, m.endpoints)
+	m.session.UIStream.Ch = ch
 
 	m.updateViewportContent()
-	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd(m.stream.id))
-}
-
-// flushToolMessage updates metrics, recomputes sequence stats, and invalidates
-// the render cache for the saved assistant message at msgIdx.
-func (m *Model) flushToolMessage(msgIdx int) {
-	msg := &m.session.file.Messages[msgIdx]
-	execDurMs := int64(0)
-	for _, tc := range msg.ToolCalls {
-		execDurMs += tc.Execution.DurationMs
-	}
-	msg.DurationTimeMs = m.stream.metrics.Duration().Milliseconds() + execDurMs
-	msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
-	recomputeSequenceStats(m.session.file.Messages)
-	m.session.invalidateRenderFrom(msgIdx)
-}
-
-// recomputeSequenceStats scans all assistant messages after the last user message
-// and writes a fresh SequenceStat on the head (first assistant). This replaces
-// incremental Accumulate with a full recompute — simpler, correct, and cheap
-// (~20 messages = <1μs).
-func recomputeSequenceStats(messages []config.Message) {
-	seqIdx := config.FindSequenceHeadIdx(messages)
-	if seqIdx == -1 {
-		return
-	}
-
-	head := messages[seqIdx]
-	stat := &config.SequenceStat{}
-
-	for i := seqIdx; i < len(messages); i++ {
-		msg := messages[i]
-		stat.OutputTokens += msg.OutputTokens
-		stat.DurationMs += msg.DurationTimeMs
-		stat.InferenceDuractionMs += msg.TextMetrics.InferenceDuractionMs
-		stat.InferenceDuractionMs += msg.ThinkingMetrics.InferenceDuractionMs
-		stat.InferenceDuractionMs += msg.ToolCallMetrics.InferenceDuractionMs
-		stat.InputTokens += msg.InputTokens
-		for _, tc := range msg.ToolCalls {
-			stat.ExecDurMs += tc.Execution.DurationMs
-		}
-	}
-
-	if stat.InferenceDuractionMs > 0 {
-		stat.AvgTokensPerSec = float64(stat.OutputTokens) / float64(stat.InferenceDuractionMs) * 1000.0
-	}
-
-	head.SequenceStat = stat
-	messages[seqIdx] = head
-}
-
-// appendAssistantMsg saves an assistant message and recomputes SequenceStat on
-// the sequence head (first assistant message after the last user message).
-// Returns the index of the appended message in the messages slice.
-func (m *Model) appendAssistantMsg(msg config.Message) int {
-	m.session.appendMsg(msg)
-	recomputeSequenceStats(m.session.file.Messages)
-	return len(m.session.file.Messages) - 1
+	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd(m.session.UIStream.ID))
 }

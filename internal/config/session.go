@@ -20,9 +20,9 @@ const (
 	RoleInternal  = "internal"  // metadata visible to user; excluded from API
 )
 
-type SessionFile struct {
+type SessionDoc struct {
 	Version     int                       `json:"version"`
-	Session     Session                   `json:"session"`
+	Session     SessionMeta               `json:"session"`
 	Messages    []Message                 `json:"messages"`
 	TotalTokens int                       `json:"total_tokens"`
 	FileState   map[string]FileStateEntry `json:"file_state,omitempty"`
@@ -50,7 +50,17 @@ type SessionInference struct {
 	Current InferenceConfig `json:"current"`
 }
 
-type Session struct {
+type SessionTools struct {
+	Initial []string `json:"initial"`
+	Current []string `json:"current"`
+}
+
+type SessionSkills struct {
+	Initial []string `json:"initial"`
+	Current []string `json:"current"`
+}
+
+type SessionMeta struct {
 	ID               string           `json:"id"`
 	Title            string           `json:"title"`
 	CreatedAt        string           `json:"created_at"`
@@ -59,6 +69,8 @@ type Session struct {
 	SystemPromptFile string           `json:"system_prompt_file"`
 	WorkingDir       string           `json:"working_dir"`
 	Skill            SessionSkill     `json:"skill"`
+	Tools            SessionTools     `json:"tools,omitempty"`
+	Skills           SessionSkills    `json:"skills,omitempty"`
 }
 
 type ContentMetrics struct {
@@ -223,12 +235,12 @@ func TotalExecutionTokens(entries []ToolCallEntry) int {
 	return total
 }
 
-// NewSessionFile creates a new empty session
-func NewSessionFile(inf InferenceConfig, systemPrompt string, workingDir string) SessionFile {
+// NewSessionDoc creates a new empty session
+func NewSessionDoc(inf InferenceConfig, systemPrompt string, workingDir string, toolNames, skillNames []string) SessionDoc {
 	now := time.Now().UTC().Format(time.RFC3339)
-	return SessionFile{
+	return SessionDoc{
 		Version: 1,
-		Session: Session{
+		Session: SessionMeta{
 			ID:        uuid.New().String(),
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -238,6 +250,14 @@ func NewSessionFile(inf InferenceConfig, systemPrompt string, workingDir string)
 			},
 			SystemPromptFile: systemPrompt,
 			WorkingDir:       workingDir,
+			Tools: SessionTools{
+				Initial: append([]string(nil), toolNames...),
+				Current: append([]string(nil), toolNames...),
+			},
+			Skills: SessionSkills{
+				Initial: append([]string(nil), skillNames...),
+				Current: append([]string(nil), skillNames...),
+			},
 		},
 	}
 }
@@ -247,8 +267,8 @@ func SessionPath(p Paths, name string) string {
 	return filepath.Join(p.Sessions, name+".chat.json")
 }
 
-// SaveSession writes a session to sessions/<name>.chat.json
-func SaveSession(p Paths, name string, sf SessionFile) error {
+// SaveSessionDoc writes a session to sessions/<name>.chat.json
+func SaveSessionDoc(p Paths, name string, sf SessionDoc) error {
 	sf.Session.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	data, err := json.MarshalIndent(sf, "", "  ")
 	if err != nil {
@@ -257,16 +277,16 @@ func SaveSession(p Paths, name string, sf SessionFile) error {
 	return os.WriteFile(SessionPath(p, name), data, 0644)
 }
 
-// LoadSession reads a session from sessions/<name>.chat.json
-func LoadSession(p Paths, name string) (SessionFile, error) {
+// LoadSessionDoc reads a session from sessions/<name>.chat.json
+func LoadSessionDoc(p Paths, name string) (SessionDoc, error) {
 	file := SessionPath(p, name)
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return SessionFile{}, err
+		return SessionDoc{}, err
 	}
-	var sf SessionFile
+	var sf SessionDoc
 	if err := json.Unmarshal(data, &sf); err != nil {
-		return SessionFile{}, err
+		return SessionDoc{}, err
 	}
 	return sf, nil
 }

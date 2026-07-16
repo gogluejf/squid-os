@@ -1,7 +1,6 @@
 package app
 
 import (
-	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,7 +15,7 @@ import (
 // openSaveSessionPrompt opens a prompt so the user can confirm or edit the session name.
 func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 	if m.incognito {
-		return m, nil // no saving in incognito
+		return m, nil
 	}
 	name := m.settings.LastSessionName
 	if name == "" {
@@ -44,52 +43,9 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 	return m, nil
 }
 
-// saveAs persists the current session under the given name and updates LastSessionName.
-// Pass silent=true to skip setting a notification (e.g. for background auto-saves).
-func (m Model) saveAs(name string, silent bool) (Model, tea.Cmd) {
-	if name == "" || m.incognito {
-		return m, nil
-	}
-	m.session.file.TotalTokens = m.session.totalTokens()
-	err := config.SaveSession(m.paths, name, m.session.file)
-	if err != nil {
-		if !silent {
-			(&m).setNotification(ui.NotificationError, "couldn't save session")
-		}
-	} else {
-		m.settings.LastSessionName = name
-		_ = config.SaveSettings(m.paths, m.settings)
-		if !silent {
-			(&m).setNotification(ui.NotificationInfo, "session saved to "+config.SessionPath(m.paths, name))
-		}
-	}
-	return m, nil
-}
-
-// autoSave persists silently after each assistant reply when AutoSave is enabled.
-// Only saves if there is at least one user message, OR the session file already
-// exists on disk (to keep it in sync after destroys).
-func (m Model) autoSave() (Model, tea.Cmd) {
-	if !m.settings.AutoSave || m.incognito {
-		return m, nil
-	}
-	name := m.settings.LastSessionName
-	if name == "" {
-		name = time.Now().Format("2006-01-02_15-04")
-	}
-	// Don't save if no user messages and no existing file
-	if !m.session.hasUserMessage() {
-		path := config.SessionPath(m.paths, name)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return m, nil
-		}
-	}
-	return m.saveAs(name, true)
-}
-
 // clearSession resets all messages and session state to start fresh.
 func (m Model) clearSession() (Model, tea.Cmd) {
-	m.session.clear(m.settings, m.paths, m.workingDir)
+	m.session = NewUISessionFromSettings(m.settings, m.paths, m.workingDir)
 	if !m.incognito {
 		m.settings.LastSessionName = ""
 		_ = config.SaveSettings(m.paths, m.settings)
@@ -105,14 +61,11 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 // toggleIncognito switches incognito mode on/off and resets the chat either way.
 func (m Model) toggleIncognito() (Model, tea.Cmd) {
 	m.incognito = !m.incognito
-	m.session.clear(m.settings, m.paths, m.workingDir)
+	m.session = NewUISessionFromSettings(m.settings, m.paths, m.workingDir)
 	if !m.incognito {
-		// Leaving incognito: also reset last session name so auto-save doesn't
-		// accidentally write to the previous session.
 		m.settings.LastSessionName = ""
 		_ = config.SaveSettings(m.paths, m.settings)
 	}
-	// Disable logging in incognito, re-enable if debug is on
 	log.SetEnabled(m.settings.DebugEnabled && !m.incognito)
 	if m.incognito {
 		(&m).setNotification(ui.NotificationInfo, "incognito is on")
@@ -130,9 +83,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Snapshot current state so Esc can restore it
-	snap := m.session
-	m.sessionSnapshot = &snap
+	m.sessionSnapshot = m.session
 
 	items := make([]component.PickerItem, len(sessions))
 	for i, s := range sessions {
@@ -153,11 +104,11 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			if name == "" {
 				return
 			}
-			sf, err := config.LoadSession(m.paths, name)
+			sf, err := config.LoadSessionDoc(m.paths, name)
 			if err != nil {
 				return
 			}
-			m.session.setFrom(sf, false)
+			m.session.LoadFromDoc(sf)
 			if sf.Session.WorkingDir != "" {
 				m.applyWorkingDir(sf.Session.WorkingDir)
 			}
@@ -173,11 +124,11 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 				m.settings.LastSessionName = selected
 				_ = config.SaveSettings(m.paths, m.settings)
 			}
-			sf, err := config.LoadSession(m.paths, selected)
+			sf, err := config.LoadSessionDoc(m.paths, selected)
 			if err != nil {
 				return m.setChatMode()
 			}
-			m.session.setFrom(sf)
+			m.session.LoadFromDoc(sf)
 			m.sessionSnapshot = nil
 			m.setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
 			return m.setChatMode()
@@ -185,10 +136,10 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 		OnCancel: func(ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			if m.sessionSnapshot != nil {
-				m.session = *m.sessionSnapshot
+				m.session = m.sessionSnapshot
 				m.sessionSnapshot = nil
-				if m.session.file.Session.WorkingDir != "" {
-					m.applyWorkingDir(m.session.file.Session.WorkingDir)
+				if m.session.Doc.Session.WorkingDir != "" {
+					m.applyWorkingDir(m.session.Doc.Session.WorkingDir)
 				}
 			}
 			return m.setChatMode()
@@ -196,6 +147,5 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 	}
 
 	(&m).setComponent(&picker)
-
 	return m, nil
 }

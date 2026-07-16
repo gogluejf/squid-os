@@ -97,14 +97,14 @@ func (m *Model) updateViewportContent() {
 		m.session.renderedWidth = m.width
 	}
 	// Render only new messages, reuse cache for existing ones
-	for i := len(m.session.renderedMessages); i < len(m.session.file.Messages); i++ {
-		msg := m.session.file.Messages[i]
+	for i := len(m.session.renderedMessages); i < len(m.session.Doc.Messages); i++ {
+		msg := m.session.Doc.Messages[i]
 		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, m.expanded))
 	}
 
 	var liveSeqStat *config.SequenceStat
 	var liveSeqStatID string
-	if m.stream.active {
+	if m.session.Stream.Active {
 		liveSeqStat, liveSeqStatID = m.buildLiveSeqStat()
 	}
 
@@ -112,7 +112,7 @@ func (m *Model) updateViewportContent() {
 	b.WriteString(style.StatusLineStyle.Width(m.width).Render(""))
 
 	for i, rendered := range m.session.renderedMessages {
-		msg := m.session.file.Messages[i]
+		msg := m.session.Doc.Messages[i]
 		if msg.Role == "assistant" && msg.SequenceStat != nil {
 			stat := msg.SequenceStat
 			if msg.ID == liveSeqStatID {
@@ -125,48 +125,48 @@ func (m *Model) updateViewportContent() {
 		b.WriteString(rendered)
 	}
 
-	if m.stream.active {
+	if m.session.Stream.Active {
 		if liveSeqStat != nil && liveSeqStatID == "" {
 			// First of sequence — no saved assistant message yet
-			b.WriteString(ui.RenderAssistantHeader(m.stream.metrics.Start, liveSeqStat, m.width))
+			b.WriteString(ui.RenderAssistantHeader(m.session.Stream.Metrics.Start, liveSeqStat, m.width))
 		}
 		// Only re-run glamour when a new line has completed (lastNL changed).
-		lastNL := strings.LastIndex(m.stream.text, "\n")
-		if lastNL > m.stream.markdownEnd || (lastNL < 0 && m.stream.markdown != "") {
+		lastNL := strings.LastIndex(m.session.Stream.Text, "\n")
+		if lastNL > m.session.UIStream.MarkdownEnd || (lastNL < 0 && m.session.UIStream.Markdown != "") {
 			if lastNL >= 0 {
-				m.stream.markdown = strings.TrimRight(
-					ui.RenderMarkdownOnBg(m.stream.text[:lastNL], style.P.BgApp, style.CanvasContentWidth(m.width)), "\n")
-				m.stream.markdownEnd = lastNL
+				m.session.UIStream.Markdown = strings.TrimRight(
+					ui.RenderMarkdownOnBg(m.session.Stream.Text[:lastNL], style.P.BgApp, style.CanvasContentWidth(m.width)), "\n")
+				m.session.UIStream.MarkdownEnd = lastNL
 			} else {
-				m.stream.markdown = ""
-				m.stream.markdownEnd = -1
+				m.session.UIStream.Markdown = ""
+				m.session.UIStream.MarkdownEnd = -1
 			}
 		}
-		partial := m.stream.text
+		partial := m.session.Stream.Text
 		if lastNL >= 0 {
-			partial = m.stream.text[lastNL+1:]
+			partial = m.session.Stream.Text[lastNL+1:]
 		}
 
 		b.WriteString(ui.RenderStreamingMessage(ui.StreamingViewData{
-			RenderedMarkdown: m.stream.markdown,
+			RenderedMarkdown: m.session.UIStream.Markdown,
 			Partial:          partial,
-			ThinkingText:     m.stream.thinking,
-			InThinking:       m.stream.inThinking,
+			ThinkingText:     m.session.Stream.Thinking,
+			InThinking:       m.session.Stream.InThinking,
 			Width:            m.width,
 			Expanded:         m.expanded,
-			RequestStart:     m.stream.metrics.Start,
-			ThinkingTokens:   m.stream.metrics.ThinkingTokens(),
-			ThinkingDur:      m.stream.metrics.ThinkingDuration(),
-			TextTokens:       m.stream.metrics.TextTokens(),
-			TextDur:          m.stream.metrics.TextDuration(),
-			Waiting:          !m.stream.metrics.HasFirstToken(),
-			PendingTools:     m.stream.toStreamingToolCalls(),
+			RequestStart:     m.session.Stream.Metrics.Start,
+			ThinkingTokens:   m.session.Stream.Metrics.ThinkingTokens(),
+			ThinkingDur:      m.session.Stream.Metrics.ThinkingDuration(),
+			TextTokens:       m.session.Stream.Metrics.TextTokens(),
+			TextDur:          m.session.Stream.Metrics.TextDuration(),
+			Waiting:          !m.session.Stream.Metrics.HasFirstToken(),
+			PendingTools:     streamingToolCalls(m.session.Stream.PartialTools),
 		}))
 	}
 
 	// Show squid art when no user messages have been sent yet.
 	// Skip during component overlays — viewport is reduced, art would look wrong.
-	if !m.session.hasUserMessage() && !m.stream.active && m.mode != ModeComponent {
+	if !m.session.HasUserMessage() && !m.session.Stream.Active && m.mode != ModeComponent {
 		existingRows := strings.Count(b.String(), "\n")
 		b.WriteString(ui.RenderSquidArt(m.width, m.viewport.Height, existingRows))
 	}
@@ -190,9 +190,9 @@ func (m *Model) updateViewportContent() {
 
 // buildFooterData assembles the dynamic footer data.
 func (m Model) buildFooterData() ui.FooterData {
-	sessionIn := m.session.totalInputTokens()
-	sessionOut := m.session.totalOutputTokens()
-	streamOut := m.stream.metrics.TotalOutputTokens()
+	sessionIn := m.session.TotalInputTokens()
+	sessionOut := m.session.TotalOutputTokens()
+	streamOut := m.session.Stream.Metrics.TotalOutputTokens()
 
 	return ui.FooterData{
 		Model:             modelBasename(m.settings.Model),
@@ -200,12 +200,12 @@ func (m Model) buildFooterData() ui.FooterData {
 		TotalTokens:       sessionIn + sessionOut + streamOut,
 		TotalInputTokens:  sessionIn,
 		TotalOutTokens:    sessionOut + streamOut,
-		Streaming:         m.stream.active,
+		Streaming:         m.session.Stream.Active,
 		ThinkingOn:        m.settings.Thinking.Enabled,
 		AuthorizationMode: m.settings.Authorization,
-		TokPerSec:         jitterTokenRate(m.stream.metrics.AvgTokenPerSec(), m.stream.metrics.LastActivity(), m.stream.active),
+		TokPerSec:         jitterTokenRate(m.session.Stream.Metrics.AvgTokenPerSec(), m.session.Stream.Metrics.LastActivity(), m.session.Stream.Active),
 		SeqDurMs: func() int64 {
-			if m.stream.active {
+			if m.session.Stream.Active {
 				ss, _ := m.buildLiveSeqStat()
 				return ss.DurationMs
 			} else {
@@ -214,7 +214,7 @@ func (m Model) buildFooterData() ui.FooterData {
 		}(),
 		ContextWindow: m.settings.ContextWindow,
 		WorkingDir:    m.workingDir,
-		Skill:         m.session.file.Session.Skill,
+		Skill:         m.session.Doc.Session.Skill,
 	}
 }
 
@@ -228,18 +228,18 @@ func (m Model) renderHelp() string {
 // yet (the stream is the first assistant message of the sequence).
 func (m *Model) buildLiveSeqStat() (*config.SequenceStat, string) {
 	live := &config.SequenceStat{
-		OutputTokens:         m.stream.metrics.TotalOutputTokens(),
-		DurationMs:           m.stream.stopwatch.Elapsed().Milliseconds(),
-		InferenceDuractionMs: m.stream.metrics.InferenceDuration().Milliseconds(),
-		AvgTokensPerSec:      jitterTokenRate(m.stream.metrics.AvgTokenPerSec(), m.stream.metrics.LastActivity(), m.stream.active),
+		OutputTokens:         m.session.Stream.Metrics.TotalOutputTokens(),
+		DurationMs:           m.session.UIStream.Stopwatch.Elapsed().Milliseconds(),
+		InferenceDuractionMs: m.session.Stream.Metrics.InferenceDuration().Milliseconds(),
+		AvgTokensPerSec:      jitterTokenRate(m.session.Stream.Metrics.AvgTokenPerSec(), m.session.Stream.Metrics.LastActivity(), m.session.Stream.Active),
 	}
 
-	seqIdx := config.FindSequenceHeadIdx(m.session.file.Messages)
+	seqIdx := config.FindSequenceHeadIdx(m.session.Doc.Messages)
 	if seqIdx == -1 {
 		return live, ""
 	}
 
-	base := *m.session.file.Messages[seqIdx].SequenceStat
+	base := *m.session.Doc.Messages[seqIdx].SequenceStat
 	base.Add(live)
-	return &base, m.session.file.Messages[seqIdx].ID
+	return &base, m.session.Doc.Messages[seqIdx].ID
 }

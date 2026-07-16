@@ -22,9 +22,9 @@ func (m Model) cycleSkill() (Model, tea.Cmd) {
 	}
 
 	// Determine current position: prefer Next if set (pending), else Current
-	current := m.session.file.Session.Skill.Current
-	if m.session.file.Session.Skill.Next != nil {
-		current = *m.session.file.Session.Skill.Next
+	current := m.session.Doc.Session.Skill.Current
+	if m.session.Doc.Session.Skill.Next != nil {
+		current = *m.session.Doc.Session.Skill.Next
 	}
 
 	idx := 0
@@ -44,7 +44,7 @@ func (m Model) cycleSkill() (Model, tea.Cmd) {
 
 // setSkill sets the pending skill change and shows a notification.
 func (m *Model) setSkill(name string) {
-	m.session.file.Session.Skill.Next = &name
+	m.session.Doc.Session.Skill.Next = &name
 	if name == "" {
 		m.setNotification(ui.NotificationInfo, "skill: (will unload at next user turn)")
 	} else {
@@ -73,8 +73,8 @@ func (m *Model) injectSkillChangeSynthetic(old string, nxt string) {
 		params = map[string]string{"name": nxt}
 	}
 
-	m.session.appendMsg(config.Message{
-		ID:          fmt.Sprintf("msg_%d", len(m.session.file.Messages)+1),
+	m.session.Append(config.Message{
+		ID:          fmt.Sprintf("msg_%d", len(m.session.Doc.Messages)+1),
 		Role:        config.RoleSynthetic,
 		CreatedAt:   time.Now(),
 		Text:        text,
@@ -119,9 +119,9 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 	}
 
 	// Pre-select current skill if any
-	current := m.session.file.Session.Skill.Current
-	if m.session.file.Session.Skill.Next != nil {
-		current = *m.session.file.Session.Skill.Next
+	current := m.session.Doc.Session.Skill.Current
+	if m.session.Doc.Session.Skill.Next != nil {
+		current = *m.session.Doc.Session.Skill.Next
 	}
 
 	picker := component.Picker{
@@ -134,9 +134,9 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 			if skillName == "(none)" {
 				skillName = ""
 			}
-			current := m.session.file.Session.Skill.Current
-			if m.session.file.Session.Skill.Next != nil {
-				current = *m.session.file.Session.Skill.Next
+			current := m.session.Doc.Session.Skill.Current
+			if m.session.Doc.Session.Skill.Next != nil {
+				current = *m.session.Doc.Session.Skill.Next
 			}
 			if skillName != current {
 				m.setSkill(skillName)
@@ -152,5 +152,3 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 	(&m).setComponent(&picker)
 	return m, nil
 }
-
-

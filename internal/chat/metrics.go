@@ -1,4 +1,4 @@
-package app
+package chat
 
 import (
 	"time"
@@ -7,24 +7,22 @@ import (
 )
 
 // StreamMetrics owns all timing and token-count metrics for an active inference stream.
-// Text/thinking accumulation lives in streamState; this type owns the derived metrics.
+// Text/thinking accumulation lives in StreamState; this type owns the derived metrics.
 type StreamMetrics struct {
 	Start                time.Time
 	firstThinkingTokenAt time.Time
 	thinkingDoneAt       time.Time
 	firstTextTokenAt     time.Time
 	textDoneAt           time.Time
-	thinkingChars        int // private — updated by streamState
+	thinkingChars        int
 	textChars            int
 	firstToolCallTokenAt time.Time
 	toolCallDoneAt       time.Time
 	toolCallChars        int
 }
 
-/* ================== THINKING TOKENS ================ */
-
-// addThinkChars adds character count to thinkingChars and records firstThinkingTokenAt on first call.
-func (m *StreamMetrics) addThinkChars(s string) {
+// AddThinkChars adds character count to thinkingChars and records firstThinkingTokenAt on first call.
+func (m *StreamMetrics) AddThinkChars(s string) {
 	n := len(s)
 	if m.thinkingChars == 0 && n > 0 {
 		m.firstThinkingTokenAt = time.Now()
@@ -34,8 +32,6 @@ func (m *StreamMetrics) addThinkChars(s string) {
 	log.LogStreamMetrics("addThinkChars", s, n, m.thinkingChars, m.firstThinkingTokenAt, m.thinkingDoneAt)
 }
 
-// ThinkingDuration returns the duration from the first thinking token to when thinking ended
-// (or now if thinking is still active).
 func (m StreamMetrics) ThinkingDuration() time.Duration {
 	if m.firstThinkingTokenAt.IsZero() {
 		return 0
@@ -47,12 +43,8 @@ func (m StreamMetrics) ThinkingDuration() time.Duration {
 	return end.Sub(m.firstThinkingTokenAt)
 }
 
-// ThinkingTokens returns the approximate token count for thinking characters.
-func (m StreamMetrics) ThinkingTokens() int {
-	return countTokensApproxInt(m.thinkingChars)
-}
+func (m StreamMetrics) ThinkingTokens() int { return CountTokensApproxInt(m.thinkingChars) }
 
-// TimeToFirstThinkingToken returns the time from stream start to the first thinking token.
 func (m StreamMetrics) TimeToFirstThinkingToken() time.Duration {
 	if m.firstThinkingTokenAt.IsZero() {
 		return 0
@@ -60,10 +52,8 @@ func (m StreamMetrics) TimeToFirstThinkingToken() time.Duration {
 	return m.firstThinkingTokenAt.Sub(m.Start)
 }
 
-/* ================== TEXT TOKENS ================ */
-
-// addTextChars adds character count to textChars and records firstTextTokenAt on first call.
-func (m *StreamMetrics) addTextChars(s string) {
+// AddTextChars adds character count to textChars and records firstTextTokenAt on first call.
+func (m *StreamMetrics) AddTextChars(s string) {
 	n := len(s)
 	if m.textChars == 0 && n > 0 {
 		m.firstTextTokenAt = time.Now()
@@ -73,12 +63,8 @@ func (m *StreamMetrics) addTextChars(s string) {
 	log.LogStreamMetrics("addTextChars", s, n, m.textChars, m.firstTextTokenAt, m.textDoneAt)
 }
 
-// TextTokens returns the approximate token count for text characters.
-func (m StreamMetrics) TextTokens() int {
-	return countTokensApproxInt(m.textChars)
-}
+func (m StreamMetrics) TextTokens() int { return CountTokensApproxInt(m.textChars) }
 
-// TimeToFirstTextToken returns the time from stream start to the first text token.
 func (m StreamMetrics) TimeToFirstTextToken() time.Duration {
 	if m.firstTextTokenAt.IsZero() {
 		return 0
@@ -86,8 +72,6 @@ func (m StreamMetrics) TimeToFirstTextToken() time.Duration {
 	return m.firstTextTokenAt.Sub(m.Start)
 }
 
-// TextDuration returns the duration from the first text token to when text ended
-// (or now if text is still active).
 func (m StreamMetrics) TextDuration() time.Duration {
 	if m.firstTextTokenAt.IsZero() {
 		return 0
@@ -99,10 +83,8 @@ func (m StreamMetrics) TextDuration() time.Duration {
 	return end.Sub(m.firstTextTokenAt)
 }
 
-/* ================== TOOL TOKENS ================ */
-
-// addToolCallChars adds character count to toolCallChars and records firstToolCallTokenAt on first call.
-func (m *StreamMetrics) addToolCallChars(s string) {
+// AddToolCallChars adds character count to toolCallChars and records firstToolCallTokenAt on first call.
+func (m *StreamMetrics) AddToolCallChars(s string) {
 	n := len(s)
 	if m.toolCallChars == 0 && n > 0 {
 		m.firstToolCallTokenAt = time.Now()
@@ -112,12 +94,8 @@ func (m *StreamMetrics) addToolCallChars(s string) {
 	log.LogStreamMetrics("addToolCallChars", s, n, m.toolCallChars, m.firstToolCallTokenAt, m.toolCallDoneAt)
 }
 
-// ToolCallTokens returns the approximate token count for tool call argument characters.
-func (m StreamMetrics) ToolCallTokens() int {
-	return countTokensApproxInt(m.toolCallChars)
-}
+func (m StreamMetrics) ToolCallTokens() int { return CountTokensApproxInt(m.toolCallChars) }
 
-// TimeToFirstToolCallToken returns the time from stream start to the first tool call delta.
 func (m StreamMetrics) TimeToFirstToolCallToken() time.Duration {
 	if m.firstToolCallTokenAt.IsZero() {
 		return 0
@@ -125,7 +103,6 @@ func (m StreamMetrics) TimeToFirstToolCallToken() time.Duration {
 	return m.firstToolCallTokenAt.Sub(m.Start)
 }
 
-// ToolCallDuration returns the duration from the first tool call delta to when it was done.
 func (m StreamMetrics) ToolCallDuration() time.Duration {
 	if m.firstToolCallTokenAt.IsZero() {
 		return 0
@@ -137,7 +114,6 @@ func (m StreamMetrics) ToolCallDuration() time.Duration {
 	return end.Sub(m.firstToolCallTokenAt)
 }
 
-// firstTokenAt returns the earliest timestamp at which any token arrived.
 func (m StreamMetrics) firstTokenAt() time.Time {
 	earliest := m.firstThinkingTokenAt
 	if !m.firstTextTokenAt.IsZero() && (earliest.IsZero() || m.firstTextTokenAt.Before(earliest)) {
@@ -149,33 +125,22 @@ func (m StreamMetrics) firstTokenAt() time.Time {
 	return earliest
 }
 
-/* ================== TOTAL TOKENS ================== */
-
-// HasFirstToken returns true if at least one token (text or thinking) has arrived.
 func (m StreamMetrics) HasFirstToken() bool {
 	return !m.firstThinkingTokenAt.IsZero() || !m.firstTextTokenAt.IsZero() || !m.firstToolCallTokenAt.IsZero()
 }
 
-// TotalOutputTokens returns thinking + text tokens (model output during streaming).
 func (m StreamMetrics) TotalOutputTokens() int {
-	return countTokensApproxInt(m.thinkingChars + m.textChars + m.toolCallChars)
+	return CountTokensApproxInt(m.thinkingChars + m.textChars + m.toolCallChars)
 }
 
-// InferenceDuration returns the actual processing time — the sum of text,
-// thinking, and tool call durations. Excludes idle gaps between categories
-// and time spent waiting for the first token.
 func (m StreamMetrics) InferenceDuration() time.Duration {
 	return m.TextDuration() + m.ThinkingDuration() + m.ToolCallDuration()
 }
 
-// Duration returns the honest wall-clock time from start to the end of
-// inference: TimeToFirstToken + InferenceDuration. This excludes idle
-// gaps after tokens stop arriving. ( during prompt etc)
 func (m StreamMetrics) Duration() time.Duration {
 	return m.TimeToFirstToken() + m.InferenceDuration()
 }
 
-// TimeToFirstToken returns the earliest time from stream start to any first token.
 func (m StreamMetrics) TimeToFirstToken() time.Duration {
 	t := m.firstTokenAt()
 	if t.IsZero() {
@@ -184,7 +149,6 @@ func (m StreamMetrics) TimeToFirstToken() time.Duration {
 	return t.Sub(m.Start)
 }
 
-// LastActivity returns the most recent time any token arrived.
 func (m StreamMetrics) LastActivity() time.Time {
 	latest := m.textDoneAt
 	if !m.thinkingDoneAt.IsZero() && m.thinkingDoneAt.After(latest) {
@@ -196,18 +160,16 @@ func (m StreamMetrics) LastActivity() time.Time {
 	return latest
 }
 
-// AvgTokenPerSec returns the average tokens per second during actual
-// inference time (excludes idle gaps and time-to-first-token).
 func (m StreamMetrics) AvgTokenPerSec() float64 {
 	d := m.InferenceDuration()
-	if d < 100*time.Millisecond { // first token is nano to inference, so we create a buffer to avoid divide and get crazy numbers
+	if d < 100*time.Millisecond {
 		return 0
 	}
 	return float64(m.TotalOutputTokens()) / d.Seconds()
 }
 
-// countTokensApproxInt estimates token count from a character count.
-func countTokensApproxInt(chars int) int {
+// CountTokensApproxInt estimates token count from a character count.
+func CountTokensApproxInt(chars int) int {
 	n := chars / 4
 	if n == 0 && chars > 0 {
 		n = 1

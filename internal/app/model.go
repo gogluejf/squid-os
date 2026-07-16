@@ -123,7 +123,7 @@ func (m *Model) buildModelPicker(entries []provider.ModelEntry) {
 				}
 			}
 
-			m.session.updateConfigMsg(entry.Provider, entry.ID, m.settings.Thinking)
+			m.session.PushConfigChange(entry.Provider, entry.ID, m.settings.Thinking)
 			m.settings.Model = entry.ID
 			m.settings.Provider = entry.Provider
 			m.settings.ContextWindow = contextLength

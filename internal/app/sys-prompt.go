@@ -31,14 +31,14 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 			if selected != "" {
 				changed := false
 				if m.settings.SystemPromptFile != "" && m.settings.SystemPromptFile != selected {
-					m.session.updateSystemPromptMsg(m.settings.SystemPromptFile, selected, m.paths)
+					m.session.PushSystemPromptChange(m.settings.SystemPromptFile, selected, m.paths)
 					changed = true
 				} else {
-					for i := range m.session.file.Messages {
-						if m.session.file.Messages[i].ID == "sys0" {
+					for i := range m.session.Doc.Messages {
+						if m.session.Doc.Messages[i].ID == "sys0" {
 							newContent := config.LoadSystemPrompt(m.paths, selected)
-							m.session.file.Messages[i].Text = newContent
-							m.session.file.Messages[i].InputTokens = countTokensApprox(newContent)
+							m.session.Doc.Messages[i].Text = newContent
+							m.session.Doc.Messages[i].InputTokens = countTokensApprox(newContent)
 							changed = true
 							break
 						}
@@ -60,5 +60,3 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 	(&m).setComponent(&picker)
 	return m, nil
 }
-
-

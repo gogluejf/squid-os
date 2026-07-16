@@ -17,7 +17,7 @@ import (
 var sectionRe = regexp.MustCompile(`##\s+\[([^\]]+)\]`)
 
 // LoadEnvironment assembles all sections and returns a full Environment struct.
-func LoadEnvironment(paths config.Paths, settings config.Settings, workingDir string) Environment {
+func LoadEnvironment(paths config.Paths, workingDir string, debugEnabled bool) Environment {
 	projectDir := paths.ProjectDir
 
 	env := Environment{
@@ -32,7 +32,7 @@ func LoadEnvironment(paths config.Paths, settings config.Settings, workingDir st
 			MemoryDir:     paths.MemoryDir,
 			TempFolder:    paths.TempFolder,
 			DocumentsDir:  paths.DocumentsDir,
-			DebugEnabled:  settings.DebugEnabled,
+			DebugEnabled:  debugEnabled,
 		},
 	}
 
@@ -185,4 +185,3 @@ func installedOrNot(v bool) string {
 	}
 	return "✘ not installed"
 }
-

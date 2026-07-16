@@ -4,11 +4,11 @@ package app
 type Mode int
 
 const (
-	ModeChat            Mode = iota // Default: textarea focused
-	ModeStreaming                   // Inference active, input disabled
-	ModeComponent                   // Active component (picker, prompt, or question)
-	ModeHelp                        // Help overlay
-	ModeHistorySearch               // Reverse search through prompt history
+	ModeChat          Mode = iota // Default: textarea focused
+	ModeStreaming                 // Inference active, input disabled
+	ModeComponent                 // Active component (picker, prompt, or question)
+	ModeHelp                      // Help overlay
+	ModeHistorySearch             // Reverse search through prompt history
 )
 
 func (m Mode) String() string {

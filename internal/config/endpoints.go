@@ -68,8 +68,8 @@ type ProviderSettings struct {
 type AuthStatus string
 
 const (
-	AuthStatusOK       AuthStatus = ""           // default, no action needed
-	AuthStatusFailed   AuthStatus = "failed"     // auth failed, show sentinel
+	AuthStatusOK        AuthStatus = ""          // default, no action needed
+	AuthStatusFailed    AuthStatus = "failed"    // auth failed, show sentinel
 	AuthStatusRefreshed AuthStatus = "refreshed" // token was refreshed, needs saving
 )
 
@@ -156,4 +156,23 @@ func SaveProviderSettings(p Paths, settings *ProviderSettings) error {
 		}
 	}
 	return SaveEndpoints(p, e)
+}
+
+// PersistRefreshedProvider saves refreshed credentials and marks them OK.
+func PersistRefreshedProvider(p Paths, endpoints EndpointsConfig, provider string) error {
+	settings := ResolveProviderSettings(endpoints, provider)
+	if settings == nil || settings.Credentials == nil || settings.Credentials.AuthStatus != AuthStatusRefreshed {
+		return nil
+	}
+	settings.Credentials.AuthStatus = AuthStatusOK
+	return SaveProviderSettings(p, settings)
+}
+
+// PersistProviderAuthState saves the provider settings after the provider mutated auth state.
+func PersistProviderAuthState(p Paths, endpoints EndpointsConfig, provider string) error {
+	settings := ResolveProviderSettings(endpoints, provider)
+	if settings == nil {
+		return nil
+	}
+	return SaveProviderSettings(p, settings)
 }

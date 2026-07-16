@@ -31,21 +31,6 @@ type StreamEvent struct {
 	ToolCallID    string     // tool call ID when available
 }
 
-// isAuthFailure returns true if the error message indicates an authentication failure.
-func isAuthFailure(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "401") ||
-		strings.Contains(msg, "unauthorized") ||
-		strings.Contains(msg, "invalidapi") ||
-		strings.Contains(msg, "invalid_api") ||
-		strings.Contains(msg, "invalid token") ||
-		strings.Contains(msg, "token expired") ||
-		strings.Contains(msg, "no credentials")
-}
-
 // ToolCall represents a single tool call from the model.
 type ToolCall struct {
 	ID       string `json:"id"`
@@ -105,6 +90,21 @@ type Engine struct {
 	Model    string
 	Thinking config.ThinkingConfig
 	provider provider.Provider
+}
+
+// isAuthFailure returns true if the error message indicates an authentication failure.
+func isAuthFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "401") ||
+		strings.Contains(msg, "unauthorized") ||
+		strings.Contains(msg, "invalidapi") ||
+		strings.Contains(msg, "invalid_api") ||
+		strings.Contains(msg, "invalid token") ||
+		strings.Contains(msg, "token expired") ||
+		strings.Contains(msg, "no credentials")
 }
 
 func NewEngine(settings *config.ProviderSettings, model string, thinking config.ThinkingConfig) *Engine {

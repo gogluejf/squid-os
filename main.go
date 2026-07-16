@@ -81,9 +81,9 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	// Auto-load session if configured
-	var initialSession *config.SessionFile
+	var initialSession *config.SessionDoc
 	if settings.AutoLoadLastSession && settings.LastSessionName != "" && !flagIncognito {
-		if sf, err := config.LoadSession(paths, settings.LastSessionName); err == nil {
+		if sf, err := config.LoadSessionDoc(paths, settings.LastSessionName); err == nil {
 			initialSession = &sf
 		}
 	}

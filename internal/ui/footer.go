@@ -49,9 +49,9 @@ func RenderFooter(data FooterData, width int) string {
 	// Thinking indicator — always visible, white text on footer bg.
 	var thinkLabel string
 	if data.ThinkingOn {
-		thinkLabel = style.FooterValueStyle.Render("[thinking: on]")
+		thinkLabel = style.FooterDimStyle.Render("[think: ") + style.FooterValueStyle.Render("on") + style.FooterDimStyle.Render("]")
 	} else {
-		thinkLabel = style.FooterValueStyle.Render("[thinking: off]")
+		thinkLabel = style.FooterDimStyle.Render("[think: ") + style.FooterValueStyle.Render("off") + style.FooterDimStyle.Render("]")
 	}
 
 	// Authorization mode indicator — only the mode name is colored, brackets stay default.
@@ -59,8 +59,7 @@ func RenderFooter(data FooterData, width int) string {
 	modeStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(style.P.BgFooter)).
 		Foreground(lipgloss.Color(authColor))
-	bracketStyle := style.FooterValueStyle
-	authLabel := bracketStyle.Render("[") + modeStyle.Render(data.AuthorizationMode) + bracketStyle.Render("]")
+	authLabel := style.FooterDimStyle.Render("[") + modeStyle.Render(data.AuthorizationMode) + style.FooterDimStyle.Render("]")
 
 	// Skill indicator — always shown; value colored with skill color.
 	var skillLabel string
@@ -69,18 +68,18 @@ func RenderFooter(data FooterData, width int) string {
 		Foreground(lipgloss.Color(style.P.TextSkill))
 	if data.Skill.Next != nil {
 		if *data.Skill.Next != "" {
-			skillLabel = style.FooterValueStyle.Render("[skill: ") + skillStyle.Render(*data.Skill.Next) + style.FooterValueStyle.Render("]")
+			skillLabel = style.FooterDimStyle.Render("[skill: ") + skillStyle.Render(*data.Skill.Next) + style.FooterDimStyle.Render("]")
 		} else {
-			skillLabel = style.FooterValueStyle.Render("[skill: none]")
+			skillLabel = style.FooterDimStyle.Render("[skill: ") + style.FooterValueStyle.Render("none") + style.FooterDimStyle.Render("]")
 		}
 	} else if data.Skill.Current != "" {
-		skillLabel = style.FooterValueStyle.Render("[skill: ") + skillStyle.Render(data.Skill.Current) + style.FooterValueStyle.Render("]")
+		skillLabel = style.FooterDimStyle.Render("[skill: ") + skillStyle.Render(data.Skill.Current) + style.FooterDimStyle.Render("]")
 	} else {
-		skillLabel = style.FooterValueStyle.Render("[skill: none]")
+		skillLabel = style.FooterDimStyle.Render("[skill: ") + style.FooterValueStyle.Render("none") + style.FooterDimStyle.Render("]")
 	}
 
 	// ── Line 1: status chips + command hints (left) + model label (right) ─────────────
-	left1 := " " + thinkLabel + authLabel + skillLabel + style.FooterDimStyle.Render("  ") +
+	left1 := " " + authLabel + skillLabel + thinkLabel + style.FooterDimStyle.Render(",  ") +
 		style.FooterKeyStyle.Render("/") + style.FooterDimStyle.Render("cmd") +
 		style.FooterDimStyle.Render("  ") +
 		style.FooterKeyStyle.Render("ctrl+h") + style.FooterDimStyle.Render(" help")
@@ -104,12 +103,12 @@ func RenderFooter(data FooterData, width int) string {
 		parts = append(parts, style.FooterValueStyle.Render(fmt.Sprintf("%.1f tok/s", data.TokPerSec)))
 	}
 
-	tokLabel := style.FooterValueStyle.Render(tokenChipBoth(data.TotalOutTokens, data.TotalInputTokens, nil, nil)) +
-		style.FooterValueStyle.Render(" [") + style.FooterValueStyle.Render(formatTokens(data.TotalTokens))
+	tokLabel := style.FooterDimStyle.Render(tokenChipBoth(data.TotalOutTokens, data.TotalInputTokens, nil, nil)) +
+		style.FooterDimStyle.Render(" [") + style.FooterValueStyle.Render(formatTokens(data.TotalTokens))
 	if data.ContextWindow > 0 {
 		tokLabel += style.FooterDimStyle.Render("/" + formatTokens(data.ContextWindow))
 	}
-	tokLabel += style.FooterValueStyle.Render("]")
+	tokLabel += style.FooterDimStyle.Render("]")
 	parts = append(parts, tokLabel)
 
 	ctxBar := renderContextBar(data.TotalTokens, data.ContextWindow)

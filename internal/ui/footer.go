@@ -51,7 +51,7 @@ func RenderFooter(data FooterData, width int) string {
 	if data.ThinkingOn {
 		thinkLabel = style.FooterDimStyle.Render("[think: ") + style.FooterValueStyle.Render("on") + style.FooterDimStyle.Render("]")
 	} else {
-		thinkLabel = style.FooterDimStyle.Render("[think: ") + style.FooterValueStyle.Render("off") + style.FooterDimStyle.Render("]")
+		thinkLabel = style.FooterDimStyle.Render("[think: off]")
 	}
 
 	// Authorization mode indicator — only the mode name is colored, brackets stay default.
@@ -70,12 +70,12 @@ func RenderFooter(data FooterData, width int) string {
 		if *data.Skill.Next != "" {
 			skillLabel = style.FooterDimStyle.Render("[skill: ") + skillStyle.Render(*data.Skill.Next) + style.FooterDimStyle.Render("]")
 		} else {
-			skillLabel = style.FooterDimStyle.Render("[skill: ") + style.FooterValueStyle.Render("none") + style.FooterDimStyle.Render("]")
+			skillLabel = style.FooterDimStyle.Render("[skill: none]")
 		}
 	} else if data.Skill.Current != "" {
 		skillLabel = style.FooterDimStyle.Render("[skill: ") + skillStyle.Render(data.Skill.Current) + style.FooterDimStyle.Render("]")
 	} else {
-		skillLabel = style.FooterDimStyle.Render("[skill: ") + style.FooterValueStyle.Render("none") + style.FooterDimStyle.Render("]")
+		skillLabel = style.FooterDimStyle.Render("[skill: none]")
 	}
 
 	// ── Line 1: status chips + command hints (left) + model label (right) ─────────────

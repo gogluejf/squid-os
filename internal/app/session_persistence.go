@@ -23,8 +23,10 @@ func (m Model) saveAs(name string, silent bool) (Model, tea.Cmd) {
 			(&m).setNotification(ui.NotificationError, "couldn't save session")
 		}
 	} else {
-		m.settings.LastSessionName = name
-		_ = config.SaveSettings(m.paths, m.settings)
+		if m.settings.LastSessionName != name {
+			m.settings.LastSessionName = name
+			_ = config.SaveSettings(m.paths, m.settings)
+		}
 		if !silent {
 			(&m).setNotification(ui.NotificationInfo, "session saved to "+config.SessionPath(m.paths, name))
 		}

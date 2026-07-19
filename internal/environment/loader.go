@@ -32,6 +32,9 @@ func LoadEnvironment(paths config.Paths, workingDir string, debugEnabled bool) E
 			MemoryDir:     paths.MemoryDir,
 			TempFolder:    paths.TempFolder,
 			DocumentsDir:  paths.DocumentsDir,
+			SettingsFile:  paths.SettingsFile(),
+			EndpointsFile: paths.EndpointsFile(),
+			HistoryFile:   paths.HistoryFile(),
 			DebugEnabled:  debugEnabled,
 		},
 	}
@@ -81,6 +84,9 @@ func FormatEnvironment(env Environment) string {
 	b.WriteString("- memory: " + util.FriendlyPath(git.Decorate(env.SquidOS.MemoryDir)) + "\n")
 	b.WriteString("- temp: " + util.FriendlyPath(git.Decorate(env.SquidOS.TempFolder)) + "\n")
 	b.WriteString("- documents: " + util.FriendlyPath(git.Decorate(env.SquidOS.DocumentsDir)) + "\n")
+	b.WriteString("- settings: " + util.FriendlyPath(env.SquidOS.SettingsFile) + "\n")
+	b.WriteString("- endpoints: " + util.FriendlyPath(env.SquidOS.EndpointsFile) + "\n")
+	b.WriteString("- history: " + util.FriendlyPath(env.SquidOS.HistoryFile) + "\n")
 	if env.SquidOS.DebugEnabled {
 		b.WriteString("- debug: enabled\n")
 	}

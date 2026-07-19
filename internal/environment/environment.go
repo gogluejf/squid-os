@@ -42,7 +42,10 @@ type SquidOSInfo struct {
 	ProjectDir    string
 	MemoryDir     string
 	TempFolder    string
-	DocumentsDir   string
+	DocumentsDir  string
+	SettingsFile  string
+	EndpointsFile string
+	HistoryFile   string
 	DebugEnabled  bool
 }
 

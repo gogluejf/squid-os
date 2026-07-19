@@ -93,6 +93,22 @@ func (u *UISession) invalidateRenderAt(i int) {
 	}
 }
 
+func (u *UISession) lastPendingToolMsgIdx() (int, bool) {
+	for i := len(u.Doc.Messages) - 1; i >= 0; i-- {
+		msg := u.Doc.Messages[i]
+		if msg.Role != config.RoleAssistant || len(msg.ToolCalls) == 0 {
+			continue
+		}
+		for _, tc := range msg.ToolCalls {
+			if tc.Execution.Status == tools.ResultStatusPending {
+				return i, true
+			}
+		}
+		return -1, false
+	}
+	return -1, false
+}
+
 func availableToolNames() []string {
 	var names []string
 	for _, t := range tools.GetTools() {

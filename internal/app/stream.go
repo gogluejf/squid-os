@@ -242,12 +242,10 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 
 // resumeToolExecution runs or resumes pure tool execution and handles TUI side effects.
 func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
-	msgIdx := -1
-	startIndex := 0
+	msgIdx := m.session.UIStream.MsgIdx
 	var decision *chat.AuthDecision
 	if m.session.UIStream.AuthorizationCtx != nil {
 		msgIdx = m.session.UIStream.MsgIdx
-		startIndex = m.session.UIStream.PendingToolIndex
 		decision = &chat.AuthDecision{
 			Approved:     m.session.UIStream.AuthorizationCtx.Result.Approved,
 			Instructions: m.session.UIStream.AuthorizationCtx.Result.Instructions,
@@ -261,7 +259,6 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 			MaxToolResultTokens: m.settings.MaxToolResultTokens,
 			Decision:            decision,
 			MsgIdx:              msgIdx,
-			StartIndex:          startIndex,
 		})
 		decision = nil
 
@@ -285,7 +282,6 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 				DisplayValue:  result.AuthRequest.DisplayValue,
 				IsDestructive: result.AuthRequest.IsDestructive,
 			}
-			m.session.UIStream.PendingToolIndex = result.ToolIndex
 			m.session.UIStream.MsgIdx = result.MsgIdx
 			m.setAuthMode()
 			m.updateViewportContent()
@@ -298,7 +294,6 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 		case chat.ToolExecContinue:
 			m.updateViewportContent()
 			msgIdx = result.MsgIdx
-			startIndex = result.NextIndex
 			continue
 
 		case chat.ToolExecDone:

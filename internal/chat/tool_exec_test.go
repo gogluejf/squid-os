@@ -73,7 +73,7 @@ func TestExecuteToolsStoresOnlySizeErrorForOversizedResult(t *testing.T) {
 		}},
 	}}
 
-	ExecuteTools(s, reg, ToolExecOptions{AuthorizationMode: config.AuthorizationAuto, MsgIdx: 0, StartIndex: 0})
+	ExecuteTools(s, reg, ToolExecOptions{AuthorizationMode: config.AuthorizationAuto, MsgIdx: 0})
 
 	exec := s.Doc.Messages[0].ToolCalls[0].Execution
 	if exec.Status != tools.ResultStatusError {

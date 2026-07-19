@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/chat"
+	"squid-os/internal/tools"
 )
 
 // Update is the top-level Bubble Tea update function — routes every incoming
@@ -43,6 +44,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamEventMsg:
 		return m.handleStreamEvent(chat.StreamEvent(msg))
+
+	case pendingToolResumeMsg:
+		m.toolReg = tools.GetRegistry()
+		m.session.UIStream.MsgIdx = msg.msgIdx
+		return (&m).resumeToolExecution()
 
 	case modelsLoadedMsg:
 		m = m.onModelsLoaded(msg)

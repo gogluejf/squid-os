@@ -17,12 +17,11 @@ type UIStreamState struct {
 	TokenCount       int
 	Stopwatch        util.Stopwatch
 	AuthorizationCtx *AuthorizationContext
-	PendingToolIndex int
 	MsgIdx           int
 }
 
 func (ss *UIStreamState) reset() {
-	*ss = UIStreamState{MarkdownEnd: -1, PendingToolIndex: -1, MsgIdx: -1}
+	*ss = UIStreamState{MarkdownEnd: -1, MsgIdx: -1}
 }
 
 // streamingToolCalls converts pure partial tool state into display-ready values while streaming.

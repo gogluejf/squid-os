@@ -168,7 +168,12 @@ func (m Model) Init() tea.Cmd {
 	tools.SetProjectDir(m.paths.ProjectDir)
 	tools.SetWorkingDir(m.workingDir)
 
-	return tea.Batch(chatMode, (&m).refreshContextCmd())
+	var resumePending tea.Cmd
+	if msgIdx, ok := m.session.lastPendingToolMsgIdx(); ok {
+		resumePending = func() tea.Msg { return pendingToolResumeMsg{msgIdx: msgIdx} }
+	}
+
+	return tea.Batch(chatMode, resumePending, (&m).refreshContextCmd())
 }
 
 // refreshContextCmd scans models in the background and updates the context

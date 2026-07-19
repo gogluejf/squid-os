@@ -298,9 +298,8 @@ func RunLoop(ctx context.Context, s *Session, endpoints config.EndpointsConfig, 
 					return
 				case LoopToolCalls:
 					msgIdx := -1
-					startIndex := 0
 					for {
-						toolRes := ExecuteTools(s, toolReg, ToolExecOptions{AuthorizationMode: config.AuthorizationAuto, MsgIdx: msgIdx, StartIndex: startIndex})
+						toolRes := ExecuteTools(s, toolReg, ToolExecOptions{AuthorizationMode: config.AuthorizationAuto, MsgIdx: msgIdx})
 						out <- LoopEvent{Type: LoopEventToolFlushed, MsgIdx: toolRes.MsgIdx, ToolIndex: toolRes.ToolIndex}
 						if toolRes.WorkingDir != "" {
 							tools.SetWorkingDir(toolRes.WorkingDir)
@@ -311,7 +310,6 @@ func RunLoop(ctx context.Context, s *Session, endpoints config.EndpointsConfig, 
 							return
 						case ToolExecContinue:
 							msgIdx = toolRes.MsgIdx
-							startIndex = toolRes.NextIndex
 							continue
 						case ToolExecDone:
 							if toolRes.CapturedUserText != "" {

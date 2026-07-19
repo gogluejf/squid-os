@@ -38,7 +38,6 @@ type ToolExecOptions struct {
 	MaxToolResultTokens int
 	Decision            *AuthDecision
 	MsgIdx              int
-	StartIndex          int
 }
 
 type ToolExecResult struct {
@@ -73,7 +72,6 @@ func ExecuteTools(s *Session, toolReg *tools.Registry, opts ToolExecOptions) Too
 	sessionState := s.Doc.FileState
 
 	msgIdx := opts.MsgIdx
-	startIndex := opts.StartIndex
 	if msgIdx < 0 {
 		entries := make([]config.ToolCallEntry, len(s.Stream.PartialTools))
 		for i, p := range s.Stream.PartialTools {
@@ -96,10 +94,10 @@ func ExecuteTools(s *Session, toolReg *tools.Registry, opts ToolExecOptions) Too
 			TimeToFirstTokenMs: s.Stream.Metrics.TimeToFirstToken().Milliseconds(),
 			StopReason:         "tool_calls",
 		})
-		startIndex = 0
 	}
 
 	entries := s.Doc.Messages[msgIdx].ToolCalls
+	startIndex := nextExecutableToolIndex(entries)
 	if startIndex >= len(entries) {
 		FlushToolMessage(s, msgIdx)
 		return ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: len(entries) - 1, NextIndex: len(entries)}
@@ -131,7 +129,7 @@ func ExecuteTools(s *Session, toolReg *tools.Registry, opts ToolExecOptions) Too
 	}
 
 	var capturedInstructions string
-	if opts.Decision != nil && opts.StartIndex == i {
+	if opts.Decision != nil {
 		capturedInstructions = opts.Decision.Instructions
 		if !opts.Decision.Approved {
 			entries[i].Execution.Status = tools.ResultStatusError
@@ -163,6 +161,7 @@ func ExecuteTools(s *Session, toolReg *tools.Registry, opts ToolExecOptions) Too
 	}
 
 	if shouldAuthorize(opts.AuthorizationMode, tool, args) {
+		entries[i].Execution.Error = ""
 		if tool.Preview != nil {
 			preview := tool.Preview(args)
 			if preview.Status == tools.ResultStatusError {
@@ -207,6 +206,11 @@ func ExecuteTools(s *Session, toolReg *tools.Registry, opts ToolExecOptions) Too
 	}
 
 doExecute:
+	entries[i].Execution.Status = ""
+	entries[i].Execution.Result = ""
+	entries[i].Execution.Error = ""
+	entries[i].Execution.Files = nil
+
 	maxToolResultTokens := opts.MaxToolResultTokens
 	if maxToolResultTokens <= 0 {
 		maxToolResultTokens = s.Doc.Session.MaxToolResultTokens
@@ -282,6 +286,18 @@ func nextToolAction(i, total int) ToolExecAction {
 		return ToolExecDone
 	}
 	return ToolExecContinue
+}
+
+func nextExecutableToolIndex(entries []config.ToolCallEntry) int {
+	for i, entry := range entries {
+		switch entry.Execution.Status {
+		case tools.ResultStatusSuccess, tools.ResultStatusError:
+			continue
+		default:
+			return i
+		}
+	}
+	return len(entries)
 }
 
 func enforceToolResultTokenLimit(result tools.ToolResult, maxTokens int) tools.ToolResult {

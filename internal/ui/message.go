@@ -231,11 +231,11 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 		// Status indicator + tool name as first part, no separator between them
 		var prefix string
 		switch tc.Execution.Status {
-		case "error":
+		case tools.ResultStatusError:
 			prefix = style.CheckError.Render("[✗] ")
-		case "success":
+		case tools.ResultStatusSuccess:
 			prefix = style.CheckSuccess.Render("[✓] ")
-		case "pending":
+		case tools.ResultStatusPending:
 			prefix = style.CheckWarning.Render("[?] ")
 		}
 		parts = append(parts, prefix+t.Style.Label.Render(tc.Instruction.Name))
@@ -262,18 +262,18 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 				content = append(content, formatArgs(tc.Instruction.Arguments, t.Style.Bg, boxWidth))
 			}
 			switch tc.Execution.Status {
-			case "error":
+			case tools.ResultStatusError:
 				if tc.Execution.Error != "" {
 					content = append(content, renderPerLine(tc.Execution.Error, t.Style.Error))
 				}
 				if tc.Execution.Result != "" {
 					content = append(content, "Result:\n"+tc.Execution.Result)
 				}
-			case "success":
+			case tools.ResultStatusSuccess:
 				if tc.Execution.Result != "" {
 					content = append(content, tc.Execution.Result)
 				}
-			case "pending":
+			case tools.ResultStatusPending:
 				if tc.Execution.Result != "" {
 					content = append(content, tc.Execution.Result)
 				}
@@ -281,7 +281,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 		}
 
 		// Diff visible for both success and pending (with preview data)
-		if (tc.Execution.Status == "success" || tc.Execution.Status == "pending") && len(tc.Execution.Files) > 0 {
+		if (tc.Execution.Status == tools.ResultStatusSuccess || tc.Execution.Status == tools.ResultStatusPending) && len(tc.Execution.Files) > 0 {
 			if d := renderToolFilesDiff(tc.Execution.Files, boxWidth, t.Style); d != "" {
 				content = append(content, d)
 			}
@@ -290,7 +290,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 		b.WriteString(drawToolBox(parts, content, t.Style, boxWidth))
 
 		// Stop rendering after the first pending tool — it's the one being authorized.
-		if tc.Execution.Status == "pending" {
+		if tc.Execution.Status == tools.ResultStatusPending {
 			break
 		}
 	}

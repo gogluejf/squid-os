@@ -129,8 +129,14 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 				return m.setChatMode()
 			}
 			m.session = NewUISessionFromDoc(sf)
+			if sf.Session.WorkingDir != "" {
+				m.applyWorkingDir(sf.Session.WorkingDir)
+			}
 			m.sessionSnapshot = nil
 			m.setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
+			if msgIdx, ok := m.session.lastPendingToolMsgIdx(); ok {
+				return tea.Batch(m.setChatMode(), func() tea.Msg { return pendingToolResumeMsg{msgIdx: msgIdx} })
+			}
 			return m.setChatMode()
 		},
 		OnCancel: func(ctx any) tea.Cmd {

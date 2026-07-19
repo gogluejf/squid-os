@@ -18,6 +18,10 @@ type modelsLoadedMsg struct {
 	models []provider.ModelEntry
 }
 
+type pendingToolResumeMsg struct {
+	msgIdx int
+}
+
 // scanModelsCmd launches an async model scan and returns the result as a modelsLoadedMsg.
 func (m Model) scanModelsCmd() tea.Cmd {
 	return func() tea.Msg {

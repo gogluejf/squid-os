@@ -11,6 +11,7 @@ import (
 	"squid-os/internal/config"
 	"squid-os/internal/headless"
 	"squid-os/internal/log"
+	"squid-os/internal/version"
 )
 
 var (
@@ -25,6 +26,7 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:   "squid-os",
 		Short: "Interactive TUI chat with OpenAI-compatible endpoints",
+		Version: version.Full(),
 		RunE:  run,
 	}
 

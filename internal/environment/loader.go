@@ -11,6 +11,7 @@ import (
 	"squid-os/internal/git"
 	"squid-os/internal/skills"
 	"squid-os/internal/util"
+	"squid-os/internal/version"
 )
 
 // sectionRe matches "## [SectionName]" headings and captures the name inside brackets.
@@ -24,6 +25,7 @@ func LoadEnvironment(paths config.Paths, workingDir string, debugEnabled bool) E
 		OS:     CollectOSInfo(workingDir),
 		Skills: loadSkillEntries(),
 		SquidOS: SquidOSInfo{
+			Version:       version.Full(),
 			SkillsDir:     paths.Skills,
 			LogsDir:       paths.Logs,
 			SysPromptsDir: paths.SysPrompts,
@@ -76,6 +78,7 @@ func FormatEnvironment(env Environment) string {
 
 	// [Squid-OS] section
 	b.WriteString("## [Squid-OS]\n")
+	b.WriteString("- version: " + env.SquidOS.Version + "\n")
 	b.WriteString("- skills: " + util.FriendlyPath(git.Decorate(env.SquidOS.SkillsDir)) + "\n")
 	b.WriteString("- logs: " + util.FriendlyPath(git.Decorate(env.SquidOS.LogsDir)) + "\n")
 	b.WriteString("- sys-prompts: " + util.FriendlyPath(git.Decorate(env.SquidOS.SysPromptsDir)) + "\n")

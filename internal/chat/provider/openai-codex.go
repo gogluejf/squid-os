@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"squid-os/internal/config"
+	"squid-os/internal/version"
 
 	"github.com/zendev-sh/goai/provider"
 	goai_openai "github.com/zendev-sh/goai/provider/openai"
@@ -121,7 +122,7 @@ func (o *CodexProvider) BuildGoAIModel(model string) (provider.LanguageModel, bo
 		opts = append(opts, goai_openai.WithTokenSource(ts))
 		headers := map[string]string{
 			"Originator": "opencode",
-			"User-Agent": "squid-os",
+			"User-Agent": version.String(),
 		}
 		if o.creds().OAuth != nil && o.creds().OAuth.AccountID != "" {
 			headers["ChatGPT-Account-Id"] = o.creds().OAuth.AccountID
@@ -257,7 +258,7 @@ func (o *CodexProvider) StartDeviceAuth() (visitURL string, code string, err err
 		return "", "", fmt.Errorf("codex device auth request failed: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "squid-os")
+	req.Header.Set("User-Agent", version.String())
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -303,7 +304,7 @@ func (o *CodexProvider) PollDeviceAuth() error {
 			return fmt.Errorf("codex device poll request failed: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "squid-os")
+		req.Header.Set("User-Agent", version.String())
 
 		resp, err := client.Do(req)
 		if err != nil {

@@ -35,6 +35,7 @@ type SkillInfo struct {
 
 // SquidOSInfo holds Squid-OS directory paths and flags.
 type SquidOSInfo struct {
+	Version       string
 	SkillsDir     string
 	LogsDir       string
 	SysPromptsDir string

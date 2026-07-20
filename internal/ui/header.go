@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"squid-os/internal/style"
+	"squid-os/internal/version"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -15,11 +16,11 @@ type HeaderData struct {
 
 // RenderHeader renders the top header bar, including the incognito indicator when active.
 func RenderHeader(data HeaderData, width int) string {
+	title := "squid-os " + version.Full()
 	if !data.Incognito {
-		return style.TopHeaderStyle.Width(width).Render("squid-os v0.1")
+		return style.TopHeaderStyle.Width(width).Render(title)
 	}
 	headerStyle := style.IncognitoHeaderStyle.Width(width)
-	title := "squid-os v0.1"
 	label := "👻 incognito"
 	titleWidth := lipgloss.Width(style.IncognitoHeaderStyle.Render(title))
 	labelWidth := lipgloss.Width(style.IncognitoHeaderStyle.Render(label))

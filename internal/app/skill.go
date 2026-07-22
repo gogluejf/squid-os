@@ -13,35 +13,6 @@ import (
 	"squid-os/internal/ui/component"
 )
 
-func (m Model) cycleSkill() (Model, tea.Cmd) {
-	options := []string{""}
-	if reg := skills.GetRegistry(); reg != nil {
-		for _, e := range reg.List() {
-			options = append(options, e.Name)
-		}
-	}
-
-	// Determine current position: prefer Next if set (pending), else Current
-	current := m.session.Doc.Session.Skill.Current
-	if m.session.Doc.Session.Skill.Next != nil {
-		current = *m.session.Doc.Session.Skill.Next
-	}
-
-	idx := 0
-	for i, s := range options {
-		if s == current {
-			idx = i
-			break
-		}
-	}
-
-	next := options[(idx+1)%len(options)]
-	(&m).setSkill(next)
-
-	m.updateViewportContent()
-	return m.autoSave()
-}
-
 // setSkill sets the pending skill change and shows a notification.
 func (m *Model) setSkill(name string) {
 	m.session.Doc.Session.Skill.Next = &name

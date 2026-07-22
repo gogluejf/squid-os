@@ -22,7 +22,6 @@ type keyMap struct {
 	Left          key.Binding
 	Right         key.Binding
 	Escape        key.Binding
-	CycleSkill    key.Binding
 	Listify       key.Binding
 	ScrollUp      key.Binding
 	ScrollDown    key.Binding
@@ -82,8 +81,8 @@ var keys = keyMap{
 		key.WithHelp("alt+t", "toggle thinking"),
 	),
 	Skill: key.NewBinding(
-		key.WithKeys("alt+s"),
-		key.WithHelp("alt+s", "select skill"),
+		key.WithKeys("ctrl+k"),
+		key.WithHelp("ctrl+k", "select skill"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c"),
@@ -108,10 +107,6 @@ var keys = keyMap{
 	Escape: key.NewBinding(
 		key.WithKeys("esc"),
 		key.WithHelp("esc", "back"),
-	),
-	CycleSkill: key.NewBinding(
-		key.WithKeys("ctrl+k"),
-		key.WithHelp("ctrl+k", "cycle skill"),
 	),
 	Listify: key.NewBinding(
 		key.WithKeys("tab"),

@@ -149,9 +149,6 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.autoSizeTextarea()
 		return m, nil
 
-	case key.Matches(msg, keys.CycleSkill):
-		return m.cycleSkill()
-
 	case msg.Type == tea.KeyTab && !msg.Alt:
 		return m.applyListify()
 
@@ -211,9 +208,6 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case matchCommandKey(msg) != "":
 		return m.executeCommandByName(matchCommandKey(msg))
-
-	case key.Matches(msg, keys.CycleSkill):
-		return m.cycleSkill()
 
 	case m.handleViewportScroll(msg):
 		return m, nil

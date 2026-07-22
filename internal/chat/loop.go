@@ -104,11 +104,12 @@ func ProcessStreamEvent(s *Session, event StreamEvent) LoopResult {
 	}
 
 	if len(event.ToolCalls) > 0 {
-		for i, tc := range event.ToolCalls {
-			for len(s.Stream.PartialTools) <= i {
+		for offset, tc := range event.ToolCalls {
+			idx := event.ToolCallIdx + offset
+			for len(s.Stream.PartialTools) <= idx {
 				s.Stream.PartialTools = append(s.Stream.PartialTools, PartialTool{})
 			}
-			p := &s.Stream.PartialTools[i]
+			p := &s.Stream.PartialTools[idx]
 			p.ID = tc.ID
 			p.Type = tc.Type
 			p.Name = tc.Name

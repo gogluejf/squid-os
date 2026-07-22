@@ -304,7 +304,7 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 				toolBuffers[idx].argsBuf.Reset()
 				toolBuffers[idx].nameBuf.WriteString(tc.Name)
 				toolBuffers[idx].argsBuf.WriteString(tc.ArgsJSON)
-				ch <- StreamEvent{ToolCalls: []ToolCall{tc}}
+				ch <- StreamEvent{ToolCalls: []ToolCall{tc}, ToolCallIdx: idx}
 
 			case goai_provider.ChunkStepFinish:
 				stopReason = string(chunk.FinishReason)

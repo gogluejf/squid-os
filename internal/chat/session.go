@@ -16,6 +16,7 @@ import (
 type Session struct {
 	Doc    config.SessionDoc
 	Stream StreamState
+	Info   config.SessionInfo
 }
 
 // SessionConfig carries initial session settings for CLI, subagents, and TUI.
@@ -69,7 +70,15 @@ func NewSession(cfg SessionConfig, paths config.Paths) *Session {
 }
 
 // LoadSession wraps an existing session document.
-func LoadSession(sd config.SessionDoc) *Session { return &Session{Doc: sd} }
+func LoadSession(sd config.SessionDoc, name string) *Session {
+	info := config.SessionInfo{Name: name}
+	if sd.Session.UpdatedAt != "" {
+		if t, err := time.Parse(time.RFC3339, sd.Session.UpdatedAt); err == nil {
+			info.ModTime = t
+		}
+	}
+	return &Session{Doc: sd, Info: info}
+}
 
 func (s *Session) Append(msg config.Message) { s.Doc.Messages = append(s.Doc.Messages, msg) }
 

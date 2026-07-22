@@ -100,7 +100,7 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	var sess *UISession
 	var notification ui.Notification
 	if initialSession != nil {
-		sess = NewUISessionFromDoc(*initialSession)
+		sess = NewUISessionFromDoc(*initialSession, settings.LastSessionName)
 		// Show friendly notification for auto-load
 		notification = ui.Notification{
 			Level:   ui.NotificationInfo,

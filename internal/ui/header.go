@@ -3,7 +3,9 @@ package ui
 import (
 	"strings"
 
+	"squid-os/internal/config"
 	"squid-os/internal/style"
+	"squid-os/internal/util"
 	"squid-os/internal/version"
 
 	"github.com/charmbracelet/lipgloss"
@@ -12,21 +14,46 @@ import (
 // HeaderData holds header information
 type HeaderData struct {
 	Incognito bool
+	Session   config.SessionInfo
 }
 
-// RenderHeader renders the top header bar, including the incognito indicator when active.
+// RenderHeader renders the top header bar, including the incognito indicator and session name.
 func RenderHeader(data HeaderData, width int) string {
-	title := "squid-os " + version.Full()
-	if !data.Incognito {
-		return style.TopHeaderStyle.Width(width).Render(title)
+	var bgStyle lipgloss.Style
+	if data.Incognito {
+		bgStyle = lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgIncognito))
+	} else {
+		bgStyle = lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgFooter))
 	}
-	headerStyle := style.IncognitoHeaderStyle.Width(width)
-	label := "👻 incognito"
-	titleWidth := lipgloss.Width(style.IncognitoHeaderStyle.Render(title))
-	labelWidth := lipgloss.Width(style.IncognitoHeaderStyle.Render(label))
-	gap := width - titleWidth - labelWidth
+
+	title := bgStyle.Bold(true).Foreground(lipgloss.Color(style.P.TextSecondary)).Padding(0, 1).Render("squid-os " + version.Full())
+
+	// Build right-side session label
+	var right string
+	if data.Incognito {
+		right = bgStyle.Bold(true).Foreground(lipgloss.Color(style.P.TextPrimary)).Render("👻 incognito")
+	} else {
+		muted := bgStyle.Foreground(lipgloss.Color(style.P.TextMuted))
+		primary := bgStyle.Bold(true).Foreground(lipgloss.Color(style.P.TextPrimary))
+		if data.Session.Name != "" {
+			name := primary.Render(data.Session.Name)
+			if !data.Session.ModTime.IsZero() {
+				ts := muted.Render(" · ") + muted.Render(util.FriendlyModDate(data.Session.ModTime))
+				right = name + ts
+			} else {
+				right = name
+			}
+		} else {
+			right = muted.Render("not saved")
+		}
+	}
+
+	gap := width - lipgloss.Width(title) - lipgloss.Width(right)
 	if gap < 1 {
 		gap = 1
 	}
-	return headerStyle.Render(title + strings.Repeat(" ", gap) + label)
+	space := bgStyle.Render(strings.Repeat(" ", gap))
+
+	lineStyle := bgStyle.Width(width)
+	return lineStyle.Render(title + space + right)
 }

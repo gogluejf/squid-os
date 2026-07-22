@@ -108,7 +108,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			if err != nil {
 				return
 			}
-			m.session = NewUISessionFromDoc(sf)
+			m.session = NewUISessionFromDoc(sf, name)
 			if sf.Session.WorkingDir != "" {
 				m.applyWorkingDir(sf.Session.WorkingDir)
 			}
@@ -128,7 +128,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			if err != nil {
 				return m.setChatMode()
 			}
-			m.session = NewUISessionFromDoc(sf)
+			m.session = NewUISessionFromDoc(sf, selected)
 			if sf.Session.WorkingDir != "" {
 				m.applyWorkingDir(sf.Session.WorkingDir)
 			}

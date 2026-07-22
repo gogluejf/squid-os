@@ -20,8 +20,8 @@ func NewUISession(cfg chat.SessionConfig, paths config.Paths) *UISession {
 	return &UISession{Session: chat.NewSession(cfg, paths)}
 }
 
-func NewUISessionFromDoc(sd config.SessionDoc) *UISession {
-	return &UISession{Session: chat.LoadSession(sd)}
+func NewUISessionFromDoc(sd config.SessionDoc, name string) *UISession {
+	return &UISession{Session: chat.LoadSession(sd, name)}
 }
 
 func NewUISessionFromSettings(settings config.Settings, paths config.Paths, workingDir string) *UISession {

@@ -27,6 +27,8 @@ func (m Model) saveAs(name string, silent bool) (Model, tea.Cmd) {
 			m.settings.LastSessionName = name
 			_ = config.SaveSettings(m.paths, m.settings)
 		}
+		m.session.Info.Name = name
+		m.session.Info.ModTime = time.Now()
 		if !silent {
 			(&m).setNotification(ui.NotificationInfo, "session saved to "+config.SessionPath(m.paths, name))
 		}

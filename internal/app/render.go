@@ -49,7 +49,10 @@ func (m Model) View() string {
 	}
 
 	var sections []string
-	sections = append(sections, ui.RenderHeader(ui.HeaderData{Incognito: m.incognito}, m.width))
+	sections = append(sections, ui.RenderHeader(ui.HeaderData{
+		Incognito: m.incognito,
+		Session:   m.session.Info,
+	}, m.width))
 
 	// Viewport (messages)
 	sections = append(sections, m.viewport.View())

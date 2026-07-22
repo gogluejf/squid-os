@@ -139,7 +139,11 @@ func ExecuteTools(s *Session, toolReg *tools.Registry, opts ToolExecOptions) Too
 				entries[j].Execution.Error = "cancelled: previous tool was not approved"
 			}
 			FlushToolMessage(s, msgIdx)
-			return ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: i, NextIndex: len(entries)}
+			res := ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: i, NextIndex: len(entries)}
+			if capturedInstructions != "" {
+				res.CapturedUserText = capturedInstructions
+			}
+			return res
 		}
 		goto doExecute
 	}

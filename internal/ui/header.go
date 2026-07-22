@@ -34,12 +34,12 @@ func RenderHeader(data HeaderData, width int) string {
 		right = bgStyle.Bold(true).Foreground(lipgloss.Color(style.P.TextPrimary)).Render("👻 incognito")
 	} else {
 		muted := bgStyle.Foreground(lipgloss.Color(style.P.TextMuted))
-		primary := bgStyle.Bold(true).Foreground(lipgloss.Color(style.P.TextPrimary))
+		primary := bgStyle.Bold(true).Foreground(lipgloss.Color(style.P.TextSecondary))
 		if data.Session.Name != "" {
 			name := primary.Render(data.Session.Name)
 			if !data.Session.ModTime.IsZero() {
-				ts := muted.Render(" · ") + muted.Render(util.FriendlyModDate(data.Session.ModTime))
-				right = name + ts
+				ts := muted.Render(util.FriendlyModDate(data.Session.ModTime)) + muted.Render(" · ")
+				right = ts + name
 			} else {
 				right = name
 			}

@@ -72,6 +72,9 @@ func (o *OpenAIProvider) StaticModels() []ModelEntry {
 		{ID: "gpt-5.4", ContextLength: 1_050_000},
 		{ID: "gpt-5.4-mini", ContextLength: 1_050_000},
 		{ID: "gpt-5.5", ContextLength: 1_050_000},
+		{ID: "gpt-5.6-sol", ContextLength: 1_050_000},
+		{ID: "gpt-5.6-terra", ContextLength: 1_050_000},
+		{ID: "gpt-5.6-luna", ContextLength: 1_050_000},
 	}
 }
 func (o *OpenAIProvider) DefaultBaseURL() string { return "https://api.openai.com" }
@@ -115,7 +118,7 @@ func (o *OpenAIProvider) BuildGoAIModel(model string) (provider.LanguageModel, b
 		if o.creds().OAuth != nil && o.creds().OAuth.AccountID != "" {
 			opts = append(opts, goai_openai.WithHeaders(map[string]string{
 				"Originator":         "opencode",
-				"User-Agent": version.String(),
+				"User-Agent":         version.String(),
 				"ChatGPT-Account-Id": o.creds().OAuth.AccountID,
 			}))
 		} else {

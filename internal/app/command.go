@@ -6,7 +6,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"squid-os/internal/config"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
 )
@@ -93,7 +92,6 @@ var AllCommands = []SlashCommand{
 		Name:        "exit",
 		Description: "Exit squid-os",
 		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
-			_ = config.SaveHistory(m.paths, m.history)
 			return m, tea.Quit
 		},
 	},

@@ -6,7 +6,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"squid-os/internal/config"
 	"squid-os/internal/ui"
 )
 
@@ -117,7 +116,6 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.textarea.SetValue("")
 			m.autoSizeTextarea()
 		} else {
-			_ = config.SaveHistory(m.paths, m.history)
 			return m, tea.Quit
 		}
 		return m, nil

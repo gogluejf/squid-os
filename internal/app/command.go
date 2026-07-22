@@ -51,7 +51,7 @@ var AllCommands = []SlashCommand{
 		Description: "Cycle authorization mode (auto/ask-on-write/ask-for-all)",
 		Key:         keys.AuthMode,
 		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
-			return m.cycleAuthorization()
+			return m.cycleAuthorization(true)
 		},
 	},
 	{

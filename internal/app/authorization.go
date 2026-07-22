@@ -28,7 +28,8 @@ func (c *AuthorizationContext) IsActionable() bool {
 }
 
 // cycleAuthorization cycles through authorization modes: auto -> ask-on-write -> ask-for-all -> auto.
-func (m Model) cycleAuthorization() (Model, tea.Cmd) {
+// If dismiss is true, the component is closed (useful when cycling to "auto" mid-prompt).
+func (m Model) cycleAuthorization(dismiss bool) (Model, tea.Cmd) {
 	modes := []string{config.AuthorizationAuto, config.AuthorizationAskOnWrite, config.AuthorizationAskForAll}
 	idx := 0
 	for i, mode := range modes {
@@ -46,5 +47,11 @@ func (m Model) cycleAuthorization() (Model, tea.Cmd) {
 		config.AuthorizationAskForAll:  "ask-for-all — confirm every tool call",
 	}
 	(&m).setNotification(ui.NotificationInfo, "authorization: "+labels[next])
-	return m, m.setChatMode()
+
+	if dismiss {
+		return m, m.setChatMode()
+	}
+	// When not dismissing, just re-render the current view with updated state.
+	(&m).recalcLayout()
+	return m, nil
 }

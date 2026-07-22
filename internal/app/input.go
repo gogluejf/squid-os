@@ -62,6 +62,12 @@ func (m Model) handleComponent(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Auth mode cycling works from any component overlay — allows switching
+	// to auto mid-prompt without dismissing the dialog.
+	if key.Matches(msg, keys.AuthMode) {
+		return m.cycleAuthorization(false)
+	}
+
 	// Expand/collapse works during component overlays (e.g. auth questions).
 	if key.Matches(msg, keys.Expand) {
 		m.expanded = !m.expanded

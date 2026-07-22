@@ -15,6 +15,7 @@ import (
 // openSaveSessionPrompt opens a prompt so the user can confirm or edit the session name.
 func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 	if m.incognito {
+		(&m).setNotification(ui.NotificationInfo, "incognito is on, session won't be saved")
 		return m, nil
 	}
 	name := m.settings.LastSessionName
@@ -46,10 +47,8 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 // clearSession resets all messages and session state to start fresh.
 func (m Model) clearSession() (Model, tea.Cmd) {
 	m.session = NewUISessionFromSettings(m.settings, m.paths, m.workingDir)
-	if !m.incognito {
-		m.settings.LastSessionName = ""
-		_ = config.SaveSettings(m.paths, m.settings)
-	}
+	m.settings.LastSessionName = ""
+	_ = config.SaveSettings(m.paths, m.settings)
 	if m.settings.AutoSave {
 		(&m).setNotification(ui.NotificationInfo, "new session started, will auto-save")
 	} else {
@@ -58,20 +57,30 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 	return m, m.setChatMode()
 }
 
-// toggleIncognito switches incognito mode on/off and resets the chat either way.
+// toggleIncognito switches incognito mode on/off.
+// On: keep current session alive, stop saving/history/debug.
+// Off: reload session from disk if it was saved (discarding incognito changes).
 func (m Model) toggleIncognito() (Model, tea.Cmd) {
 	m.incognito = !m.incognito
-	m.session = NewUISessionFromSettings(m.settings, m.paths, m.workingDir)
-	if !m.incognito {
+	if m.incognito {
 		m.settings.LastSessionName = ""
 		_ = config.SaveSettings(m.paths, m.settings)
-	}
-	log.SetEnabled(m.settings.DebugEnabled && !m.incognito)
-	if m.incognito {
 		(&m).setNotification(ui.NotificationInfo, "incognito is on")
 	} else {
+		// Resume — reload from disk if the session was previously saved
+		if m.session.Info.Name != "" {
+			if sf, err := config.LoadSessionDoc(m.paths, m.session.Info.Name); err == nil {
+				m.session = NewUISessionFromDoc(sf, m.session.Info.Name)
+				m.settings.LastSessionName = m.session.Info.Name
+				_ = config.SaveSettings(m.paths, m.settings)
+				if m.session.Doc.Session.WorkingDir != "" {
+					m.applyWorkingDir(m.session.Doc.Session.WorkingDir)
+				}
+			}
+		}
 		(&m).setNotification(ui.NotificationInfo, "incognito is off")
 	}
+	log.SetEnabled(m.settings.DebugEnabled && !m.incognito)
 	return m, m.setChatMode()
 }
 
@@ -120,10 +129,8 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			if selected == "" {
 				return m.setChatMode()
 			}
-			if !m.incognito {
-				m.settings.LastSessionName = selected
-				_ = config.SaveSettings(m.paths, m.settings)
-			}
+			m.settings.LastSessionName = selected
+			_ = config.SaveSettings(m.paths, m.settings)
 			sf, err := config.LoadSessionDoc(m.paths, selected)
 			if err != nil {
 				return m.setChatMode()

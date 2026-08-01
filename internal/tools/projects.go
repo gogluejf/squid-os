@@ -6,38 +6,21 @@ import (
 	"path/filepath"
 	"strings"
 
+	"squid-os/internal/config"
 	"squid-os/internal/environment"
 	"squid-os/internal/style"
 )
 
-// SetWorkingDirCallback is called by the tool to notify the app of a working dir change.
-var SetWorkingDirCallback func(path string)
-
 // projectDir is set by the app at startup via SetProjectDir.
 var projectDir string
 
-// workingDir is the working directory for all file tools.
-var workingDir string
-
-// SetProjectDir sets the project directory for the list_projects tool.
+// SetProjectDir sets the project directory used for project metadata.
 func SetProjectDir(dir string) {
 	projectDir = dir
 }
 
-// SetWorkingDir sets the working directory used by file tools and bash.
-func SetWorkingDir(dir string) {
-	workingDir = dir
-}
-
-// ResolvePath resolves a relative path against the working directory.
-// Exported so callers outside the tools package can normalize paths for validation.
-func ResolvePath(p string) string {
-	return resolvePath(p)
-}
-
-// resolvePath resolves a relative path against the working directory.
-// If the path is already absolute, returns it unchanged.
-func resolvePath(p string) string {
+// ResolvePath resolves a path against the provided session working directory.
+func ResolvePath(p, workingDir string) string {
 	if strings.HasPrefix(p, "~") {
 		home, _ := os.UserHomeDir()
 		p = strings.Replace(p, "~", home, 1)
@@ -67,7 +50,7 @@ var SetWorkingDirTool = Tool{
 	},
 	"required": ["path"]
 }`),
-	Execute: func(args map[string]interface{}) ToolResult {
+	Execute: func(args map[string]interface{}, _ config.SessionConfig) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
@@ -75,12 +58,7 @@ var SetWorkingDirTool = Tool{
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("path does not exist: %s", path)}
 		}
-		if SetWorkingDirCallback != nil {
-			SetWorkingDirCallback(path)
-		}
 		info := environment.LoadProjectInfo(path, projectDir)
 		return ToolResult{Status: ResultStatusSuccess, Result: environment.FormatProjectInfo(info)}
 	},
 }
-
-

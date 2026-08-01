@@ -20,23 +20,53 @@ const (
 	RoleInternal  = "internal"  // metadata visible to user; excluded from API
 )
 
+// SessionDoc is the persisted session document.
+// Meta holds identity. Initial holds provenance. Config holds current runtime state.
+// Pending holds desired next state (nil = nothing pending).
 type SessionDoc struct {
 	Version     int                       `json:"version"`
-	Session     SessionMeta               `json:"session"`
+	Meta        SessionMeta               `json:"meta"`
+	Initial     SessionConfig             `json:"initial"`
+	Config      SessionConfig             `json:"config"`
+	Pending     *PendingConfig            `json:"pending,omitempty"`
 	Messages    []Message                 `json:"messages"`
 	TotalTokens int                       `json:"total_tokens"`
 	FileState   map[string]FileStateEntry `json:"file_state,omitempty"`
 }
 
-// SessionSkill tracks the loaded skill on a session.
-// Current is the committed skill (loaded in context).
-// Next is a pending change from Tab cycling:
-//   - nil       → no pending change (stable state)
-//   - ptr to "" → user explicitly unloaded skill via Tab
-//   - ptr to "name" → user selected a skill via Tab
-type SessionSkill struct {
-	Current string  `json:"current"`
-	Next    *string `json:"next"`
+// SessionMeta holds identity-only fields that never change.
+type SessionMeta struct {
+	ID        string `json:"id"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// SessionConfig is the single runtime configuration for a session.
+// Used by runtime.Resolve, chat.NewSession, and persisted in SessionDoc.
+type SessionConfig struct {
+	Inference        InferenceConfig   `json:"inference"`
+	SystemPromptFile string            `json:"system_prompt_file,omitempty"`
+	AgentName        string            `json:"agent_name,omitempty"`
+	AgentSystem      string            `json:"agent_system,omitempty"`
+	ActiveSkill      string            `json:"active_skill,omitempty"`
+	AuthMode         AuthorizationMode `json:"auth_mode,omitempty"`
+	WorkingDir       string            `json:"working_dir,omitempty"`
+	Tools            []string          `json:"tools,omitempty"`
+	Skills           []string          `json:"skills,omitempty"`
+	Agents           []string          `json:"agents,omitempty"`
+	Memory           SessionMemory     `json:"memory,omitempty"`
+	Autosave         SessionAutosave   `json:"autosave,omitempty"`
+	Limits           SessionLimits     `json:"limits,omitempty"`
+	DebugEnabled     bool              `json:"debug_enabled,omitempty"`
+}
+
+// PendingConfig holds desired next-state changes. Non-nil fields are pending.
+type PendingConfig struct {
+	Inference   *InferenceConfig `json:"inference,omitempty"`
+	ActiveSkill *string          `json:"active_skill,omitempty"`
+	Tools       *[]string        `json:"tools,omitempty"`
+	Skills      *[]string        `json:"skills,omitempty"`
+	Agents      *[]string        `json:"agents,omitempty"`
 }
 
 type InferenceConfig struct {
@@ -45,93 +75,29 @@ type InferenceConfig struct {
 	Thinking ThinkingConfig `json:"thinking"`
 }
 
-type SessionInference struct {
-	Initial InferenceConfig `json:"initial"`
-	Current InferenceConfig `json:"current"`
+type SessionMemory struct {
+	Namespace    string `json:"namespace,omitempty"`
+	Path         string `json:"path,omitempty"`
+	Instructions string `json:"instructions,omitempty"`
 }
 
-type SessionTools struct {
-	Initial []string `json:"initial"`
-	Current []string `json:"current"`
+type SessionAutosave struct {
+	Enabled bool   `json:"enabled"`
+	Name    string `json:"name,omitempty"`
 }
 
-type SessionSkills struct {
-	Initial []string `json:"initial"`
-	Current []string `json:"current"`
-}
-
-type SessionMeta struct {
-	ID                  string           `json:"id"`
-	Title               string           `json:"title"`
-	CreatedAt           string           `json:"created_at"`
-	UpdatedAt           string           `json:"updated_at"`
-	Inference           SessionInference `json:"inference"`
-	SystemPromptFile    string           `json:"system_prompt_file"`
-	WorkingDir          string           `json:"working_dir"`
-	MaxToolResultTokens int              `json:"max_tool_result_tokens,omitempty"`
-	Skill               SessionSkill     `json:"skill"`
-	Tools               SessionTools     `json:"tools,omitempty"`
-	Skills              SessionSkills    `json:"skills,omitempty"`
+type SessionLimits struct {
+	MaxSteps            int    `json:"max_steps,omitempty"`
+	MaxTools            int    `json:"max_tools,omitempty"`
+	MaxToolResultTokens int    `json:"max_tool_result_tokens,omitempty"`
+	MaxAgentDepth       int    `json:"max_agent_depth,omitempty"`
+	MaxTime             string `json:"max_time,omitempty"`
 }
 
 type ContentMetrics struct {
 	Tokens               int   `json:"tokens,omitempty"`
 	InferenceDuractionMs int64 `json:"inference_duration_ms,omitempty"`
 	TimeToFirstTokenMs   int64 `json:"time_to_first_token_ms,omitempty"`
-}
-
-type SequenceStat struct {
-	AvgTokensPerSec      float64 `json:"avg_tok_per_sec,omitempty"`
-	OutputTokens         int     `json:"output_tokens,omitempty"`
-	DurationMs           int64   `json:"duration_ms,omitempty"`
-	InferenceDuractionMs int64   `json:"inference_duration_ms,omitempty"`
-	InputTokens          int     `json:"input_tokens,omitempty"`
-	ExecDurMs            int64   `json:"exec_dur_ms,omitempty"`
-}
-
-// Add sums another SequenceStat into this one and recomputes AvgTokensPerSec.
-func (ss *SequenceStat) Add(other *SequenceStat) {
-	ss.OutputTokens += other.OutputTokens
-	ss.DurationMs += other.DurationMs
-	ss.InferenceDuractionMs += other.InferenceDuractionMs
-	ss.ExecDurMs += other.ExecDurMs
-	ss.InputTokens += other.InputTokens
-	if ss.InferenceDuractionMs > 0 {
-		ss.AvgTokensPerSec = float64(ss.OutputTokens) / float64(ss.InferenceDuractionMs) * 1000.0
-	}
-}
-
-func (ss *SequenceStat) Accumulate(msg Message) {
-	ss.OutputTokens += msg.OutputTokens
-	ss.DurationMs += msg.DurationTimeMs
-	ss.InferenceDuractionMs += msg.TextMetrics.InferenceDuractionMs
-	ss.InferenceDuractionMs += msg.ThinkingMetrics.InferenceDuractionMs
-	ss.InferenceDuractionMs += msg.ToolCallMetrics.InferenceDuractionMs
-	ss.InputTokens += msg.InputTokens
-	for _, tc := range msg.ToolCalls {
-		ss.ExecDurMs += tc.Execution.DurationMs
-	}
-
-	if ss.InferenceDuractionMs > 0 {
-		ss.AvgTokensPerSec = float64(ss.OutputTokens) / float64(ss.InferenceDuractionMs) * 1000.0
-	}
-}
-
-// FindSequenceHeadIdx returns the index of the first assistant message after
-// the last user message, skipping any "synthetic" messages in between,
-// or -1 if none exists yet.
-func FindSequenceHeadIdx(msgs []Message) int {
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == RoleUser {
-			for j := i + 1; j < len(msgs); j++ {
-				if msgs[j].Role == RoleAssistant {
-					return j
-				}
-			}
-			return -1
-		}
-	}
-	return -1
 }
 
 // File tracking constants
@@ -236,32 +202,27 @@ func TotalExecutionTokens(entries []ToolCallEntry) int {
 	return total
 }
 
-// NewSessionDoc creates a new empty session
-func NewSessionDoc(inf InferenceConfig, systemPrompt string, workingDir string, toolNames, skillNames []string) SessionDoc {
+// NewSessionDoc creates a new empty session with independent initial/current config copies.
+func NewSessionDoc(cfg SessionConfig) SessionDoc {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return SessionDoc{
-		Version: 1,
-		Session: SessionMeta{
-			ID:                  uuid.New().String(),
-			CreatedAt:           now,
-			UpdatedAt:           now,
-			MaxToolResultTokens: 0,
-			Inference: SessionInference{
-				Initial: inf,
-				Current: inf,
-			},
-			SystemPromptFile: systemPrompt,
-			WorkingDir:       workingDir,
-			Tools: SessionTools{
-				Initial: append([]string(nil), toolNames...),
-				Current: append([]string(nil), toolNames...),
-			},
-			Skills: SessionSkills{
-				Initial: append([]string(nil), skillNames...),
-				Current: append([]string(nil), skillNames...),
-			},
+		Version: 2,
+		Meta: SessionMeta{
+			ID:        uuid.New().String(),
+			CreatedAt: now,
+			UpdatedAt: now,
 		},
+		Initial:  CloneSessionConfig(cfg),
+		Config:   cfg,
+		Messages: []Message{},
 	}
+}
+
+func CloneSessionConfig(cfg SessionConfig) SessionConfig {
+	cfg.Tools = append([]string(nil), cfg.Tools...)
+	cfg.Skills = append([]string(nil), cfg.Skills...)
+	cfg.Agents = append([]string(nil), cfg.Agents...)
+	return cfg
 }
 
 // SessionPath returns the file path for a session by name.
@@ -271,7 +232,7 @@ func SessionPath(p Paths, name string) string {
 
 // SaveSessionDoc writes a session to sessions/<name>.chat.json
 func SaveSessionDoc(p Paths, name string, sf SessionDoc) error {
-	sf.Session.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	sf.Meta.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	data, err := json.MarshalIndent(sf, "", "  ")
 	if err != nil {
 		return err

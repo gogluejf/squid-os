@@ -2,16 +2,45 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
 
-// Authorization modes
+// AuthorizationMode controls when tool authorization is required and whether
+// the caller asks interactively or ends non-interactive execution.
+type AuthorizationMode string
+
 const (
-	AuthorizationAuto       = "auto"
-	AuthorizationAskOnWrite = "ask-on-write"
-	AuthorizationAskForAll  = "ask-for-all"
+	AuthorizationAuto       AuthorizationMode = "auto"
+	AuthorizationAskOnWrite AuthorizationMode = "ask-on-write"
+	AuthorizationAskForAll  AuthorizationMode = "ask-for-all"
+	AuthorizationEndOnWrite AuthorizationMode = "end-on-write"
+	AuthorizationEndOnAll   AuthorizationMode = "end-on-all"
 )
+
+func ParseAuthorizationMode(value string) (AuthorizationMode, error) {
+	mode := AuthorizationMode(value)
+	switch mode {
+	case AuthorizationAuto, AuthorizationAskOnWrite, AuthorizationAskForAll, AuthorizationEndOnWrite, AuthorizationEndOnAll:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("invalid authorization mode %q", value)
+	}
+}
+
+// ValidateAuthorization returns the normalized authorization mode, falling back to auto.
+func (s Settings) ValidateAuthorization() AuthorizationMode {
+	mode, err := ParseAuthorizationMode(s.Authorization)
+	if err != nil {
+		return AuthorizationAuto
+	} else if mode == AuthorizationEndOnWrite {
+		return AuthorizationAskOnWrite
+	} else if mode == AuthorizationEndOnAll {
+		return AuthorizationAskForAll
+	}
+	return mode
+}
 
 // ThinkingConfig groups thinking-related settings.
 type ThinkingConfig struct {
@@ -46,16 +75,6 @@ type Settings struct {
 	MemoryDir    string `json:"memory_dir"`    // default: "memory"
 	TempFolder   string `json:"temp_folder"`   // default: "tmp"
 	DocumentsDir string `json:"documents_dir"` // default: "Documents/squid-os"
-}
-
-// ValidateAuthorization returns the normalized authorization mode, falling back to auto.
-func (s Settings) ValidateAuthorization() string {
-	switch s.Authorization {
-	case AuthorizationAuto, AuthorizationAskOnWrite, AuthorizationAskForAll:
-		return s.Authorization
-	default:
-		return AuthorizationAuto
-	}
 }
 
 // LoadSettings loads settings.json from the given config directory.

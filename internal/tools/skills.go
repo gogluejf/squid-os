@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"squid-os/internal/config"
 	"squid-os/internal/skills"
 	"squid-os/internal/style"
 )
@@ -24,10 +25,13 @@ var SkillLoad = Tool{
 	},
 	"required": ["name"]
 }`),
-	Execute: func(args map[string]interface{}) ToolResult {
+	Execute: func(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
 		name, ok := args["name"].(string)
 		if !ok || name == "" {
 			return ToolResult{Status: ResultStatusError, Error: "name is required and must be a string"}
+		}
+		if !contains(cfg.Skills, name) {
+			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("skill %q is not available. Run skill_list to see available skills.", name)}
 		}
 		reg := skills.GetRegistry()
 		if reg == nil {
@@ -65,14 +69,23 @@ var SkillList = Tool{
 	DisplayParam: "",
 	Style:        style.SkillStyle(),
 	Schema:       []byte(`{"type": "object", "properties": {}}`),
-	Execute: func(args map[string]interface{}) ToolResult {
+	Execute: func(_ map[string]interface{}, cfg config.SessionConfig) ToolResult {
 		reg := skills.GetRegistry()
 		if reg == nil {
 			return ToolResult{Status: ResultStatusError, Error: "skill registry not initialized"}
 		}
-		entries := reg.List()
+		allowed := make(map[string]bool, len(cfg.Skills))
+		for _, name := range cfg.Skills {
+			allowed[name] = true
+		}
+		var entries []skills.SkillEntry
+		for _, entry := range reg.List() {
+			if allowed[entry.Name] {
+				entries = append(entries, entry)
+			}
+		}
 		if len(entries) == 0 {
-			return ToolResult{Status: ResultStatusSuccess, Result: "No skills installed."}
+			return ToolResult{Status: ResultStatusSuccess, Result: "No skills available in this session."}
 		}
 		var b strings.Builder
 		b.WriteString(fmt.Sprintf("Available skills (%d):\n", len(entries)))
@@ -82,5 +95,3 @@ var SkillList = Tool{
 		return ToolResult{Status: ResultStatusSuccess, Result: b.String()}
 	},
 }
-
-

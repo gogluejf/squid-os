@@ -12,31 +12,15 @@ import (
 
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
-	"squid-os/internal/tools"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
 )
 
-// needsAuthorization checks the current authorization mode and tool destructiveness
-// to determine if user confirmation is required before execution.
-func (m Model) needsAuthorization(tool *tools.Tool, args map[string]interface{}) bool {
-	switch m.settings.ValidateAuthorization() {
-	case config.AuthorizationAskForAll:
-		return true
-	case config.AuthorizationAskOnWrite:
-		return tool != nil && tool.IsDestructive != nil && tool.IsDestructive(args)
-	default: // auto
-		return false
-	}
-}
-
-// setStreamMode initializes the stream state for a new request.
+// setStreamMode initializes TUI state for a new request.
+// Shared stream state and metrics are initialized by chat.StartStreamWithContext.
 func (m *Model) setStreamMode() {
-	m.session.Stream.Reset()
 	m.session.UIStream.reset()
 	m.session.UIStream.ID = uuid.NewString()
-	m.session.Stream.Active = true
-	m.session.Stream.Metrics.Start = time.Now()
 	m.mode = ModeStreaming
 	m.session.UIStream.Stopwatch.Start()
 	m.textarea.Placeholder = "ctrl+c to cancel..."
@@ -129,22 +113,9 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 
 	m.session.Append(userMsg)
 
-	// Commit all pending per-turn transitions immediately after the user message,
-	// so they belong to this turn and are removed together by destroy-last-sequence.
-	if m.session.Doc.Session.Skill.Next != nil && *m.session.Doc.Session.Skill.Next != m.session.Doc.Session.Skill.Current {
-		(&m).injectSkillChangeSynthetic(m.session.Doc.Session.Skill.Current, *m.session.Doc.Session.Skill.Next)
-		m.session.Doc.Session.Skill.Current = *m.session.Doc.Session.Skill.Next
-		m.session.Doc.Session.Skill.Next = nil
-	}
-	current := m.session.Doc.Session.Inference.Current
-	if current.Model != m.settings.Model || current.Provider != m.settings.Provider {
-		m.session.PushModelSwitch(current.Provider+"/"+current.Model, m.settings.Provider+"/"+m.settings.Model)
-	}
-	if current.Thinking != m.settings.Thinking {
-		m.session.PushThinkingSwitch(m.settings.Thinking)
-	}
-	if current.Provider != m.settings.Provider || current.Model != m.settings.Model || current.Thinking != m.settings.Thinking {
-		m.session.SetInference(config.InferenceConfig{Provider: m.settings.Provider, Model: m.settings.Model, Thinking: m.settings.Thinking})
+	if err := chat.PrepareTurn(m.session.Session); err != nil {
+		(&m).setNotification(ui.NotificationError, err.Error())
+		return m, nil
 	}
 
 	m.session.undoStack = nil
@@ -171,9 +142,12 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		}
 
 		text, image, truncated := m.session.CancelTruncate()
-		if text != "" {
-			m.textarea.SetValue(text)
-			m.attachedImage = image
+		if truncated {
+			m.session.invalidateRenderFrom(len(m.session.Doc.Messages))
+			if text != "" {
+				m.textarea.SetValue(text)
+				m.attachedImage = image
+			}
 		}
 
 		if result.IsAuthError {
@@ -189,10 +163,6 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			result.MsgIdx = chat.AppendStreamErrorMessage(m.session.Session, result.Error)
 		}
 		(&m).setNotification(ui.NotificationError, msg)
-
-		if truncated {
-			m.session.invalidateRenderFrom(len(m.session.Doc.Messages))
-		}
 
 		nm, autoSaveCmd := m.autoSave()
 		m = nm
@@ -254,23 +224,20 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 	}
 
 	for {
-		result := chat.ExecuteTools(m.session.Session, m.toolReg, chat.ToolExecOptions{
-			AuthorizationMode:   m.settings.ValidateAuthorization(),
-			MaxToolResultTokens: m.settings.MaxToolResultTokens,
-			Decision:            decision,
-			MsgIdx:              msgIdx,
+		result := chat.ExecuteTools(m.session.Session, chat.ToolExecOptions{
+			Decision: decision,
+			MsgIdx:   msgIdx,
 		})
 		decision = nil
 
 		if result.MsgIdx >= 0 {
 			m.session.invalidateRenderFrom(result.MsgIdx)
 		}
-		if result.WorkingDir != "" {
-			m.applyWorkingDir(result.WorkingDir)
-		}
 		if result.LoadedSkill != "" {
-			m.session.Doc.Session.Skill.Current = result.LoadedSkill
-			m.session.Doc.Session.Skill.Next = nil
+			m.session.Doc.Config.ActiveSkill = result.LoadedSkill
+			if m.session.Doc.Pending != nil {
+				m.session.Doc.Pending.ActiveSkill = nil
+			}
 		}
 
 		switch result.Action {
@@ -324,7 +291,6 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 // startStream builds API messages from current session state and starts a new stream.
 func (m *Model) startStream() (tea.Model, tea.Cmd) {
 	m.setStreamMode()
-	m.toolReg = tools.GetRegistry()
 
 	ch := chat.StartStream(m.session.Session, m.endpoints)
 	m.session.UIStream.Ch = ch

@@ -7,6 +7,7 @@ import (
 
 	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
+	"squid-os/internal/modelcache"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
 
@@ -28,6 +29,7 @@ func (m Model) scanModelsCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		models := provider.ScanModels(ctx, m.endpoints)
+		_ = (modelcache.Store{Dir: m.paths.CacheDir}).Save(m.endpoints, models)
 		return modelsLoadedMsg{models: models}
 	}
 }
@@ -82,7 +84,7 @@ func (m *Model) buildModelPicker(entries []provider.ModelEntry) {
 	picker := component.Picker{
 		Title:        "Select Model",
 		Items:        items,
-		DefaultValue: m.settings.Model,
+		DefaultValue: m.session.EffectiveInference().Model,
 		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			modelID := item.Value
@@ -127,13 +129,15 @@ func (m *Model) buildModelPicker(entries []provider.ModelEntry) {
 				}
 			}
 
-			m.session.PushConfigChange(entry.Provider, entry.ID, m.settings.Thinking)
+			current := m.session.EffectiveInference()
+			next := config.InferenceConfig{Provider: entry.Provider, Model: entry.ID, Thinking: current.Thinking}
+			m.session.SetPendingInference(next)
 			m.settings.Model = entry.ID
 			m.settings.Provider = entry.Provider
 			m.settings.ContextWindow = contextLength
 			m.session.invalidateRenderAll()
 			_ = config.SaveSettings(m.paths, m.settings)
-			m.setNotification(ui.NotificationInfo, "switched to model: "+modelBasename(m.settings.Model))
+			m.setNotification(ui.NotificationInfo, "Model will switch on next turn: "+modelBasename(m.settings.Model))
 			return m.setChatMode()
 		},
 		OnCancel: func(ctx any) tea.Cmd {

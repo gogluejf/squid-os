@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"squid-os/internal/agent"
 	"squid-os/internal/config"
 	"squid-os/internal/git"
 	"squid-os/internal/skills"
@@ -17,16 +18,21 @@ import (
 // sectionRe matches "## [SectionName]" headings and captures the name inside brackets.
 var sectionRe = regexp.MustCompile(`##\s+\[([^\]]+)\]`)
 
-// LoadEnvironment assembles all sections and returns a full Environment struct.
-func LoadEnvironment(paths config.Paths, workingDir string, debugEnabled bool) Environment {
+// LoadEnvironment assembles environment sections using resolved session scopes.
+func LoadEnvironment(paths config.Paths, sessionConfig config.SessionConfig) Environment {
+	workingDir := sessionConfig.WorkingDir
+	debugEnabled := sessionConfig.DebugEnabled
+	sessionMemory := sessionConfig.Memory
 	projectDir := paths.ProjectDir
 
 	env := Environment{
 		OS:     CollectOSInfo(workingDir),
-		Skills: loadSkillEntries(),
+		Skills: loadSkillEntries(sessionConfig.Skills),
+		Agents: loadAgentEntries(sessionConfig.Agents),
 		SquidOS: SquidOSInfo{
 			Version:       version.Full(),
 			SkillsDir:     paths.Skills,
+			AgentsDir:     paths.Agents,
 			LogsDir:       paths.Logs,
 			SysPromptsDir: paths.SysPrompts,
 			SessionsDir:   paths.Sessions,
@@ -46,7 +52,14 @@ func LoadEnvironment(paths config.Paths, workingDir string, debugEnabled bool) E
 	}
 	env.Projects = FindProjects(projectDir)
 	env.Documents = FindDocuments(paths.DocumentsDir)
-	env.Memory = loadMemoryIndex(paths.MemoryDir)
+	env.MemoryNamespace = sessionMemory.Namespace
+	env.MemoryPath = sessionMemory.Path
+	env.MemoryInstructions = sessionMemory.Instructions
+	memoryPath := sessionMemory.Path
+	if memoryPath == "" {
+		memoryPath = paths.MemoryDir
+	}
+	env.Memory = loadMemoryIndex(memoryPath)
 
 	return env
 }
@@ -76,10 +89,21 @@ func FormatEnvironment(env Environment) string {
 	}
 	b.WriteString("\n")
 
+	b.WriteString("## [Agents]\n")
+	if len(env.Agents) == 0 {
+		b.WriteString("- none: \n")
+	} else {
+		for _, a := range env.Agents {
+			b.WriteString(fmt.Sprintf("- %s: %s\n", a.Name, a.Description))
+		}
+	}
+	b.WriteString("\n")
+
 	// [Squid-OS] section
 	b.WriteString("## [Squid-OS]\n")
 	b.WriteString("- version: " + env.SquidOS.Version + "\n")
 	b.WriteString("- skills: " + util.FriendlyPath(git.Decorate(env.SquidOS.SkillsDir)) + "\n")
+	b.WriteString("- agents: " + util.FriendlyPath(git.Decorate(env.SquidOS.AgentsDir)) + "\n")
 	b.WriteString("- logs: " + util.FriendlyPath(git.Decorate(env.SquidOS.LogsDir)) + "\n")
 	b.WriteString("- sys-prompts: " + util.FriendlyPath(git.Decorate(env.SquidOS.SysPromptsDir)) + "\n")
 	b.WriteString("- sessions: " + util.FriendlyPath(git.Decorate(env.SquidOS.SessionsDir)) + "\n")
@@ -128,10 +152,22 @@ func FormatEnvironment(env Environment) string {
 	}
 
 	// [Memory] section
-	if env.Memory != "" {
+	if env.MemoryNamespace != "" || env.Memory != "" {
 		b.WriteString("## [Memory]\n")
-		b.WriteString(env.Memory)
-		b.WriteString("\n\n")
+		if env.MemoryNamespace != "" {
+			b.WriteString("- namespace: " + env.MemoryNamespace + "\n")
+		}
+		if env.MemoryPath != "" {
+			b.WriteString("- path: " + util.FriendlyPath(env.MemoryPath) + "\n")
+		}
+		if env.MemoryInstructions != "" {
+			b.WriteString("- instructions: " + env.MemoryInstructions + "\n")
+		}
+		if env.Memory != "" {
+			b.WriteString(env.Memory)
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
 	}
 
 	return b.String()
@@ -165,18 +201,38 @@ func loadMemoryIndex(memoryDir string) string {
 	return content
 }
 
-func loadSkillEntries() []SkillInfo {
-	var entries []SkillInfo
+func loadSkillEntries(allowedNames []string) []SkillInfo {
 	registry := skills.GetRegistry()
 	if registry == nil {
-		return entries
+		return nil
 	}
-	skillEntries := registry.List()
-	for _, e := range skillEntries {
-		entries = append(entries, SkillInfo{
-			Name:        e.Name,
-			Description: e.Description,
-		})
+	allowed := make(map[string]bool, len(allowedNames))
+	for _, name := range allowedNames {
+		allowed[name] = true
+	}
+	var entries []SkillInfo
+	for _, entry := range registry.List() {
+		if allowed[entry.Name] {
+			entries = append(entries, SkillInfo{Name: entry.Name, Description: entry.Description})
+		}
+	}
+	return entries
+}
+
+func loadAgentEntries(allowedNames []string) []AgentInfo {
+	registry := agent.GetRegistry()
+	if registry == nil {
+		return nil
+	}
+	allowed := make(map[string]bool, len(allowedNames))
+	for _, name := range allowedNames {
+		allowed[name] = true
+	}
+	var entries []AgentInfo
+	for _, entry := range registry.List() {
+		if allowed[entry.Name] {
+			entries = append(entries, AgentInfo{Name: entry.Name, Description: entry.Description})
+		}
 	}
 	return entries
 }

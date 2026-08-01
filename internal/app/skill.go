@@ -1,13 +1,10 @@
 package app
 
 import (
-	"fmt"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"squid-os/internal/config"
 	"squid-os/internal/skills"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
@@ -15,60 +12,12 @@ import (
 
 // setSkill sets the pending skill change and shows a notification.
 func (m *Model) setSkill(name string) {
-	m.session.Doc.Session.Skill.Next = &name
+	m.session.SetPendingSkill(name)
 	if name == "" {
 		m.setNotification(ui.NotificationInfo, "skill: (will unload at next user turn)")
 	} else {
-		m.setNotification(ui.NotificationInfo, "skill: "+name+" (will inject at next user turn)")
+		m.setNotification(ui.NotificationInfo, "skill: "+name+" (will load at next user turn)")
 	}
-}
-
-func (m *Model) injectSkillChangeSynthetic(old string, nxt string) {
-	var text string
-	var label string
-	var params map[string]string
-
-	if nxt == "" {
-		text = fmt.Sprintf("Skill %q has been unloaded by the user. Don't use the previously loaded skill anymore.", old)
-		label = "skill_unload"
-		params = nil
-	} else if old == "" {
-		text = fmt.Sprintf("Skill %q has been loaded by the user.\n\n", nxt)
-		text += m.getSkillText(nxt)
-		label = "skill_load"
-		params = map[string]string{"name": nxt}
-	} else {
-		text = fmt.Sprintf("Skill changed from %q to %q by the user. Stop using the previous skill and use the new one instead.\n\n", old, nxt)
-		text += m.getSkillText(nxt)
-		label = "skill_load"
-		params = map[string]string{"name": nxt}
-	}
-
-	m.session.Append(config.Message{
-		ID:          fmt.Sprintf("msg_%d", len(m.session.Doc.Messages)+1),
-		Role:        config.RoleSynthetic,
-		CreatedAt:   time.Now(),
-		Text:        text,
-		Label:       label,
-		Params:      params,
-		InputTokens: countTokensApprox(text),
-	})
-}
-
-func (m *Model) getSkillText(name string) string {
-	reg := skills.GetRegistry()
-	if reg == nil {
-		return fmt.Sprintf("Loaded skill: %s", name)
-	}
-	sk, err := reg.Load(name)
-	if err != nil {
-		return fmt.Sprintf("Loaded skill: %s", name)
-	}
-	text := fmt.Sprintf("Loaded skill: %s\n\n", name)
-	if sk.Body != "" {
-		text += sk.Body
-	}
-	return text
 }
 
 // openSkillPicker opens the skill picker overlay, building items from the registry.
@@ -80,7 +29,14 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 		Value: "(none)",
 	})
 	if reg := skills.GetRegistry(); reg != nil {
+		allowed := make(map[string]bool, len(m.session.Doc.Config.Skills))
+		for _, name := range m.session.Doc.Config.Skills {
+			allowed[name] = true
+		}
 		for _, e := range reg.List() {
+			if !allowed[e.Name] {
+				continue
+			}
 			items = append(items, component.PickerItem{
 				Label: e.Name,
 				Meta:  []string{e.Description},
@@ -90,10 +46,7 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 	}
 
 	// Pre-select current skill if any
-	current := m.session.Doc.Session.Skill.Current
-	if m.session.Doc.Session.Skill.Next != nil {
-		current = *m.session.Doc.Session.Skill.Next
-	}
+	current := m.session.EffectiveSkill()
 
 	picker := component.Picker{
 		Title:        "Select Skill",
@@ -105,11 +58,7 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 			if skillName == "(none)" {
 				skillName = ""
 			}
-			current := m.session.Doc.Session.Skill.Current
-			if m.session.Doc.Session.Skill.Next != nil {
-				current = *m.session.Doc.Session.Skill.Next
-			}
-			if skillName != current {
+			if skillName != m.session.EffectiveSkill() {
 				m.setSkill(skillName)
 			}
 			return m.setChatMode()

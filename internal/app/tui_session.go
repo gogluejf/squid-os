@@ -7,10 +7,19 @@ import (
 
 	"squid-os/internal/config"
 	"squid-os/internal/log"
+	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
 	"squid-os/internal/util"
 )
+
+func (m *Model) loadUISession(doc config.SessionDoc, name string) {
+	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{Settings: m.settings, Paths: m.paths, ExistingSession: &doc, SessionName: name, Target: runtimeconfig.TargetTUI})
+	if err == nil {
+		runtimeconfig.ApplyToExistingSession(&doc, resolved)
+	}
+	m.session = NewUISessionFromDoc(doc, name)
+}
 
 // openSaveSessionPrompt opens a prompt so the user can confirm or edit the session name.
 func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
@@ -46,7 +55,17 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 
 // clearSession resets all messages and session state to start fresh.
 func (m Model) clearSession() (Model, tea.Cmd) {
-	m.session = NewUISessionFromSettings(m.settings, m.paths, m.workingDir)
+	sessionConfig, err := runtimeconfig.Resolve(runtimeconfig.Inputs{
+		Settings: m.settings,
+		Paths:    m.paths,
+		Target:   runtimeconfig.TargetTUI,
+		CLI:      runtimeconfig.Overrides{WorkingDir: m.session.Doc.Config.WorkingDir},
+	})
+	if err != nil {
+		(&m).setNotification(ui.NotificationError, err.Error())
+		return m, nil
+	}
+	m.session = NewUISession(sessionConfig, m.paths)
 	m.settings.LastSessionName = ""
 	_ = config.SaveSettings(m.paths, m.settings)
 	if m.settings.AutoSave {
@@ -70,12 +89,9 @@ func (m Model) toggleIncognito() (Model, tea.Cmd) {
 		// Resume — reload from disk if the session was previously saved
 		if m.session.Info.Name != "" {
 			if sf, err := config.LoadSessionDoc(m.paths, m.session.Info.Name); err == nil {
-				m.session = NewUISessionFromDoc(sf, m.session.Info.Name)
+				m.loadUISession(sf, m.session.Info.Name)
 				m.settings.LastSessionName = m.session.Info.Name
 				_ = config.SaveSettings(m.paths, m.settings)
-				if m.session.Doc.Session.WorkingDir != "" {
-					m.applyWorkingDir(m.session.Doc.Session.WorkingDir)
-				}
 			}
 		}
 		(&m).setNotification(ui.NotificationInfo, "incognito is off")
@@ -117,10 +133,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			if err != nil {
 				return
 			}
-			m.session = NewUISessionFromDoc(sf, name)
-			if sf.Session.WorkingDir != "" {
-				m.applyWorkingDir(sf.Session.WorkingDir)
-			}
+			m.loadUISession(sf, name)
 			m.updateViewportContent()
 		},
 		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
@@ -135,10 +148,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			if err != nil {
 				return m.setChatMode()
 			}
-			m.session = NewUISessionFromDoc(sf, selected)
-			if sf.Session.WorkingDir != "" {
-				m.applyWorkingDir(sf.Session.WorkingDir)
-			}
+			m.loadUISession(sf, selected)
 			m.sessionSnapshot = nil
 			m.setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
 			if msgIdx, ok := m.session.lastPendingToolMsgIdx(); ok {
@@ -151,9 +161,6 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			if m.sessionSnapshot != nil {
 				m.session = m.sessionSnapshot
 				m.sessionSnapshot = nil
-				if m.session.Doc.Session.WorkingDir != "" {
-					m.applyWorkingDir(m.session.Doc.Session.WorkingDir)
-				}
 			}
 			return m.setChatMode()
 		},

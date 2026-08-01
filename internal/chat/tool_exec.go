@@ -34,10 +34,8 @@ type AuthDecision struct {
 }
 
 type ToolExecOptions struct {
-	AuthorizationMode   string
-	MaxToolResultTokens int
-	Decision            *AuthDecision
-	MsgIdx              int
+	Decision *AuthDecision
+	MsgIdx   int
 }
 
 type ToolExecResult struct {
@@ -47,7 +45,6 @@ type ToolExecResult struct {
 	NextIndex        int
 	AuthRequest      *AuthRequest
 	CapturedUserText string
-	WorkingDir       string
 	LoadedSkill      string
 }
 
@@ -65,7 +62,7 @@ func BuildInstructionEntry(p PartialTool) config.ToolCallEntry {
 	}
 }
 
-func ExecuteTools(s *Session, toolReg *tools.Registry, opts ToolExecOptions) ToolExecResult {
+func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 	if s.Doc.FileState == nil {
 		s.Doc.FileState = make(map[string]config.FileStateEntry)
 	}
@@ -108,7 +105,7 @@ func ExecuteTools(s *Session, toolReg *tools.Registry, opts ToolExecOptions) Too
 	toolName := entry.Instruction.Name
 	argsJSON := entry.Instruction.Arguments
 
-	tool := toolReg.Get(toolName)
+	tool := s.GetTool(toolName)
 	if tool == nil {
 		entry.Execution.Status = tools.ResultStatusError
 		entry.Execution.Error = fmt.Sprintf("unknown tool: %s", toolName)
@@ -150,7 +147,7 @@ func ExecuteTools(s *Session, toolReg *tools.Registry, opts ToolExecOptions) Too
 
 	if toolName != "read_file" && toolName != "open" {
 		if pathVal, ok := args["path"].(string); ok {
-			resolvedPath := tools.ResolvePath(pathVal)
+			resolvedPath := tools.ResolvePath(pathVal, s.Doc.Config.WorkingDir)
 			if err := tools.Validate(resolvedPath, sessionState); err != nil {
 				entries[i].Execution.Status = tools.ResultStatusError
 				entries[i].Execution.Error = fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again uisng the tool \"read_file\" and retry your command.", resolvedPath)
@@ -164,10 +161,10 @@ func ExecuteTools(s *Session, toolReg *tools.Registry, opts ToolExecOptions) Too
 		}
 	}
 
-	if shouldAuthorize(opts.AuthorizationMode, tool, args) {
+	if shouldAuthorize(s.Doc.Config.AuthMode, tool, args) {
 		entries[i].Execution.Error = ""
 		if tool.Preview != nil {
-			preview := tool.Preview(args)
+			preview := tool.Preview(args, s.Doc.Config)
 			if preview.Status == tools.ResultStatusError {
 				entries[i].Execution.Status = tools.ResultStatusError
 				entries[i].Execution.Error = preview.Error
@@ -215,13 +212,10 @@ doExecute:
 	entries[i].Execution.Error = ""
 	entries[i].Execution.Files = nil
 
-	maxToolResultTokens := opts.MaxToolResultTokens
-	if maxToolResultTokens <= 0 {
-		maxToolResultTokens = s.Doc.Session.MaxToolResultTokens
-	}
+	maxToolResultTokens := s.Doc.Config.Limits.MaxToolResultTokens
 
 	resultStart := time.Now()
-	result := tool.Execute(args)
+	result := tool.Execute(args, s.Doc.Config)
 	result = enforceToolResultTokenLimit(result, maxToolResultTokens)
 	entries[i].Execution.Status = result.Status
 	entries[i].Execution.Result = result.Result
@@ -242,8 +236,7 @@ doExecute:
 	res := ToolExecResult{Action: nextToolAction(i, len(entries)), MsgIdx: msgIdx, ToolIndex: i, NextIndex: i + 1}
 	if toolName == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
 		if pathVal, ok := args["path"].(string); ok {
-			res.WorkingDir = pathVal
-			s.Doc.Session.WorkingDir = pathVal
+			s.Doc.Config.WorkingDir = pathVal
 		}
 	}
 	if toolName == "skill_load" && result.Status == tools.ResultStatusSuccess {
@@ -327,11 +320,11 @@ func enforceToolResultTokenLimit(result tools.ToolResult, maxTokens int) tools.T
 	}
 }
 
-func shouldAuthorize(mode string, tool *tools.Tool, args map[string]interface{}) bool {
+func shouldAuthorize(mode config.AuthorizationMode, tool *tools.Tool, args map[string]interface{}) bool {
 	switch mode {
-	case config.AuthorizationAskForAll:
+	case config.AuthorizationAskForAll, config.AuthorizationEndOnAll:
 		return true
-	case config.AuthorizationAskOnWrite:
+	case config.AuthorizationAskOnWrite, config.AuthorizationEndOnWrite:
 		return tool != nil && tool.IsDestructive != nil && tool.IsDestructive(args)
 	default:
 		return false

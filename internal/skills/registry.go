@@ -102,7 +102,7 @@ func (r *Registry) Load(name string) (*Skill, error) {
 
 	data, err := os.ReadFile(entry.Path)
 	if err != nil {
-		return nil, fmt.Errorf("read skill %q: %w", err)
+		return nil, fmt.Errorf("read skill %q: %w", name, err)
 	}
 
 	return ParseSkillFile(entry.Path, data)

@@ -121,7 +121,7 @@ func renderSyntheticMessage(msg config.Message, width int, expanded bool) string
 	s := style.SyntheticStyleLabel()
 	parts := []string{
 		s.Label.Render(msg.Label),
-		s.Dim.Render(tokenChipOutput(msg.TextMetrics.Tokens, nil)),
+		s.Dim.Render(tokenChipInput(msg.InputTokens, nil)),
 	}
 
 	if msg.Params != nil {

@@ -3,7 +3,6 @@ package app
 import (
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
-	"squid-os/internal/skills"
 	"squid-os/internal/tools"
 )
 
@@ -16,26 +15,12 @@ type UISession struct {
 	undoStack        [][]config.Message
 }
 
-func NewUISession(cfg chat.SessionConfig, paths config.Paths) *UISession {
+func NewUISession(cfg config.SessionConfig, paths config.Paths) *UISession {
 	return &UISession{Session: chat.NewSession(cfg, paths)}
 }
 
 func NewUISessionFromDoc(sd config.SessionDoc, name string) *UISession {
 	return &UISession{Session: chat.LoadSession(sd, name)}
-}
-
-func NewUISessionFromSettings(settings config.Settings, paths config.Paths, workingDir string) *UISession {
-	return NewUISession(chat.SessionConfig{
-		Provider:            settings.Provider,
-		Model:               settings.Model,
-		Thinking:            settings.Thinking,
-		SystemPromptFile:    settings.SystemPromptFile,
-		Tools:               availableToolNames(),
-		Skills:              availableSkillNames(),
-		WorkingDir:          workingDir,
-		MaxToolResultTokens: settings.MaxToolResultTokens,
-		DebugEnabled:        settings.DebugEnabled,
-	}, paths)
 }
 
 func (u *UISession) destroyLastSequence() (userText, userImage string) {
@@ -107,24 +92,4 @@ func (u *UISession) lastPendingToolMsgIdx() (int, bool) {
 		return -1, false
 	}
 	return -1, false
-}
-
-func availableToolNames() []string {
-	var names []string
-	for _, t := range tools.GetTools() {
-		names = append(names, t.Name)
-	}
-	return names
-}
-
-func availableSkillNames() []string {
-	reg := skills.GetRegistry()
-	if reg == nil {
-		return nil
-	}
-	var names []string
-	for _, s := range reg.List() {
-		names = append(names, s.Name)
-	}
-	return names
 }

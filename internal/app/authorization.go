@@ -30,18 +30,19 @@ func (c *AuthorizationContext) IsActionable() bool {
 // cycleAuthorization cycles through authorization modes: auto -> ask-on-write -> ask-for-all -> auto.
 // If dismiss is true, the component is closed (useful when cycling to "auto" mid-prompt).
 func (m Model) cycleAuthorization(dismiss bool) (Model, tea.Cmd) {
-	modes := []string{config.AuthorizationAuto, config.AuthorizationAskOnWrite, config.AuthorizationAskForAll}
+	modes := []config.AuthorizationMode{config.AuthorizationAuto, config.AuthorizationAskOnWrite, config.AuthorizationAskForAll}
 	idx := 0
 	for i, mode := range modes {
-		if mode == m.settings.Authorization {
+		if string(mode) == m.settings.Authorization {
 			idx = i
 			break
 		}
 	}
 	next := modes[(idx+1)%len(modes)]
-	m.settings.Authorization = next
+	m.settings.Authorization = string(next)
+	m.session.Doc.Config.AuthMode = next
 	_ = config.SaveSettings(m.paths, m.settings)
-	labels := map[string]string{
+	labels := map[config.AuthorizationMode]string{
 		config.AuthorizationAuto:       "auto — execute all tools without asking",
 		config.AuthorizationAskOnWrite: "ask-on-write — confirm before destructive commands",
 		config.AuthorizationAskForAll:  "ask-for-all — confirm every tool call",

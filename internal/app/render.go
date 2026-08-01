@@ -197,15 +197,16 @@ func (m Model) buildFooterData() ui.FooterData {
 	sessionOut := m.session.TotalOutputTokens()
 	streamOut := m.session.Stream.Metrics.TotalOutputTokens()
 
+	inference := m.session.EffectiveInference()
 	return ui.FooterData{
-		Model:             modelBasename(m.settings.Model),
-		Provider:          m.settings.Provider,
+		Model:             modelBasename(inference.Model),
+		Provider:          inference.Provider,
 		TotalTokens:       sessionIn + sessionOut + streamOut,
 		TotalInputTokens:  sessionIn,
 		TotalOutTokens:    sessionOut + streamOut,
 		Streaming:         m.session.Stream.Active,
-		ThinkingOn:        m.settings.Thinking.Enabled,
-		AuthorizationMode: m.settings.Authorization,
+		ThinkingOn:        inference.Thinking.Enabled,
+		AuthorizationMode: string(m.session.Doc.Config.AuthMode),
 		TokPerSec:         jitterTokenRate(m.session.Stream.Metrics.AvgTokenPerSec(), m.session.Stream.Metrics.LastActivity(), m.session.Stream.Active),
 		SeqDurMs: func() int64 {
 			if m.session.Stream.Active {
@@ -216,8 +217,8 @@ func (m Model) buildFooterData() ui.FooterData {
 			}
 		}(),
 		ContextWindow: m.settings.ContextWindow,
-		WorkingDir:    m.workingDir,
-		Skill:         m.session.Doc.Session.Skill,
+		WorkingDir:    m.session.Doc.Config.WorkingDir,
+		Skill:         m.session.EffectiveSkill(),
 	}
 }
 

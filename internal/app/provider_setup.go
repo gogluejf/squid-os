@@ -30,11 +30,12 @@ func (m *Model) showProviderConfig(s *config.ProviderSettings) tea.Cmd {
 // ensureProviderConfigured checks if the active provider is configured and
 // credentials are valid. Returns (blocked, cmd).
 func (m *Model) ensureProviderConfigured() (bool, tea.Cmd) {
-	if m.settings.Model == "" {
+	inference := m.session.EffectiveInference()
+	if inference.Model == "" {
 		return true, m.showModelPicker()
 	}
 
-	s := config.ResolveProviderSettings(m.endpoints, m.settings.Provider)
+	s := config.ResolveProviderSettings(m.endpoints, inference.Provider)
 	if s == nil || !provider.IsConfigured(s) {
 		return true, m.showModelPicker()
 	}

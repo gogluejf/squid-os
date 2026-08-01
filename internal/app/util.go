@@ -105,11 +105,6 @@ func countTokensApprox(s string) int {
 	return n
 }
 
-// SetAttachedImage sets the image to attach to the next message (from --image flag).
-func (m *Model) SetAttachedImage(path string) {
-	m.attachedImage = path
-}
-
 // autoSizeTextarea adjusts the textarea height to match its content line count,
 // capped at MaxHeight (20). Call after SetValue when the content might have grown
 // or when restoring a block of text. Also recalculates layout so the viewport
@@ -147,8 +142,9 @@ func formatContextLength(ctxLen int) string {
 // refreshContextWindow looks up the current model in the entries and updates
 // settings.ContextWindow, then persists to disk.
 func (m *Model) refreshContextWindow(entries []provider.ModelEntry) {
+	inference := m.session.EffectiveInference()
 	for _, e := range entries {
-		if e.ID == m.settings.Model && e.Provider == m.settings.Provider {
+		if e.ID == inference.Model && e.Provider == inference.Provider {
 			if e.ContextLength != m.settings.ContextWindow {
 				m.settings.ContextWindow = e.ContextLength
 				_ = config.SaveSettings(m.paths, m.settings)

@@ -8,13 +8,17 @@ type FolderEntry struct {
 
 // Environment holds all sections of the sys1 environment message.
 type Environment struct {
-	OS        OSInfo
-	Skills    []SkillInfo
-	SquidOS   SquidOSInfo
-	Project   *ProjectInfo // nil if no working dir set
-	Projects  []FolderEntry
-	Documents []FolderEntry
-	Memory    string // content of index.md from memory dir
+	OS                 OSInfo
+	Skills             []SkillInfo
+	Agents             []AgentInfo
+	SquidOS            SquidOSInfo
+	Project            *ProjectInfo // nil if no working dir set
+	Projects           []FolderEntry
+	Documents          []FolderEntry
+	Memory             string // content of index.md from memory dir
+	MemoryNamespace    string
+	MemoryPath         string
+	MemoryInstructions string
 }
 
 // OSInfo holds OS-level context.
@@ -33,10 +37,16 @@ type SkillInfo struct {
 	Description string
 }
 
+type AgentInfo struct {
+	Name        string
+	Description string
+}
+
 // SquidOSInfo holds Squid-OS directory paths and flags.
 type SquidOSInfo struct {
 	Version       string
 	SkillsDir     string
+	AgentsDir     string
 	LogsDir       string
 	SysPromptsDir string
 	SessionsDir   string

@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -13,6 +12,8 @@ import (
 
 	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
+	"squid-os/internal/modelcache"
+	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/skills"
 	"squid-os/internal/tools"
 	"squid-os/internal/ui"
@@ -46,15 +47,11 @@ type Model struct {
 	session         *UISession
 	sessionSnapshot *UISession
 
-	// Tools registry (survives across stream resets)
-	toolReg *tools.Registry
-
 	// Config
-	settings   config.Settings
-	endpoints  config.EndpointsConfig
-	paths      config.Paths
-	history    config.History
-	workingDir string // working directory, defaults to home (used for env + tools)
+	settings  config.Settings
+	endpoints config.EndpointsConfig
+	paths     config.Paths
+	history   config.History
 
 	// Prompt history navigation
 	historyIdx int // -1 = draft, 0..n = browsing history
@@ -69,15 +66,26 @@ type Model struct {
 	expanded bool
 }
 
-// New creates a new app Model. Pass a non-nil initialSession to pre-load a session,
-// and incognito=true to start in incognito mode.
-func New(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, history config.History, initialSession *config.SessionDoc, incognito bool) Model {
+// StartupOptions contains resolved values for an interactive session bootstrap.
+type StartupOptions struct {
+	Session  runtimeconfig.SessionRequest
+	Settings config.Settings
+	History  config.History
+}
+
+// New creates a new app model from explicit startup options.
+func New(options StartupOptions) Model {
+	paths := options.Session.Paths
+	settings := options.Settings
+	endpoints := options.Session.Endpoints
+	history := options.History
+	initialSession := options.Session.ExistingSession
+	runtimeConfig := options.Session.Config
+
 	// Initialize skill registry early so LoadEnvironment() picks up skills.
 	if err := skills.InitRegistry(paths.Skills); err != nil {
 		// Non-fatal: log but don't crash
 	}
-
-	wd, _ := os.Getwd()
 
 	ta := textarea.New()
 
@@ -87,6 +95,9 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	ta.Placeholder = "Type a message..."
 	ta.Focus()
 	ta.CharLimit = 0
+	if options.Session.Prompt != "" {
+		ta.SetValue(options.Session.Prompt)
+	}
 
 	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
 	ta.FocusedStyle.Base = lipgloss.NewStyle().
@@ -100,18 +111,14 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 	var sess *UISession
 	var notification ui.Notification
 	if initialSession != nil {
-		sess = NewUISessionFromDoc(*initialSession, settings.LastSessionName)
+		sess = NewUISessionFromDoc(*initialSession, options.Session.SessionName)
 		// Show friendly notification for auto-load
 		notification = ui.Notification{
 			Level:   ui.NotificationInfo,
-			Message: fmt.Sprintf("Auto-load on, last session loaded: %s", config.SessionPath(paths, settings.LastSessionName)),
-		}
-		// Restore working dir from the loaded session
-		if initialSession.Session.WorkingDir != "" {
-			wd = initialSession.Session.WorkingDir
+			Message: fmt.Sprintf("Auto-load on, last session loaded: %s", config.SessionPath(paths, options.Session.SessionName)),
 		}
 	} else {
-		sess = NewUISessionFromSettings(settings, paths, wd)
+		sess = NewUISession(runtimeConfig, paths)
 		// Fresh session — clear LastSessionName so auto-save doesn't overwrite the previous session
 		if settings.LastSessionName != "" {
 			settings.LastSessionName = ""
@@ -127,12 +134,11 @@ func New(paths config.Paths, settings config.Settings, endpoints config.Endpoint
 		endpoints:     endpoints,
 		paths:         paths,
 		history:       history,
-		workingDir:    wd, // starts as current working directory
 		session:       sess,
 		historyIdx:    -1,
 		allCommands:   buildCommandPickerItems(),
 		historySearch: ui.NewHistorySearchOverlay(nil),
-		incognito:     incognito,
+		incognito:     false,
 		notification:  notification,
 	}
 }
@@ -151,22 +157,12 @@ func (m *Model) setComponent(c component.Component) {
 	m.recalcLayout()
 }
 
-// applyWorkingDir updates the app model, the tools package, and the session file
-// working directory.  Call from both tool execution (stream.go) and session load
-// so the state stays consistent everywhere.
-func (m *Model) applyWorkingDir(path string) {
-	m.workingDir = path
-	tools.SetWorkingDir(path)
-	m.session.Doc.Session.WorkingDir = path
-}
-
 // Init starts the cursor blink command and refreshes the context window.
 func (m Model) Init() tea.Cmd {
 	chatMode := (&m).setChatMode()
 
 	// Wire tool callbacks
 	tools.SetProjectDir(m.paths.ProjectDir)
-	tools.SetWorkingDir(m.workingDir)
 
 	var resumePending tea.Cmd
 	if msgIdx, ok := m.session.lastPendingToolMsgIdx(); ok {
@@ -183,6 +179,7 @@ func (m *Model) refreshContextCmd() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		models := provider.ScanModels(ctx, m.endpoints)
+		_ = (modelcache.Store{Dir: m.paths.CacheDir}).Save(m.endpoints, models)
 		return contextRefreshMsg{models: models}
 	}
 }

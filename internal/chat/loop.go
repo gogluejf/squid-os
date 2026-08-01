@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"squid-os/internal/config"
-	"squid-os/internal/tools"
 )
 
 type LoopAction int
@@ -162,7 +161,7 @@ func appendSyntheticMessage(s *Session, text, label string) int {
 		CreatedAt:   time.Now(),
 		Text:        text,
 		Label:       label,
-		TextMetrics: config.ContentMetrics{Tokens: CountTokensApproxString(text)},
+		InputTokens: CountTokensApproxString(text),
 	})
 	return len(s.Doc.Messages) - 1
 }
@@ -173,7 +172,7 @@ func nextMessageID(s *Session) string {
 
 func SaveAssistantMsg(s *Session, msg config.Message) int {
 	s.Append(msg)
-	RecomputeSequenceStats(s.Doc.Messages)
+	config.RecomputeSequenceStats(s.Doc.Messages)
 	return len(s.Doc.Messages) - 1
 }
 
@@ -185,33 +184,7 @@ func FlushToolMessage(s *Session, msgIdx int) {
 	}
 	msg.DurationTimeMs = s.Stream.Metrics.Duration().Milliseconds() + execDurMs
 	msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
-	RecomputeSequenceStats(s.Doc.Messages)
-}
-
-func RecomputeSequenceStats(messages []config.Message) {
-	seqIdx := config.FindSequenceHeadIdx(messages)
-	if seqIdx == -1 {
-		return
-	}
-	head := messages[seqIdx]
-	stat := &config.SequenceStat{}
-	for i := seqIdx; i < len(messages); i++ {
-		msg := messages[i]
-		stat.OutputTokens += msg.OutputTokens
-		stat.DurationMs += msg.DurationTimeMs
-		stat.InferenceDuractionMs += msg.TextMetrics.InferenceDuractionMs
-		stat.InferenceDuractionMs += msg.ThinkingMetrics.InferenceDuractionMs
-		stat.InferenceDuractionMs += msg.ToolCallMetrics.InferenceDuractionMs
-		stat.InputTokens += msg.InputTokens
-		for _, tc := range msg.ToolCalls {
-			stat.ExecDurMs += tc.Execution.DurationMs
-		}
-	}
-	if stat.InferenceDuractionMs >= MinSpeedInferenceDuration.Milliseconds() {
-		stat.AvgTokensPerSec = float64(stat.OutputTokens) / float64(stat.InferenceDuractionMs) * 1000.0
-	}
-	head.SequenceStat = stat
-	messages[seqIdx] = head
+	config.RecomputeSequenceStats(s.Doc.Messages)
 }
 
 // StartStream builds API messages from session state and starts provider streaming.
@@ -221,6 +194,7 @@ func StartStream(s *Session, endpoints config.EndpointsConfig) <-chan StreamEven
 
 // StartStreamWithContext builds API messages from session state and starts provider streaming using ctx.
 func StartStreamWithContext(ctx context.Context, s *Session, endpoints config.EndpointsConfig) <-chan StreamEvent {
+	s.Stream.Begin()
 	inf := s.CurrentInference()
 	providerSettings := config.ResolveProviderSettings(endpoints, inf.Provider)
 	engine := NewEngine(providerSettings, inf.Model, inf.Thinking)
@@ -257,12 +231,17 @@ type LoopEvent struct {
 	Cancelled   bool
 }
 
-// RunLoop runs a streaming headless/API loop and emits loop events until done or error.
-func RunLoop(ctx context.Context, s *Session, endpoints config.EndpointsConfig, toolReg *tools.Registry) <-chan LoopEvent {
+func RunLoop(ctx context.Context, s *Session, endpoints config.EndpointsConfig) <-chan LoopEvent {
 	out := make(chan LoopEvent, 64)
 	go func() {
 		defer close(out)
+		steps, toolCount := 0, 0
 		for {
+			steps++
+			if s.Doc.Config.Limits.MaxSteps > 0 && steps > s.Doc.Config.Limits.MaxSteps {
+				out <- LoopEvent{Type: LoopEventError, Error: fmt.Errorf("maximum steps exceeded")}
+				return
+			}
 			streamCh := StartStreamWithContext(ctx, s, endpoints)
 			restart := false
 			for event := range streamCh {
@@ -300,11 +279,13 @@ func RunLoop(ctx context.Context, s *Session, endpoints config.EndpointsConfig, 
 				case LoopToolCalls:
 					msgIdx := -1
 					for {
-						toolRes := ExecuteTools(s, toolReg, ToolExecOptions{AuthorizationMode: config.AuthorizationAuto, MsgIdx: msgIdx})
-						out <- LoopEvent{Type: LoopEventToolFlushed, MsgIdx: toolRes.MsgIdx, ToolIndex: toolRes.ToolIndex}
-						if toolRes.WorkingDir != "" {
-							tools.SetWorkingDir(toolRes.WorkingDir)
+						if s.Doc.Config.Limits.MaxTools > 0 && toolCount >= s.Doc.Config.Limits.MaxTools {
+							out <- LoopEvent{Type: LoopEventError, Error: fmt.Errorf("maximum tools exceeded")}
+							return
 						}
+						toolRes := ExecuteTools(s, ToolExecOptions{MsgIdx: msgIdx})
+						toolCount++
+						out <- LoopEvent{Type: LoopEventToolFlushed, MsgIdx: toolRes.MsgIdx, ToolIndex: toolRes.ToolIndex}
 						switch toolRes.Action {
 						case ToolExecNeedAuth:
 							out <- LoopEvent{Type: LoopEventNeedAuth, MsgIdx: toolRes.MsgIdx, ToolIndex: toolRes.ToolIndex, AuthRequest: toolRes.AuthRequest}

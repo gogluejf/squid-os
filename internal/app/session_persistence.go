@@ -16,6 +16,7 @@ func (m Model) saveAs(name string, silent bool) (Model, tea.Cmd) {
 	if name == "" || m.incognito {
 		return m, nil
 	}
+	m.session.Doc.Config.Autosave.Name = name
 	m.session.Doc.TotalTokens = m.session.TotalTokens()
 	err := config.SaveSessionDoc(m.paths, name, m.session.Doc)
 	if err != nil {
@@ -36,17 +37,14 @@ func (m Model) saveAs(name string, silent bool) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// autoSave persists silently after each assistant reply when AutoSave is enabled.
+// autoSave persists silently after each assistant reply when session autosave is enabled.
 // Only saves if there is at least one user message, OR the session file already
 // exists on disk (to keep it in sync after destroys).
 func (m Model) autoSave() (Model, tea.Cmd) {
-	if !m.settings.AutoSave || m.incognito {
+	if !m.session.Doc.Config.Autosave.Enabled || m.incognito {
 		return m, nil
 	}
-	name := m.settings.LastSessionName
-	if name == "" {
-		name = time.Now().Format("2006-01-02_15-04")
-	}
+	name := m.session.Doc.Config.Autosave.Name
 	if !m.session.HasUserMessage() {
 		path := config.SessionPath(m.paths, name)
 		if _, err := os.Stat(path); os.IsNotExist(err) {

@@ -82,6 +82,19 @@ func ComputeChecksum(data []byte) string {
 	return hex.EncodeToString(h[:])
 }
 
+// EqualStringSlices reports whether two string slices have identical values in order.
+func EqualStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // FriendlyPath replaces the user's home directory prefix with "~".
 // Idempotent — calling it on an already-shrunk path is a no-op.
 func FriendlyPath(path string) string {

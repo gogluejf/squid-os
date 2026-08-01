@@ -10,9 +10,9 @@ import (
 
 // Tool execution result
 const (
-	ResultStatusSuccess  = "success"
-	ResultStatusError    = "error"
-	ResultStatusPending  = "pending" // awaiting user authorization
+	ResultStatusSuccess = "success"
+	ResultStatusError   = "error"
+	ResultStatusPending = "pending" // awaiting user authorization
 )
 
 // ToolResult is returned by Execute instead of (string, error).
@@ -24,20 +24,17 @@ type ToolResult struct {
 }
 
 // Tool defines the contract for a callable tool.
-// Each tool has a JSON Schema definition (for the LLM) and an Execute function.
-// Schema is stored as pre-serialized JSON bytes to control key ordering.
-// DisplayParam is the arg field name to show in the UI instead of the full JSON
-// args. E.g., "path" renders as [read_file(/home/...)] instead of dumping all args.
+// Every execution receives the current session config, which owns scopes and policy.
 type Tool struct {
 	Name         string
 	Description  string
 	DisplayParam string
 	Style        style.StyleLabel
 	Schema       []byte
-	Execute func(args map[string]interface{}) ToolResult
+	Execute      func(args map[string]interface{}, cfg config.SessionConfig) ToolResult
 	// Preview is optional. If present, it returns the expected ToolResult (Files, Diff)
 	// without performing side-effects (writes). Used for authorization checks.
-	Preview func(args map[string]interface{}) ToolResult
+	Preview func(args map[string]interface{}, cfg config.SessionConfig) ToolResult
 	// IsDestructive is optional. If present, it returns true if the tool call modifies
 	// disk state, makes network calls, or otherwise has security implications.
 	// nil means the tool is never destructive. Used by the authorization
@@ -62,6 +59,9 @@ func init() {
 		Open,
 		SkillLoad,
 		SkillList,
+		ListAgents,
+		CallAgent,
+		InlineAgent,
 		SetWorkingDirTool,
 	}
 	for i := range list {

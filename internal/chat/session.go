@@ -19,24 +19,9 @@ type Session struct {
 	Info   config.SessionInfo
 }
 
-// SessionConfig carries initial session settings for CLI, subagents, and TUI.
-type SessionConfig struct {
-	Provider            string
-	Model               string
-	Thinking            config.ThinkingConfig
-	SystemPromptFile    string
-	Tools               []string
-	Skills              []string
-	WorkingDir          string
-	MaxToolResultTokens int
-	DebugEnabled        bool
-}
-
 // NewSession creates a pure session with initial system/environment/config/tool messages.
-func NewSession(cfg SessionConfig, paths config.Paths) *Session {
-	inf := config.InferenceConfig{Provider: cfg.Provider, Model: cfg.Model, Thinking: cfg.Thinking}
-	doc := config.NewSessionDoc(inf, cfg.SystemPromptFile, cfg.WorkingDir, cfg.Tools, cfg.Skills)
-	doc.Session.MaxToolResultTokens = cfg.MaxToolResultTokens
+func NewSession(cfg config.SessionConfig, paths config.Paths) *Session {
+	doc := config.NewSessionDoc(cfg)
 	s := &Session{Doc: doc}
 
 	sysContent := config.LoadSystemPrompt(paths, cfg.SystemPromptFile)
@@ -49,7 +34,7 @@ func NewSession(cfg SessionConfig, paths config.Paths) *Session {
 		InputTokens: CountTokensApproxString(sysContent),
 	})
 
-	env := environment.LoadEnvironment(paths, cfg.WorkingDir, cfg.DebugEnabled)
+	env := environment.LoadEnvironment(paths, cfg)
 	envContent := environment.FormatEnvironment(env)
 	envSections := environment.ExtractSectionNames(envContent)
 	s.Append(config.Message{
@@ -61,8 +46,18 @@ func NewSession(cfg SessionConfig, paths config.Paths) *Session {
 		InputTokens: CountTokensApproxString(envContent),
 	})
 
-	s.Append(BuildConfigMsg(cfg.Provider, cfg.Model, cfg.Thinking))
-	if toolsMsg := BuildToolsEnabledMsg(s.GetTools()); toolsMsg.Text != "" {
+	if cfg.AgentSystem != "" {
+		s.Append(config.Message{
+			ID:          "agent0",
+			Role:        config.RoleSystem,
+			Text:        cfg.AgentSystem,
+			Label:       "Agent System",
+			InputTokens: CountTokensApproxString(cfg.AgentSystem),
+		})
+	}
+
+	s.Append(BuildConfigMsg(cfg.Inference))
+	if toolsMsg := BuildToolsEnabledMsg(s.GetTools()); toolsMsg.ID != "" {
 		s.Append(toolsMsg)
 	}
 
@@ -72,8 +67,8 @@ func NewSession(cfg SessionConfig, paths config.Paths) *Session {
 // LoadSession wraps an existing session document.
 func LoadSession(sd config.SessionDoc, name string) *Session {
 	info := config.SessionInfo{Name: name}
-	if sd.Session.UpdatedAt != "" {
-		if t, err := time.Parse(time.RFC3339, sd.Session.UpdatedAt); err == nil {
+	if sd.Meta.UpdatedAt != "" {
+		if t, err := time.Parse(time.RFC3339, sd.Meta.UpdatedAt); err == nil {
 			info.ModTime = t
 		}
 	}
@@ -154,60 +149,130 @@ func (s *Session) Messages() []config.Message { return s.Doc.Messages }
 func (s *Session) BuildMessages() []goai_provider.Message { return BuildAPIMessages(s.Doc.Messages) }
 
 func (s *Session) GetTools() []tools.Tool {
-	allowed := s.Doc.Session.Tools.Current
-	if len(allowed) == 0 {
-		return tools.GetTools()
+	allowed := make(map[string]bool, len(s.Doc.Config.Tools))
+	for _, name := range s.Doc.Config.Tools {
+		allowed[name] = true
 	}
-	allowedSet := make(map[string]bool, len(allowed))
-	for _, name := range allowed {
-		allowedSet[name] = true
-	}
-	var out []tools.Tool
-	for _, t := range tools.GetTools() {
-		if allowedSet[t.Name] {
-			out = append(out, t)
+	registered := tools.GetTools()
+	out := make([]tools.Tool, 0, len(s.Doc.Config.Tools))
+	for _, tool := range registered {
+		if allowed[tool.Name] {
+			out = append(out, tool)
 		}
 	}
 	return out
 }
 
-func (s *Session) SetTools(names []string) {
-	s.Doc.Session.Tools.Current = append([]string(nil), names...)
-}
-
-func (s *Session) GetSkills() []string { return append([]string(nil), s.Doc.Session.Skills.Current...) }
-
-func (s *Session) SetSkills(names []string) {
-	s.Doc.Session.Skills.Current = append([]string(nil), names...)
-}
-
-func (s *Session) CurrentSkill() string { return s.Doc.Session.Skill.Current }
-
-func (s *Session) SetCurrentSkill(name string) {
-	s.Doc.Session.Skill.Current = name
-	s.Doc.Session.Skill.Next = nil
-}
-
-func (s *Session) PendingSkill() *string { return s.Doc.Session.Skill.Next }
-
-func (s *Session) SetPendingSkill(name string) { s.Doc.Session.Skill.Next = &name }
-
-func (s *Session) CurrentInference() config.InferenceConfig { return s.Doc.Session.Inference.Current }
-
-func (s *Session) SetInference(cfg config.InferenceConfig) { s.Doc.Session.Inference.Current = cfg }
-
-func (s *Session) PushConfigChange(provider, model string, thinking config.ThinkingConfig) {
-	if s.HasUserMessage() {
-		return
-	}
-	for i := range s.Doc.Messages {
-		if s.Doc.Messages[i].ID == "config0" {
-			s.Doc.Messages[i] = BuildConfigMsg(provider, model, thinking)
-			s.Doc.Session.Inference.Initial = config.InferenceConfig{Provider: provider, Model: model, Thinking: thinking}
-			s.Doc.Session.Inference.Current = config.InferenceConfig{Provider: provider, Model: model, Thinking: thinking}
-			return
+func (s *Session) GetTool(name string) *tools.Tool {
+	for _, allowed := range s.Doc.Config.Tools {
+		if allowed == name {
+			return tools.GetRegistry().Get(name)
 		}
 	}
+	return nil
+}
+
+func (s *Session) SetTools(names []string) {
+	s.Doc.Config.Tools = append([]string(nil), names...)
+}
+
+func (s *Session) GetSkills() []string { return append([]string(nil), s.Doc.Config.Skills...) }
+
+func (s *Session) SetSkills(names []string) {
+	s.Doc.Config.Skills = append([]string(nil), names...)
+}
+
+func (s *Session) CurrentSkill() string { return s.Doc.Config.ActiveSkill }
+
+func (s *Session) EffectiveSkill() string {
+	if s.Doc.Pending != nil && s.Doc.Pending.ActiveSkill != nil {
+		return *s.Doc.Pending.ActiveSkill
+	}
+	return s.Doc.Config.ActiveSkill
+}
+
+func (s *Session) SetCurrentSkill(name string) {
+	s.Doc.Config.ActiveSkill = name
+	if s.Doc.Pending != nil {
+		s.Doc.Pending.ActiveSkill = nil
+	}
+}
+
+func (s *Session) PendingSkill() *string {
+	if s.Doc.Pending != nil {
+		return s.Doc.Pending.ActiveSkill
+	}
+	return nil
+}
+
+func (s *Session) SetPendingSkill(name string) {
+	if s.Doc.Pending == nil {
+		s.Doc.Pending = &config.PendingConfig{}
+	}
+	s.Doc.Pending.ActiveSkill = &name
+}
+
+func (s *Session) CurrentInference() config.InferenceConfig { return s.Doc.Config.Inference }
+
+func (s *Session) EffectiveInference() config.InferenceConfig {
+	if s.Doc.Pending != nil && s.Doc.Pending.Inference != nil {
+		return *s.Doc.Pending.Inference
+	}
+	return s.Doc.Config.Inference
+}
+
+func (s *Session) DesiredInference(fallback config.InferenceConfig) config.InferenceConfig {
+	if s.Doc.Pending != nil && s.Doc.Pending.Inference != nil {
+		return *s.Doc.Pending.Inference
+	}
+	return fallback
+}
+
+func (s *Session) SetPendingInference(cfg config.InferenceConfig) {
+	if cfg == s.Doc.Config.Inference {
+		if s.Doc.Pending != nil {
+			s.Doc.Pending.Inference = nil
+		}
+		return
+	}
+
+	// Before the first user turn, inference changes redefine the session's
+	// bootstrap configuration rather than creating a transition message.
+	if !s.HasUserMessage() && s.PushConfigChange(cfg) {
+		if s.Doc.Pending != nil {
+			s.Doc.Pending.Inference = nil
+		}
+		return
+	}
+
+	if s.Doc.Pending == nil {
+		s.Doc.Pending = &config.PendingConfig{}
+	}
+	s.Doc.Pending.Inference = &cfg
+}
+
+func (s *Session) SetInference(cfg config.InferenceConfig) {
+	s.Doc.Config.Inference = cfg
+	if s.Doc.Pending != nil {
+		s.Doc.Pending.Inference = nil
+	}
+}
+
+func (s *Session) PushConfigChange(cfg config.InferenceConfig) bool {
+	if s.HasUserMessage() {
+		return false
+	}
+
+	for i := range s.Doc.Messages {
+		if s.Doc.Messages[i].ID == "config0" {
+			s.Doc.Messages[i] = BuildConfigMsg(cfg)
+			s.Doc.Initial.Inference = cfg
+			s.Doc.Config.Inference = cfg
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *Session) PushSystemPromptChange(oldFile, newFile string, paths config.Paths) {
@@ -259,16 +324,16 @@ func (s *Session) Save(p config.Paths, name string) error {
 	return config.SaveSessionDoc(p, name, s.Doc)
 }
 
-func BuildConfigMsg(provider, model string, thinking config.ThinkingConfig) config.Message {
+func BuildConfigMsg(inf config.InferenceConfig) config.Message {
 	thinkStr := "off"
-	if thinking.Enabled {
+	if inf.Thinking.Enabled {
 		thinkStr = "on"
 	}
 	return config.Message{
 		ID:     "config0",
 		Role:   config.RoleInternal,
 		Label:  "Init Config",
-		Params: map[string]string{"provider": provider, "model": model, "thinking": thinkStr},
+		Params: map[string]string{"provider": inf.Provider, "model": inf.Model, "thinking": thinkStr},
 	}
 }
 

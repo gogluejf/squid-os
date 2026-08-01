@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"squid-os/internal/config"
 	"squid-os/internal/git"
 	"squid-os/internal/style"
 	"squid-os/internal/util"
@@ -26,7 +25,7 @@ type FooterData struct {
 	AuthorizationMode string // "auto", "ask-on-write", "ask-for-all"
 	ContextWindow     int    // model context window in tokens; 0 if unknown
 	WorkingDir        string
-	Skill             config.SessionSkill
+	Skill             string
 }
 
 // RenderFooter renders the fixed 2-line footer bar, always exactly `width` chars wide.
@@ -74,14 +73,8 @@ func RenderFooter(data FooterData, width int) string {
 	skillStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(style.P.BgFooter)).
 		Foreground(lipgloss.Color(style.P.TextSkill))
-	if data.Skill.Next != nil {
-		if *data.Skill.Next != "" {
-			skillLabel = style.FooterDimStyle.Render("["+skillPrefix) + skillStyle.Render(*data.Skill.Next) + style.FooterDimStyle.Render("]")
-		} else {
-			skillLabel = style.FooterDimStyle.Render("[" + skillPrefix + "none]")
-		}
-	} else if data.Skill.Current != "" {
-		skillLabel = style.FooterDimStyle.Render("["+skillPrefix) + skillStyle.Render(data.Skill.Current) + style.FooterDimStyle.Render("]")
+	if data.Skill != "" {
+		skillLabel = style.FooterDimStyle.Render("["+skillPrefix) + skillStyle.Render(data.Skill) + style.FooterDimStyle.Render("]")
 	} else {
 		skillLabel = style.FooterDimStyle.Render("[" + skillPrefix + "none]")
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"squid-os/internal/config"
 	"squid-os/internal/style"
 )
 
@@ -41,7 +42,7 @@ var Bash = Tool{
 	},
 	"required": ["command", "destructive"]
 }`),
-	Execute: func(args map[string]interface{}) ToolResult {
+	Execute: func(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
 		cmdStr, ok := args["command"].(string)
 		if !ok || cmdStr == "" {
 			return ToolResult{Status: ResultStatusError, Error: "command is required and must be a string"}
@@ -83,11 +84,8 @@ var Bash = Tool{
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
 		defer cancel()
 
-		// cd to working dir if set
-		runDir := ""
-		if workingDir != "" {
-			runDir = workingDir
-		}
+		// Execute relative to the session's working directory.
+		runDir := cfg.WorkingDir
 		cmd := exec.CommandContext(ctx, "bash", "-c", cmdStr)
 		if runDir != "" {
 			cmd.Dir = runDir
@@ -100,7 +98,7 @@ var Bash = Tool{
 			cmd.Stderr = nil
 			err := cmd.Start()
 			if err != nil {
-				return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to run %s: %w", cmdStr, err)}
+				return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to run %s: %v", cmdStr, err)}
 			}
 			return ToolResult{Status: ResultStatusSuccess, Result: fmt.Sprintf("launched: %s", cmdStr)}
 		}

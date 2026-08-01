@@ -7,13 +7,15 @@ import (
 	"squid-os/internal/ui"
 )
 
-// toggleThinking toggles thinking mode on/off and persists the setting.
+// toggleThinking changes the global default and queues the session transition.
 func (m Model) toggleThinking() (Model, tea.Cmd) {
-	m.settings.Thinking.Enabled = !m.settings.Thinking.Enabled
+	inference := m.session.EffectiveInference()
+	inference.Thinking.Enabled = !inference.Thinking.Enabled
+	m.session.SetPendingInference(inference)
+	m.settings.Thinking = inference.Thinking
 	_ = config.SaveSettings(m.paths, m.settings)
-	(&m).session.PushConfigChange(m.settings.Provider, m.settings.Model, m.settings.Thinking)
-	(&m).session.invalidateRenderAll()
-	if m.settings.Thinking.Enabled {
+	m.session.invalidateRenderAll()
+	if inference.Thinking.Enabled {
 		(&m).setNotification(ui.NotificationInfo, "thinking on")
 	} else {
 		(&m).setNotification(ui.NotificationInfo, "thinking off")

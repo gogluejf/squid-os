@@ -58,6 +58,13 @@ func (ss *StreamState) Cancel(msg string) {
 	ss.MarkCancelled(msg)
 }
 
+// Begin initializes transient state and timing for a provider request.
+func (ss *StreamState) Begin() {
+	ss.Reset()
+	ss.Active = true
+	ss.Metrics.Start = time.Now()
+}
+
 // Reset clears pure stream state before a new request.
 func (ss *StreamState) Reset() {
 	*ss = StreamState{}

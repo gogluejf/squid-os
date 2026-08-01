@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 
+	"squid-os/internal/config"
 	"squid-os/internal/style"
 )
 
@@ -25,14 +26,14 @@ var Open = Tool{
 	},
 	"required": ["path"]
 }`),
-	Execute: func(args map[string]interface{}) ToolResult {
+	Execute: func(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
 		target, ok := args["path"].(string)
 		if !ok || target == "" {
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
 
 		if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
-			target = ResolvePath(target)
+			target = ResolvePath(target, cfg.WorkingDir)
 		}
 
 		var cmd *exec.Cmd
@@ -49,7 +50,7 @@ var Open = Tool{
 
 		err := cmd.Start()
 		if err != nil {
-			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to open %s: %w", target, err)}
+			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to open %s: %v", target, err)}
 		}
 
 		return ToolResult{Status: ResultStatusSuccess, Result: fmt.Sprintf("opened: %s", target)}

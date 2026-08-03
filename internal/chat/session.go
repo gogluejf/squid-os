@@ -342,13 +342,16 @@ func BuildToolsEnabledMsg(tl []tools.Tool) config.Message {
 		return config.Message{}
 	}
 	var names []string
+	var textLines []string
 	for _, t := range tl {
 		names = append(names, t.Name)
+		textLines = append(textLines, fmt.Sprintf("- %s: %s", t.Name, t.Description))
 	}
 	rawJSON, _ := MarshalToolsJSON(tl)
 	return config.Message{
 		ID:          "tools0",
 		Role:        config.RoleInternal,
+		Text:        strings.Join(textLines, "\n"),
 		Label:       "Tools Enabled",
 		Params:      map[string]string{"tools": strings.Join(names, ", ")},
 		InputTokens: CountTokensApproxString(string(rawJSON)),

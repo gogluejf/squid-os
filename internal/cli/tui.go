@@ -146,9 +146,6 @@ func launchTUI(opts *TUIOptions) error {
 	if err != nil {
 		return err
 	}
-	if err := validateWorkingDir(resolved.WorkingDir); err != nil {
-		return err
-	}
 	runtimeconfig.ApplyToExistingSession(existing, resolved)
 	request := runtimeconfig.SessionRequest{Paths: cfg.paths, Endpoints: cfg.endpoints, Config: resolved, ExistingSession: existing, SessionName: sessionName, Prompt: opts.Prompt}
 	if sessionName != "" {

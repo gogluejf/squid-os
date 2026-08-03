@@ -64,16 +64,6 @@ func parseOptionalAuthorization(value string) (config.AuthorizationMode, error) 
 	return config.ParseAuthorizationMode(value)
 }
 
-func validateWorkingDir(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("working directory: %w", err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("working directory is not a directory: %s", path)
-	}
-	return nil
-}
 
 func validateTUIAuthMode(value string) error {
 	if value == "" {

@@ -69,13 +69,6 @@ func executeGNU(o *GNUOptions) error {
 			return err
 		}
 	}
-	info, err := statPath(workingDir)
-	if err != nil {
-		return fmt.Errorf("working directory: %w", err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("working directory is not a directory: %s", workingDir)
-	}
 	save := false
 	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{Settings: cfg.settings, Paths: cfg.paths, Target: runtimeconfig.TargetNonInteractive, CLI: runtimeconfig.Overrides{Model: o.Model, WorkingDir: workingDir, Autosave: &save}})
 	if err != nil {
@@ -116,7 +109,6 @@ func executeGNU(o *GNUOptions) error {
 }
 
 var currentWorkingDir = func() (string, error) { return os.Getwd() }
-var statPath = os.Stat
 var noColorUnset = func() bool { return os.Getenv("NO_COLOR") == "" }
 
 func terminalFile(w io.Writer) bool { f, ok := w.(*os.File); return ok && term.IsTerminal(int(f.Fd())) }

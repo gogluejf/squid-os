@@ -164,9 +164,6 @@ func executeRun(o *RunOptions) error {
 	if resolved.Inference.Model == "" {
 		return fmt.Errorf("no model configured")
 	}
-	if err := validateWorkingDir(resolved.WorkingDir); err != nil {
-		return err
-	}
 	runtimeconfig.ApplyToExistingSession(existing, resolved)
 	request := runservice.Request{Session: runtimeconfig.SessionRequest{Paths: cfg.paths, Endpoints: cfg.endpoints, Config: resolved, ExistingSession: existing, SessionName: o.SessionName, Prompt: o.Prompt}}
 	if runservice.OutputMode(o.Mode) == runservice.OutputStream {

@@ -1,345 +1,345 @@
 {
-  "plan_name": "agent-subsession",
-  "title": "Agent Sub-session: Multi-context streaming with child agents",
-  "why": "The current app supports only a single chat session with a single stream. Models need to delegate work to sub-agents with their own context, tools, and skills \u2014 spawning child sessions that the user can toggle between while the parent tool call blocks awaiting results.",
-  "outcomes": "agent_call tool spawns isolated child sessions with full tool support, user toggles between parent and child views, child file state is isolated, headless mode reuses the same stream engine",
-  "milestones": [
-    {
-      "number": "1",
-      "name": "Session Architecture",
-      "pattern": [
-        "Entity-Context, State Migration"
-      ],
-      "objective": "Move session ownership and stream state from Model into chatSession so each session is independently streamable, then add multi-session management to Model.",
-      "success": "Model manages multiple chatSession instances keyed by ID, each with its own streamState, active session drives the viewport, single session path is backward compatible.",
-      "diagram": "Model { sessions map[ID]*chatSession, activeSessionID, textarea, viewport, mode }. chatSession { file config.SessionFile, stream streamState, renderedMessages, undoStack, parentID }. Mode derived from activeSession.stream.active + global overlays.",
-      "tasks": [
+    "plan_name": "agent-subsession",
+    "title": "Agent Sub-session: Multi-context streaming with child agents",
+    "milestones": [
         {
-          "number": "1.1",
-          "name": "Move streamState into chatSession",
-          "layer": "Domain",
-          "what": "Move streamState from Model into chatSession struct. Add ParentID and ToolCallID fields to chatSession for child session tracking.",
-          "why": "Each session needs its own independent stream state so multiple sessions can stream concurrently. Parent/child linkage enables the agent_call tool to track ownership.",
-          "files": [
-            "~ internal/app/chat_session.go"
-          ],
-          "snippet": [
-            "type chatSession struct {\n    file             config.SessionFile\n    renderedMessages []string // glamour cache, 1:1 with file.Messages\n    renderedWidth    int\n    undoStack        [][]config.Message\n    stream           streamState  // moved from Model \u2014 each session has its own\n    ParentID         string       // parent session ID (empty string for root sessions)\n    ToolCallID       string       // originating tool call ID from parent (empty for root)\n}"
-          ],
-          "acceptance": [
-            "chatSession compiles with embedded streamState"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
+            "number": "1",
+            "name": "Session Architecture",
+            "pattern": [
+                "Entity-Context, State Migration"
+            ],
+            "objective": "Move session ownership and stream state from Model into chatSession so each session is independently streamable, then add multi-session management to Model.",
+            "success": "Model manages multiple chatSession instances keyed by ID, each with its own streamState, active session drives the viewport, single session path is backward compatible.",
+            "diagram": "Model { sessions map[ID]*chatSession, activeSessionID, textarea, viewport, mode }. chatSession { file config.SessionFile, stream streamState, renderedMessages, undoStack, parentID }. Mode derived from activeSession.stream.active + global overlays.",
+            "tasks": [
+                {
+                    "number": "1.1",
+                    "name": "Move streamState into chatSession",
+                    "layer": "Domain",
+                    "what": "Move streamState from Model into chatSession struct. Add ParentID and ToolCallID fields to chatSession for child session tracking.",
+                    "why": "Each session needs its own independent stream state so multiple sessions can stream concurrently. Parent/child linkage enables the agent_call tool to track ownership.",
+                    "files": [
+                        "~ internal/app/chat_session.go"
+                    ],
+                    "snippet": [
+                        "type chatSession struct {\n    file             config.SessionFile\n    renderedMessages []string // glamour cache, 1:1 with file.Messages\n    renderedWidth    int\n    undoStack        [][]config.Message\n    stream           streamState  // moved from Model \u2014 each session has its own\n    ParentID         string       // parent session ID (empty string for root sessions)\n    ToolCallID       string       // originating tool call ID from parent (empty for root)\n}"
+                    ],
+                    "acceptance": [
+                        "chatSession compiles with embedded streamState"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "1.2",
+                    "name": "Replace Model.session with session map",
+                    "layer": "Application",
+                    "what": "Replace single chatSession field on Model with map[string]*chatSession and activeSessionID string. Add helper methods activeSession() and setActiveSession().",
+                    "why": "Model must manage multiple sessions for parent-child toggling with O(1) lookup.",
+                    "files": [
+                        "~ internal/app/app.go"
+                    ],
+                    "snippet": [
+                        "// On Model \u2014 replace: session chatSession\nSessions        map[string]*chatSession\nActiveSessionID string\n\nfunc (m *Model) activeSession() *chatSession {\n    if s, ok := m.Sessions[m.ActiveSessionID]; ok {\n        return s\n    }\n    return nil\n}\n\nfunc (m *Model) addSession(cs *chatSession) {\n    if m.Sessions == nil {\n        m.Sessions = make(map[string]*chatSession)\n    }\n    m.Sessions[cs.file.Session.ID] = cs\n}",
+                        "// In New() \u2014 initialize with single session:\nSessions:        map[string]*chatSession{sess.file.Session.ID: &sess},\nActiveSessionID: sess.file.Session.ID,"
+                    ],
+                    "acceptance": [
+                        "Model compiles with sessions map, activeSession() returns correct session"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "1.3",
+                    "name": "Update all Model methods to use activeSession()",
+                    "layer": "Application",
+                    "what": "Rewrite every reference to m.session and m.stream across all app files to use m.activeSession() and m.activeSession().stream.",
+                    "why": "After the structural change all existing code must route through the active session.",
+                    "files": [
+                        "~ internal/app/stream.go",
+                        "~ internal/app/session.go",
+                        "~ internal/app/render.go",
+                        "~ internal/app/input.go"
+                    ],
+                    "snippet": [
+                        "// Systematic replacements across stream.go, session.go, render.go, input.go:\n// m.session.xxx          -> m.activeSession().xxx\n// m.stream.xxx           -> m.activeSession().stream.xxx\n// m.session.file.Messages -> m.activeSession().file.Messages",
+                        "// Example from sendMessage():\ncs := m.activeSession()\ncs.appendMsg(userMsg)\ncs.undoStack = nil\napiMsgs := chat.BuildAPIMessages(m.paths, m.settings, cs.file.Messages)",
+                        "// Example from handleStreamEvent():\ncs := m.activeSession()\nif event.Done {\n    if cs.stream.userCancelled { ... }\n}"
+                    ],
+                    "acceptance": [
+                        "All references compile via activeSession(), app runs identically"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "1.4",
+                    "name": "Derive Model.mode from active session state",
+                    "layer": "Application",
+                    "what": "Derive m.mode from activeSession().stream.active combined with overlay modes. Update setStreamMode() and setChatMode() for active session.",
+                    "why": "With multiple sessions mode depends on which session is active. Overlay modes remain global.",
+                    "files": [
+                        "~ internal/app/stream.go",
+                        "~ internal/app/modes.go"
+                    ],
+                    "snippet": [
+                        "// setStreamMode() and setChatMode() operate on active session stream only\nfunc (m *Model) setStreamMode() {\n    cs := m.activeSession()\n    cs.stream.reset()\n    cs.stream.active = true\n    cs.stream.metrics.Start = time.Now()\n    m.mode = ModeStreaming\n    m.textarea.Placeholder = \"ctrl+c to cancel...\"\n}\n\nfunc (m *Model) setChatMode() tea.Cmd {\n    cs := m.activeSession()\n    cs.stream.active = false\n    m.textarea.Placeholder = \"Type a message...\"\n    m.mode = ModeChat\n    m.textarea.Focus()\n    m.recalcLayout()\n    return textarea.Blink\n}",
+                        "// computeMode() derives effective mode from overlays + active session\nfunc (m *Model) computeMode() Mode {\n    switch {\n    case m.mode == ModeHelp:\n        return ModeHelp\n    case m.mode == ModeModelPicker:\n        return ModeModelPicker\n    case m.mode == ModeSessionPicker:\n        return ModeSessionPicker\n    case m.mode == ModeFilePicker:\n        return ModeFilePicker\n    case m.mode == ModeSavePrompt:\n        return ModeSavePrompt\n    case m.mode == ModeHistorySearch:\n        return ModeHistorySearch\n    case m.cmdPalette.Visible:\n        return ModeChat\n    }\n    if cs := m.activeSession(); cs != nil && cs.stream.active {\n        return ModeStreaming\n    }\n    return ModeChat\n}"
+                    ],
+                    "acceptance": [
+                        "Mode reflects active session streaming state correctly"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
         },
         {
-          "number": "1.2",
-          "name": "Replace Model.session with session map",
-          "layer": "Application",
-          "what": "Replace single chatSession field on Model with map[string]*chatSession and activeSessionID string. Add helper methods activeSession() and setActiveSession().",
-          "why": "Model must manage multiple sessions for parent-child toggling with O(1) lookup.",
-          "files": [
-            "~ internal/app/app.go"
-          ],
-          "snippet": [
-            "// On Model \u2014 replace: session chatSession\nSessions        map[string]*chatSession\nActiveSessionID string\n\nfunc (m *Model) activeSession() *chatSession {\n    if s, ok := m.Sessions[m.ActiveSessionID]; ok {\n        return s\n    }\n    return nil\n}\n\nfunc (m *Model) addSession(cs *chatSession) {\n    if m.Sessions == nil {\n        m.Sessions = make(map[string]*chatSession)\n    }\n    m.Sessions[cs.file.Session.ID] = cs\n}",
-            "// In New() \u2014 initialize with single session:\nSessions:        map[string]*chatSession{sess.file.Session.ID: &sess},\nActiveSessionID: sess.file.Session.ID,"
-          ],
-          "acceptance": [
-            "Model compiles with sessions map, activeSession() returns correct session"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
+            "number": "2",
+            "name": "agent_call Tool",
+            "pattern": [
+                "Command, Synchronous Delegation"
+            ],
+            "objective": "Implement the agent_call tool that spawns child sessions, runs them to completion (blocking the tool executor), and returns the result to the parent.",
+            "success": "Model can call agent_call with prompt/tools/skills/skill_default, child session runs with full tool loop, file state isolated, result flows back as tool execution output.",
+            "diagram": "executeTools() detects agent_call \u2192 spawnChildSession() \u2192 runStreamLoop(child) [direct channel loop, no Bubble Tea] \u2192 child accumulates messages + tool results \u2192 loop returns final text \u2192 set Execution.Result on parent tool entry.",
+            "tasks": [
+                {
+                    "number": "2.1",
+                    "name": "Define agent_call tool schema",
+                    "layer": "Domain",
+                    "what": "Create agent_call Tool struct with schema: prompt (string), tools (array of strings), skills (array of strings), skill_default (string). Register it in the tools init list.",
+                    "why": "The model needs a callable tool definition to spawn sub-agents with configurable tool and skill access.",
+                    "files": [
+                        "~ internal/tools/tools.go"
+                    ],
+                    "snippet": [
+                        "var AgentCall = Tool{\n    Name:         \"agent_call\",\n    Description:  \"Spawn a child agent session with its own context window, tools, and skills. \" +\n        \"The child runs to completion and returns its final output. \" +\n        \"Use for focused sub-tasks that need their own context.\",\n    Schema: []byte(`{\n        \"type\": \"object\",\n        \"properties\": {\n            \"prompt\": {\"type\": \"string\", \"description\": \"The prompt/task for the sub-agent\"},\n            \"tools\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"Tool names the child can use (e.g. read_file, bash). Empty = no tools.\"},\n            \"skills\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"Skill names available to the child agent.\"},\n            \"skill_default\": {\"type\": \"string\", \"description\": \"Default skill to auto-load into child session on init.\"}\n        },\n        \"required\": [\"prompt\"]\n    }`),\n    Execute: func(args map[string]interface{}) ToolResult {\n        // Handled specially in executeTools \u2014 not here\n        return ToolResult{Status: ResultStatusError, Error: \"agent_call is processed inline in executeTools\"}\n    },\n}"
+                    ],
+                    "acceptance": [
+                        "agent_call appears in tools.GetTools(), schema is valid JSON"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "2.2",
+                    "name": "Implement spawnChildSession and runStreamLoop",
+                    "layer": "Application",
+                    "what": "Create spawnChildSession() that initializes a child chatSession with ParentID, system prompt, environment, filtered tools, and skill_default. Create runStreamLoop(*chatSession) that drives engine.Stream directly, handles tool_calls restart, and returns final output.",
+                    "why": "Child sessions run inside executeTools which blocks Bubble Tea \u2014 they need a direct channel loop. spawnChildSession sets up isolation, runStreamLoop drives the full cycle.",
+                    "files": [
+                        "~ internal/app/stream.go",
+                        "~ internal/app/chat_session.go"
+                    ],
+                    "snippet": [
+                        "// spawnChildSession creates and initializes a child session\nfunc (m *Model) spawnChildSession(parentID string, prompt string,\n    toolNames []string, skillNames []string, skillDefault string) *chatSession {\n    cs := &chatSession{\n        ParentID: parentID,\n    }\n    cs.file = config.NewSessionFile(m.settings.Provider, m.settings.Model,\n        m.settings.Thinking, m.settings.SystemPromptFile, m.workingDir)\n\n    // Push system prompt + environment messages (reuse clear() logic)\n    // Inject skill_default if set: load skill and push as system/internal msg\n    // Append prompt as user message\n    cs.appendMsg(config.Message{\n        ID:   \"msg_1\",\n        Role: config.RoleUser,\n        Text: prompt,\n    })\n\n    // Filter tools to allowed list\n    cs.allowedTools = filterTools(tools.GetTools(), toolNames)\n\n    m.addSession(cs)\n    return cs\n}",
+                        "// runStreamLoop drives a session stream to completion via direct channel loop\n// Used by both child agents (inside executeTools) and headless mode.\nfunc (m *Model) runStreamLoop(cs *chatSession) string {\n    var result strings.Builder\n\n    for {\n        apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, cs.file.Messages)\n        engine := chat.NewEngine(\n            config.ResolveChatURL(m.endpoints, m.settings.Provider),\n            m.settings.Model, m.settings.Thinking,\n        )\n\n        ctx, cancel := context.WithCancel(context.Background())\n        ch := engine.Stream(ctx, apiMsgs, cs.allowedTools)\n\n        for event := range ch {\n            cancel()\n            if event.Error != nil {\n                result.WriteString(\"[agent error: \" + event.Error.Error() + \"]\")\n                return result.String()\n            }\n            if event.Done {\n                if event.StopReason == \"tool_calls\" && len(cs.stream.partialTools) > 0 {\n                    // Execute tools on this child, append assistant msg, outer loop restarts stream\n                    toolEntries := m.executeToolsFor(cs, cs.stream.partialTools)\n                    m.appendAssistantMsgFor(cs, toolEntries)\n                    cs.stream.reset()\n                    continue OUTER // restart stream with tool results in history\n                }\n                // Normal completion \u2014 save final assistant msg\n                m.appendAssistantMsgFor(cs, nil)\n                return result.String()\n            }\n            if event.Text != \"\" {\n                result.WriteString(event.Text)\n                cs.stream.AddTextChunk(event.Text)\n            }\n            if event.Thinking != \"\" {\n                cs.stream.AddThinkChunk(event.Thinking)\n            }\n            if event.ToolCallDelta != \"\" {\n                // Accumulate partial tool state (same logic as TUI handleStreamEvent)\n                accumulateToolCallDelta(&cs.stream, event)\n            }\n        }\n    }\n}"
+                    ],
+                    "acceptance": [
+                        "spawnChildSession creates valid session, runStreamLoop completes full stream cycle with tool support"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "2.3",
+                    "name": "Implement agent_call Execute in executeTools",
+                    "layer": "Application",
+                    "what": "In executeTools, detect agent_call by name. Parse args, call spawnChildSession and runStreamLoop sequentially for each agent. Collect results and return as Execution.Result. Save child session to disk after completion.",
+                    "why": "This bridges the tool framework with the new session architecture \u2014 the integration point where parent tool execution spawns child agents.",
+                    "files": [
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "// In executeTools() \u2014 special case for agent_call\nif p.name == \"agent_call\" {\n    var argsStruct struct {\n        Prompt       string   `json:\"prompt\"`\n        Tools        []string `json:\"tools\"`\n        Skills       []string `json:\"skills\"`\n        SkillDefault string   `json:\"skill_default\"`\n    }\n    json.Unmarshal([]byte(p.args), &argsStruct)\n\n    // Spawn child session and run to completion (blocking)\n    child := m.spawnChildSession(m.ActiveSessionID, argsStruct.Prompt,\n        argsStruct.Tools, argsStruct.Skills, argsStruct.SkillDefault)\n\n    // Tag the child with the originating tool call ID\n    child.ToolCallID = p.id\n\n    result := m.runStreamLoop(child)\n\n    // Save child session to subfolder under parent\n    parentName := m.activeSession().file.Session.Title\n    if parentName == \"\" {\n        parentName = \"unsaved\"\n    }\n    _ = config.SaveChildSession(m.paths, parentName,\n        child.file.Session.ID, child.file)\n\n    entries[i].Execution.Status = tools.ResultStatusSuccess\n    entries[i].Execution.Result = result\n    continue // skip normal tool execution path\n}"
+                    ],
+                    "acceptance": [
+                        "agent_call spawns child, runs to completion, returns result, child is saved"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
         },
         {
-          "number": "1.3",
-          "name": "Update all Model methods to use activeSession()",
-          "layer": "Application",
-          "what": "Rewrite every reference to m.session and m.stream across all app files to use m.activeSession() and m.activeSession().stream.",
-          "why": "After the structural change all existing code must route through the active session.",
-          "files": [
-            "~ internal/app/stream.go",
-            "~ internal/app/session.go",
-            "~ internal/app/render.go",
-            "~ internal/app/input.go"
-          ],
-          "snippet": [
-            "// Systematic replacements across stream.go, session.go, render.go, input.go:\n// m.session.xxx          -> m.activeSession().xxx\n// m.stream.xxx           -> m.activeSession().stream.xxx\n// m.session.file.Messages -> m.activeSession().file.Messages",
-            "// Example from sendMessage():\ncs := m.activeSession()\ncs.appendMsg(userMsg)\ncs.undoStack = nil\napiMsgs := chat.BuildAPIMessages(m.paths, m.settings, cs.file.Messages)",
-            "// Example from handleStreamEvent():\ncs := m.activeSession()\nif event.Done {\n    if cs.stream.userCancelled { ... }\n}"
-          ],
-          "acceptance": [
-            "All references compile via activeSession(), app runs identically"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
+            "number": "3",
+            "name": "Multi-session TUI",
+            "pattern": [
+                "Viewport Multiplexing, Key-driven Navigation"
+            ],
+            "objective": "Enable the user to toggle between parent and child session views, render the active session's viewport, and derive mode from the active session state.",
+            "success": "ctrl+tab cycles between active session and its children, viewport shows correct session, mode reflects active session streaming state, textarea binds to active session.",
+            "diagram": "handleKey() routes session-switch key \u2192 rotate activeSessionID through parent+children \u2192 updateViewportContent() uses active session \u2192 mode = activeSession.stream.active ? ModeStreaming : ModeChat \u2192 textarea binds to active session.",
+            "tasks": [
+                {
+                    "number": "3.1",
+                    "name": "Add session switch keybinding",
+                    "layer": "Interface",
+                    "what": "Add ctrl+tab keybinding that cycles activeSessionID between parent and its children. Add session indicator to header showing current context (Parent vs Agent).",
+                    "why": "User needs to toggle between parent and child views to monitor agent progress.",
+                    "files": [
+                        "~ internal/app/keymap.go",
+                        "~ internal/app/input.go",
+                        "~ internal/app/render.go"
+                    ],
+                    "snippet": [
+                        "// New key binding in keymap.go\nSwitchSession: key.NewBinding(\n    key.WithKeys(\"ctrl+tab\"),\n    key.WithHelp(\"ctrl+tab\", \"switch session\"),\n),\n\n// In handleChatKey():\ncase key.Matches(msg, keys.SwitchSession):\n    return m.switchSession(), nil\n\nfunc (m *Model) switchSession() tea.Model {\n    // Build ordered list: current active first, then children by spawn order\n    var ordered []string\n    for id, cs := range m.Sessions {\n        if cs.ParentID == m.ActiveSessionID || id == m.ActiveSessionID {\n            ordered = append(ordered, id)\n        }\n    }\n    if len(ordered) < 2 {\n        return m\n    }\n    // Rotate to next in cycle\n    for i, id := range ordered {\n        if id == m.ActiveSessionID {\n            m.ActiveSessionID = ordered[(i+1)%len(ordered)]\n            break\n        }\n    }\n    m.updateViewportContent()\n    m.recalcLayout()\n    return m\n}"
+                    ],
+                    "acceptance": [
+                        "ctrl+tab cycles sessions, viewport updates, header shows context"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "3.2",
+                    "name": "Update viewport and footer to bind to active session",
+                    "layer": "Interface",
+                    "what": "Rewrite updateViewportContent() to render activeSession. Update buildFooterData() for per-session token counts. Update handleKey to route input to active session.",
+                    "why": "Viewport, footer, and input must reflect whichever session is active for correct user experience.",
+                    "files": [
+                        "~ internal/app/render.go",
+                        "~ internal/app/input.go"
+                    ],
+                    "snippet": [
+                        "// updateViewportContent() \u2014 route to active session\nfunc (m *Model) updateViewportContent() {\n    cs := m.activeSession()\n    if cs == nil {\n        return\n    }\n    // Same render logic as before, but all m.session/m.stream refs become cs/cs.stream\n    // Render cs.file.Messages, then if cs.stream.active render live streaming\n}\n\n// buildFooterData() \u2014 per-session tokens\nfunc (m Model) buildFooterData() ui.FooterData {\n    cs := m.activeSession()\n    sessionIn := cs.totalInputTokens()\n    sessionOut := cs.totalOutputTokens()\n    streamOut := cs.stream.metrics.TotalOutputTokens()\n    return ui.FooterData{\n        Model:            modelBasename(m.settings.Model),\n        Provider:         m.settings.Provider,\n        TotalTokens:      sessionIn + sessionOut + streamOut,\n        TotalInputTokens: sessionIn,\n        TotalOutTokens:   sessionOut + streamOut,\n        Streaming:        cs.stream.active,\n        ThinkingOn:       m.settings.Thinking,\n        TokPerSec:        cs.stream.metrics.AvgTokenPerSec(),\n        WorkingDir:       m.workingDir,\n    }\n}\n\n// Header \u2014 show session context label for visual indication\nfunc (m Model) sessionLabel() string {\n    cs := m.activeSession()\n    if cs == nil || cs.ParentID == \"\" {\n        return \"Orchestrator\"\n    }\n    // Show truncated first user msg as label\n    for _, msg := range cs.file.Messages {\n        if msg.Role == config.RoleUser {\n            label := msg.Text\n            if len(label) > 40 {\n                label = label[:37] + \"...\"\n            }\n            return \"Agent: \" + label\n        }\n    }\n    return \"Agent\"\n}"
+                    ],
+                    "acceptance": [
+                        "Viewport renders correct session, footer shows per-session stats"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
         },
         {
-          "number": "1.4",
-          "name": "Derive Model.mode from active session state",
-          "layer": "Application",
-          "what": "Derive m.mode from activeSession().stream.active combined with overlay modes. Update setStreamMode() and setChatMode() for active session.",
-          "why": "With multiple sessions mode depends on which session is active. Overlay modes remain global.",
-          "files": [
-            "~ internal/app/stream.go",
-            "~ internal/app/modes.go"
-          ],
-          "snippet": [
-            "// setStreamMode() and setChatMode() operate on active session stream only\nfunc (m *Model) setStreamMode() {\n    cs := m.activeSession()\n    cs.stream.reset()\n    cs.stream.active = true\n    cs.stream.metrics.Start = time.Now()\n    m.mode = ModeStreaming\n    m.textarea.Placeholder = \"ctrl+c to cancel...\"\n}\n\nfunc (m *Model) setChatMode() tea.Cmd {\n    cs := m.activeSession()\n    cs.stream.active = false\n    m.textarea.Placeholder = \"Type a message...\"\n    m.mode = ModeChat\n    m.textarea.Focus()\n    m.recalcLayout()\n    return textarea.Blink\n}",
-            "// computeMode() derives effective mode from overlays + active session\nfunc (m *Model) computeMode() Mode {\n    switch {\n    case m.mode == ModeHelp:\n        return ModeHelp\n    case m.mode == ModeModelPicker:\n        return ModeModelPicker\n    case m.mode == ModeSessionPicker:\n        return ModeSessionPicker\n    case m.mode == ModeFilePicker:\n        return ModeFilePicker\n    case m.mode == ModeSavePrompt:\n        return ModeSavePrompt\n    case m.mode == ModeHistorySearch:\n        return ModeHistorySearch\n    case m.cmdPalette.Visible:\n        return ModeChat\n    }\n    if cs := m.activeSession(); cs != nil && cs.stream.active {\n        return ModeStreaming\n    }\n    return ModeChat\n}"
-          ],
-          "acceptance": [
-            "Mode reflects active session streaming state correctly"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
+            "number": "4",
+            "name": "Event Loop & Stream Multiplexing",
+            "pattern": [
+                "Tagged Event Routing, Direct Channel Loop"
+            ],
+            "objective": "Refactor the Bubble Tea event loop to route stream events to the correct session, and add a direct channel-based stream loop for child agents that bypasses Bubble Tea.",
+            "success": "Tagged stream events route to correct session, direct stream loop processes child tool loops synchronously, active child state visible in TUI via chatSession.stream.",
+            "diagram": "waitForStreamEvent(sid, ch) \u2192 taggedStreamEvent{sid, event}. Update() routes: if sid == activeSessionID \u2192 handleStreamEvent(activeSession). Child loop: runStreamLoop(sess) \u2192 range ch \u2192 processEvent(sess, event) \u2192 handles tool_calls restart inline.",
+            "tasks": [
+                {
+                    "number": "4.1",
+                    "name": "Add tagged stream events and session-aware routing",
+                    "layer": "Application",
+                    "what": "Replace streamEventMsg with taggedStreamEvent including sessionID. Update waitForStreamEvent to accept sessionID. Update Update() to route events to the correct session.",
+                    "why": "Bubble Tea processes one message at a time \u2014 tagging enables routing to the correct session. Non-active sessions accumulate state silently.",
+                    "files": [
+                        "~ internal/app/events.go",
+                        "~ internal/app/update.go",
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "// Replace streamEventMsg with tagged version\ntype taggedStreamEvent struct {\n    sessionID string\n    event     chat.StreamEvent\n}\n\n// waitForStreamEventFor blocks on a session-specific channel\nfunc waitForStreamEventFor(sid string, ch <-chan chat.StreamEvent) tea.Cmd {\n    return func() tea.Msg {\n        event, ok := <-ch\n        if !ok {\n            return taggedStreamEvent{sid, chat.StreamEvent{Done: true}}\n        }\n        return taggedStreamEvent{sid, event}\n    }\n}\n\n// In sendMessage() \u2014 tag the stream command\ncs := m.activeSession()\nreturn m, tea.Batch(waitForStreamEventFor(cs.file.Session.ID, ch), streamTickCmd())",
+                        "// In Update() \u2014 new case for tagged events\ncase taggedStreamEvent:\n    if msg.sessionID == m.ActiveSessionID {\n        // Active session: full processing + render\n        return m.processStreamEventFor(m.activeSession(), msg.event)\n    }\n    // Non-active session: accumulate stream state silently\n    if cs, ok := m.Sessions[msg.sessionID]; ok {\n        m.processStreamEventSilent(cs, msg.event)\n    }\n    return m, nil"
+                    ],
+                    "acceptance": [
+                        "Events route to correct session, non-active sessions accumulate silently"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "4.2",
+                    "name": "Refactor handleStreamEvent to target chatSession",
+                    "layer": "Application",
+                    "what": "Extract stream event processing into processStreamEventFor(*chatSession, event) that reads/writes cs.stream and cs.file. Keep executeTools on Model but accept target session for FileState.",
+                    "why": "handleStreamEvent must operate on any session. This also makes it reusable by runStreamLoop and headless mode.",
+                    "files": [
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "// processStreamEventFor \u2014 operates on any session, used by TUI event loop\nfunc (m *Model) processStreamEventFor(cs *chatSession, event chat.StreamEvent) (tea.Model, tea.Cmd) {\n    // All m.stream refs -> cs.stream, all m.session refs -> cs\n    if event.Error != nil {\n        text, image, _ := cs.cancelTruncate()\n        if text != \"\" {\n            m.textarea.SetValue(text)\n        }\n        cs.stream.reset()\n        cmd := m.setChatMode()\n        m.updateViewportContent()\n        return m, cmd\n    }\n    if event.Done {\n        if len(cs.stream.partialTools) > 0 {\n            toolEntries := m.executeToolsFor(cs, cs.stream.partialTools)\n            m.appendAssistantMsgFor(cs, toolEntries)\n            cs.stream.reset()\n            m.updateViewportContent()\n            return m, m.startStreamFor(cs)\n        }\n        // Normal completion\n        m.appendAssistantMsgFor(cs, nil)\n        cs.stream.reset()\n        blinkCmd := m.setChatMode()\n        m.updateViewportContent()\n        return m, blinkCmd\n    }\n    // Accumulate text/thinking/tool deltas into cs.stream\n    // ... (existing logic with m.stream -> cs.stream)\n    sid := cs.file.Session.ID\n    return m, waitForStreamEventFor(sid, cs.stream.ch)\n}",
+                        "// processStreamEventSilent \u2014 accumulates state without rendering\nfunc (m *Model) processStreamEventSilent(cs *chatSession, event chat.StreamEvent) {\n    if event.Done {\n        if len(cs.stream.partialTools) > 0 {\n            toolEntries := m.executeToolsFor(cs, cs.stream.partialTools)\n            m.appendAssistantMsgFor(cs, toolEntries)\n            cs.stream.reset()\n            // Auto-restart for silent session\n            m.startStreamForSilent(cs)\n        } else {\n            m.appendAssistantMsgFor(cs, nil)\n            cs.stream.reset()\n        }\n        return\n    }\n    if event.Text != \"\" {\n        cs.stream.AddTextChunk(event.Text)\n    }\n    if event.Thinking != \"\" {\n        cs.stream.AddThinkChunk(event.Thinking)\n    }\n    if event.ToolCallDelta != \"\" {\n        accumulateToolCallDelta(&cs.stream, event)\n    }\n}\n\n// executeToolsFor \u2014 same as executeTools but targets specific session\nfunc (m *Model) executeToolsFor(cs *chatSession, partials []partialTool) []config.ToolCallEntry {\n    if cs.file.FileState == nil {\n        cs.file.FileState = make(map[string]config.FileStateEntry)\n    }\n    sessionState := cs.file.FileState\n    // ... same execution logic, but writes to cs.file.FileState\n    // ... agent_call special-cased here for nested sub-agents\n}"
+                    ],
+                    "acceptance": [
+                        "processStreamEventFor works on any session, executeToolsFor accumulates into target FileState"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "5",
+            "name": "Session Persistence",
+            "pattern": [
+                "Hierarchical Storage"
+            ],
+            "objective": "Save child sessions in a sub-folder under the parent session name so the session directory stays organized.",
+            "success": "Child sessions save to sessions/<parent-name>/<child-id>.chat.json, load/restore works for children, parent session listing is unaffected.",
+            "diagram": "SaveSession(parentName, childID, file) \u2192 sessions/<parent-name>/<child-id>.chat.json. New helper: SaveChildSession(paths, parentName, childID, sf). LoadChildSession(paths, parentName, childID).",
+            "tasks": [
+                {
+                    "number": "5.1",
+                    "name": "Add ParentID to Session and child persistence helpers",
+                    "layer": "Infrastructure",
+                    "what": "Add ParentID field to config.Session. Create SaveChildSession, LoadChildSession, and ChildSessionPath helpers for sessions/parent-name/child-id.chat.json storage.",
+                    "why": "Child sessions need structured storage under their parent to keep the sessions directory clean and traceable.",
+                    "files": [
+                        "~ internal/config/session.go"
+                    ],
+                    "snippet": [
+                        "// Add to Session struct in config/session.go\ntype Session struct {\n    ID               string `json:\"id\"`\n    Title            string `json:\"title\"`\n    ParentID         string `json:\"parent_id,omitempty\"` // new field\n    CreatedAt        string `json:\"created_at\"`\n    // ... rest unchanged\n}",
+                        "// Child session persistence helpers\nfunc ChildSessionDir(p Paths, parentName string) string {\n    return filepath.Join(p.Sessions, parentName)\n}\n\nfunc ChildSessionPath(p Paths, parentName, childID string) string {\n    return filepath.Join(ChildSessionDir(p, parentName), childID+\"-agent.chat.json\")\n}\n\nfunc SaveChildSession(p Paths, parentName, childID string, sf SessionFile) error {\n    sf.Session.UpdatedAt = time.Now().UTC().Format(time.RFC3339)\n    if err := os.MkdirAll(ChildSessionDir(p, parentName), 0755); err != nil {\n        return err\n    }\n    data, err := json.MarshalIndent(sf, \"\", \"  \")\n    if err != nil {\n        return err\n    }\n    return os.WriteFile(ChildSessionPath(p, parentName, childID), data, 0644)\n}\n\nfunc LoadChildSession(p Paths, parentName, childID string) (SessionFile, error) {\n    data, err := os.ReadFile(ChildSessionPath(p, parentName, childID))\n    if err != nil {\n        return SessionFile{}, err\n    }\n    var sf SessionFile\n    return sf, json.Unmarshal(data, &sf)\n}"
+                    ],
+                    "acceptance": [
+                        "Child sessions save to subfolder, load correctly, ParentID is persisted"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "6",
+            "name": "Headless Unification",
+            "pattern": [
+                "Shared Core, Eliminate Duplication"
+            ],
+            "objective": "Replace the bare-bones headless stream loop with the same session/stream processing engine used by the TUI, enabling headless mode to support tools and thinking natively.",
+            "success": "headless.Run() uses chatSession + runStreamLoop, processes tool calls, supports thinking output, single stream processing code path for both TUI and headless.",
+            "diagram": "headless.Run() \u2192 create chatSession \u2192 append user message \u2192 runStreamLoop(sess) [same as child agent] \u2192 tool_calls \u2192 executeTools() \u2192 restart stream \u2192 on done, print accumulated text to stdout.",
+            "tasks": [
+                {
+                    "number": "6.1",
+                    "name": "Refactor headless.Run to use shared stream engine",
+                    "layer": "Application",
+                    "what": "Replace bare-bones headless stream loop with chatSession creation plus runStreamLoop. Headless creates a session, appends user prompt, calls runStreamLoop, and prints accumulated output with native tool support.",
+                    "why": "Eliminates duplicate stream loop. Headless and child agents share the same engine with full tool support.",
+                    "files": [
+                        "~ internal/headless/headless.go"
+                    ],
+                    "snippet": [
+                        "// headless.go \u2014 replaced bare stream loop with shared session engine\nfunc Run(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, prompt, imagePath string) error {\n    // Build a minimal Model for stream processing (no TUI components needed)\n    m := buildHeadlessModel(paths, settings, endpoints)\n\n    cs := m.activeSession()\n    cs.appendMsg(config.Message{\n        ID:          \"msg_1\",\n        Role:        config.RoleUser,\n        Text:        prompt,\n        ImagePath:   imagePath,\n        InputTokens: countTokensApprox(prompt),\n    })\n\n    // Run the same loop used by child agents \u2014 full tool support\n    result := m.runStreamLoop(cs)\n\n    fmt.Println(result)\n    return nil\n}\n\n// buildHeadlessModel creates a minimal Model with initialized session and tools\nfunc buildHeadlessModel(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig) *app.Model {\n    wd, _ := os.Getwd()\n    var sess chatSession\n    sess.clear(settings, paths, wd)\n    m := &app.Model{\n        Sessions:        map[string]*chatSession{sess.file.Session.ID: &sess},\n        ActiveSessionID: sess.file.Session.ID,\n        settings:        settings,\n        endpoints:       endpoints,\n        paths:           paths,\n        workingDir:      wd,\n    }\n    m.toolReg = tools.GetRegistry()\n    return m\n}"
+                    ],
+                    "acceptance": [
+                        "headless.Run() processes tools natively, go build passes"
+                    ],
+                    "verify": [
+                        "cd ~/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
         }
-      ]
-    },
-    {
-      "number": "2",
-      "name": "agent_call Tool",
-      "pattern": [
-        "Command, Synchronous Delegation"
-      ],
-      "objective": "Implement the agent_call tool that spawns child sessions, runs them to completion (blocking the tool executor), and returns the result to the parent.",
-      "success": "Model can call agent_call with prompt/tools/skills/skill_default, child session runs with full tool loop, file state isolated, result flows back as tool execution output.",
-      "diagram": "executeTools() detects agent_call \u2192 spawnChildSession() \u2192 runStreamLoop(child) [direct channel loop, no Bubble Tea] \u2192 child accumulates messages + tool results \u2192 loop returns final text \u2192 set Execution.Result on parent tool entry.",
-      "tasks": [
-        {
-          "number": "2.1",
-          "name": "Define agent_call tool schema",
-          "layer": "Domain",
-          "what": "Create agent_call Tool struct with schema: prompt (string), tools (array of strings), skills (array of strings), skill_default (string). Register it in the tools init list.",
-          "why": "The model needs a callable tool definition to spawn sub-agents with configurable tool and skill access.",
-          "files": [
-            "~ internal/tools/tools.go"
-          ],
-          "snippet": [
-            "var AgentCall = Tool{\n    Name:         \"agent_call\",\n    Description:  \"Spawn a child agent session with its own context window, tools, and skills. \" +\n        \"The child runs to completion and returns its final output. \" +\n        \"Use for focused sub-tasks that need their own context.\",\n    Schema: []byte(`{\n        \"type\": \"object\",\n        \"properties\": {\n            \"prompt\": {\"type\": \"string\", \"description\": \"The prompt/task for the sub-agent\"},\n            \"tools\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"Tool names the child can use (e.g. read_file, bash). Empty = no tools.\"},\n            \"skills\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"Skill names available to the child agent.\"},\n            \"skill_default\": {\"type\": \"string\", \"description\": \"Default skill to auto-load into child session on init.\"}\n        },\n        \"required\": [\"prompt\"]\n    }`),\n    Execute: func(args map[string]interface{}) ToolResult {\n        // Handled specially in executeTools \u2014 not here\n        return ToolResult{Status: ResultStatusError, Error: \"agent_call is processed inline in executeTools\"}\n    },\n}"
-          ],
-          "acceptance": [
-            "agent_call appears in tools.GetTools(), schema is valid JSON"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "2.2",
-          "name": "Implement spawnChildSession and runStreamLoop",
-          "layer": "Application",
-          "what": "Create spawnChildSession() that initializes a child chatSession with ParentID, system prompt, environment, filtered tools, and skill_default. Create runStreamLoop(*chatSession) that drives engine.Stream directly, handles tool_calls restart, and returns final output.",
-          "why": "Child sessions run inside executeTools which blocks Bubble Tea \u2014 they need a direct channel loop. spawnChildSession sets up isolation, runStreamLoop drives the full cycle.",
-          "files": [
-            "~ internal/app/stream.go",
-            "~ internal/app/chat_session.go"
-          ],
-          "snippet": [
-            "// spawnChildSession creates and initializes a child session\nfunc (m *Model) spawnChildSession(parentID string, prompt string,\n    toolNames []string, skillNames []string, skillDefault string) *chatSession {\n    cs := &chatSession{\n        ParentID: parentID,\n    }\n    cs.file = config.NewSessionFile(m.settings.Provider, m.settings.Model,\n        m.settings.Thinking, m.settings.SystemPromptFile, m.workingDir)\n\n    // Push system prompt + environment messages (reuse clear() logic)\n    // Inject skill_default if set: load skill and push as system/internal msg\n    // Append prompt as user message\n    cs.appendMsg(config.Message{\n        ID:   \"msg_1\",\n        Role: config.RoleUser,\n        Text: prompt,\n    })\n\n    // Filter tools to allowed list\n    cs.allowedTools = filterTools(tools.GetTools(), toolNames)\n\n    m.addSession(cs)\n    return cs\n}",
-            "// runStreamLoop drives a session stream to completion via direct channel loop\n// Used by both child agents (inside executeTools) and headless mode.\nfunc (m *Model) runStreamLoop(cs *chatSession) string {\n    var result strings.Builder\n\n    for {\n        apiMsgs := chat.BuildAPIMessages(m.paths, m.settings, cs.file.Messages)\n        engine := chat.NewEngine(\n            config.ResolveChatURL(m.endpoints, m.settings.Provider),\n            m.settings.Model, m.settings.Thinking,\n        )\n\n        ctx, cancel := context.WithCancel(context.Background())\n        ch := engine.Stream(ctx, apiMsgs, cs.allowedTools)\n\n        for event := range ch {\n            cancel()\n            if event.Error != nil {\n                result.WriteString(\"[agent error: \" + event.Error.Error() + \"]\")\n                return result.String()\n            }\n            if event.Done {\n                if event.StopReason == \"tool_calls\" && len(cs.stream.partialTools) > 0 {\n                    // Execute tools on this child, append assistant msg, outer loop restarts stream\n                    toolEntries := m.executeToolsFor(cs, cs.stream.partialTools)\n                    m.appendAssistantMsgFor(cs, toolEntries)\n                    cs.stream.reset()\n                    continue OUTER // restart stream with tool results in history\n                }\n                // Normal completion \u2014 save final assistant msg\n                m.appendAssistantMsgFor(cs, nil)\n                return result.String()\n            }\n            if event.Text != \"\" {\n                result.WriteString(event.Text)\n                cs.stream.AddTextChunk(event.Text)\n            }\n            if event.Thinking != \"\" {\n                cs.stream.AddThinkChunk(event.Thinking)\n            }\n            if event.ToolCallDelta != \"\" {\n                // Accumulate partial tool state (same logic as TUI handleStreamEvent)\n                accumulateToolCallDelta(&cs.stream, event)\n            }\n        }\n    }\n}"
-          ],
-          "acceptance": [
-            "spawnChildSession creates valid session, runStreamLoop completes full stream cycle with tool support"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "2.3",
-          "name": "Implement agent_call Execute in executeTools",
-          "layer": "Application",
-          "what": "In executeTools, detect agent_call by name. Parse args, call spawnChildSession and runStreamLoop sequentially for each agent. Collect results and return as Execution.Result. Save child session to disk after completion.",
-          "why": "This bridges the tool framework with the new session architecture \u2014 the integration point where parent tool execution spawns child agents.",
-          "files": [
-            "~ internal/app/stream.go"
-          ],
-          "snippet": [
-            "// In executeTools() \u2014 special case for agent_call\nif p.name == \"agent_call\" {\n    var argsStruct struct {\n        Prompt       string   `json:\"prompt\"`\n        Tools        []string `json:\"tools\"`\n        Skills       []string `json:\"skills\"`\n        SkillDefault string   `json:\"skill_default\"`\n    }\n    json.Unmarshal([]byte(p.args), &argsStruct)\n\n    // Spawn child session and run to completion (blocking)\n    child := m.spawnChildSession(m.ActiveSessionID, argsStruct.Prompt,\n        argsStruct.Tools, argsStruct.Skills, argsStruct.SkillDefault)\n\n    // Tag the child with the originating tool call ID\n    child.ToolCallID = p.id\n\n    result := m.runStreamLoop(child)\n\n    // Save child session to subfolder under parent\n    parentName := m.activeSession().file.Session.Title\n    if parentName == \"\" {\n        parentName = \"unsaved\"\n    }\n    _ = config.SaveChildSession(m.paths, parentName,\n        child.file.Session.ID, child.file)\n\n    entries[i].Execution.Status = tools.ResultStatusSuccess\n    entries[i].Execution.Result = result\n    continue // skip normal tool execution path\n}"
-          ],
-          "acceptance": [
-            "agent_call spawns child, runs to completion, returns result, child is saved"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "3",
-      "name": "Multi-session TUI",
-      "pattern": [
-        "Viewport Multiplexing, Key-driven Navigation"
-      ],
-      "objective": "Enable the user to toggle between parent and child session views, render the active session's viewport, and derive mode from the active session state.",
-      "success": "ctrl+tab cycles between active session and its children, viewport shows correct session, mode reflects active session streaming state, textarea binds to active session.",
-      "diagram": "handleKey() routes session-switch key \u2192 rotate activeSessionID through parent+children \u2192 updateViewportContent() uses active session \u2192 mode = activeSession.stream.active ? ModeStreaming : ModeChat \u2192 textarea binds to active session.",
-      "tasks": [
-        {
-          "number": "3.1",
-          "name": "Add session switch keybinding",
-          "layer": "Interface",
-          "what": "Add ctrl+tab keybinding that cycles activeSessionID between parent and its children. Add session indicator to header showing current context (Parent vs Agent).",
-          "why": "User needs to toggle between parent and child views to monitor agent progress.",
-          "files": [
-            "~ internal/app/keymap.go",
-            "~ internal/app/input.go",
-            "~ internal/app/render.go"
-          ],
-          "snippet": [
-            "// New key binding in keymap.go\nSwitchSession: key.NewBinding(\n    key.WithKeys(\"ctrl+tab\"),\n    key.WithHelp(\"ctrl+tab\", \"switch session\"),\n),\n\n// In handleChatKey():\ncase key.Matches(msg, keys.SwitchSession):\n    return m.switchSession(), nil\n\nfunc (m *Model) switchSession() tea.Model {\n    // Build ordered list: current active first, then children by spawn order\n    var ordered []string\n    for id, cs := range m.Sessions {\n        if cs.ParentID == m.ActiveSessionID || id == m.ActiveSessionID {\n            ordered = append(ordered, id)\n        }\n    }\n    if len(ordered) < 2 {\n        return m\n    }\n    // Rotate to next in cycle\n    for i, id := range ordered {\n        if id == m.ActiveSessionID {\n            m.ActiveSessionID = ordered[(i+1)%len(ordered)]\n            break\n        }\n    }\n    m.updateViewportContent()\n    m.recalcLayout()\n    return m\n}"
-          ],
-          "acceptance": [
-            "ctrl+tab cycles sessions, viewport updates, header shows context"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "3.2",
-          "name": "Update viewport and footer to bind to active session",
-          "layer": "Interface",
-          "what": "Rewrite updateViewportContent() to render activeSession. Update buildFooterData() for per-session token counts. Update handleKey to route input to active session.",
-          "why": "Viewport, footer, and input must reflect whichever session is active for correct user experience.",
-          "files": [
-            "~ internal/app/render.go",
-            "~ internal/app/input.go"
-          ],
-          "snippet": [
-            "// updateViewportContent() \u2014 route to active session\nfunc (m *Model) updateViewportContent() {\n    cs := m.activeSession()\n    if cs == nil {\n        return\n    }\n    // Same render logic as before, but all m.session/m.stream refs become cs/cs.stream\n    // Render cs.file.Messages, then if cs.stream.active render live streaming\n}\n\n// buildFooterData() \u2014 per-session tokens\nfunc (m Model) buildFooterData() ui.FooterData {\n    cs := m.activeSession()\n    sessionIn := cs.totalInputTokens()\n    sessionOut := cs.totalOutputTokens()\n    streamOut := cs.stream.metrics.TotalOutputTokens()\n    return ui.FooterData{\n        Model:            modelBasename(m.settings.Model),\n        Provider:         m.settings.Provider,\n        TotalTokens:      sessionIn + sessionOut + streamOut,\n        TotalInputTokens: sessionIn,\n        TotalOutTokens:   sessionOut + streamOut,\n        Streaming:        cs.stream.active,\n        ThinkingOn:       m.settings.Thinking,\n        TokPerSec:        cs.stream.metrics.AvgTokenPerSec(),\n        WorkingDir:       m.workingDir,\n    }\n}\n\n// Header \u2014 show session context label for visual indication\nfunc (m Model) sessionLabel() string {\n    cs := m.activeSession()\n    if cs == nil || cs.ParentID == \"\" {\n        return \"Orchestrator\"\n    }\n    // Show truncated first user msg as label\n    for _, msg := range cs.file.Messages {\n        if msg.Role == config.RoleUser {\n            label := msg.Text\n            if len(label) > 40 {\n                label = label[:37] + \"...\"\n            }\n            return \"Agent: \" + label\n        }\n    }\n    return \"Agent\"\n}"
-          ],
-          "acceptance": [
-            "Viewport renders correct session, footer shows per-session stats"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "4",
-      "name": "Event Loop & Stream Multiplexing",
-      "pattern": [
-        "Tagged Event Routing, Direct Channel Loop"
-      ],
-      "objective": "Refactor the Bubble Tea event loop to route stream events to the correct session, and add a direct channel-based stream loop for child agents that bypasses Bubble Tea.",
-      "success": "Tagged stream events route to correct session, direct stream loop processes child tool loops synchronously, active child state visible in TUI via chatSession.stream.",
-      "diagram": "waitForStreamEvent(sid, ch) \u2192 taggedStreamEvent{sid, event}. Update() routes: if sid == activeSessionID \u2192 handleStreamEvent(activeSession). Child loop: runStreamLoop(sess) \u2192 range ch \u2192 processEvent(sess, event) \u2192 handles tool_calls restart inline.",
-      "tasks": [
-        {
-          "number": "4.1",
-          "name": "Add tagged stream events and session-aware routing",
-          "layer": "Application",
-          "what": "Replace streamEventMsg with taggedStreamEvent including sessionID. Update waitForStreamEvent to accept sessionID. Update Update() to route events to the correct session.",
-          "why": "Bubble Tea processes one message at a time \u2014 tagging enables routing to the correct session. Non-active sessions accumulate state silently.",
-          "files": [
-            "~ internal/app/events.go",
-            "~ internal/app/update.go",
-            "~ internal/app/stream.go"
-          ],
-          "snippet": [
-            "// Replace streamEventMsg with tagged version\ntype taggedStreamEvent struct {\n    sessionID string\n    event     chat.StreamEvent\n}\n\n// waitForStreamEventFor blocks on a session-specific channel\nfunc waitForStreamEventFor(sid string, ch <-chan chat.StreamEvent) tea.Cmd {\n    return func() tea.Msg {\n        event, ok := <-ch\n        if !ok {\n            return taggedStreamEvent{sid, chat.StreamEvent{Done: true}}\n        }\n        return taggedStreamEvent{sid, event}\n    }\n}\n\n// In sendMessage() \u2014 tag the stream command\ncs := m.activeSession()\nreturn m, tea.Batch(waitForStreamEventFor(cs.file.Session.ID, ch), streamTickCmd())",
-            "// In Update() \u2014 new case for tagged events\ncase taggedStreamEvent:\n    if msg.sessionID == m.ActiveSessionID {\n        // Active session: full processing + render\n        return m.processStreamEventFor(m.activeSession(), msg.event)\n    }\n    // Non-active session: accumulate stream state silently\n    if cs, ok := m.Sessions[msg.sessionID]; ok {\n        m.processStreamEventSilent(cs, msg.event)\n    }\n    return m, nil"
-          ],
-          "acceptance": [
-            "Events route to correct session, non-active sessions accumulate silently"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "4.2",
-          "name": "Refactor handleStreamEvent to target chatSession",
-          "layer": "Application",
-          "what": "Extract stream event processing into processStreamEventFor(*chatSession, event) that reads/writes cs.stream and cs.file. Keep executeTools on Model but accept target session for FileState.",
-          "why": "handleStreamEvent must operate on any session. This also makes it reusable by runStreamLoop and headless mode.",
-          "files": [
-            "~ internal/app/stream.go"
-          ],
-          "snippet": [
-            "// processStreamEventFor \u2014 operates on any session, used by TUI event loop\nfunc (m *Model) processStreamEventFor(cs *chatSession, event chat.StreamEvent) (tea.Model, tea.Cmd) {\n    // All m.stream refs -> cs.stream, all m.session refs -> cs\n    if event.Error != nil {\n        text, image, _ := cs.cancelTruncate()\n        if text != \"\" {\n            m.textarea.SetValue(text)\n        }\n        cs.stream.reset()\n        cmd := m.setChatMode()\n        m.updateViewportContent()\n        return m, cmd\n    }\n    if event.Done {\n        if len(cs.stream.partialTools) > 0 {\n            toolEntries := m.executeToolsFor(cs, cs.stream.partialTools)\n            m.appendAssistantMsgFor(cs, toolEntries)\n            cs.stream.reset()\n            m.updateViewportContent()\n            return m, m.startStreamFor(cs)\n        }\n        // Normal completion\n        m.appendAssistantMsgFor(cs, nil)\n        cs.stream.reset()\n        blinkCmd := m.setChatMode()\n        m.updateViewportContent()\n        return m, blinkCmd\n    }\n    // Accumulate text/thinking/tool deltas into cs.stream\n    // ... (existing logic with m.stream -> cs.stream)\n    sid := cs.file.Session.ID\n    return m, waitForStreamEventFor(sid, cs.stream.ch)\n}",
-            "// processStreamEventSilent \u2014 accumulates state without rendering\nfunc (m *Model) processStreamEventSilent(cs *chatSession, event chat.StreamEvent) {\n    if event.Done {\n        if len(cs.stream.partialTools) > 0 {\n            toolEntries := m.executeToolsFor(cs, cs.stream.partialTools)\n            m.appendAssistantMsgFor(cs, toolEntries)\n            cs.stream.reset()\n            // Auto-restart for silent session\n            m.startStreamForSilent(cs)\n        } else {\n            m.appendAssistantMsgFor(cs, nil)\n            cs.stream.reset()\n        }\n        return\n    }\n    if event.Text != \"\" {\n        cs.stream.AddTextChunk(event.Text)\n    }\n    if event.Thinking != \"\" {\n        cs.stream.AddThinkChunk(event.Thinking)\n    }\n    if event.ToolCallDelta != \"\" {\n        accumulateToolCallDelta(&cs.stream, event)\n    }\n}\n\n// executeToolsFor \u2014 same as executeTools but targets specific session\nfunc (m *Model) executeToolsFor(cs *chatSession, partials []partialTool) []config.ToolCallEntry {\n    if cs.file.FileState == nil {\n        cs.file.FileState = make(map[string]config.FileStateEntry)\n    }\n    sessionState := cs.file.FileState\n    // ... same execution logic, but writes to cs.file.FileState\n    // ... agent_call special-cased here for nested sub-agents\n}"
-          ],
-          "acceptance": [
-            "processStreamEventFor works on any session, executeToolsFor accumulates into target FileState"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "5",
-      "name": "Session Persistence",
-      "pattern": [
-        "Hierarchical Storage"
-      ],
-      "objective": "Save child sessions in a sub-folder under the parent session name so the session directory stays organized.",
-      "success": "Child sessions save to sessions/<parent-name>/<child-id>.chat.json, load/restore works for children, parent session listing is unaffected.",
-      "diagram": "SaveSession(parentName, childID, file) \u2192 sessions/<parent-name>/<child-id>.chat.json. New helper: SaveChildSession(paths, parentName, childID, sf). LoadChildSession(paths, parentName, childID).",
-      "tasks": [
-        {
-          "number": "5.1",
-          "name": "Add ParentID to Session and child persistence helpers",
-          "layer": "Infrastructure",
-          "what": "Add ParentID field to config.Session. Create SaveChildSession, LoadChildSession, and ChildSessionPath helpers for sessions/parent-name/child-id.chat.json storage.",
-          "why": "Child sessions need structured storage under their parent to keep the sessions directory clean and traceable.",
-          "files": [
-            "~ internal/config/session.go"
-          ],
-          "snippet": [
-            "// Add to Session struct in config/session.go\ntype Session struct {\n    ID               string `json:\"id\"`\n    Title            string `json:\"title\"`\n    ParentID         string `json:\"parent_id,omitempty\"` // new field\n    CreatedAt        string `json:\"created_at\"`\n    // ... rest unchanged\n}",
-            "// Child session persistence helpers\nfunc ChildSessionDir(p Paths, parentName string) string {\n    return filepath.Join(p.Sessions, parentName)\n}\n\nfunc ChildSessionPath(p Paths, parentName, childID string) string {\n    return filepath.Join(ChildSessionDir(p, parentName), childID+\"-agent.chat.json\")\n}\n\nfunc SaveChildSession(p Paths, parentName, childID string, sf SessionFile) error {\n    sf.Session.UpdatedAt = time.Now().UTC().Format(time.RFC3339)\n    if err := os.MkdirAll(ChildSessionDir(p, parentName), 0755); err != nil {\n        return err\n    }\n    data, err := json.MarshalIndent(sf, \"\", \"  \")\n    if err != nil {\n        return err\n    }\n    return os.WriteFile(ChildSessionPath(p, parentName, childID), data, 0644)\n}\n\nfunc LoadChildSession(p Paths, parentName, childID string) (SessionFile, error) {\n    data, err := os.ReadFile(ChildSessionPath(p, parentName, childID))\n    if err != nil {\n        return SessionFile{}, err\n    }\n    var sf SessionFile\n    return sf, json.Unmarshal(data, &sf)\n}"
-          ],
-          "acceptance": [
-            "Child sessions save to subfolder, load correctly, ParentID is persisted"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "6",
-      "name": "Headless Unification",
-      "pattern": [
-        "Shared Core, Eliminate Duplication"
-      ],
-      "objective": "Replace the bare-bones headless stream loop with the same session/stream processing engine used by the TUI, enabling headless mode to support tools and thinking natively.",
-      "success": "headless.Run() uses chatSession + runStreamLoop, processes tool calls, supports thinking output, single stream processing code path for both TUI and headless.",
-      "diagram": "headless.Run() \u2192 create chatSession \u2192 append user message \u2192 runStreamLoop(sess) [same as child agent] \u2192 tool_calls \u2192 executeTools() \u2192 restart stream \u2192 on done, print accumulated text to stdout.",
-      "tasks": [
-        {
-          "number": "6.1",
-          "name": "Refactor headless.Run to use shared stream engine",
-          "layer": "Application",
-          "what": "Replace bare-bones headless stream loop with chatSession creation plus runStreamLoop. Headless creates a session, appends user prompt, calls runStreamLoop, and prints accumulated output with native tool support.",
-          "why": "Eliminates duplicate stream loop. Headless and child agents share the same engine with full tool support.",
-          "files": [
-            "~ internal/headless/headless.go"
-          ],
-          "snippet": [
-            "// headless.go \u2014 replaced bare stream loop with shared session engine\nfunc Run(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig, prompt, imagePath string) error {\n    // Build a minimal Model for stream processing (no TUI components needed)\n    m := buildHeadlessModel(paths, settings, endpoints)\n\n    cs := m.activeSession()\n    cs.appendMsg(config.Message{\n        ID:          \"msg_1\",\n        Role:        config.RoleUser,\n        Text:        prompt,\n        ImagePath:   imagePath,\n        InputTokens: countTokensApprox(prompt),\n    })\n\n    // Run the same loop used by child agents \u2014 full tool support\n    result := m.runStreamLoop(cs)\n\n    fmt.Println(result)\n    return nil\n}\n\n// buildHeadlessModel creates a minimal Model with initialized session and tools\nfunc buildHeadlessModel(paths config.Paths, settings config.Settings, endpoints config.EndpointsConfig) *app.Model {\n    wd, _ := os.Getwd()\n    var sess chatSession\n    sess.clear(settings, paths, wd)\n    m := &app.Model{\n        Sessions:        map[string]*chatSession{sess.file.Session.ID: &sess},\n        ActiveSessionID: sess.file.Session.ID,\n        settings:        settings,\n        endpoints:       endpoints,\n        paths:           paths,\n        workingDir:      wd,\n    }\n    m.toolReg = tools.GetRegistry()\n    return m\n}"
-          ],
-          "acceptance": [
-            "headless.Run() processes tools natively, go build passes"
-          ],
-          "verify": [
-            "cd ~/src/squid-os && go build ./..."
-          ]
-        }
-      ]
-    }
-  ]
+    ],
+    "problem": "The current app supports only a single chat session with a single stream. Models need to delegate work to sub-agents with their own context, tools, and skills \u2014 spawning child sessions that the user can toggle between while the parent tool call blocks awaiting results.",
+    "goal": "agent_call tool spawns isolated child sessions with full tool support, user toggles between parent and child views, child file state is isolated, headless mode reuses the same stream engine"
 }

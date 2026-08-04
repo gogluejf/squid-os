@@ -1,442 +1,442 @@
 {
-  "plan_name": "tool-authorization",
-  "title": "Tool Authorization",
-  "why": "Users need granular control over when tool executions require confirmation. The LLM currently executes all tools blindly, which can lead to unintended file modifications or destructive commands.",
-  "outcomes": "Users can choose between auto-execute, ask-on-write, or ask-for-all modes. The LLM must declare destructive intent on bash calls. Pending tool calls are cancelled when the user adds instructions mid-execution.",
-  "milestones": [
-    {
-      "number": "1",
-      "name": "Authorization Setting",
-      "pattern": [
-        "Configuration Flag"
-      ],
-      "objective": "Add a user-configurable setting that determines which tools require confirmation before execution.",
-      "success": "Settings exposes an Authorization field with three valid values. Invalid values fall back to auto.",
-      "diagram": "Settings.json \u2192 Authorization field \u2192 parsed at startup \u2192 drives authorization gate behavior per tool call",
-      "tasks": [
+    "plan_name": "tool-authorization",
+    "title": "Tool Authorization",
+    "milestones": [
         {
-          "number": "1.1",
-          "name": "Add Authorization field to Settings",
-          "layer": "Domain",
-          "what": "Add Authorization string field to Settings struct in internal/config/settings.go with default value \"auto\".",
-          "why": "Stores the user's preference for tool authorization mode: auto, ask-on-write, or ask-for-all.",
-          "files": [
-            "~ internal/config/settings.go"
-          ],
-          "snippet": [
-            "type Settings struct {\n\t// ... existing fields ...\n\tAuthorization string \\u0060json:\"authorization\"\\u0060 // auto | ask-on-write | ask-for-all\n}\n\nfunc DefaultSettings() Settings {\n\treturn Settings{\n\t\t// ... existing defaults ...\n\t\tAuthorization: \"auto\",\n\t}\n}\n\n// ValidateAuthorization returns the normalized authorization mode.\nfunc (s Settings) ValidateAuthorization() string {\n\tswitch s.Authorization {\n\tcase \"auto\", \"ask-on-write\", \"ask-for-all\":\n\t\treturn s.Authorization\n\tdefault:\n\t\treturn \"auto\"\n\t}\n}"
-          ],
-          "acceptance": [
-            "Settings struct compiles, defaults to \"auto\", rejects unknown values by falling back to auto"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
+            "number": "1",
+            "name": "Authorization Setting",
+            "pattern": [
+                "Configuration Flag"
+            ],
+            "objective": "Add a user-configurable setting that determines which tools require confirmation before execution.",
+            "success": "Settings exposes an Authorization field with three valid values. Invalid values fall back to auto.",
+            "diagram": "Settings.json \u2192 Authorization field \u2192 parsed at startup \u2192 drives authorization gate behavior per tool call",
+            "tasks": [
+                {
+                    "number": "1.1",
+                    "name": "Add Authorization field to Settings",
+                    "layer": "Domain",
+                    "what": "Add Authorization string field to Settings struct in internal/config/settings.go with default value \"auto\".",
+                    "why": "Stores the user's preference for tool authorization mode: auto, ask-on-write, or ask-for-all.",
+                    "files": [
+                        "~ internal/config/settings.go"
+                    ],
+                    "snippet": [
+                        "type Settings struct {\n\t// ... existing fields ...\n\tAuthorization string \\u0060json:\"authorization\"\\u0060 // auto | ask-on-write | ask-for-all\n}\n\nfunc DefaultSettings() Settings {\n\treturn Settings{\n\t\t// ... existing defaults ...\n\t\tAuthorization: \"auto\",\n\t}\n}\n\n// ValidateAuthorization returns the normalized authorization mode.\nfunc (s Settings) ValidateAuthorization() string {\n\tswitch s.Authorization {\n\tcase \"auto\", \"ask-on-write\", \"ask-for-all\":\n\t\treturn s.Authorization\n\tdefault:\n\t\treturn \"auto\"\n\t}\n}"
+                    ],
+                    "acceptance": [
+                        "Settings struct compiles, defaults to \"auto\", rejects unknown values by falling back to auto"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "1.2",
+                    "name": "Add Authorization enum constants",
+                    "layer": "Domain",
+                    "what": "Add AuthorizationAuto, AuthorizationAskOnWrite, AuthorizationAskForAll string constants in settings.go.",
+                    "why": "Avoid magic strings scattered across the codebase. Single source of truth for mode names.",
+                    "files": [
+                        "~ internal/config/settings.go"
+                    ],
+                    "snippet": [
+                        "const (\n\tAuthorizationAuto        = \"auto\"\n\tAuthorizationAskOnWrite  = \"ask-on-write\"\n\tAuthorizationAskForAll   = \"ask-for-all\"\n)"
+                    ],
+                    "acceptance": [
+                        "Constants match the three valid values, used in ValidateAuthorization"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
         },
         {
-          "number": "1.2",
-          "name": "Add Authorization enum constants",
-          "layer": "Domain",
-          "what": "Add AuthorizationAuto, AuthorizationAskOnWrite, AuthorizationAskForAll string constants in settings.go.",
-          "why": "Avoid magic strings scattered across the codebase. Single source of truth for mode names.",
-          "files": [
-            "~ internal/config/settings.go"
-          ],
-          "snippet": [
-            "const (\n\tAuthorizationAuto        = \"auto\"\n\tAuthorizationAskOnWrite  = \"ask-on-write\"\n\tAuthorizationAskForAll   = \"ask-for-all\"\n)"
-          ],
-          "acceptance": [
-            "Constants match the three valid values, used in ValidateAuthorization"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
+            "number": "2",
+            "name": "Destructive Bash",
+            "pattern": [
+                "Schema Extension"
+            ],
+            "objective": "Add a required destructive boolean field to the bash tool schema so the LLM must declare whether a command modifies disk state.",
+            "success": "Bash tool schema requires destructive field, returns error if omitted. Tool tracks destructiveness on the result.",
+            "diagram": "LLM \u2192 bash({\"command\": \"rm -rf ...\", \"destructive\": true}) \u2192 schema validates required field \u2192 Execute checks destructiveness \u2192 ToolResult carries Destructive flag",
+            "tasks": [
+                {
+                    "number": "2.1",
+                    "name": "Add destructive to bash schema",
+                    "layer": "Infrastructure",
+                    "what": "Add destructive (boolean, required) to the bash tool JSON schema in internal/tools/bash.go.",
+                    "why": "The LLM must explicitly declare whether a bash command modifies files or system state. No default \u2014 omitting it returns an error.",
+                    "files": [
+                        "~ internal/tools/bash.go"
+                    ],
+                    "snippet": [
+                        "\"properties\": {\n\t\"command\": {\n\t\t\"type\": \"string\",\n\t\t\"description\": \"The shell command to execute\"\n\t},\n\t\"timeout\": {\n\t\t\"type\": \"number\",\n\t\t\"description\": \"Timeout in milliseconds (default 120000)\"\n\t},\n\t\"destructive\": {\n\t\t\"type\": \"boolean\",\n\t\t\"description\": \"Must be true if the command modifies files, deletes data, or changes system state. Must be false for read-only commands (cat, ls, grep, find, git status, etc.). This field is required.\"\n\t}\n},\n\"required\": [\"command\", \"destructive\"]"
+                    ],
+                    "acceptance": [
+                        "Schema is valid JSON, destructive is required, omitting it causes a validation error"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "2.2",
+                    "name": "Add Destructive field to ToolResult",
+                    "layer": "Infrastructure",
+                    "what": "Add Destructive bool to ToolResult struct in internal/tools/tools.go. Set it from args[\"destructive\"] in the bash Execute function.",
+                    "why": "The authorization gate needs to know at execution time whether a tool is destructive, before running it.",
+                    "files": [
+                        "~ internal/tools/tools.go",
+                        "~ internal/tools/bash.go"
+                    ],
+                    "snippet": [
+                        "type ToolResult struct {\n\tStatus    string             // ...\n\tResult    string             // ...\n\tError     string             // ...\n\tDestructive bool             // true if this tool modifies disk state\n\tFiles     []config.FileEntry // ...\n}\n\n// In bash Execute:\ndestructive, ok := args[\"destructive\"].(bool)\nif !ok {\n\treturn ToolResult{Status: ResultStatusError, Error: \"destructive is required and must be a boolean\"}\n}\n// ... after execution ...\nreturn ToolResult{Status: ResultStatusSuccess, Result: result.String(), Destructive: destructive}"
+                    ],
+                    "acceptance": [
+                        "Destructive field populated on bash results, error returned when omitted"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "2.3",
+                    "name": "Mark inherently destructive tools",
+                    "layer": "Infrastructure",
+                    "what": "Add IsDestructive func()bool to the Tool struct. Set it true for write_file, edit_file, skill_build. Bash uses the runtime destructive arg.",
+                    "why": "The authorization gate needs a pre-execution way to determine if a tool is destructive, without running it first. For file tools, destructiveness is static. For bash, it comes from the args.",
+                    "files": [
+                        "~ internal/tools/tools.go"
+                    ],
+                    "snippet": [
+                        "type Tool struct {\n\t// ... existing fields ...\n\tIsDestructive func(args map[string]interface{}) bool // nil = never destructive\n}\n\nvar WriteFile = Tool{\n\t// ...\n\tIsDestructive: func(args map[string]interface{}) bool { return true },\n}\n\nvar EditFile = Tool{\n\t// ...\n\tIsDestructive: func(args map[string]interface{}) bool { return true },\n}\n\nvar SkillBuild = Tool{\n\t// ...\n\tIsDestructive: func(args map[string]interface{}) bool { return true },\n}\n\nvar Bash = Tool{\n\t// ...\n\tIsDestructive: func(args map[string]interface{}) bool {\n\t\td, ok := args[\"destructive\"].(bool)\n\t\treturn ok && d\n\t},\n}"
+                    ],
+                    "acceptance": [
+                        "write_file, edit_file, skill_build always report destructive. bash reports based on args. read_file, skill_load, skill_list, set_working_dir, open report false"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "3",
+            "name": "Authorization Gate",
+            "pattern": [
+                "Guard Clause / Interrupt"
+            ],
+            "objective": "Intercept tool execution in the stream loop. When authorization mode requires it, pause and ask the user before executing. On rejection, cancel pending tool calls.",
+            "success": "In ask-on-write mode, destructive tools pause for confirmation, read-only tools auto-execute. In ask-for-all, every tool pauses. Rejected or instruction-annotated tools cancel remaining pending calls and resume stream.",
+            "diagram": "Stream \u2192 tool_calls stop \u2192 iterate partialTools \u2192 check authorization needed? \u2192 yes: enter ModeAuthorize \u2192 user responds (y/n + optional instructions) \u2192 execute tool or reject \u2192 if instructions injected: cancel remaining tools, resume stream immediately. else: continue to next tool",
+            "tasks": [
+                {
+                    "number": "3.1",
+                    "name": "Add authorization types and constants",
+                    "layer": "Domain",
+                    "what": "Create internal/app/authorization.go with AuthorizationResult enum (Accepted, Rejected, AcceptedWithInstructions) and AuthorizationContext struct holding the pending tool, args, user instructions, and result.",
+                    "why": "Encapsulates the authorization state machine: what tool is pending, what the user responded, and whether extra instructions were provided.",
+                    "files": [
+                        "+ internal/app/authorization.go"
+                    ],
+                    "snippet": [
+                        "package app\n\ntype AuthResult int\nconst (\n\tAuthAccepted           AuthResult = iota // plain yes\n\tAuthRejected                            // plain no\n\tAuthAcceptedWithInstructions            // yes + instructions\n\tAuthRejectedWithInstructions            // no + instructions\n)\n\ntype AuthorizationContext struct {\n\tToolName        string                  // tool being authorized\n\tArgs            map[string]interface{}  // parsed args for display\n\tArgsJSON        string                  // raw args for display\n\tDisplayValue    string                  // from tool.DisplayParam\n\tResult          AuthResult\n\tUserInstructions string                // optional text the user attached\n\tIsDestructive   bool\n}\n\nfunc (c *AuthorizationContext) IsActionable() bool {\n\treturn c.Result != 0\n}"
+                    ],
+                    "acceptance": [
+                        "Struct and types compile, provides all fields needed by the UI and execution logic"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "3.2",
+                    "name": "Add authorization mode to streamState",
+                    "layer": "Application",
+                    "what": "Add authorizationContext field to streamState in stream.go. Add pendingToolIndex int to track which partialTool is being authorized. Add needsAuthorization helper method on Model.",
+                    "why": "The stream loop needs to know when it's paused waiting for user authorization and which tool is pending.",
+                    "files": [
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "// In streamState struct:\n\tauthorizationCtx *AuthorizationContext // non-nil when paused awaiting auth\n\tpendingToolIndex int                   // index into partialTools being authorized\n\n// In Model:\nfunc (m Model) needsAuthorization(tool *tools.Tool, args map[string]interface{}) bool {\n\tauthMode := m.settings.ValidateAuthorization()\n\tswitch authMode {\n\tcase config.AuthorizationAskForAll:\n\t\treturn true\n\tcase config.AuthorizationAskOnWrite:\n\t\tif tool != nil && tool.IsDestructive != nil {\n\t\t\treturn tool.IsDestructive(args)\n\t\t}\n\t\treturn false\n\tdefault: // auto\n\t\treturn false\n\t}\n}"
+                    ],
+                    "acceptance": [
+                        "needsAuthorization returns true for all tools in ask-for-all, only destructive in ask-on-write, nothing in auto"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "3.3",
+                    "name": "Refactor executeTools to support authorization interruption",
+                    "layer": "Application",
+                    "what": "Rewrite executeTools in stream.go to check authorization before each tool execution. If authorization is needed, return a single AuthorizationContext and the caller (handleStreamEvent) pauses the stream. Remaining tools are left unexecuted until the user responds.",
+                    "why": "Currently executeTools runs all tools in a batch. With authorization, we must process one at a time and potentially pause for user input, canceling remaining tools on rejection or instruction injection.",
+                    "files": [
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {\n\t// Phase 1: Determine if any tool needs authorization\n\tfor i, p := range partials {\n\t\ttool := m.toolReg.Get(p.name)\n\t\tvar args map[string]interface{}\n\t\tif p.args != \"\" {\n\t\t\t_ = json.Unmarshal([]byte(p.args), &args)\n\t\t}\n\t\tif m.needsAuthorization(tool, args) {\n\t\t\t// Pause here \u2014 set up authorization context\n\t\t\tisDestructive := false\n\t\t\tif tool != nil && tool.IsDestructive != nil {\n\t\t\t\tisDestructive = tool.IsDestructive(args)\n\t\t\t}\n\t\t\tm.stream.authorizationCtx = &AuthorizationContext{\n\t\t\t\tToolName:       p.name,\n\t\t\t\tArgs:           args,\n\t\t\t\tArgsJSON:       p.args,\n\t\t\t\tDisplayValue:   tool.DisplayValue(p.args),\n\t\t\t\tIsDestructive:  isDestructive,\n\t\t\t}\n\t\t\tm.stream.pendingToolIndex = i\n\t\t\treturn nil // nil signals caller to enter authorization mode\n\t\t}\n\t}\n\t// Phase 2: No authorization needed \u2014 execute all (existing logic)\n\treturn m.executeToolsUnauthenticated(partials)\n}\n\nfunc (m *Model) executeToolsUnauthenticated(partials []partialTool) []config.ToolCallEntry {\n\t// ... existing executeTools body (renamed) ...\n}"
+                    ],
+                    "acceptance": [
+                        "When no authorization is needed, behavior is identical to before. When authorization is needed, returns nil and sets authorizationCtx"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "3.4",
+                    "name": "Handle authorization response in stream event loop",
+                    "layer": "Application",
+                    "what": "In handleStreamEvent, after executeTools returns nil (authorization needed), transition to ModeAuthorize. After user responds: if Accepted \u2192 execute that single tool, check next tool. If Rejected or WithInstructions \u2192 mark remaining tools as cancelled, build entries with appropriate error/result, resume stream. If instructions attached \u2192 inject synthetic user message before resuming.",
+                    "why": "This is the core state transition: stream pauses \u2192 user decides \u2192 stream resumes with modified context.",
+                    "files": [
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "// In handleStreamEvent, after tool_calls stop reason:\ntoolEntries := (&m).executeTools(m.stream.partialTools)\nif toolEntries == nil {\n\t// Authorization needed \u2014 pause the stream in ModeAuthorize\n\t(&m).setAuthMode()\n\tm.updateViewportContent()\n\treturn m, nil // no new command \u2014 waiting for user key\n}\n\n// setAuthMode switches to authorization mode\nfunc (m *Model) setAuthMode() {\n\tm.mode = ModeAuthorize\n\tm.stream.active = false // stop waiting for stream events\n\tm.textarea.Placeholder = \"press y/n to proceed, tab for instructions...\"\n}\n\n// handleAuthorizationResponse executes after user confirms/rejects\nfunc (m *Model) handleAuthorizationResponse(result AuthResult, instructions string) ([]config.ToolCallEntry, bool) {\n\tctx := m.stream.authorizationCtx\n\tidx := m.stream.pendingToolIndex\n\tpartials := m.stream.partialTools\n\tentries := make([]config.ToolCallEntry, len(partials))\n\n\tif result == AuthAccepted || result == AuthAcceptedWithInstructions {\n\t\t// Execute the pending tool\n\t\t// ... (single tool execution logic) ...\n\t\tentries[idx] = executedEntry\n\n\t\t// If instructions were given, cancel remaining tools and signal resume-with-injection\n\t\tif result == AuthAcceptedWithInstructions {\n\t\t\tfor j := idx + 1; j < len(partials); j++ {\n\t\t\t\tentries[j] = config.ToolCallEntry{\n\t\t\t\t\tID: partials[j].id,\n\t\t\t\t\tInstruction: struct{...}{Name: partials[j].name, Arguments: partials[j].args},\n\t\t\t\t\tExecution: struct{...}{\n\t\t\t\t\t\tStatus: ResultStatusError,\n\t\t\t\t\t\tError:  \"cancelled: user provided instructions before this tool could execute\",\n\t\t\t\t\t},\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn entries, true // true = inject user message\n\t\t}\n\t\t// Continue to next tool (check if it also needs auth)\n\t\t// ... recursive or iterative check ...\n\t} else {\n\t\t// Rejected\n\t\tentries[idx] = config.ToolCallEntry{\n\t\t\t// ... with error \"rejected by user\" ...\n\t\t}\n\t\t// Cancel remaining\n\t\tfor j := idx + 1; j < len(partials); j++ {\n\t\t\t// ... cancelled ...\n\t\t}\n\t\treturn entries, result == AuthRejectedWithInstructions\n\t}\n}"
+                    ],
+                    "acceptance": [
+                        "Accepted tools execute, rejected tools return error, instructions trigger synthetic message injection, remaining tools are cancelled"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "3.5",
+                    "name": "Inject synthetic user message on instruction-attached authorization",
+                    "layer": "Application",
+                    "what": "When authorization resolves with instructions, append a synthetic user message to the session containing the user's instructions, then resume streaming via startStream().",
+                    "why": "Breaks the assistant turn with user context, allowing the LLM to adjust its behavior before continuing.",
+                    "files": [
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "func (m *Model) injectAndResume(instructions string) (tea.Model, tea.Cmd) {\n\t// Append user message with instructions\n\tuserMsg := config.Message{\n\t\tID:        fmt.Sprintf(\"msg_%d\", len(m.session.file.Messages)+1),\n\t\tRole:      config.RoleUser,\n\t\tCreatedAt: time.Now(),\n\t\tText:      instructions,\n\t\tInputTokens: countTokensApprox(instructions),\n\t}\n\tm.session.appendMsg(userMsg)\n\n\t// Reset authorization state\n\tm.stream.authorizationCtx = nil\n\tm.stream.pendingToolIndex = -1\n\n\t// Resume stream\n\treturn (&m).startStream()\n}"
+                    ],
+                    "acceptance": [
+                        "User message appears in session, stream resumes with the new message in context"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "4",
+            "name": "Authorization UI",
+            "pattern": [
+                "Overlay Mode / State Machine"
+            ],
+            "objective": "Build the authorization prompt that appears in the status bar area: yes/no selection with arrow keys, tab to switch to instruction input, shift+tab to return to yes/no, enter to submit.",
+            "success": "The authorization overlay renders in the status line area. User can navigate between yes/no, switch to text input, and submit. All keybindings work correctly and transition back to streaming or chat mode.",
+            "diagram": "ModeAuthorize \u2192 render overlay (status line): [\u2190] Yes / No [\u2192] \u2190\u2192 arrows, tab for text, enter to submit \u2192 user key event \u2192 if text mode: textarea input \u2192 if yes/no mode: arrow selection \u2192 enter: resolve authorization \u2192 resume stream or chat",
+            "tasks": [
+                {
+                    "number": "4.1",
+                    "name": "Add ModeAuthorize to modes",
+                    "layer": "Interface",
+                    "what": "Add ModeAuthorize to the Mode enum in internal/app/modes.go and its String() method.",
+                    "why": "Needed for the routing in Update/View to handle the authorization overlay as a distinct mode.",
+                    "files": [
+                        "~ internal/app/modes.go"
+                    ],
+                    "snippet": [
+                        "const (\n\tModeChat          Mode = iota\n\tModeStreaming\n\tModeModelPicker\n\tModeHelp\n\tModeFilePicker\n\tModeSessionPicker\n\tModeSavePrompt\n\tModeHistorySearch\n\tModeAuthorize   // awaiting user authorization for tool execution\n)\n\nfunc (m Mode) String() string {\n\tswitch m {\n\t// ...\n\tcase ModeAuthorize:\n\t\treturn \"authorize\"\n\t// ...\n\t}"
+                    ],
+                    "acceptance": [
+                        "ModeAuthorize compiles, String() returns \"authorize\""
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "4.2",
+                    "name": "Build authorization prompt component",
+                    "layer": "Interface",
+                    "what": "Create internal/ui/authorization.go with an AuthorizationPrompt struct that renders the yes/no prompt in the status bar area. Tracks selection (yes=0, no=1) and text mode (false=yes/no, true=text input).",
+                    "why": "Encapsulates the authorization UI: the prompt line showing tool name + args, the yes/no selection, and the text input for instructions.",
+                    "files": [
+                        "+ internal/ui/authorization.go"
+                    ],
+                    "snippet": [
+                        "package ui\n\nimport (\n\t\"fmt\"\n\t\"github.com/charmbracelet/lipgloss\"\n\t\"squid-os/internal/style\"\n)\n\ntype AuthorizationPrompt struct {\n\tToolName       string\n\tArgsJSON       string\n\tDisplayValue   string\n\tIsDestructive  bool\n\tSelection      int // 0=yes, 1=no\n\tTextMode       bool // true = typing instructions\n\tTextInput      string\n\tWidth          int\n}\n\nfunc (p AuthorizationPrompt) Render() string {\n\twidth := p.Width\n\tif width == 0 {\n\t\twidth = 80\n\t}\n\n\t// Build prompt line\n\tlabel := p.ToolName\n\tif p.DisplayValue != \"\" {\n\t\tlabel = fmt.Sprintf(\"%s(%s)\", p.ToolName, truncate(p.DisplayValue, 40))\n\t}\n\n\tvar destructiveIcon string\n\tif p.IsDestructive {\n\t\tdestructiveIcon = \"\u26a0 \"\n\t}\n\n\tvar prompt string\n\tif p.TextMode {\n\t\tprompt = fmt.Sprintf(\"%sProceed with %s? [%s] Type instructions...\", \n\t\t\tdestructiveIcon, label, \n\t\t\tp.selectedLabel())\n\t} else {\n\t\tprompt = fmt.Sprintf(\"%sProceed with %s? [%s]es / [N]o / [T]ab for instructions\",\n\t\t\tdestructiveIcon, label, p.selectedLabel())\n\t}\n\n\t// Style: highlight selected option\n\tyesStyle := style.SelectionStyle.Render(\"Yes\")\n\tnoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(\"240\")).Render(\"No\")\n\tif p.Selection == 0 {\n\t\tyesStyle = style.SelectionStyle.Render(\"Yes\")\n\t} else {\n\t\tnoStyle = style.SelectionStyle.Render(\"No\")\n\t}\n\n\treturn style.StatusLineStyle.Width(width).Render(fmt.Sprintf(\n\t\t\"  %s  %s / %s  %s\",\n\t\tlabel,\n\t\tyesStyle,\n\t\tnoStyle,\n\t\tpromptSuffix(p.TextMode),\n\t))\n}\n\nfunc (p AuthorizationPrompt) selectedLabel() string {\n\tif p.Selection == 0 {\n\t\treturn \"Y\"\n\t}\n\treturn \"N\"\n}\n\nfunc (p AuthorizationPrompt) promptSuffix(textMode bool) string {\n\tif textMode {\n\t\treturn \"\u2190 enter to submit, shift+tab to review\"\n\t}\n\treturn \"\u2190\u2192 select \u00b7 tab for instructions \u00b7 enter to confirm\"\n}"
+                    ],
+                    "acceptance": [
+                        "Component renders correctly, shows tool name, yes/no selection, and instruction hint"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "4.3",
+                    "name": "Add authorization prompt field to Model",
+                    "layer": "Interface",
+                    "what": "Add authPrompt ui.AuthorizationPrompt to the Model struct in app.go. Populate it from authorizationCtx when entering ModeAuthorize.",
+                    "why": "The Model needs to hold the authorization prompt state so it can render and handle input.",
+                    "files": [
+                        "~ internal/app/app.go"
+                    ],
+                    "snippet": [
+                        "// In Model struct:\n\tauthPrompt ui.AuthorizationPrompt // authorization prompt state\n\n// In setAuthMode():\nfunc (m *Model) setAuthMode() {\n\tm.mode = ModeAuthorize\n\tm.stream.active = false\n\tctx := m.stream.authorizationCtx\n\tm.authPrompt = ui.AuthorizationPrompt{\n\t\tToolName:      ctx.ToolName,\n\t\tArgsJSON:      ctx.ArgsJSON,\n\t\tDisplayValue:  ctx.DisplayValue,\n\t\tIsDestructive: ctx.IsDestructive,\n\t\tSelection:     0, // default to Yes\n\t\tWidth:         m.width,\n\t}\n}"
+                    ],
+                    "acceptance": [
+                        "authPrompt is populated from authorizationCtx, setAuthMode initializes it"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "4.4",
+                    "name": "Render authorization overlay in View",
+                    "layer": "Interface",
+                    "what": "In render.go View(), add a case for ModeAuthorize that renders authPrompt instead of the textarea, replacing the status line area.",
+                    "why": "The authorization prompt replaces the input area during authorization, making it the primary interaction point.",
+                    "files": [
+                        "~ internal/app/render.go"
+                    ],
+                    "snippet": [
+                        "// In View(), after the mode switch for overlays:\ncase ModeAuthorize:\n\tsections = append(sections, m.authPrompt.Render())\n\n// Skip textarea in auth mode\nif m.mode != ModeAuthorize {\n\tsections = append(sections, m.textarea.View())\n}"
+                    ],
+                    "acceptance": [
+                        "In ModeAuthorize, the authorization prompt replaces the textarea in the layout"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "4.5",
+                    "name": "Handle authorization key input",
+                    "layer": "Interface",
+                    "what": "Add handleAuthorizeKey to input.go: Left/Right arrows toggle Yes/No, Tab switches to text mode, Shift+Tab returns to yes/no, Enter submits. In text mode: normal text input, Enter submits with text, Shift+Tab returns to yes/no.",
+                    "why": "Routes authorization key events to the correct action: selecting yes/no, switching to text, or submitting.",
+                    "files": [
+                        "~ internal/app/input.go"
+                    ],
+                    "snippet": [
+                        "func (m Model) handleAuthorizeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {\n\tvar result app.AuthResult\n\n\tswitch {\n\tcase key.Matches(msg, keys.Left):\n\t\tif !m.authPrompt.TextMode {\n\t\t\tm.authPrompt.Selection = 0 // Yes\n\t\t\tm.updateViewportContent()\n\t\t\treturn m, nil\n\t\t}\n\tcase key.Matches(msg, keys.Right):\n\t\tif !m.authPrompt.TextMode {\n\t\t\tm.authPrompt.Selection = 1 // No\n\t\t\tm.updateViewportContent()\n\t\t\treturn m, nil\n\t\t}\n\n\tcase msg.Type == tea.KeyTab && !msg.Modifiers.Contains(tea.ModShift):\n\t\t// Tab \u2192 switch to text mode\n\t\tm.authPrompt.TextMode = true\n\t\treturn m, nil\n\n\tcase msg.Type == tea.KeyTab && msg.Modifiers.Contains(tea.ModShift):\n\t\t// Shift+Tab \u2192 return to yes/no mode\n\t\tm.authPrompt.TextMode = false\n\t\treturn m, nil\n\n\tcase key.Matches(msg, keys.Send):\n\t\tif m.authPrompt.TextMode {\n\t\t\t// Submit with text\n\t\t\ttext := m.authPrompt.TextInput\n\t\t\tif m.authPrompt.Selection == 0 {\n\t\t\t\tresult = app.AuthAcceptedWithInstructions\n\t\t\t} else {\n\t\t\t\tresult = app.AuthRejectedWithInstructions\n\t\t\t}\n\t\t\treturn m.resolveAuthorization(result, text)\n\t\t} else {\n\t\t\t// Submit yes/no without text\n\t\t\tif m.authPrompt.Selection == 0 {\n\t\t\t\tresult = app.AuthAccepted\n\t\t\t} else {\n\t\t\t\tresult = app.AuthRejected\n\t\t\t}\n\t\t\treturn m.resolveAuthorization(result, \"\")\n\t\t}\n\n\tdefault:\n\t\tif m.authPrompt.TextMode && msg.Type == tea.KeyRunes {\n\t\t\tm.authPrompt.TextInput += string(msg.Runes)\n\t\t\treturn m, nil\n\t\t} else if m.authPrompt.TextMode && msg.Type == tea.KeyBackspace {\n\t\t\ttext := m.authPrompt.TextInput\n\t\t\tif len(text) > 0 {\n\t\t\t\trunes := []rune(text)\n\t\t\t\tm.authPrompt.TextInput = string(runes[:len(runes)-1])\n\t\t\t}\n\t\t\treturn m, nil\n\t\t}\n\t}\n\treturn m, nil\n}"
+                    ],
+                    "acceptance": [
+                        "Left/Right toggles selection, Tab enters text mode, Shift+Tab exits text mode, Enter resolves. Text input works in text mode."
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "4.6",
+                    "name": "Wire authorization mode in Update dispatch",
+                    "layer": "Interface",
+                    "what": "In update.go handleKey, add case for ModeAuthorize \u2192 handleAuthorizeKey. In handleStreamEvent, when executeTools returns nil, transition to ModeAuthorize.",
+                    "why": "Wires the authorization mode into the main event loop so it can intercept and respond to key events.",
+                    "files": [
+                        "~ internal/app/update.go"
+                    ],
+                    "snippet": [
+                        "func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {\n\tswitch m.mode {\n\t// ...\n\tcase ModeAuthorize:\n\t\treturn m.handleAuthorizeKey(msg)\n\t// ...\n\t}"
+                    ],
+                    "acceptance": [
+                        "Authorization mode is dispatched in handleKey, key events reach handleAuthorizeKey"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "5",
+            "name": "System Prompt Update",
+            "pattern": [
+                "Instruction Injection"
+            ],
+            "objective": "Update the system prompt so the LLM knows it must set the destructive field on every bash call, and understands the semantics of what makes a command destructive.",
+            "success": "System prompt clearly defines destructive vs read-only bash commands. LLM consistently sets the correct value.",
+            "diagram": "sys-prompt.go \u2192 DefaultAssistantPrompt() includes new bash destructive field instructions \u2192 injected into every API request as system message",
+            "tasks": [
+                {
+                    "number": "5.1",
+                    "name": "Update system prompt for destructive field",
+                    "layer": "Infrastructure",
+                    "what": "Add a new section to the default system prompt in internal/config/sys-prompt.go explaining the destructive field for bash: when to set true, when to set false, and that the field is required.",
+                    "why": "The LLM needs explicit instructions to populate the required destructive field correctly on every bash call.",
+                    "files": [
+                        "~ internal/config/sys-prompt.go"
+                    ],
+                    "snippet": [
+                        "## Bash Tool\n- The bash tool requires a \"destructive\" boolean parameter on every call.\n- Set destructive: true if the command modifies files, deletes data, creates directories, installs packages, or changes system state (e.g., rm, mv, cp, mkdir, chmod, apt-get, pip install, git commit, sed -i).\n- Set destructive: false for read-only commands (e.g., cat, ls, grep, find, git status, git diff, wc, head, tail, df, ps, curl GET).\n- Omitting the destructive field will result in an error."
+                    ],
+                    "acceptance": [
+                        "System prompt contains clear destructive field instructions for bash, examples of true and false cases"
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "6",
+            "name": "Resolve Authorization Response",
+            "pattern": [
+                "State Machine / Post-Action Routing"
+            ],
+            "objective": "After the user responds to an authorization prompt, execute or reject the tool, handle remaining pending calls, and route back to either continued tool authorization or stream resume.",
+            "success": "resolveAuthorization handles all four result types (Accepted, Rejected, AcceptedWithInstructions, RejectedWithInstructions). Pending tools are cancelled when instructions are injected. Stream resumes correctly with or without injected user message.",
+            "diagram": "handleAuthorizeKey Enter \u2192 resolveAuthorization(result, instructions) \u2192 if Accepted: execute tool \u2192 check next partial (needs auth? \u2192 ModeAuthorize again / no \u2192 continue) \u2192 if WithInstructions: cancel remaining, inject user msg, startStream \u2192 if Rejected: mark rejected, cancel remaining, resume stream",
+            "tasks": [
+                {
+                    "number": "6.1",
+                    "name": "Implement resolveAuthorization",
+                    "layer": "Application",
+                    "what": "Add resolveAuthorization method to Model in stream.go. Handles the four auth results: execute+continue for Accepted, mark error for Rejected, execute+cancel+inject for AcceptedWithInstructions, mark error+cancel+inject for RejectedWithInstructions.",
+                    "why": "This is the core post-authorization logic that determines what happens after the user responds \u2014 the branching point between continuing, cancelling, and injecting context.",
+                    "files": [
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "func (m *Model) resolveAuthorization(result AuthResult, instructions string) (tea.Model, tea.Cmd) {\n\tctx := m.stream.authorizationCtx\n\tidx := m.stream.pendingToolIndex\n\tpartials := m.stream.partialTools\n\tentries := make([]config.ToolCallEntry, len(partials))\n\n\tfor i, p := range partials {\n\t\tentries[i] = config.ToolCallEntry{\n\t\t\tID: p.id, Type: p.typeStr,\n\t\t\tInstruction: struct{...}{Name: p.name, Arguments: p.args, Tokens: countTokensApprox(p.args)},\n\t\t}\n\t}\n\n\tswitch result {\n\tcase AuthAccepted:\n\t\tentries[idx] = m.executeSingleTool(partials[idx])\n\t\t// Save assistant message with this entry, then check next tools\n\t\treturn m.continueAfterAuth(entries, false, \"\")\n\n\tcase AuthRejected:\n\t\tentries[idx].Execution.Status = tools.ResultStatusError\n\t\tentries[idx].Execution.Error = \"rejected by user \u2014 tool was not executed\"\n\t\t// Cancel remaining\n\t\tfor j := idx + 1; j < len(partials); j++ {\n\t\t\tentries[j].Execution.Status = tools.ResultStatusError\n\t\t\tentries[j].Execution.Error = \"cancelled: previous tool was rejected by user\"\n\t\t}\n\t\treturn m.continueAfterAuth(entries, false, \"\")\n\n\tcase AuthAcceptedWithInstructions:\n\t\tentries[idx] = m.executeSingleTool(partials[idx])\n\t\tfor j := idx + 1; j < len(partials); j++ {\n\t\t\tentries[j].Execution.Status = tools.ResultStatusError\n\t\t\tentries[j].Execution.Error = \"cancelled: user provided instructions before this tool could execute\"\n\t\t}\n\t\treturn m.continueAfterAuth(entries, true, instructions)\n\n\tcase AuthRejectedWithInstructions:\n\t\tentries[idx].Execution.Status = tools.ResultStatusError\n\t\tentries[idx].Execution.Error = \"rejected by user \u2014 tool was not executed\"\n\t\tfor j := idx + 1; j < len(partials); j++ {\n\t\t\tentries[j].Execution.Status = tools.ResultStatusError\n\t\t\tentries[j].Execution.Error = \"cancelled: user provided instructions\"\n\t\t}\n\t\treturn m.continueAfterAuth(entries, true, instructions)\n\t}\n\treturn m, nil\n}"
+                    ],
+                    "acceptance": [
+                        "All four auth results are handled correctly. Single tool executes on accept, error on reject. Remaining tools cancelled on instructions. Stream resumes or user message injected."
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                },
+                {
+                    "number": "6.2",
+                    "name": "Implement executeSingleTool and continueAfterAuth",
+                    "layer": "Application",
+                    "what": "Add executeSingleTool (extracted from old executeTools batch logic, for one partial) and continueAfterAuth (saves the assistant message with all entries, injects user message if needed, and either resumes stream or checks next tool for authorization).",
+                    "why": "Factored from executeTools so a single tool can be executed outside the batch, and the post-authorization flow can decide whether to resume streaming or continue checking more tools.",
+                    "files": [
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "func (m *Model) executeSingleTool(p partialTool) config.ToolCallEntry {\n\ttool := m.toolReg.Get(p.name)\n\tvar args map[string]interface{}\n\tif p.args != \"\" {\n\t\t_ = json.Unmarshal([]byte(p.args), &args)\n\t}\n\t// ... checksum validation from tracker ...\n\tresultStart := time.Now()\n\tresult := tool.Execute(args)\n\tentry := config.ToolCallEntry{\n\t\tID: p.id, Type: p.typeStr,\n\t\tInstruction: struct{...}{Name: p.name, Arguments: p.args, Tokens: countTokensApprox(p.args)},\n\t\tExecution: struct{...}{\n\t\t\tStatus: result.Status, Result: result.Result, Error: result.Error,\n\t\t\tTokens: countTokensApprox(result.Result),\n\t\t\tDurationMs: time.Since(resultStart).Milliseconds(),\n\t\t\tFiles: result.Files,\n\t\t},\n\t}\n\t// Handle set_working_dir side effect\n\tif p.name == \"set_working_dir\" && result.Status == tools.ResultStatusSuccess {\n\t\tif pathVal, ok := args[\"path\"].(string); ok {\n\t\t\tm.applyWorkingDir(pathVal)\n\t\t}\n\t}\n\treturn entry\n}\n\nfunc (m *Model) continueAfterAuth(entries []config.ToolCallEntry, injectUserMsg bool, instructions string) (tea.Model, tea.Cmd) {\n\t// Check if there are more tools that need authorization\n\tif !injectUserMsg {\n\t\t// Check remaining tools after the one we just handled\n\t\tnextIdx := m.stream.pendingToolIndex + 1\n\t\tif nextIdx < len(m.stream.partialTools) {\n\t\t\tremaining := m.stream.partialTools[nextIdx:]\n\t\t\t// Check if any remaining unexecuted tool needs auth\n\t\t\t// ... if yes, set authorizationCtx for next, stay in ModeAuthorize\n\t\t\t// ... if no, execute remaining + merge with entries, save assistant msg, resume stream\n\t\t}\n\t}\n\n\t// Save assistant message with all tool entries\n\t(&m).appendAssistantMsg(config.Message{\n\t\tID: fmt.Sprintf(\"msg_%d\", len(m.session.file.Messages)+1),\n\t\tRole: config.RoleAssistant,\n\t\t// ... metrics from stream ...\n\t\tToolCalls: entries,\n\t\tStopReason: \"tool_calls\",\n\t})\n\n\tm.stream.authorizationCtx = nil\n\tm.stream.pendingToolIndex = -1\n\n\tif injectUserMsg && instructions != \"\" {\n\t\treturn m.injectAndResume(instructions)\n\t}\n\treturn (&m).startStream()\n}"
+                    ],
+                    "acceptance": [
+                        "Single tool execution mirrors batch behavior. continueAfterAuth saves message, handles injection, and resumes stream. Remaining tools are checked for authorization."
+                    ],
+                    "verify": [
+                        "cd /home/goglue/src/squid-os && go build ./..."
+                    ]
+                }
+            ]
         }
-      ]
-    },
-    {
-      "number": "2",
-      "name": "Destructive Bash",
-      "pattern": [
-        "Schema Extension"
-      ],
-      "objective": "Add a required destructive boolean field to the bash tool schema so the LLM must declare whether a command modifies disk state.",
-      "success": "Bash tool schema requires destructive field, returns error if omitted. Tool tracks destructiveness on the result.",
-      "diagram": "LLM \u2192 bash({\"command\": \"rm -rf ...\", \"destructive\": true}) \u2192 schema validates required field \u2192 Execute checks destructiveness \u2192 ToolResult carries Destructive flag",
-      "tasks": [
-        {
-          "number": "2.1",
-          "name": "Add destructive to bash schema",
-          "layer": "Infrastructure",
-          "what": "Add destructive (boolean, required) to the bash tool JSON schema in internal/tools/bash.go.",
-          "why": "The LLM must explicitly declare whether a bash command modifies files or system state. No default \u2014 omitting it returns an error.",
-          "files": [
-            "~ internal/tools/bash.go"
-          ],
-          "snippet": [
-            "\"properties\": {\n\t\"command\": {\n\t\t\"type\": \"string\",\n\t\t\"description\": \"The shell command to execute\"\n\t},\n\t\"timeout\": {\n\t\t\"type\": \"number\",\n\t\t\"description\": \"Timeout in milliseconds (default 120000)\"\n\t},\n\t\"destructive\": {\n\t\t\"type\": \"boolean\",\n\t\t\"description\": \"Must be true if the command modifies files, deletes data, or changes system state. Must be false for read-only commands (cat, ls, grep, find, git status, etc.). This field is required.\"\n\t}\n},\n\"required\": [\"command\", \"destructive\"]"
-          ],
-          "acceptance": [
-            "Schema is valid JSON, destructive is required, omitting it causes a validation error"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "2.2",
-          "name": "Add Destructive field to ToolResult",
-          "layer": "Infrastructure",
-          "what": "Add Destructive bool to ToolResult struct in internal/tools/tools.go. Set it from args[\"destructive\"] in the bash Execute function.",
-          "why": "The authorization gate needs to know at execution time whether a tool is destructive, before running it.",
-          "files": [
-            "~ internal/tools/tools.go",
-            "~ internal/tools/bash.go"
-          ],
-          "snippet": [
-            "type ToolResult struct {\n\tStatus    string             // ...\n\tResult    string             // ...\n\tError     string             // ...\n\tDestructive bool             // true if this tool modifies disk state\n\tFiles     []config.FileEntry // ...\n}\n\n// In bash Execute:\ndestructive, ok := args[\"destructive\"].(bool)\nif !ok {\n\treturn ToolResult{Status: ResultStatusError, Error: \"destructive is required and must be a boolean\"}\n}\n// ... after execution ...\nreturn ToolResult{Status: ResultStatusSuccess, Result: result.String(), Destructive: destructive}"
-          ],
-          "acceptance": [
-            "Destructive field populated on bash results, error returned when omitted"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "2.3",
-          "name": "Mark inherently destructive tools",
-          "layer": "Infrastructure",
-          "what": "Add IsDestructive func()bool to the Tool struct. Set it true for write_file, edit_file, skill_build. Bash uses the runtime destructive arg.",
-          "why": "The authorization gate needs a pre-execution way to determine if a tool is destructive, without running it first. For file tools, destructiveness is static. For bash, it comes from the args.",
-          "files": [
-            "~ internal/tools/tools.go"
-          ],
-          "snippet": [
-            "type Tool struct {\n\t// ... existing fields ...\n\tIsDestructive func(args map[string]interface{}) bool // nil = never destructive\n}\n\nvar WriteFile = Tool{\n\t// ...\n\tIsDestructive: func(args map[string]interface{}) bool { return true },\n}\n\nvar EditFile = Tool{\n\t// ...\n\tIsDestructive: func(args map[string]interface{}) bool { return true },\n}\n\nvar SkillBuild = Tool{\n\t// ...\n\tIsDestructive: func(args map[string]interface{}) bool { return true },\n}\n\nvar Bash = Tool{\n\t// ...\n\tIsDestructive: func(args map[string]interface{}) bool {\n\t\td, ok := args[\"destructive\"].(bool)\n\t\treturn ok && d\n\t},\n}"
-          ],
-          "acceptance": [
-            "write_file, edit_file, skill_build always report destructive. bash reports based on args. read_file, skill_load, skill_list, set_working_dir, open report false"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "3",
-      "name": "Authorization Gate",
-      "pattern": [
-        "Guard Clause / Interrupt"
-      ],
-      "objective": "Intercept tool execution in the stream loop. When authorization mode requires it, pause and ask the user before executing. On rejection, cancel pending tool calls.",
-      "success": "In ask-on-write mode, destructive tools pause for confirmation, read-only tools auto-execute. In ask-for-all, every tool pauses. Rejected or instruction-annotated tools cancel remaining pending calls and resume stream.",
-      "diagram": "Stream \u2192 tool_calls stop \u2192 iterate partialTools \u2192 check authorization needed? \u2192 yes: enter ModeAuthorize \u2192 user responds (y/n + optional instructions) \u2192 execute tool or reject \u2192 if instructions injected: cancel remaining tools, resume stream immediately. else: continue to next tool",
-      "tasks": [
-        {
-          "number": "3.1",
-          "name": "Add authorization types and constants",
-          "layer": "Domain",
-          "what": "Create internal/app/authorization.go with AuthorizationResult enum (Accepted, Rejected, AcceptedWithInstructions) and AuthorizationContext struct holding the pending tool, args, user instructions, and result.",
-          "why": "Encapsulates the authorization state machine: what tool is pending, what the user responded, and whether extra instructions were provided.",
-          "files": [
-            "+ internal/app/authorization.go"
-          ],
-          "snippet": [
-            "package app\n\ntype AuthResult int\nconst (\n\tAuthAccepted           AuthResult = iota // plain yes\n\tAuthRejected                            // plain no\n\tAuthAcceptedWithInstructions            // yes + instructions\n\tAuthRejectedWithInstructions            // no + instructions\n)\n\ntype AuthorizationContext struct {\n\tToolName        string                  // tool being authorized\n\tArgs            map[string]interface{}  // parsed args for display\n\tArgsJSON        string                  // raw args for display\n\tDisplayValue    string                  // from tool.DisplayParam\n\tResult          AuthResult\n\tUserInstructions string                // optional text the user attached\n\tIsDestructive   bool\n}\n\nfunc (c *AuthorizationContext) IsActionable() bool {\n\treturn c.Result != 0\n}"
-          ],
-          "acceptance": [
-            "Struct and types compile, provides all fields needed by the UI and execution logic"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "3.2",
-          "name": "Add authorization mode to streamState",
-          "layer": "Application",
-          "what": "Add authorizationContext field to streamState in stream.go. Add pendingToolIndex int to track which partialTool is being authorized. Add needsAuthorization helper method on Model.",
-          "why": "The stream loop needs to know when it's paused waiting for user authorization and which tool is pending.",
-          "files": [
-            "~ internal/app/stream.go"
-          ],
-          "snippet": [
-            "// In streamState struct:\n\tauthorizationCtx *AuthorizationContext // non-nil when paused awaiting auth\n\tpendingToolIndex int                   // index into partialTools being authorized\n\n// In Model:\nfunc (m Model) needsAuthorization(tool *tools.Tool, args map[string]interface{}) bool {\n\tauthMode := m.settings.ValidateAuthorization()\n\tswitch authMode {\n\tcase config.AuthorizationAskForAll:\n\t\treturn true\n\tcase config.AuthorizationAskOnWrite:\n\t\tif tool != nil && tool.IsDestructive != nil {\n\t\t\treturn tool.IsDestructive(args)\n\t\t}\n\t\treturn false\n\tdefault: // auto\n\t\treturn false\n\t}\n}"
-          ],
-          "acceptance": [
-            "needsAuthorization returns true for all tools in ask-for-all, only destructive in ask-on-write, nothing in auto"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "3.3",
-          "name": "Refactor executeTools to support authorization interruption",
-          "layer": "Application",
-          "what": "Rewrite executeTools in stream.go to check authorization before each tool execution. If authorization is needed, return a single AuthorizationContext and the caller (handleStreamEvent) pauses the stream. Remaining tools are left unexecuted until the user responds.",
-          "why": "Currently executeTools runs all tools in a batch. With authorization, we must process one at a time and potentially pause for user input, canceling remaining tools on rejection or instruction injection.",
-          "files": [
-            "~ internal/app/stream.go"
-          ],
-          "snippet": [
-            "func (m *Model) executeTools(partials []partialTool) []config.ToolCallEntry {\n\t// Phase 1: Determine if any tool needs authorization\n\tfor i, p := range partials {\n\t\ttool := m.toolReg.Get(p.name)\n\t\tvar args map[string]interface{}\n\t\tif p.args != \"\" {\n\t\t\t_ = json.Unmarshal([]byte(p.args), &args)\n\t\t}\n\t\tif m.needsAuthorization(tool, args) {\n\t\t\t// Pause here \u2014 set up authorization context\n\t\t\tisDestructive := false\n\t\t\tif tool != nil && tool.IsDestructive != nil {\n\t\t\t\tisDestructive = tool.IsDestructive(args)\n\t\t\t}\n\t\t\tm.stream.authorizationCtx = &AuthorizationContext{\n\t\t\t\tToolName:       p.name,\n\t\t\t\tArgs:           args,\n\t\t\t\tArgsJSON:       p.args,\n\t\t\t\tDisplayValue:   tool.DisplayValue(p.args),\n\t\t\t\tIsDestructive:  isDestructive,\n\t\t\t}\n\t\t\tm.stream.pendingToolIndex = i\n\t\t\treturn nil // nil signals caller to enter authorization mode\n\t\t}\n\t}\n\t// Phase 2: No authorization needed \u2014 execute all (existing logic)\n\treturn m.executeToolsUnauthenticated(partials)\n}\n\nfunc (m *Model) executeToolsUnauthenticated(partials []partialTool) []config.ToolCallEntry {\n\t// ... existing executeTools body (renamed) ...\n}"
-          ],
-          "acceptance": [
-            "When no authorization is needed, behavior is identical to before. When authorization is needed, returns nil and sets authorizationCtx"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "3.4",
-          "name": "Handle authorization response in stream event loop",
-          "layer": "Application",
-          "what": "In handleStreamEvent, after executeTools returns nil (authorization needed), transition to ModeAuthorize. After user responds: if Accepted \u2192 execute that single tool, check next tool. If Rejected or WithInstructions \u2192 mark remaining tools as cancelled, build entries with appropriate error/result, resume stream. If instructions attached \u2192 inject synthetic user message before resuming.",
-          "why": "This is the core state transition: stream pauses \u2192 user decides \u2192 stream resumes with modified context.",
-          "files": [
-            "~ internal/app/stream.go"
-          ],
-          "snippet": [
-            "// In handleStreamEvent, after tool_calls stop reason:\ntoolEntries := (&m).executeTools(m.stream.partialTools)\nif toolEntries == nil {\n\t// Authorization needed \u2014 pause the stream in ModeAuthorize\n\t(&m).setAuthMode()\n\tm.updateViewportContent()\n\treturn m, nil // no new command \u2014 waiting for user key\n}\n\n// setAuthMode switches to authorization mode\nfunc (m *Model) setAuthMode() {\n\tm.mode = ModeAuthorize\n\tm.stream.active = false // stop waiting for stream events\n\tm.textarea.Placeholder = \"press y/n to proceed, tab for instructions...\"\n}\n\n// handleAuthorizationResponse executes after user confirms/rejects\nfunc (m *Model) handleAuthorizationResponse(result AuthResult, instructions string) ([]config.ToolCallEntry, bool) {\n\tctx := m.stream.authorizationCtx\n\tidx := m.stream.pendingToolIndex\n\tpartials := m.stream.partialTools\n\tentries := make([]config.ToolCallEntry, len(partials))\n\n\tif result == AuthAccepted || result == AuthAcceptedWithInstructions {\n\t\t// Execute the pending tool\n\t\t// ... (single tool execution logic) ...\n\t\tentries[idx] = executedEntry\n\n\t\t// If instructions were given, cancel remaining tools and signal resume-with-injection\n\t\tif result == AuthAcceptedWithInstructions {\n\t\t\tfor j := idx + 1; j < len(partials); j++ {\n\t\t\t\tentries[j] = config.ToolCallEntry{\n\t\t\t\t\tID: partials[j].id,\n\t\t\t\t\tInstruction: struct{...}{Name: partials[j].name, Arguments: partials[j].args},\n\t\t\t\t\tExecution: struct{...}{\n\t\t\t\t\t\tStatus: ResultStatusError,\n\t\t\t\t\t\tError:  \"cancelled: user provided instructions before this tool could execute\",\n\t\t\t\t\t},\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn entries, true // true = inject user message\n\t\t}\n\t\t// Continue to next tool (check if it also needs auth)\n\t\t// ... recursive or iterative check ...\n\t} else {\n\t\t// Rejected\n\t\tentries[idx] = config.ToolCallEntry{\n\t\t\t// ... with error \"rejected by user\" ...\n\t\t}\n\t\t// Cancel remaining\n\t\tfor j := idx + 1; j < len(partials); j++ {\n\t\t\t// ... cancelled ...\n\t\t}\n\t\treturn entries, result == AuthRejectedWithInstructions\n\t}\n}"
-          ],
-          "acceptance": [
-            "Accepted tools execute, rejected tools return error, instructions trigger synthetic message injection, remaining tools are cancelled"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "3.5",
-          "name": "Inject synthetic user message on instruction-attached authorization",
-          "layer": "Application",
-          "what": "When authorization resolves with instructions, append a synthetic user message to the session containing the user's instructions, then resume streaming via startStream().",
-          "why": "Breaks the assistant turn with user context, allowing the LLM to adjust its behavior before continuing.",
-          "files": [
-            "~ internal/app/stream.go"
-          ],
-          "snippet": [
-            "func (m *Model) injectAndResume(instructions string) (tea.Model, tea.Cmd) {\n\t// Append user message with instructions\n\tuserMsg := config.Message{\n\t\tID:        fmt.Sprintf(\"msg_%d\", len(m.session.file.Messages)+1),\n\t\tRole:      config.RoleUser,\n\t\tCreatedAt: time.Now(),\n\t\tText:      instructions,\n\t\tInputTokens: countTokensApprox(instructions),\n\t}\n\tm.session.appendMsg(userMsg)\n\n\t// Reset authorization state\n\tm.stream.authorizationCtx = nil\n\tm.stream.pendingToolIndex = -1\n\n\t// Resume stream\n\treturn (&m).startStream()\n}"
-          ],
-          "acceptance": [
-            "User message appears in session, stream resumes with the new message in context"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "4",
-      "name": "Authorization UI",
-      "pattern": [
-        "Overlay Mode / State Machine"
-      ],
-      "objective": "Build the authorization prompt that appears in the status bar area: yes/no selection with arrow keys, tab to switch to instruction input, shift+tab to return to yes/no, enter to submit.",
-      "success": "The authorization overlay renders in the status line area. User can navigate between yes/no, switch to text input, and submit. All keybindings work correctly and transition back to streaming or chat mode.",
-      "diagram": "ModeAuthorize \u2192 render overlay (status line): [\u2190] Yes / No [\u2192] \u2190\u2192 arrows, tab for text, enter to submit \u2192 user key event \u2192 if text mode: textarea input \u2192 if yes/no mode: arrow selection \u2192 enter: resolve authorization \u2192 resume stream or chat",
-      "tasks": [
-        {
-          "number": "4.1",
-          "name": "Add ModeAuthorize to modes",
-          "layer": "Interface",
-          "what": "Add ModeAuthorize to the Mode enum in internal/app/modes.go and its String() method.",
-          "why": "Needed for the routing in Update/View to handle the authorization overlay as a distinct mode.",
-          "files": [
-            "~ internal/app/modes.go"
-          ],
-          "snippet": [
-            "const (\n\tModeChat          Mode = iota\n\tModeStreaming\n\tModeModelPicker\n\tModeHelp\n\tModeFilePicker\n\tModeSessionPicker\n\tModeSavePrompt\n\tModeHistorySearch\n\tModeAuthorize   // awaiting user authorization for tool execution\n)\n\nfunc (m Mode) String() string {\n\tswitch m {\n\t// ...\n\tcase ModeAuthorize:\n\t\treturn \"authorize\"\n\t// ...\n\t}"
-          ],
-          "acceptance": [
-            "ModeAuthorize compiles, String() returns \"authorize\""
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "4.2",
-          "name": "Build authorization prompt component",
-          "layer": "Interface",
-          "what": "Create internal/ui/authorization.go with an AuthorizationPrompt struct that renders the yes/no prompt in the status bar area. Tracks selection (yes=0, no=1) and text mode (false=yes/no, true=text input).",
-          "why": "Encapsulates the authorization UI: the prompt line showing tool name + args, the yes/no selection, and the text input for instructions.",
-          "files": [
-            "+ internal/ui/authorization.go"
-          ],
-          "snippet": [
-            "package ui\n\nimport (\n\t\"fmt\"\n\t\"github.com/charmbracelet/lipgloss\"\n\t\"squid-os/internal/style\"\n)\n\ntype AuthorizationPrompt struct {\n\tToolName       string\n\tArgsJSON       string\n\tDisplayValue   string\n\tIsDestructive  bool\n\tSelection      int // 0=yes, 1=no\n\tTextMode       bool // true = typing instructions\n\tTextInput      string\n\tWidth          int\n}\n\nfunc (p AuthorizationPrompt) Render() string {\n\twidth := p.Width\n\tif width == 0 {\n\t\twidth = 80\n\t}\n\n\t// Build prompt line\n\tlabel := p.ToolName\n\tif p.DisplayValue != \"\" {\n\t\tlabel = fmt.Sprintf(\"%s(%s)\", p.ToolName, truncate(p.DisplayValue, 40))\n\t}\n\n\tvar destructiveIcon string\n\tif p.IsDestructive {\n\t\tdestructiveIcon = \"\u26a0 \"\n\t}\n\n\tvar prompt string\n\tif p.TextMode {\n\t\tprompt = fmt.Sprintf(\"%sProceed with %s? [%s] Type instructions...\", \n\t\t\tdestructiveIcon, label, \n\t\t\tp.selectedLabel())\n\t} else {\n\t\tprompt = fmt.Sprintf(\"%sProceed with %s? [%s]es / [N]o / [T]ab for instructions\",\n\t\t\tdestructiveIcon, label, p.selectedLabel())\n\t}\n\n\t// Style: highlight selected option\n\tyesStyle := style.SelectionStyle.Render(\"Yes\")\n\tnoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(\"240\")).Render(\"No\")\n\tif p.Selection == 0 {\n\t\tyesStyle = style.SelectionStyle.Render(\"Yes\")\n\t} else {\n\t\tnoStyle = style.SelectionStyle.Render(\"No\")\n\t}\n\n\treturn style.StatusLineStyle.Width(width).Render(fmt.Sprintf(\n\t\t\"  %s  %s / %s  %s\",\n\t\tlabel,\n\t\tyesStyle,\n\t\tnoStyle,\n\t\tpromptSuffix(p.TextMode),\n\t))\n}\n\nfunc (p AuthorizationPrompt) selectedLabel() string {\n\tif p.Selection == 0 {\n\t\treturn \"Y\"\n\t}\n\treturn \"N\"\n}\n\nfunc (p AuthorizationPrompt) promptSuffix(textMode bool) string {\n\tif textMode {\n\t\treturn \"\u2190 enter to submit, shift+tab to review\"\n\t}\n\treturn \"\u2190\u2192 select \u00b7 tab for instructions \u00b7 enter to confirm\"\n}"
-          ],
-          "acceptance": [
-            "Component renders correctly, shows tool name, yes/no selection, and instruction hint"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "4.3",
-          "name": "Add authorization prompt field to Model",
-          "layer": "Interface",
-          "what": "Add authPrompt ui.AuthorizationPrompt to the Model struct in app.go. Populate it from authorizationCtx when entering ModeAuthorize.",
-          "why": "The Model needs to hold the authorization prompt state so it can render and handle input.",
-          "files": [
-            "~ internal/app/app.go"
-          ],
-          "snippet": [
-            "// In Model struct:\n\tauthPrompt ui.AuthorizationPrompt // authorization prompt state\n\n// In setAuthMode():\nfunc (m *Model) setAuthMode() {\n\tm.mode = ModeAuthorize\n\tm.stream.active = false\n\tctx := m.stream.authorizationCtx\n\tm.authPrompt = ui.AuthorizationPrompt{\n\t\tToolName:      ctx.ToolName,\n\t\tArgsJSON:      ctx.ArgsJSON,\n\t\tDisplayValue:  ctx.DisplayValue,\n\t\tIsDestructive: ctx.IsDestructive,\n\t\tSelection:     0, // default to Yes\n\t\tWidth:         m.width,\n\t}\n}"
-          ],
-          "acceptance": [
-            "authPrompt is populated from authorizationCtx, setAuthMode initializes it"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "4.4",
-          "name": "Render authorization overlay in View",
-          "layer": "Interface",
-          "what": "In render.go View(), add a case for ModeAuthorize that renders authPrompt instead of the textarea, replacing the status line area.",
-          "why": "The authorization prompt replaces the input area during authorization, making it the primary interaction point.",
-          "files": [
-            "~ internal/app/render.go"
-          ],
-          "snippet": [
-            "// In View(), after the mode switch for overlays:\ncase ModeAuthorize:\n\tsections = append(sections, m.authPrompt.Render())\n\n// Skip textarea in auth mode\nif m.mode != ModeAuthorize {\n\tsections = append(sections, m.textarea.View())\n}"
-          ],
-          "acceptance": [
-            "In ModeAuthorize, the authorization prompt replaces the textarea in the layout"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "4.5",
-          "name": "Handle authorization key input",
-          "layer": "Interface",
-          "what": "Add handleAuthorizeKey to input.go: Left/Right arrows toggle Yes/No, Tab switches to text mode, Shift+Tab returns to yes/no, Enter submits. In text mode: normal text input, Enter submits with text, Shift+Tab returns to yes/no.",
-          "why": "Routes authorization key events to the correct action: selecting yes/no, switching to text, or submitting.",
-          "files": [
-            "~ internal/app/input.go"
-          ],
-          "snippet": [
-            "func (m Model) handleAuthorizeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {\n\tvar result app.AuthResult\n\n\tswitch {\n\tcase key.Matches(msg, keys.Left):\n\t\tif !m.authPrompt.TextMode {\n\t\t\tm.authPrompt.Selection = 0 // Yes\n\t\t\tm.updateViewportContent()\n\t\t\treturn m, nil\n\t\t}\n\tcase key.Matches(msg, keys.Right):\n\t\tif !m.authPrompt.TextMode {\n\t\t\tm.authPrompt.Selection = 1 // No\n\t\t\tm.updateViewportContent()\n\t\t\treturn m, nil\n\t\t}\n\n\tcase msg.Type == tea.KeyTab && !msg.Modifiers.Contains(tea.ModShift):\n\t\t// Tab \u2192 switch to text mode\n\t\tm.authPrompt.TextMode = true\n\t\treturn m, nil\n\n\tcase msg.Type == tea.KeyTab && msg.Modifiers.Contains(tea.ModShift):\n\t\t// Shift+Tab \u2192 return to yes/no mode\n\t\tm.authPrompt.TextMode = false\n\t\treturn m, nil\n\n\tcase key.Matches(msg, keys.Send):\n\t\tif m.authPrompt.TextMode {\n\t\t\t// Submit with text\n\t\t\ttext := m.authPrompt.TextInput\n\t\t\tif m.authPrompt.Selection == 0 {\n\t\t\t\tresult = app.AuthAcceptedWithInstructions\n\t\t\t} else {\n\t\t\t\tresult = app.AuthRejectedWithInstructions\n\t\t\t}\n\t\t\treturn m.resolveAuthorization(result, text)\n\t\t} else {\n\t\t\t// Submit yes/no without text\n\t\t\tif m.authPrompt.Selection == 0 {\n\t\t\t\tresult = app.AuthAccepted\n\t\t\t} else {\n\t\t\t\tresult = app.AuthRejected\n\t\t\t}\n\t\t\treturn m.resolveAuthorization(result, \"\")\n\t\t}\n\n\tdefault:\n\t\tif m.authPrompt.TextMode && msg.Type == tea.KeyRunes {\n\t\t\tm.authPrompt.TextInput += string(msg.Runes)\n\t\t\treturn m, nil\n\t\t} else if m.authPrompt.TextMode && msg.Type == tea.KeyBackspace {\n\t\t\ttext := m.authPrompt.TextInput\n\t\t\tif len(text) > 0 {\n\t\t\t\trunes := []rune(text)\n\t\t\t\tm.authPrompt.TextInput = string(runes[:len(runes)-1])\n\t\t\t}\n\t\t\treturn m, nil\n\t\t}\n\t}\n\treturn m, nil\n}"
-          ],
-          "acceptance": [
-            "Left/Right toggles selection, Tab enters text mode, Shift+Tab exits text mode, Enter resolves. Text input works in text mode."
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "4.6",
-          "name": "Wire authorization mode in Update dispatch",
-          "layer": "Interface",
-          "what": "In update.go handleKey, add case for ModeAuthorize \u2192 handleAuthorizeKey. In handleStreamEvent, when executeTools returns nil, transition to ModeAuthorize.",
-          "why": "Wires the authorization mode into the main event loop so it can intercept and respond to key events.",
-          "files": [
-            "~ internal/app/update.go"
-          ],
-          "snippet": [
-            "func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {\n\tswitch m.mode {\n\t// ...\n\tcase ModeAuthorize:\n\t\treturn m.handleAuthorizeKey(msg)\n\t// ...\n\t}"
-          ],
-          "acceptance": [
-            "Authorization mode is dispatched in handleKey, key events reach handleAuthorizeKey"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "5",
-      "name": "System Prompt Update",
-      "pattern": [
-        "Instruction Injection"
-      ],
-      "objective": "Update the system prompt so the LLM knows it must set the destructive field on every bash call, and understands the semantics of what makes a command destructive.",
-      "success": "System prompt clearly defines destructive vs read-only bash commands. LLM consistently sets the correct value.",
-      "diagram": "sys-prompt.go \u2192 DefaultAssistantPrompt() includes new bash destructive field instructions \u2192 injected into every API request as system message",
-      "tasks": [
-        {
-          "number": "5.1",
-          "name": "Update system prompt for destructive field",
-          "layer": "Infrastructure",
-          "what": "Add a new section to the default system prompt in internal/config/sys-prompt.go explaining the destructive field for bash: when to set true, when to set false, and that the field is required.",
-          "why": "The LLM needs explicit instructions to populate the required destructive field correctly on every bash call.",
-          "files": [
-            "~ internal/config/sys-prompt.go"
-          ],
-          "snippet": [
-            "## Bash Tool\n- The bash tool requires a \"destructive\" boolean parameter on every call.\n- Set destructive: true if the command modifies files, deletes data, creates directories, installs packages, or changes system state (e.g., rm, mv, cp, mkdir, chmod, apt-get, pip install, git commit, sed -i).\n- Set destructive: false for read-only commands (e.g., cat, ls, grep, find, git status, git diff, wc, head, tail, df, ps, curl GET).\n- Omitting the destructive field will result in an error."
-          ],
-          "acceptance": [
-            "System prompt contains clear destructive field instructions for bash, examples of true and false cases"
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "6",
-      "name": "Resolve Authorization Response",
-      "pattern": [
-        "State Machine / Post-Action Routing"
-      ],
-      "objective": "After the user responds to an authorization prompt, execute or reject the tool, handle remaining pending calls, and route back to either continued tool authorization or stream resume.",
-      "success": "resolveAuthorization handles all four result types (Accepted, Rejected, AcceptedWithInstructions, RejectedWithInstructions). Pending tools are cancelled when instructions are injected. Stream resumes correctly with or without injected user message.",
-      "diagram": "handleAuthorizeKey Enter \u2192 resolveAuthorization(result, instructions) \u2192 if Accepted: execute tool \u2192 check next partial (needs auth? \u2192 ModeAuthorize again / no \u2192 continue) \u2192 if WithInstructions: cancel remaining, inject user msg, startStream \u2192 if Rejected: mark rejected, cancel remaining, resume stream",
-      "tasks": [
-        {
-          "number": "6.1",
-          "name": "Implement resolveAuthorization",
-          "layer": "Application",
-          "what": "Add resolveAuthorization method to Model in stream.go. Handles the four auth results: execute+continue for Accepted, mark error for Rejected, execute+cancel+inject for AcceptedWithInstructions, mark error+cancel+inject for RejectedWithInstructions.",
-          "why": "This is the core post-authorization logic that determines what happens after the user responds \u2014 the branching point between continuing, cancelling, and injecting context.",
-          "files": [
-            "~ internal/app/stream.go"
-          ],
-          "snippet": [
-            "func (m *Model) resolveAuthorization(result AuthResult, instructions string) (tea.Model, tea.Cmd) {\n\tctx := m.stream.authorizationCtx\n\tidx := m.stream.pendingToolIndex\n\tpartials := m.stream.partialTools\n\tentries := make([]config.ToolCallEntry, len(partials))\n\n\tfor i, p := range partials {\n\t\tentries[i] = config.ToolCallEntry{\n\t\t\tID: p.id, Type: p.typeStr,\n\t\t\tInstruction: struct{...}{Name: p.name, Arguments: p.args, Tokens: countTokensApprox(p.args)},\n\t\t}\n\t}\n\n\tswitch result {\n\tcase AuthAccepted:\n\t\tentries[idx] = m.executeSingleTool(partials[idx])\n\t\t// Save assistant message with this entry, then check next tools\n\t\treturn m.continueAfterAuth(entries, false, \"\")\n\n\tcase AuthRejected:\n\t\tentries[idx].Execution.Status = tools.ResultStatusError\n\t\tentries[idx].Execution.Error = \"rejected by user \u2014 tool was not executed\"\n\t\t// Cancel remaining\n\t\tfor j := idx + 1; j < len(partials); j++ {\n\t\t\tentries[j].Execution.Status = tools.ResultStatusError\n\t\t\tentries[j].Execution.Error = \"cancelled: previous tool was rejected by user\"\n\t\t}\n\t\treturn m.continueAfterAuth(entries, false, \"\")\n\n\tcase AuthAcceptedWithInstructions:\n\t\tentries[idx] = m.executeSingleTool(partials[idx])\n\t\tfor j := idx + 1; j < len(partials); j++ {\n\t\t\tentries[j].Execution.Status = tools.ResultStatusError\n\t\t\tentries[j].Execution.Error = \"cancelled: user provided instructions before this tool could execute\"\n\t\t}\n\t\treturn m.continueAfterAuth(entries, true, instructions)\n\n\tcase AuthRejectedWithInstructions:\n\t\tentries[idx].Execution.Status = tools.ResultStatusError\n\t\tentries[idx].Execution.Error = \"rejected by user \u2014 tool was not executed\"\n\t\tfor j := idx + 1; j < len(partials); j++ {\n\t\t\tentries[j].Execution.Status = tools.ResultStatusError\n\t\t\tentries[j].Execution.Error = \"cancelled: user provided instructions\"\n\t\t}\n\t\treturn m.continueAfterAuth(entries, true, instructions)\n\t}\n\treturn m, nil\n}"
-          ],
-          "acceptance": [
-            "All four auth results are handled correctly. Single tool executes on accept, error on reject. Remaining tools cancelled on instructions. Stream resumes or user message injected."
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        },
-        {
-          "number": "6.2",
-          "name": "Implement executeSingleTool and continueAfterAuth",
-          "layer": "Application",
-          "what": "Add executeSingleTool (extracted from old executeTools batch logic, for one partial) and continueAfterAuth (saves the assistant message with all entries, injects user message if needed, and either resumes stream or checks next tool for authorization).",
-          "why": "Factored from executeTools so a single tool can be executed outside the batch, and the post-authorization flow can decide whether to resume streaming or continue checking more tools.",
-          "files": [
-            "~ internal/app/stream.go"
-          ],
-          "snippet": [
-            "func (m *Model) executeSingleTool(p partialTool) config.ToolCallEntry {\n\ttool := m.toolReg.Get(p.name)\n\tvar args map[string]interface{}\n\tif p.args != \"\" {\n\t\t_ = json.Unmarshal([]byte(p.args), &args)\n\t}\n\t// ... checksum validation from tracker ...\n\tresultStart := time.Now()\n\tresult := tool.Execute(args)\n\tentry := config.ToolCallEntry{\n\t\tID: p.id, Type: p.typeStr,\n\t\tInstruction: struct{...}{Name: p.name, Arguments: p.args, Tokens: countTokensApprox(p.args)},\n\t\tExecution: struct{...}{\n\t\t\tStatus: result.Status, Result: result.Result, Error: result.Error,\n\t\t\tTokens: countTokensApprox(result.Result),\n\t\t\tDurationMs: time.Since(resultStart).Milliseconds(),\n\t\t\tFiles: result.Files,\n\t\t},\n\t}\n\t// Handle set_working_dir side effect\n\tif p.name == \"set_working_dir\" && result.Status == tools.ResultStatusSuccess {\n\t\tif pathVal, ok := args[\"path\"].(string); ok {\n\t\t\tm.applyWorkingDir(pathVal)\n\t\t}\n\t}\n\treturn entry\n}\n\nfunc (m *Model) continueAfterAuth(entries []config.ToolCallEntry, injectUserMsg bool, instructions string) (tea.Model, tea.Cmd) {\n\t// Check if there are more tools that need authorization\n\tif !injectUserMsg {\n\t\t// Check remaining tools after the one we just handled\n\t\tnextIdx := m.stream.pendingToolIndex + 1\n\t\tif nextIdx < len(m.stream.partialTools) {\n\t\t\tremaining := m.stream.partialTools[nextIdx:]\n\t\t\t// Check if any remaining unexecuted tool needs auth\n\t\t\t// ... if yes, set authorizationCtx for next, stay in ModeAuthorize\n\t\t\t// ... if no, execute remaining + merge with entries, save assistant msg, resume stream\n\t\t}\n\t}\n\n\t// Save assistant message with all tool entries\n\t(&m).appendAssistantMsg(config.Message{\n\t\tID: fmt.Sprintf(\"msg_%d\", len(m.session.file.Messages)+1),\n\t\tRole: config.RoleAssistant,\n\t\t// ... metrics from stream ...\n\t\tToolCalls: entries,\n\t\tStopReason: \"tool_calls\",\n\t})\n\n\tm.stream.authorizationCtx = nil\n\tm.stream.pendingToolIndex = -1\n\n\tif injectUserMsg && instructions != \"\" {\n\t\treturn m.injectAndResume(instructions)\n\t}\n\treturn (&m).startStream()\n}"
-          ],
-          "acceptance": [
-            "Single tool execution mirrors batch behavior. continueAfterAuth saves message, handles injection, and resumes stream. Remaining tools are checked for authorization."
-          ],
-          "verify": [
-            "cd /home/goglue/src/squid-os && go build ./..."
-          ]
-        }
-      ]
-    }
-  ]
+    ],
+    "problem": "Users need granular control over when tool executions require confirmation. The LLM currently executes all tools blindly, which can lead to unintended file modifications or destructive commands.",
+    "goal": "Users can choose between auto-execute, ask-on-write, or ask-for-all modes. The LLM must declare destructive intent on bash calls. Pending tool calls are cancelled when the user adds instructions mid-execution."
 }

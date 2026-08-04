@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>provider-auth</title>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>tool-authorization-rigid-old-dont-read-it</title>
 <style>:root { 
     --bg: #1e1e1e; --nav: #252526; --card: #2d2d2d; --border: #3e3e42; 
     --text: #d4d4d4; --accent: #569cd6; --success: #4ec9b0; 
@@ -206,97 +206,86 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
 </style>
 <style>code[class*=language-],pre[class*=language-]{color:#ccc;background:0 0;font-family:Consolas,Monaco,'Andale Mono','Ubuntu Mono',monospace;font-size:1em;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.5;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}pre[class*=language-]{padding:1em;margin:.5em 0;overflow:auto}:not(pre)>code[class*=language-],pre[class*=language-]{background:#2d2d2d}:not(pre)>code[class*=language-]{padding:.1em;border-radius:.3em;white-space:normal}.token.block-comment,.token.cdata,.token.comment,.token.doctype,.token.prolog{color:#999}.token.punctuation{color:#ccc}.token.attr-name,.token.deleted,.token.namespace,.token.tag{color:#e2777a}.token.function-name{color:#6196cc}.token.boolean,.token.function,.token.number{color:#f08d49}.token.class-name,.token.constant,.token.property,.token.symbol{color:#f8c555}.token.atrule,.token.builtin,.token.important,.token.keyword,.token.selector{color:#cc99cd}.token.attr-value,.token.char,.token.regex,.token.string,.token.variable{color:#7ec699}.token.entity,.token.operator,.token.url{color:#67cdcc}.token.bold,.token.important{font-weight:700}.token.italic{font-style:italic}.token.entity{cursor:help}.token.inserted{color:green}</style>
 </head><body>
-    <nav><a href="#epic-overview" class="nav-item home always-visible">🏠 Epic</a><div class="nav-items" id="nav-items"><a href="#provider-data-model" class="nav-item">Provider Data Model</a><a href="#provider-interface" class="nav-item">Provider Interface</a><a href="#openai-oauth-(no-browser)" class="nav-item">OpenAI OAuth (No-Browser)</a><a href="#tui-auth-prompt" class="nav-item">TUI Auth Prompt</a><a href="#error-handling-&-fallback" class="nav-item">Error Handling &amp; Fallback</a></div><button class="hamburger" id="hamburger" aria-label="Toggle menu"><span></span><span></span><span></span></button></nav>
+    <nav><a href="#epic-overview" class="nav-item home always-visible">🏠 Epic</a><div class="nav-items" id="nav-items"><a href="#domain" class="nav-item">Domain</a><a href="#infrastructure" class="nav-item">Infrastructure</a><a href="#application" class="nav-item">Application</a><a href="#interface" class="nav-item">Interface</a></div><button class="hamburger" id="hamburger" aria-label="Toggle menu"><span></span><span></span><span></span></button></nav>
     <div class="container">
         
     <section id="epic-overview" class="epic-header">
-        <h1>Provider Authentication &amp; Dialect Framework</h1>
+        <h1>Tool Authorization Modes</h1>
         <div class="epic-meta">
             <div class="meta-box">
                 <span class="meta-label">Problem</span>
-                <div class="meta-value">Current codebase has no credential support -- Engine fires bare HTTP requests with no auth header. Need scalable provider architecture supporting API keys and OAuth, with per-provider dialect implementations, starting with OpenAI.</div>
+                <div class="meta-value">Users need control over what the AI can modify on their filesystem. Different workflows demand different trust levels — from fully automated to fully supervised.</div>
             </div>
             <div class="meta-box">
                 <span class="meta-label">Goal</span>
-                <div class="meta-value">OpenAI OAuth (no-browser) and API key auth working; extensible provider interface for adding Gemini/Anthropic/Fireworks/OpenRouter; naming consistency across Provider/Endpoint/ModelEntry</div>
+                <div class="meta-value">Three authorization modes (auto, ask-on-write, ask-for-all), destructive field enforcement on bash, interactive yes/no confirmation with optional inline instructions, and cancellation of pending tool calls when the user interrupts.</div>
             </div>
         </div>
         <div class="milestone-grid">
             
-        <a href="#provider-data-model" class="milestone-card-link">
+        <a href="#domain" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
                     <span class="ms-num">1</span>
-                    <span class="ms-name">Provider Data Model</span>
+                    <span class="ms-name">Domain</span>
                 </div>
-                <span class="pattern-tag">Interface Segregation, Strategy</span> 
-                <p class="ms-count">2 Task(s)</p>
-                <ul class="ms-task-list"><li>1.1 - Provider struct with auth and dialect fields</li><li>1.2 - Migrate EndpointsConfig and update all call sites</li></ul>
+                <span class="pattern-tag">Value Object</span> 
+                <p class="ms-count">1 Task(s)</p>
+                <ul class="ms-task-list"><li>1.1 - Add AuthorizeMode to settings</li></ul>
             </div>
         </a>
-        <a href="#provider-interface" class="milestone-card-link">
+        <a href="#infrastructure" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
                     <span class="ms-num">2</span>
-                    <span class="ms-name">Provider Interface</span>
+                    <span class="ms-name">Infrastructure</span>
                 </div>
-                <span class="pattern-tag">Strategy, Interface Segregation</span> 
-                <p class="ms-count">4 Task(s)</p>
-                <ul class="ms-task-list"><li>2.1 - Define ProviderImpl interface and registry</li><li>2.2 - Implement local/no-auth provider as default</li><li>2.3 - Wire Engine to use ProviderImpl for auth</li><li>2.4 - Generic Sequence component for multi-step wizards</li></ul>
+                <span class="pattern-tag">Port/Adapter</span> 
+                <p class="ms-count">2 Task(s)</p>
+                <ul class="ms-task-list"><li>2.1 - Add destructive to bash schema (required, no default)</li><li>2.2 - Add IsDestructive classification to Tool</li></ul>
             </div>
         </a>
-        <a href="#openai-oauth-(no-browser)" class="milestone-card-link">
+        <a href="#application" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
                     <span class="ms-num">3</span>
-                    <span class="ms-name">OpenAI OAuth (No-Browser)</span>
+                    <span class="ms-name">Application</span>
                 </div>
-                <span class="pattern-tag">PKCE, Strategy</span> 
-                <p class="ms-count">2 Task(s)</p>
-                <ul class="ms-task-list"><li>3.1 - OpenAI OAuth PKCE implementation</li><li>3.2 - OpenAI provider registration and credential persistence</li></ul>
+                <span class="pattern-tag">State Machine</span> 
+                <p class="ms-count">3 Task(s)</p>
+                <ul class="ms-task-list"><li>3.1 - Add ModeAuthorize to app modes</li><li>3.2 - Implement authorization gate in executeTools</li><li>3.3 - Implement authorization response and batch cancellation</li></ul>
             </div>
         </a>
-        <a href="#tui-auth-prompt" class="milestone-card-link">
+        <a href="#interface" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
                     <span class="ms-num">4</span>
-                    <span class="ms-name">TUI Auth Prompt</span>
+                    <span class="ms-name">Interface</span>
                 </div>
-                <span class="pattern-tag">Component, State Machine</span> 
-                <p class="ms-count">4 Task(s)</p>
-                <ul class="ms-task-list"><li>4.1 - Provider auth wizard using Sequence component</li><li>4.2 - Wire auth prompt into provider selection flow</li><li>4.3 - Wire model scanning through ProviderImpl auth</li><li>4.4 - Picker shows auth-required placeholders and triggers auth prompt</li></ul>
-            </div>
-        </a>
-        <a href="#error-handling-&-fallback" class="milestone-card-link">
-            <div class="milestone-card">
-                <div class="ms-header">
-                    <span class="ms-num">5</span>
-                    <span class="ms-name">Error Handling &amp; Fallback</span>
-                </div>
-                <span class="pattern-tag">Circuit Breaker</span> 
-                <p class="ms-count">2 Task(s)</p>
-                <ul class="ms-task-list"><li>5.1 - 401 detection and auto-refresh with re-auth prompt</li><li>5.2 - Unsupported provider error and placeholder error for non-openai dialects</li></ul>
+                <span class="pattern-tag">Presentation / Overlay</span> 
+                <p class="ms-count">5 Task(s)</p>
+                <ul class="ms-task-list"><li>4.1 - Add authorization prompt key handling</li><li>4.2 - Build authorization prompt UI overlay</li><li>4.3 - Update system prompt for destructive requirement</li><li>4.4 - Wire authorization pause/resume in handleStreamEvent</li><li>4.5 - Implement instruction text editing in authorization prompt</li></ul>
             </div>
         </a>
         </div>
     </section>
     
         
-        <section id="provider-data-model" class="milestone-section">
+        <section id="domain" class="milestone-section">
             <div class="section-header">
                 <span class="section-num">1</span>
-                <h2>Provider Data Model</h2>
-                <span class="pattern-badge">Interface Segregation, Strategy</span> 
+                <h2>Domain</h2>
+                <span class="pattern-badge">Value Object</span> 
             </div>
             
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
-                <div class="cell-value">Replace ProviderConfig with a proper Provider struct that carries auth method, dialect, credentials, and callback hooks</div>
+                <div class="cell-value">Define authorization modes and destructive classification types</div>
             </div>
             
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">ProviderConfig renamed to Provider with AuthMethod, Dialect, Credentials fields; old endpoints.json format migrated</div>
+                <div class="cell-value">Settings persists authorization mode, config exposes AuthorizeMode type</div>
             </div>
             
             <div class="diagram-canvas">
@@ -304,248 +293,79 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
                     <span class="icon">📐</span>
                     <span class="label">Architecture & Flow</span>
                 </div>
-                <pre class="mermaid">classDiagram
-    class Provider {
-        +string Name
-        +string BaseURL
-        +AuthMethod AuthMethod
-        +string Dialect
-        +ProviderCredentials Credentials
-        +ModelsURL() string
-        +ChatURL() string
-    }
-    class ProviderCredentials {
-        +string APIKey
-        +OAuthCreds OAuth
-    }
-    class OAuthCreds {
-        +string AccessToken
-        +string RefreshToken
-        +time.Time ExpiresAt
-    }
-    class AuthMethod  {
-        none
-        api_key
-        oauth
-    }
-    Provider --> ProviderCredentials
-    ProviderCredentials --> OAuthCreds</pre>
+                <div class="flow-diagram"><div class="flow-step">Settings.AuthorizeMode (enum: auto | ask-on-write | ask-for-all)</div><span class="flow-arrow">&rarr;</span><div class="flow-step">loaded at startup</div><span class="flow-arrow">&rarr;</span><div class="flow-step">drives all tool execution decisions</div></div>
             </div>
             <div class="task-list">
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 1.1</span>
-                        <span class="task-name">Provider struct with auth and dialect fields</span>
-                        <span class="layer-badge" style="background:#c586c0">refactor</span>
+                        <span class="task-name">Add AuthorizeMode to settings</span>
+                        <span class="layer-badge" style="background:#888"></span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Replace ProviderConfig with Provider struct. AuthMethod is an array of supported methods, user picks one via ActiveAuthMethod in credentials. Known providers have hardcoded URLs, custom providers need BaseURL from user.</span>
+                        <span class="cell-value">Add AuthorizeMode string type and field to config.Settings, with constants for auto, ask-on-write, ask-for-all. Update DefaultSettings and validation in LoadSettings.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Establish the data model for extensible provider authentication and API dialect support</span>
+                        <span class="cell-value">The user needs a configurable setting to select the authorization policy. Defaults to auto (current behavior) for backward compatibility.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/config/endpoints.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/config/settings.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package config
-
-type AuthMethod string
-
-const (
-	AuthNone   AuthMethod = &quot;none&quot;
-	AuthAPIKey AuthMethod = &quot;api_key&quot;
-	AuthOAuth  AuthMethod = &quot;oauth&quot;
+                    <pre><code class="language-go">const (
+	AuthorizationAuto      = &quot;auto&quot;
+	AuthorizationAskOnWrite = &quot;ask-on-write&quot;
+	AuthorizationAskForAll  = &quot;ask-for-all&quot;
 )
 
-type Dialect string
+type AuthorizeMode string
 
-const (
-	DialectOpenAICompatible Dialect = &quot;openai&quot;
-	DialectAnthropic        Dialect = &quot;anthropic&quot;
-	DialectGemini           Dialect = &quot;gemini&quot;
-)
-
-type Provider struct {
-	Name             string            `json:&quot;name&quot;`
-	BaseURL          string            `json:&quot;base_url,omitempty&quot;`
-	SupportedAuth    []AuthMethod      `json:&quot;supported_auth&quot;`
-	Dialect          Dialect           `json:&quot;dialect&quot;`
-	Credentials      *ProviderCreds    `json:&quot;credentials,omitempty&quot;`
-	NeedsConfig      bool              `json:&quot;needs_config,omitempty&quot;`
-}
-
-type ProviderCreds struct {
-	ActiveAuthMethod AuthMethod    `json:&quot;active_auth_method&quot;`
-	APIKey           string        `json:&quot;api_key,omitempty&quot;`
-	OAuth            *OAuthCreds   `json:&quot;oauth,omitempty&quot;`
-}
-
-type OAuthCreds struct {
-	AccessToken  string    `json:&quot;access_token&quot;`
-	RefreshToken string    `json:&quot;refresh_token&quot;`
-	ExpiresAt    time.Time `json:&quot;expires_at&quot;`
-}
-
-// IsConfigured returns true if the provider has valid credentials to use
-func (p Provider) IsConfigured() bool {
-	if p.Credentials == nil {
-		return false
-	}
-	if len(p.SupportedAuth) == 0 {
-		return true // no auth needed
-	}
-	switch p.Credentials.ActiveAuthMethod {
-	case AuthAPIKey:
-		return p.Credentials.APIKey != &quot;&quot;
-	case AuthOAuth:
-		return p.Credentials.OAuth != nil &amp;&amp; p.Credentials.OAuth.AccessToken != &quot;&quot;
-	default:
-		return false
-	}
-}
-
-// NeedsURL returns true if provider requires a user-provided base URL
-func (p Provider) NeedsURL() bool {
-	return p.IsKnownProvider() == false
-}
-
-// IsKnownProvider returns true for built-in providers with hardcoded URLs
-func (p Provider) IsKnownProvider() bool {
-	known := []string{&quot;openai&quot;, &quot;openai-codex&quot;, &quot;anthropic&quot;, &quot;gemini&quot;, &quot;fireworks&quot;, &quot;openrouter&quot;}
-	for _, k := range known {
-		if p.Name == k {
-			return true
-		}
+func (a AuthorizeMode) IsValid() bool {
+	switch a {
+	case AuthorizationAuto, AuthorizationAskOnWrite, AuthorizationAskForAll:
+		return true
 	}
 	return false
-}
-
-func (p Provider) ChatURL() string {
-	if p.IsKnownProvider() {
-		return p.getKnownChatURL()
-	}
-	if p.Dialect == DialectAnthropic {
-		return p.BaseURL + &quot;/v1/messages&quot;
-	}
-	return p.BaseURL + &quot;/v1/chat/completions&quot;
-}
-
-func (p Provider) ModelsURL() string {
-	if p.IsKnownProvider() {
-		return p.getKnownModelsURL()
-	}
-	if p.Dialect == DialectOpenAICompatible {
-		return p.BaseURL + &quot;/v1/models&quot;
-	}
-	return &quot;&quot;
 }</code></pre>
                 </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Provider has SupportedAuth []AuthMethod (array of what the provider supports)</li><li>ProviderCreds has ActiveAuthMethod (single chosen method) plus APIKey/OAuth</li><li>IsConfigured checks if the active method has valid credentials</li><li>NeedsURL returns true for custom providers, false for known ones</li><li>IsKnownProvider identifies built-in providers with hardcoded URLs</li><li>ChatURL/ModelsURL use hardcoded URLs for known providers, BaseURL for custom</li></ul>
-                </div>
-                </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
-            </div>
-            <div class="task-card">
-                <div class="task-header">
-                    <div class="task-title-row">
-                        <span class="task-num"># 1.2</span>
-                        <span class="task-name">Migrate EndpointsConfig and update all call sites</span>
-                        <span class="layer-badge" style="background:#c586c0">refactor</span>
-                    </div>
-                </div>
-                <div class="task-grid">
-                    <div class="task-cell">
-                        <span class="cell-label">What</span>
-                        <span class="cell-value">Update EndpointsConfig with new Provider struct. Default endpoints include vllm/ollama (need URL config) and openai (hardcoded URL, supports api_key + oauth). All call sites updated.</span>
-                    </div>
-                    <div class="task-cell">
-                        <span class="cell-label">Why</span>
-                        <span class="cell-value">Ensure the entire codebase uses the new Provider model instead of the flat ProviderConfig</span>
-                    </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/config/endpoints.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/stream.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/app.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/model.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/models.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/headless/headless.go</li></ul>
-                </div>
-                    
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">type EndpointsConfig struct {
-	Providers []Provider `json:&quot;providers&quot;`
-}
-
-func DefaultEndpoints() EndpointsConfig {
-	return EndpointsConfig{
-		Providers: []Provider{
-			{
-				Name:          &quot;vllm&quot;,
-				BaseURL:       &quot;&quot;,
-				SupportedAuth: []AuthMethod{AuthNone},
-				Dialect:       DialectOpenAICompatible,
-				NeedsConfig:   true, // needs URL from user
-			},
-			{
-				Name:          &quot;ollama&quot;,
-				BaseURL:       &quot;&quot;,
-				SupportedAuth: []AuthMethod{AuthNone},
-				Dialect:       DialectOpenAICompatible,
-				NeedsConfig:   true, // needs URL from user
-			},
-			{
-				Name:          &quot;openai&quot;,
-				SupportedAuth: []AuthMethod{AuthAPIKey, AuthOAuth},
-				Dialect:       DialectOpenAICompatible,
-			},
-		},
-	}
-}
-
-func ResolveProvider(endpoints EndpointsConfig, name string) *Provider {
-	for i, p := range endpoints.Providers {
-		if p.Name == name {
-			return &amp;endpoints.Providers[i]
-		}
-	}
-	return nil
-}</code></pre>
+                    <pre><code class="language-go">Settings struct gains:
+	Authorization AuthorizeMode \x60json:&quot;authorization&quot;\x60</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>DefaultEndpoints returns vllm and ollama with AuthNone and DialectOpenAICompatible</li><li>ResolveProvider finds by name, returns nil if not found</li><li>All call sites in stream.go, headless.go, models.go updated from ProviderConfig to Provider</li><li>No compile errors across entire codebase</li></ul>
+                    <ul class="acceptance-list"><li>Default is auto (backward compatible)</li><li>LoadSettings rejects invalid values, falls back to auto</li><li>SaveSettings round-trips the field</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> <span class="task-verify">✔ cat ~/.config/squid-os/settings.json | grep authorization</span> </div>
             </div></div>
         </section>
-        <section id="provider-interface" class="milestone-section">
+        <section id="infrastructure" class="milestone-section">
             <div class="section-header">
                 <span class="section-num">2</span>
-                <h2>Provider Interface</h2>
-                <span class="pattern-badge">Strategy, Interface Segregation</span> 
+                <h2>Infrastructure</h2>
+                <span class="pattern-badge">Port/Adapter</span> 
             </div>
             
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
-                <div class="cell-value">Define a Provider interface with callback methods that each dialect implements -- avoids big switch statements, follows existing component callback pattern</div>
+                <div class="cell-value">Bash tool declares destructive intent, classification logic for all tools</div>
             </div>
             
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">Provider interface defined with PrepareRequest, has dialect-specific implementations, engine dispatches via interface</div>
+                <div class="cell-value">Bash schema requires destructive bool, each tool is classifiable as destructive or not</div>
             </div>
             
             <div class="diagram-canvas">
@@ -553,341 +373,128 @@ func ResolveProvider(endpoints EndpointsConfig, name string) *Provider {
                     <span class="icon">📐</span>
                     <span class="label">Architecture & Flow</span>
                 </div>
-                <pre class="mermaid">classDiagram
-    class ProviderImpl {
-        +PrepareRequest(req) error
-        +GetAccessToken() string
-        +NeedsAuth() bool
-        +IsExpired() bool
-        +Refresh() error
-    }
-    class OpenAIProvider {
-        +PrepareRequest(req) error
-        +GetAccessToken() string
-        +Refresh() error
-    }
-    class LocalProvider {
-        +PrepareRequest(req) error
-    }
-    class ProviderRegistry {
-        +Get(name) ProviderImpl
-        +Register(p ProviderImpl)
-    }
-    class Engine {
-        +provider ProviderImpl
-        +Stream(ctx, msgs, tools) chan
-    }
-    ProviderImpl --|> OpenAIProvider
-    ProviderImpl --|> LocalProvider
-    Engine ..> ProviderImpl
-    ProviderRegistry ..> ProviderImpl</pre>
+                <div class="flow-diagram"><div class="flow-step">Tool Schema.destructive (bash only)</div><span class="flow-arrow">&rarr;</span><div class="flow-step">IsDestructive(tool, args) bool</div><span class="flow-arrow">&rarr;</span><div class="flow-step">drives authorization gate</div></div>
             </div>
             <div class="task-list">
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 2.1</span>
-                        <span class="task-name">Define ProviderImpl interface and registry</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                        <span class="task-name">Add destructive to bash schema (required, no default)</span>
+                        <span class="layer-badge" style="background:#888"></span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Create chat/provider.go with ProviderImpl interface (PrepareRequest, GetAccessToken, NeedsAuth, IsExpired) and a registry map</span>
+                        <span class="cell-value">Add the &#x27;destructive&#x27; boolean field to the bash tool&#x27;s JSON schema as a required field. Update the Execute function to return an error if &#x27;destructive&#x27; is missing from args. Store the value in ToolResult for downstream consumption.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Each dialect implements its own auth preparation -- no switch statement, extensible like component callbacks</span>
+                        <span class="cell-value">The LLM must explicitly declare whether a bash command modifies state. No default — the tool fails if omitted, forcing the LLM to be deliberate.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/provider.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/tools/bash.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package chat
-
-import (
-	&quot;net/http&quot;
-	&quot;sync&quot;
-)
-
-type ProviderImpl interface {
-	// PrepareRequest modifies the outgoing request with auth headers.
-	// Returns error if credentials are missing or expired and cannot be refreshed.
-	PrepareRequest(req *http.Request) error
-	
-	// GetAccessToken returns the current access token (for logging/debugging).
-	GetAccessToken() string
-	
-	// NeedsAuth returns true if this provider requires authentication.
-	NeedsAuth() bool
-	
-	// IsExpired returns true if OAuth credentials have expired.
-	IsExpired() bool
-	
-	// Refresh attempts to refresh OAuth tokens. Returns error if not applicable or failed.
-	Refresh() error
+                    <pre><code class="language-go">Schema properties addition:
+&quot;destructive&quot;: {
+  &quot;type&quot;: &quot;boolean&quot;,
+  &quot;description&quot;: &quot;true if the command modifies files, writes, deletes, or changes system state. false for read-only commands. REQUIRED - must be explicitly set.&quot;
 }
+Required array addition: &quot;destructive&quot;</code></pre>
+                </div>
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">In Execute:
 
-var (
-	providerRegistry = make(map[string]ProviderImpl)
-	registryMu       sync.RWMutex
-)
-
-func RegisterProvider(name string, impl ProviderImpl) {
-	registryMu.Lock()
-	defer registryMu.Unlock()
-	providerRegistry[name] = impl
-}
-
-func GetProvider(name string) ProviderImpl {
-	registryMu.RLock()
-	defer registryMu.RUnlock()
-	return providerRegistry[name]
-}
-</code></pre>
+destructive, ok := args[&quot;destructive&quot;].(bool)
+if !ok {
+	return ToolResult{Status: ResultStatusError, Error: &quot;destructive is required and must be a boolean&quot;}
+}</code></pre>
+                </div>
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">ToolResult gains a field to carry destructive classification (or check in caller from args)</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>ProviderImpl interface has PrepareRequest, GetAccessToken, NeedsAuth, IsExpired, Refresh methods</li><li>Registry uses sync.RWMutex for thread safety</li><li>RegisterProvider and GetProvider work correctly</li><li>No existing code breaks -- old Engine path still compiles</li></ul>
+                    <ul class="acceptance-list"><li>bash without destructive arg returns error</li><li>bash with destructive: true/false parses and executes normally</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/tools/...</span> <span class="task-verify">✔ go build ./...</span> </div>
             </div>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 2.2</span>
-                        <span class="task-name">Implement local/no-auth provider as default</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                        <span class="task-name">Add IsDestructive classification to Tool</span>
+                        <span class="layer-badge" style="background:#888"></span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Create a no-auth provider implementation that returns nil from PrepareRequest (passthrough for vllm/ollama), register it by default</span>
+                        <span class="cell-value">Add IsDestructive bool field to the Tool struct. Set it on write_file, edit_file, skill_build (true) and read_file, bash, skill_list, open, set_working_dir (false - bash determined at runtime from args). Create IsDestructiveTool(tool, args) helper that checks both the static classification and, for bash, the runtime args[destructive] value.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Existing local providers (vllm, ollama) need to continue working with no auth, serving as the base case</span>
+                        <span class="cell-value">The authorization layer needs a single way to determine whether a specific tool call with specific args is destructive or not.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/local_provider.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/tools/tools.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package chat
-
-import &quot;net/http&quot;
-
-type LocalProvider struct{}
-
-func (l *LocalProvider) PrepareRequest(req *http.Request) error { return nil }
-func (l *LocalProvider) GetAccessToken() string                { return &quot;&quot; }
-func (l *LocalProvider) NeedsAuth() bool                       { return false }
-func (l *LocalProvider) IsExpired() bool                       { return false }
-func (l *LocalProvider) Refresh() error                        { return nil }
-
-func init() {
-	RegisterProvider(&quot;vllm&quot;, &amp;LocalProvider{})
-	RegisterProvider(&quot;ollama&quot;, &amp;LocalProvider{})
-}
-</code></pre>
+                    <pre><code class="language-go">Tool struct gains:
+	IsDestructive bool \x60json:&quot;destructive&quot;\x60</code></pre>
                 </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>LocalProvider PrepareRequest is a no-op</li><li>NeedsAuth returns false</li><li>vllm and ollama registered in init</li><li>Existing Engine usage with local providers still works unchanged</li></ul>
-                </div>
-                </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
-            </div>
-            <div class="task-card">
-                <div class="task-header">
-                    <div class="task-title-row">
-                        <span class="task-num"># 2.3</span>
-                        <span class="task-name">Wire Engine to use ProviderImpl for auth</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
-                    </div>
-                </div>
-                <div class="task-grid">
-                    <div class="task-cell">
-                        <span class="cell-label">What</span>
-                        <span class="cell-value">Update Engine to accept a ProviderImpl, call PrepareRequest before each HTTP call, fall back to old behavior if no provider impl found</span>
-                    </div>
-                    <div class="task-cell">
-                        <span class="cell-label">Why</span>
-                        <span class="cell-value">Bridge the gap between the new provider interface and the existing Engine streaming logic</span>
-                    </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/engine.go</li></ul>
-                </div>
-                    
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">type Engine struct {
-	ChatURL  string
-	Model    string
-	Thinking bool
-	provider ProviderImpl
-	client   *http.Client
-}
-
-func NewEngine(chatURL, model string, thinking bool, provider ProviderImpl) *Engine {
-	return &amp;Engine{
-		ChatURL:  chatURL,
-		Model:    model,
-		Thinking: thinking,
-		provider: provider,
-		client:   &amp;http.Client{Timeout: 0},
+                    <pre><code class="language-go">var IsDestructiveTool = func(t *Tool, args map[string]interface{}) bool {
+	if t.IsDestructive {
+		return true
 	}
-}
-
-// In Stream(), after creating the request:
-if e.provider != nil {
-	if err := e.provider.PrepareRequest(req); err != nil {
-		ch &lt;- StreamEvent{Error: fmt.Errorf(&quot;provider auth: %w&quot;, err)}
-		return
-	}
-}
-</code></pre>
-                </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Engine accepts ProviderImpl in NewEngine</li><li>PrepareRequest called before every outgoing HTTP request</li><li>Auth error returns StreamEvent with Error, does not panic</li><li>Backward compatible -- nil provider works as before (no auth header)</li><li>All call sites of NewEngine in stream.go and headless.go updated</li></ul>
-                </div>
-                </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
-            </div>
-            <div class="task-card">
-                <div class="task-header">
-                    <div class="task-title-row">
-                        <span class="task-num"># 2.4</span>
-                        <span class="task-name">Generic Sequence component for multi-step wizards</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
-                    </div>
-                </div>
-                <div class="task-grid">
-                    <div class="task-cell">
-                        <span class="cell-label">What</span>
-                        <span class="cell-value">Create component/sequence.go — a tea.Model that chains multiple child components (Input, Picker, Question) with a shared context map</span>
-                    </div>
-                    <div class="task-cell">
-                        <span class="cell-label">Why</span>
-                        <span class="cell-value">Reusable wizard abstraction for provider auth and future multi-step flows (tool questions, skill install). Components remain standalone and unchanged.</span>
-                    </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/ui/component/sequence.go</li></ul>
-                </div>
-                    
-                <div class="task-cell full-width snippet-block">
-                    <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package component
-
-import (
-	tea &quot;github.com/charmbracelet/bubbletea&quot;
-)
-
-type SequenceStep struct {
-	Key       string     // name for the result in shared context
-	Component tea.Model  // child component to run
-}
-
-type Sequence struct {
-	Steps    []SequenceStep
-	Current  int
-	Context  map[string]any  // accumulated results keyed by Step.Key
-	OnDone   func(map[string]any) tea.Cmd
-	OnCancel func() tea.Cmd
-}
-
-func (s *Sequence) Init() tea.Cmd {
-	return s.Steps[s.Current].Component.Init()
-}
-
-func (s *Sequence) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	current := &amp;s.Steps[s.Current]
-	newChild, cmd := current.Component.Update(msg)
-	
-	// Check if child is done (returned a different type or nil cmd with done signal)
-	if isDone(newChild) {
-		// Extract result and store in context under step&#x27;s key
-		s.Context[current.Key] = extractResult(newChild)
-		
-		if s.Current+1 &lt; len(s.Steps) {
-			s.Current++
-			return s, s.Steps[s.Current].Component.Init()
+	if t.Name == &quot;bash&quot; {
+		if d, ok := args[&quot;destructive&quot;].(bool); ok {
+			return d
 		}
-		return s, s.OnDone(s.Context)
 	}
-	
-	current.Component = newChild
-	return s, cmd
-}
-
-func (s *Sequence) View() string {
-	return s.Steps[s.Current].Component.View()
-}
-
-// isDone checks if a child component signaled completion
-// Each component type has its own signal (e.g., Input returns empty cmd on enter)
-func isDone(m tea.Model) bool {
-	// Implementation depends on how child signals completion
-	// For now: if Update returns the same model type but with a Done flag
-}
-
-// extractResult pulls the output value from a completed component
-func extractResult(m tea.Model) any {
-	switch c := m.(type) {
-	case *Input:
-		return c.Value
-	case *Picker:
-		return c.Selected
-	case *Question:
-		return struct{ Index int; Text string }{c.Selected, c.Instructions}
-	default:
-		return nil
-	}
-}
-</code></pre>
+	return false
+}</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Sequence implements tea.Model (Init, Update, View)</li><li>Steps are defined as SequenceStep with Key name and child Component</li><li>Shared context map stores results keyed by each step&#x27;s Key</li><li>On step completion: result extracted, stored in context, advances to next step</li><li>On all steps done: calls OnDone with full context map</li><li>OnCancel callback supported</li><li>Child components remain unchanged — they don&#x27;t know about Sequence</li><li>Works with existing Input, Picker, Question components</li></ul>
+                    <ul class="acceptance-list"><li>write_file, edit_file, skill_build always return true</li><li>bash with destructive:true returns true</li><li>bash with destructive:false returns false</li><li>read_file, skill_list, open, set_working_dir always return false</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div></div>
         </section>
-        <section id="openai-oauth-(no-browser)" class="milestone-section">
+        <section id="application" class="milestone-section">
             <div class="section-header">
                 <span class="section-num">3</span>
-                <h2>OpenAI OAuth (No-Browser)</h2>
-                <span class="pattern-badge">PKCE, Strategy</span> 
+                <h2>Application</h2>
+                <span class="pattern-badge">State Machine</span> 
             </div>
             
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
-                <div class="cell-value">Implement OpenAI OAuth 2.0 PKCE flow without browser automation -- user copies URL, pastes authorization code back in TUI</div>
+                <div class="cell-value">Per-tool authorization gate with batch interruption and user-injected messages</div>
             </div>
             
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">User can authenticate with OpenAI subscription via paste-code flow, tokens auto-refresh, works on server and desktop</div>
+                <div class="cell-value">Stream pauses on authorization, user responds, pending tools cancelled with error, injected user message resumes stream</div>
             </div>
             
             <div class="diagram-canvas">
@@ -895,204 +502,186 @@ func extractResult(m tea.Model) any {
                     <span class="icon">📐</span>
                     <span class="label">Architecture & Flow</span>
                 </div>
-                <pre class="mermaid">sequenceDiagram
-    participant U as User
-    participant T as TUI
-    participant O as OpenAI Auth Server
-    participant A as OpenAI API
-
-    T->>U: Display auth URL + PKCE challenge
-    U->>O: Opens URL in browser, logs in
-    O->>U: Redirects with ?code=XYZ
-    U->>T: Pastes authorization code
-    T->>O: Exchanges code + code_verifier for tokens
-    O->>T: Returns access_token, refresh_token, expires_in
-    T->>T: Stores credentials in endpoints.json
-    T->>A: API call with Bearer token
-    A->>T: Response
-    Note over T: Auto-refresh when expires_at within 5min</pre>
+                <div class="flow-diagram"><div class="flow-step">stream</div><span class="flow-arrow">&rarr;</span><div class="flow-step">tool_calls</div><span class="flow-arrow">&rarr;</span><div class="flow-step">ForEach tool: shouldAsk?(mode, args)</div><span class="flow-arrow">&rarr;</span><div class="flow-step">yes: ModeAuthorize</div><span class="flow-arrow">&rarr;</span><div class="flow-step">user: y/n+text</div><span class="flow-arrow">&rarr;</span><div class="flow-step">execute or reject</div><span class="flow-arrow">&rarr;</span><div class="flow-step">pending tools: CANCELLED</div><span class="flow-arrow">&rarr;</span><div class="flow-step">resume stream with optional user msg</div></div>
             </div>
             <div class="task-list">
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 3.1</span>
-                        <span class="task-name">OpenAI OAuth PKCE implementation</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                        <span class="task-name">Add ModeAuthorize to app modes</span>
+                        <span class="layer-badge" style="background:#888"></span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Create chat/openai_provider.go with full PKCE OAuth flow: code challenge generation, token exchange, auto-refresh, and PrepareRequest that injects Bearer token</span>
+                        <span class="cell-value">Add ModeAuthorize to the Mode enum in modes.go. This mode interrupts the streaming flow to present a yes/no confirmation. Add authorization state to streamState: pendingTool (index of tool being authorized), pendingInstruction (text typed by user before confirming), inInstructionMode (bool - whether user is typing text vs selecting y/n).</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Enable OpenAI subscription authentication -- the primary auth use case for cloud providers</span>
+                        <span class="cell-value">We need a distinct UI mode that suspends streaming, shows the authorization prompt, and collects user intent before resuming.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/openai_provider.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/modes.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/stream.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package chat
-
-import (
-	&quot;crypto/rand&quot;
-	&quot;crypto/sha256&quot;
-	&quot;encoding/base64&quot;
-	&quot;fmt&quot;
-	&quot;net/http&quot;
-	&quot;net/url&quot;
-	&quot;time&quot;
-)
-
-const (
-	openaiClientID      = &quot;app_EMoamEEZ73f0CkXaXp7hrann&quot;
-	openaiAuthURL       = &quot;https://auth.openai.com/oauth/authorize&quot;
-	openaiTokenURL      = &quot;https://auth.openai.com/oauth/token&quot;
-	openaiBaseURL       = &quot;https://api.openai.com&quot;
-)
-
-type OpenAIProvider struct {
-	codeVerifier string
-	creds        *ProviderCreds
-}
-
-func NewOpenAIProviderWithKey(apiKey string) *OpenAIProvider {
-	return &amp;OpenAIProvider{
-		creds: &amp;ProviderCreds{APIKey: apiKey},
-	}
-}
-
-// StartOAuth returns the authorization URL the user must visit.
-func (o *OpenAIProvider) StartOAuth(redirectURI string) (authURL string, err error) {
-	// Generate 32-byte code verifier
-	o.codeVerifier = generatePKCEVerifier()
-	challenge := generateCodeChallenge(o.codeVerifier)
-	
-	params := url.Values{
-		&quot;client_id&quot;:                {openaiClientID},
-		&quot;response_type&quot;:            {&quot;code&quot;},
-		&quot;code_challenge&quot;:           {challenge},
-		&quot;code_challenge_method&quot;:    {&quot;S256&quot;},
-		&quot;redirect_uri&quot;:             {redirectURI},
-	}
-	return openaiAuthURL + &quot;?&quot; + params.Encode(), nil
-}
-
-// FinishOAuth exchanges the authorization code for tokens.
-func (o *OpenAIProvider) FinishOAuth(code string) error {
-	// POST to token endpoint with code + code_verifier
-	// Store returned access_token, refresh_token, expires_at
-}
-
-func (o *OpenAIProvider) PrepareRequest(req *http.Request) error {
-	token := o.getCurrentToken()
-	if token == &quot;&quot; {
-		return fmt.Errorf(&quot;openai: no credentials configured&quot;)
-	}
-	req.Header.Set(&quot;Authorization&quot;, &quot;Bearer &quot;+token)
-	return nil
-}
-
-func (o *OpenAIProvider) Refresh() error {
-	// If API key mode, nothing to refresh
-	// If OAuth mode, use refresh_token to get new tokens
-}
-
-func generatePKCEVerifier() string {
-	b := make([]byte, 32)
-	rand.Read(b)
-	return base64.RawURLEncoding.EncodeToString(b)
-}
-
-func generateCodeChallenge(verifier string) string {
-	h := sha256.Sum256([]byte(verifier))
-	return base64.RawURLEncoding.EncodeToString(h[:])
-}
-</code></pre>
+                    <pre><code class="language-go">const (
+	...
+	ModeAuthorize       // Authorization confirmation overlay
+)</code></pre>
+                </div>
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">streamState additions:
+	authPendingIdx       int        // index of tool awaiting authorization (-1 = none)
+	authInInstruction    bool       // user is typing inline instructions
+	authInstructionText  string     // captured instruction text
+	authPendingCancelled []int      // indices of tools to mark CANCELLED</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>PKCE code verifier is 32 random bytes, base64url encoded</li><li>Code challenge is SHA256 of verifier, base64url encoded</li><li>StartOAuth returns full authorization URL with correct OpenAI client ID</li><li>FinishOAuth exchanges code for tokens and stores them</li><li>PrepareRequest injects Bearer token (OAuth or API key)</li><li>Refresh swaps expired OAuth token using refresh_token</li><li>Returns error when no credentials configured</li></ul>
+                    <ul class="acceptance-list"><li>ModeAuthorize string returns &quot;authorize&quot;</li><li>streamState has new authorization fields</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 3.2</span>
-                        <span class="task-name">OpenAI provider registration and credential persistence</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                        <span class="task-name">Implement authorization gate in executeTools</span>
+                        <span class="layer-badge" style="background:#888"></span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Register openai and openai-codex providers, wire credential loading/saving from endpoints.json ProviderCreds into OpenAIProvider on init</span>
+                        <span class="cell-value">Restructure executeTools to process tools one at a time when authorization is needed. Before each tool: check the authorization mode (auto/ask-on-write/ask-for-all) and IsDestructiveTool. If authorization is needed, save state into streamState.authPendingIdx, switch to ModeAuthorize, and RETURN from executeTools (stream is paused). On resume from ModeAuthorize (see Task 3.3), continue from the saved index. If user rejected with instructions, execute the tool (or mark rejected), inject user message, cancel remaining tools with status error &#x27;CANCELLED due to user interruption&#x27;, and return.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Credentials survive across sessions -- user doesn&#x27;t re-auth on every restart</span>
+                        <span class="cell-value">The current batch execution model must change: we now gate per-tool, pause the assistant turn, let the user respond, then resume. This is the core behavioral change.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/openai_provider.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/endpoints.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/stream.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">// In LoadEndpoints or a new init function:
-func LoadProviderImpl(p Provider) ProviderImpl {
-	switch p.Name {
-	case &quot;openai&quot;, &quot;openai-codex&quot;:
-		impl := &amp;OpenAIProvider{}
-		if p.Credentials != nil {
-			impl.creds = p.Credentials
-		}
-		return impl
-	default:
-		return &amp;LocalProvider{}
+                    <pre><code class="language-go">func (m *Model) shouldAuthorize(t *tools.Tool, args map[string]interface{}) bool {
+	switch m.settings.Authorization {
+	case config.AuthorizationAuto:
+		return false
+	case config.AuthorizationAskForAll:
+		return true
+	case config.AuthorizationAskOnWrite:
+		return tools.IsDestructiveTool(t, args)
 	}
-}
-
-// Save credentials back after OAuth completes:
-func (o *OpenAIProvider) GetCredentials() *ProviderCreds {
-	return o.creds
-}
-</code></pre>
+	return false
+}</code></pre>
+                </div>
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">In executeTools loop, before tool execution:
+	if m.shouldAuthorize(tool, args) {
+		// Set up authorization state and return
+		m.stream.authPendingIdx = i
+		m.stream.authInInstruction = false
+		m.stream.authInstructionText = &quot;&quot;
+		return nil // signal to handleStreamEvent that we need auth
+	}</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>LoadProviderImpl returns OpenAIProvider for openai/openai-codex names</li><li>Existing OAuth credentials from endpoints.json are loaded into provider</li><li>New credentials can be marshaled back to endpoints.json</li><li>Local providers still return LocalProvider</li></ul>
+                    <ul class="acceptance-list"><li>In auto mode, all tools execute without interruption (current behavior)</li><li>In ask-on-write, only destructive tools trigger authorization</li><li>In ask-for-all, every tool triggers authorization</li><li>When executeTools returns early for auth, handleStreamEvent detects this and switches to ModeAuthorize</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 3.3</span>
+                        <span class="task-name">Implement authorization response and batch cancellation</span>
+                        <span class="layer-badge" style="background:#888"></span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">In handleStreamEvent, detect when executeTools returned nil (authorization pending). Display authorization prompt. On user response (y/n with optional instruction): 1) y without text: execute the tool normally, continue loop for next tool. 2) y with text: execute the tool, inject user message (synthetic role) into session, mark remaining tools as CANCELLED, resume stream. 3) n without text: set tool result to error &#x27;REJECTED by user&#x27;, mark remaining tools as CANCELLED, resume stream. 4) n with text: set tool result to &#x27;REJECTED by user&#x27;, inject user message, mark remaining tools as CANCELLED, resume stream. The injected user message breaks the assistant turn — the LLM continues from that point.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">The user needs to accept/reject with optional instructions that feed back into the conversation. Rejected/cancelled tools get clear error messages so the LLM knows what happened.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/stream.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">func (m *Model) handleAuthResponse(accepted bool, instruction string) []config.ToolCallEntry {
+	// Re-execute from authPendingIdx with known outcome
+	entries := make([]config.ToolCallEntry, len(m.stream.partialTools))
+	tracker := tools.NewFileTracker()
+	// Execute tools up to authPendingIdx (already done in previous call)
+	// ... copy existing entries ...
+	// Process the pending tool
+	if accepted {
+		result := tool.Execute(args)
+		// populate entry
+	} else {
+		entry.Execution.Status = tools.ResultStatusError
+		entry.Execution.Error = &quot;REJECTED by user&quot;
+	}
+	// If instruction text exists, append synthetic user message
+	if instruction != &quot;&quot; {
+		m.session.appendMsg(config.Message{...Role: RoleSynthetic, Text: instruction, Label: &quot;user instruction&quot;})
+	}
+	// Cancel remaining tools
+	for j := authPendingIdx + 1; j &lt; len(partialTools); j++ {
+		entries[j].Execution.Status = tools.ResultStatusError
+		entries[j].Execution.Error = &quot;CANCELLED due to user interruption&quot;
+	}
+	return entries
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>Accepted tool executes normally, next tool is considered</li><li>Accepted tool with instruction: tool executes, instruction injected, remaining tools cancelled, stream resumes with user message in context</li><li>Rejected tool: result is error, remaining tools cancelled, stream resumes</li><li>Rejected with instruction: error result + user message injected, remaining tools cancelled, stream resumes</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div></div>
         </section>
-        <section id="tui-auth-prompt" class="milestone-section">
+        <section id="interface" class="milestone-section">
             <div class="section-header">
                 <span class="section-num">4</span>
-                <h2>TUI Auth Prompt</h2>
-                <span class="pattern-badge">Component, State Machine</span> 
+                <h2>Interface</h2>
+                <span class="pattern-badge">Presentation / Overlay</span> 
             </div>
             
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
-                <div class="cell-value">Add a TUI prompt component that guides user through provider setup on first use -- displays auth URL, collects paste-back code, or collects API key directly</div>
+                <div class="cell-value">Authorization prompt UI: yes/no selection with arrow keys, tab for inline text, shift+tab to return</div>
             </div>
             
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">User sees guided prompt on first use of an auth-required provider, completes setup in TUI, credentials saved</div>
+                <div class="cell-value">User can see the tool prompt, press left/right to select yes/no, tab to type instructions, shift+tab to return, enter to submit</div>
             </div>
             
             <div class="diagram-canvas">
@@ -1100,474 +689,241 @@ func (o *OpenAIProvider) GetCredentials() *ProviderCreds {
                     <span class="icon">📐</span>
                     <span class="label">Architecture & Flow</span>
                 </div>
-                <pre class="mermaid">stateDiagram-v2
-    [*] --> DetectMissingCreds
-    DetectMissingCreds --> ShowAuthOptions: user selects provider
-    ShowAuthOptions --> EnterAPIKey: user chooses api_key
-    ShowAuthOptions --> ShowOAuthURL: user chooses oauth
-    EnterAPIKey --> ValidateKey: user pastes key
-    ShowOAuthURL --> WaitForCode: user copies URL, opens browser
-    WaitForCode --> ExchangeCode: user pastes auth code
-    ValidateKey --> SaveCreds: key accepted
-    ExchangeCode --> SaveCreds: tokens received
-    SaveCreds --> [*]</pre>
+                <div class="flow-diagram"><div class="flow-step">ModeAuthorize</div><span class="flow-arrow">&rarr;</span><div class="flow-step">StatusBar: [tool(args)]?  ←[Yes] [No]</div><span class="flow-arrow">&rarr;</span><div class="flow-step"></div><span class="flow-arrow">&rarr;</span><div class="flow-step">Tab: text input ←</div><span class="flow-arrow">&rarr;</span><div class="flow-step">Shift+Tab: back to selection</div><span class="flow-arrow">&rarr;</span><div class="flow-step">Enter: submit</div></div>
             </div>
             <div class="task-list">
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 4.1</span>
-                        <span class="task-name">Provider auth wizard using Sequence component</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                        <span class="task-name">Add authorization prompt key handling</span>
+                        <span class="layer-badge" style="background:#888"></span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Build provider auth flow in app layer using Sequence component: URL entry → auth method picker → credential entry. No new component file needed.</span>
+                        <span class="cell-value">Add authorization key bindings and handler in keymap.go and input.go. Keys: left arrow (select no), right arrow (select yes), tab (enter instruction mode), shift+tab (return to y/n selection), enter (submit). In ModeAuthorize, if authInInstruction is true, handle text input. Otherwise, handle selection.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Leverage generic Sequence component for clean multi-step auth wizard. Reuses existing Input, Picker, and Question components.</span>
+                        <span class="cell-value">The authorization prompt needs its own input handling separate from chat and streaming modes.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/app/auth_setup.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/keymap.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/input.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package app
-
-// buildAuthWizard creates a Sequence for provider configuration:
-// Step 1: If custom provider (vllm/ollama), prompt for BaseURL via Input
-// Step 2: If multiple auth methods, show Picker to choose method
-// Step 3: If API key, show Input for key entry
-// Step 3: If OAuth, show Question with URL, then Input for code
-// OnDone: save credentials, re-scan models
-func (m *Model) buildAuthWizard(p *config.Provider) *component.Sequence {
-	var steps []component.SequenceStep
-	
-	if p.NeedsURL() {
-		steps = append(steps, component.SequenceStep{
-			Key: &quot;baseURL&quot;,
-			Component: &amp;component.Input{
-				Label: &quot;Enter &quot; + p.Name + &quot; base URL (e.g., http://localhost:8080)&quot;,
-			},
-		})
-	}
-	
-	if len(p.SupportedAuth) &gt; 1 {
-		methods := []string{}
-		for _, a := range p.SupportedAuth {
-			methods = append(methods, string(a))
-		}
-		steps = append(steps, component.SequenceStep{
-			Key: &quot;authMethod&quot;,
-			Component: &amp;component.Picker{
-				Title:   &quot;Choose authentication method for &quot; + p.Name,
-				Options: methods,
-			},
-		})
-	}
-	
-	// Auth step depends on chosen method or single available method
-	// (built dynamically based on prior steps — see buildAuthStep)
-	
-	return &amp;component.Sequence{
-		Steps: steps,
-		OnDone: func(ctx map[string]any) tea.Cmd {
-			return m.onProviderConfigComplete(p, ctx)
-		},
-		OnCancel: func() tea.Cmd {
-			return m.returnToModelPicker()
-		},
-	}
-}
-
-func (m *Model) onProviderConfigComplete(p *config.Provider, ctx map[string]any) tea.Cmd {
-	// Apply context values to provider
-	if baseURL, ok := ctx[&quot;baseURL&quot;].(string); ok {
-		p.BaseURL = baseURL
-	}
-	if method, ok := ctx[&quot;authMethod&quot;].(string); ok {
-		p.Credentials = &amp;config.ProviderCreds{
-			ActiveAuthMethod: config.AuthMethod(method),
-		}
-		if method == &quot;api_key&quot; {
-			p.Credentials.APIKey = ctx[&quot;apiKey&quot;].(string)
-		} else if method == &quot;oauth&quot; {
-			// Trigger OAuth flow with the code
-			// (handled separately as OAuth needs network call)
-		}
-	}
-	
-	// Save and re-scan
-	m.saveProvider(*p)
-	m.refreshModels()
-	return m.setChatMode()
-}
-</code></pre>
+                    <pre><code class="language-go">keyMap additions:
+	AuthYes        key.Binding  // right arrow
+	AuthNo         key.Binding  // left arrow
+	AuthAccept     key.Binding  // enter
+	AuthInstruction key.Binding // tab</code></pre>
+                </div>
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">handleAuthorizeKey(msg tea.KeyMsg) in input.go:
+	switch {
+	case key.Matches(msg, keys.AuthYes):
+		return m.submitAuthResponse(true)
+	case key.Matches(msg, keys.AuthNo):
+		return m.submitAuthResponse(false)
+	case key.Matches(msg, keys.Tab) &amp;&amp; !m.stream.authInInstruction:
+		m.stream.authInInstruction = true
+		m.recalcLayout()
+		return m, nil
+	case msg.Shift &amp;&amp; key.Matches(msg, keys.Tab) &amp;&amp; m.stream.authInInstruction:
+		m.stream.authInInstruction = false
+		return m, nil
+	case key.Matches(msg, keys.Send):
+		return m.submitAuthResponse(m.stream.authInstructionText != &quot;&quot;)
+	}</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Uses Sequence component to chain auth steps</li><li>Custom providers (vllm/ollama) prompt for BaseURL via Input step</li><li>Providers with multiple auth methods show Picker step</li><li>Providers with single auth method skip Picker, go straight to credential</li><li>API key mode uses Input step with masked display</li><li>OAuth mode shows URL via Question, then Input for code paste</li><li>OnDone saves credentials and re-scans model list</li><li>OnCancel returns to model picker without saving</li><li>No new component file — logic in app layer using existing components</li></ul>
+                    <ul class="acceptance-list"><li>Left/right arrows toggle selection</li><li>Tab switches to text input</li><li>Shift+tab switches back to y/n</li><li>Enter submits with current selection + any text</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 4.2</span>
-                        <span class="task-name">Wire auth prompt into provider selection flow</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                        <span class="task-name">Build authorization prompt UI overlay</span>
+                        <span class="layer-badge" style="background:#888"></span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Before sending message, check if provider is fully configured. If not, show config wizard. Also auto-refresh expired OAuth tokens before sending.</span>
+                        <span class="cell-value">Build the authorization prompt component in the footer/status bar area. Display: the tool name and display args, yes/no indicators with current selection highlighted, and optionally a text input line. When authInInstruction is true, show a small textarea for typing instructions. Render via the existing footer or a dedicated overlay in render.go.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Integrate the auth prompt into the existing model/provider selection so user is guided through setup at the right moment</span>
+                        <span class="cell-value">Users need to see what tool is being authorized, what it will do, and have an intuitive way to accept/reject with optional notes.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/model.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/stream.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/render.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/ui/footer.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">// Before sending message, check if provider is configured:
-func (m *Model) ensureProviderConfigured() (bool, tea.Cmd) {
-	p := config.ResolveProvider(m.endpoints, m.settings.Provider)
-	if p == nil {
-		return false, nil
+                    <pre><code class="language-go">renderAuthorizePrompt(m Model) string:
+	tool := m.toolReg.Get(p.name)
+	display := tool.DisplayValue(p.args)
+	label := fmt.Sprintf(&quot;⚠ Proceed with %s(%s)?&quot;, p.name, display)
+	selection := &quot;[Yes] [No]&quot;  // or &quot;[Yes] [No]&quot; depending on state
+	if m.stream.authInInstruction {
+		label += &quot;
+&quot; + m.stream.authInstructionText + &quot;_&quot;
 	}
-	
-	if !p.IsConfigured() {
-		// Show config wizard
-		return true, m.showProviderConfig(p)
-	}
-	
-	// Check if OAuth creds are about to expire
-	impl := chat.LoadProviderImpl(*p)
-	if impl != nil &amp;&amp; impl.IsExpired() {
-		if err := impl.Refresh(); err != nil {
-			// Refresh failed, show re-config wizard
-			return true, m.showProviderConfig(p)
-		}
-		// Refresh succeeded, save updated creds
-		m.saveProvider(*p)
-	}
-	return false, nil
-}</code></pre>
+	return label</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>sendMessage checks if provider IsConfigured before sending</li><li>Unconfigured provider triggers config wizard instead of sending</li><li>Expired OAuth tokens auto-refresh before sending</li><li>Failed refresh triggers config wizard for re-auth</li><li>Config cancel gracefully returns without sending</li></ul>
+                    <ul class="acceptance-list"><li>Prompt shows tool name and display param</li><li>Yes/No selection is visually clear</li><li>Text instruction mode shows a cursor for input</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> <span class="task-verify">✔ visual inspection in TUI</span> </div>
             </div>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 4.3</span>
-                        <span class="task-name">Wire model scanning through ProviderImpl auth</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                        <span class="task-name">Update system prompt for destructive requirement</span>
+                        <span class="layer-badge" style="background:#888"></span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">ScanModels returns sentinel entries for unconfigured providers (&lt;not configured&gt;) and expired creds (&lt;auth expired&gt;). Both trigger the universal config wizard.</span>
+                        <span class="cell-value">Update the system prompt to instruct the LLM that the bash tool requires the &#x27;destructive&#x27; boolean field. Explain that true means the command modifies files/state, false means read-only. Emphasize this is mandatory — omitting it causes an error.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Model scanner needs auth to fetch models from authenticated providers, and must surface auth-required providers as selectable placeholders in the picker</span>
+                        <span class="cell-value">The LLM needs to know about the new required field so it includes it in every bash call.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/models.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/provider.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/config/sys-prompt.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEntry {
-	var mu sync.Mutex
-	var models []ModelEntry
-	var wg sync.WaitGroup
-
-	for _, provider := range endpoints.Providers {
-		wg.Add(1)
-		go func(p config.Provider) {
-			defer wg.Done()
-			
-			// If provider needs initial config (URL or auth), return sentinel
-			if !p.IsConfigured() {
-				mu.Lock()
-				models = append(models, ModelEntry{
-					ID:          &quot;&lt;not configured&gt;&quot;,
-					Provider:    p.Name,
-					NeedsConfig: true,
-				})
-				mu.Unlock()
-				return
-			}
-			
-			impl := LoadProviderImpl(p)
-			entries, err := FetchModelsDetailWithAuth(ctx, p, impl)
-			if err != nil {
-				// If 401, creds may be expired - return sentinel
-				if isAuthError(err) {
-					mu.Lock()
-					models = append(models, ModelEntry{
-						ID:          &quot;&lt;auth expired&gt;&quot;,
-						Provider:    p.Name,
-						NeedsConfig: true,
-					})
-					mu.Unlock()
-				}
-				return
-			}
-			
-			mu.Lock()
-			models = append(models, entries...)
-			mu.Unlock()
-		}(provider)
-	}
-	wg.Wait()
-	return models
-}</code></pre>
+                    <pre><code class="language-go">System prompt addition:
+&quot;When calling the bash tool, you MUST set the &#x27;destructive&#x27; field:
+- destructive: true if the command modifies files, writes, deletes, installs, or changes system state
+- destructive: false for read-only commands (cat, ls, find, grep, git status, etc.)
+Omitting this field will cause the tool call to fail.&quot;</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Unconfigured providers return &lt;not configured&gt; sentinel</li><li>Providers with expired/invalid creds return &lt;auth expired&gt; sentinel</li><li>Both sentinel types have NeedsConfig flag set to true</li><li>Local providers with no auth need still show &lt;not configured&gt; if URL missing</li><li>ModelEntry has NeedsConfig flag (replaces NeedsAuth) for broader coverage</li></ul>
+                    <ul class="acceptance-list"><li>System prompt mentions the destructive requirement</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 4.4</span>
-                        <span class="task-name">Picker shows auth-required placeholders and triggers auth prompt</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                        <span class="task-name">Wire authorization pause/resume in handleStreamEvent</span>
+                        <span class="layer-badge" style="background:#888"></span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Model picker shows &lt;not configured&gt; and &lt;auth expired&gt; sentinels. Selecting one opens the universal config wizard. On completion, saves provider and re-scans.</span>
+                        <span class="cell-value">In handleStreamEvent, after executeTools is called, detect if it returned nil (authorization pending). If so: switch to ModeAuthorize, render the prompt, and wait for user input. Do NOT call startStream yet. On resume from ModeAuthorize, complete the tool batch (with accepted/rejected/cancelled results), append the assistant message, and call startStream to resume.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">User needs to discover and authenticate providers through the model picker since that is the primary interaction point</span>
+                        <span class="cell-value">handleStreamEvent currently assumes executeTools always returns a complete batch. We need to handle the pause-and-resume flow: partial execution → auth prompt → completion.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/model.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/stream.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">// In model picker display logic:
-func renderModelEntry(e ModelEntry) string {
-	if e.NeedsConfig {
-		label := e.ID
-		if e.ID == &quot;&lt;auth expired&gt;&quot; {
-			label = &quot;re-authenticate&quot;
-		}
-		return fmt.Sprintf(&quot;  %s: click to %s&quot;, e.Provider, label)
+                    <pre><code class="language-go">In handleStreamEvent, tool_calls branch:
+	toolEntries := (&amp;m).executeTools(m.stream.partialTools)
+	if toolEntries == nil {
+		// Authorization pending — switch mode and wait
+		m.mode = ModeAuthorize
+		m.updateViewportContent()
+		return m, nil
 	}
-	return fmt.Sprintf(&quot;  %s: %s&quot;, e.Provider, e.ID)
-}
-
-// On model selection:
-func (m *Model) onModelSelected(entry ModelEntry) (Model, tea.Cmd) {
-	if entry.NeedsConfig {
-		// Trigger config wizard for this provider
-		p := config.ResolveProvider(m.endpoints, entry.Provider)
-		return m, m.showProviderConfig(p)
-	}
-	// Normal model selection
-	m.settings.Provider = entry.Provider
-	m.settings.Model = entry.ID
-	return m, nil
-}
-
-// After successful config, re-scan models:
-func (m *Model) onProviderConfigComplete(updated config.Provider) (Model, tea.Cmd) {
-	// Save updated provider back to endpoints
-	m.saveProvider(updated)
-	
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	models := chat.ScanModels(ctx, m.endpoints)
-	m.populateModelList(models)
-	return m, nil
-}</code></pre>
+	// Normal flow: append and resume...</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Picker displays &lt;not configured&gt; for providers missing URL or creds</li><li>Picker displays &lt;auth expired&gt; for providers with invalid creds</li><li>Selecting sentinel opens provider config wizard</li><li>Wizard completion saves provider and re-scans model list</li><li>Normal model selection unchanged for configured providers</li></ul>
+                    <ul class="acceptance-list"><li>When executeTools returns nil, mode switches to ModeAuthorize</li><li>Viewport updates to show authorization prompt</li><li>No stream resumption until auth is resolved</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
-            </div></div>
-        </section>
-        <section id="error-handling-&-fallback" class="milestone-section">
-            <div class="section-header">
-                <span class="section-num">5</span>
-                <h2>Error Handling &amp; Fallback</h2>
-                <span class="pattern-badge">Circuit Breaker</span> 
-            </div>
-            
-            <div class="ms-overview-box">
-                <span class="cell-label">Objective</span>
-                <div class="cell-value">Handle auth failures gracefully -- expired tokens trigger re-prompt, 401 errors trigger credential refresh or re-auth</div>
-            </div>
-            
-            <div class="ms-success-box">
-                <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">Expired tokens auto-refresh before retry, 401 errors prompt for re-auth, unsupported providers return clear error</div>
-            </div>
-            
-            <div class="diagram-canvas">
-                <div class="diagram-header">
-                    <span class="icon">📐</span>
-                    <span class="label">Architecture & Flow</span>
-                </div>
-                <pre class="mermaid">flowchart LR
-    A[HTTP Request] --> B{Status Code}
-    B -->|200| C[Success]
-    B -->|401| D{Has RefreshToken}
-    D -->|Yes| E[Refresh Token]
-    E --> F{Retry}
-    F -->|200| C
-    F -->|401| G[Show Re-auth Prompt]
-    D -->|No| G
-    B -->|403| H[Permission Error Message]
-    B -->|Other| I[Standard Error]</pre>
-            </div>
-            <div class="task-list">
-            <div class="task-card">
-                <div class="task-header">
-                    <div class="task-title-row">
-                        <span class="task-num"># 5.1</span>
-                        <span class="task-name">401 detection and auto-refresh with re-auth prompt</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
-                    </div>
-                </div>
-                <div class="task-grid">
-                    <div class="task-cell">
-                        <span class="cell-label">What</span>
-                        <span class="cell-value">In Engine Stream, detect 401 response, attempt token refresh, retry once, then return error that triggers re-auth prompt</span>
-                    </div>
-                    <div class="task-cell">
-                        <span class="cell-label">Why</span>
-                        <span class="cell-value">Expired tokens are common -- auto-refresh avoids bothering the user, re-auth prompt is the last resort</span>
-                    </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/engine.go</li></ul>
-                </div>
-                    
-                <div class="task-cell full-width snippet-block">
-                    <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">// In Stream(), after getting a non-200 response:
-if resp.StatusCode == http.StatusUnauthorized {
-	// Try refreshing credentials
-	if e.provider != nil &amp;&amp; e.provider.IsExpired() {
-		if err := e.provider.Refresh(); err == nil {
-			// Retry with new token
-			req2, _ := http.NewRequestWithContext(ctx, &quot;POST&quot;, e.ChatURL, bytes.NewReader(body))
-			req2.Header.Set(&quot;Content-Type&quot;, &quot;application/json&quot;)
-			e.provider.PrepareRequest(req2)
-			// ... repeat the request ...
-		}
-	}
-	// If refresh failed or not available, return error that triggers re-auth
-	ch &lt;- StreamEvent{Error: fmt.Errorf(&quot;authentication failed -- re-configure provider %s&quot;, e.providerName)}
-	return
-}
-</code></pre>
-                </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>401 response triggers token refresh attempt before showing error</li><li>Successful refresh retries the request with new token</li><li>Failed refresh returns error message that triggers re-auth prompt</li><li>Providers without refresh capability return clear error</li></ul>
-                </div>
-                </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
-                        <span class="task-num"># 5.2</span>
-                        <span class="task-name">Unsupported provider error and placeholder error for non-openai dialects</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                        <span class="task-num"># 4.5</span>
+                        <span class="task-name">Implement instruction text editing in authorization prompt</span>
+                        <span class="layer-badge" style="background:#888"></span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">When user configures a provider with a dialect that has no implementation yet (anthropic, gemini), return a clear error explaining it&#x27;s not yet supported</span>
+                        <span class="cell-value">When in instruction mode (after Tab), capture typed characters into authInstructionText. Support backspace, left/right navigation. Show the accumulating text in the status bar alongside the yes/no selection. When Shift+Tab is pressed, preserve the text and return to yes/no view so the user can review before submitting.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Scope is OpenAI only for now -- other providers should fail gracefully with a helpful message, not a cryptic panic</span>
+                        <span class="cell-value">Users need to write clear instructions (e.g., &#x27;don&#x27;t delete the config file&#x27;) alongside their yes/no decision. The back-and-forth between text editing and review should be fluid.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/provider.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/input.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">// In LoadProviderImpl:
-func LoadProviderImpl(p config.Provider) ProviderImpl {
-	switch p.Name {
-	case &quot;openai&quot;, &quot;openai-codex&quot;:
-		return newOpenAIFromConfig(p)
-	default:
-		if p.Dialect != config.DialectOpenAICompatible {
-			return &amp;UnsupportedProvider{Dialect: p.Dialect}
+                    <pre><code class="language-go">In handleAuthorizeKey, when authInInstruction:
+	case msg.Type == tea.KeyRunes:
+		m.stream.authInstructionText += string(msg.Runes)
+	case msg.Type == tea.KeyBackspace:
+		runes := []rune(m.stream.authInstructionText)
+		if len(runes) &gt; 0 {
+			m.stream.authInstructionText = string(runes[:len(runes)-1])
 		}
-		return &amp;LocalProvider{}
-	}
-}
-
-type UnsupportedProvider struct {
-	Dialect string
-}
-
-func (u *UnsupportedProvider) PrepareRequest(req *http.Request) error {
-	return fmt.Errorf(&quot;provider dialect %q not yet supported -- only openai-compatible providers are currently available&quot;, u.Dialect)
-}
-// ... other interface methods return appropriate stubs
-</code></pre>
+	return m, nil</code></pre>
+                </div>
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">Footer rendering shows:
+	- Selection: [Yes] [No]
+	- Instruction text: &quot;user typed text here|&quot; (with cursor)</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Anthropic dialect returns clear unsupported error from PrepareRequest</li><li>Gemini dialect returns clear unsupported error</li><li>OpenAI and local providers work normally</li><li>Error message guides user on what IS supported</li></ul>
+                    <ul class="acceptance-list"><li>Typing characters appends to instruction</li><li>Backspace removes last character</li><li>Shift+tab preserves text, returns to selection view</li><li>Enter in instruction mode submits with current selection + text</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div></div>
         </section>
     </div>

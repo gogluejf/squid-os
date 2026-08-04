@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>provider-auth</title>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>agent-runtime-cli.BAK.20260722</title>
 <style>:root { 
     --bg: #1e1e1e; --nav: #252526; --card: #2d2d2d; --border: #3e3e42; 
     --text: #d4d4d4; --accent: #569cd6; --success: #4ec9b0; 
@@ -206,97 +206,119 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
 </style>
 <style>code[class*=language-],pre[class*=language-]{color:#ccc;background:0 0;font-family:Consolas,Monaco,'Andale Mono','Ubuntu Mono',monospace;font-size:1em;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.5;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}pre[class*=language-]{padding:1em;margin:.5em 0;overflow:auto}:not(pre)>code[class*=language-],pre[class*=language-]{background:#2d2d2d}:not(pre)>code[class*=language-]{padding:.1em;border-radius:.3em;white-space:normal}.token.block-comment,.token.cdata,.token.comment,.token.doctype,.token.prolog{color:#999}.token.punctuation{color:#ccc}.token.attr-name,.token.deleted,.token.namespace,.token.tag{color:#e2777a}.token.function-name{color:#6196cc}.token.boolean,.token.function,.token.number{color:#f08d49}.token.class-name,.token.constant,.token.property,.token.symbol{color:#f8c555}.token.atrule,.token.builtin,.token.important,.token.keyword,.token.selector{color:#cc99cd}.token.attr-value,.token.char,.token.regex,.token.string,.token.variable{color:#7ec699}.token.entity,.token.operator,.token.url{color:#67cdcc}.token.bold,.token.important{font-weight:700}.token.italic{font-style:italic}.token.entity{cursor:help}.token.inserted{color:green}</style>
 </head><body>
-    <nav><a href="#epic-overview" class="nav-item home always-visible">🏠 Epic</a><div class="nav-items" id="nav-items"><a href="#provider-data-model" class="nav-item">Provider Data Model</a><a href="#provider-interface" class="nav-item">Provider Interface</a><a href="#openai-oauth-(no-browser)" class="nav-item">OpenAI OAuth (No-Browser)</a><a href="#tui-auth-prompt" class="nav-item">TUI Auth Prompt</a><a href="#error-handling-&-fallback" class="nav-item">Error Handling &amp; Fallback</a></div><button class="hamburger" id="hamburger" aria-label="Toggle menu"><span></span><span></span><span></span></button></nav>
+    <nav><a href="#epic-overview" class="nav-item home always-visible">🏠 Epic</a><div class="nav-items" id="nav-items"><a href="#cli-command-model" class="nav-item">CLI Command Model</a><a href="#agent-registry-and-session-metadata" class="nav-item">Agent Registry and Session Metadata</a><a href="#runtime-options-and-turn-preparation" class="nav-item">Runtime Options and Turn Preparation</a><a href="#memory-foundation" class="nav-item">Memory Foundation</a><a href="#run-execution-and-output-modes" class="nav-item">Run Execution and Output Modes</a><a href="#agent-tools" class="nav-item">Agent Tools</a><a href="#cleanup-and-validation" class="nav-item">Cleanup and Validation</a></div><button class="hamburger" id="hamburger" aria-label="Toggle menu"><span></span><span></span><span></span></button></nav>
     <div class="container">
         
     <section id="epic-overview" class="epic-header">
-        <h1>Provider Authentication &amp; Dialect Framework</h1>
+        <h1>Agent Runtime and CLI Architecture</h1>
         <div class="epic-meta">
             <div class="meta-box">
                 <span class="meta-label">Problem</span>
-                <div class="meta-value">Current codebase has no credential support -- Engine fires bare HTTP requests with no auth header. Need scalable provider architecture supporting API keys and OAuth, with per-provider dialect implementations, starting with OpenAI.</div>
+                <div class="meta-value">Squid-OS needs a clean explicit CLI, first-class agent presets, session continuation, autosave-aware run execution, memory scaffolding, and bounded agent tool delegation without scattering behavior across main.go and TUI-only paths.</div>
             </div>
             <div class="meta-box">
                 <span class="meta-label">Goal</span>
-                <div class="meta-value">OpenAI OAuth (no-browser) and API key auth working; extensible provider interface for adding Gemini/Anthropic/Fireworks/OpenRouter; naming consistency across Provider/Endpoint/ModelEntry</div>
+                <div class="meta-value">A mode-driven CLI, global agent registry, expanded session metadata, shared turn preparation, memory namespace foundation, run output modes, autosave behavior, and phase-1 agent tools.</div>
             </div>
         </div>
         <div class="milestone-grid">
             
-        <a href="#provider-data-model" class="milestone-card-link">
+        <a href="#cli-command-model" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
                     <span class="ms-num">1</span>
-                    <span class="ms-name">Provider Data Model</span>
+                    <span class="ms-name">CLI Command Model</span>
                 </div>
-                <span class="pattern-tag">Interface Segregation, Strategy</span> 
-                <p class="ms-count">2 Task(s)</p>
-                <ul class="ms-task-list"><li>1.1 - Provider struct with auth and dialect fields</li><li>1.2 - Migrate EndpointsConfig and update all call sites</li></ul>
+                <span class="pattern-tag">Command Tree, Explicit Mode Selection</span> 
+                <p class="ms-count">5 Task(s)</p>
+                <ul class="ms-task-list"><li>1.1 - Extract CLI command construction</li><li>1.2 - Implement root and TUI option parsing</li><li>1.3 - Implement complete run option parsing</li><li>1.4 - Preserve version and stub commands</li><li>1.5 - Add bash and zsh completion</li></ul>
             </div>
         </a>
-        <a href="#provider-interface" class="milestone-card-link">
+        <a href="#agent-registry-and-session-metadata" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
                     <span class="ms-num">2</span>
-                    <span class="ms-name">Provider Interface</span>
+                    <span class="ms-name">Agent Registry and Session Metadata</span>
                 </div>
-                <span class="pattern-tag">Strategy, Interface Segregation</span> 
-                <p class="ms-count">4 Task(s)</p>
-                <ul class="ms-task-list"><li>2.1 - Define ProviderImpl interface and registry</li><li>2.2 - Implement local/no-auth provider as default</li><li>2.3 - Wire Engine to use ProviderImpl for auth</li><li>2.4 - Generic Sequence component for multi-step wizards</li></ul>
+                <span class="pattern-tag">Registry, Configuration Object, Provenance Metadata</span> 
+                <p class="ms-count">3 Task(s)</p>
+                <ul class="ms-task-list"><li>2.1 - Add agent config path and registry</li><li>2.2 - Add Agent and Agents session metadata</li><li>2.3 - Expose agents in environment</li></ul>
             </div>
         </a>
-        <a href="#openai-oauth-(no-browser)" class="milestone-card-link">
+        <a href="#runtime-options-and-turn-preparation" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
                     <span class="ms-num">3</span>
-                    <span class="ms-name">OpenAI OAuth (No-Browser)</span>
+                    <span class="ms-name">Runtime Options and Turn Preparation</span>
                 </div>
-                <span class="pattern-tag">PKCE, Strategy</span> 
-                <p class="ms-count">2 Task(s)</p>
-                <ul class="ms-task-list"><li>3.1 - OpenAI OAuth PKCE implementation</li><li>3.2 - OpenAI provider registration and credential persistence</li></ul>
+                <span class="pattern-tag">Application Service, Explicit State Transition</span> 
+                <p class="ms-count">4 Task(s)</p>
+                <ul class="ms-task-list"><li>3.1 - Add runtime option resolver</li><li>3.2 - Expand session bootstrap config</li><li>3.3 - Add shared PrepareTurn</li><li>3.4 - Model autosave as session runtime config</li></ul>
             </div>
         </a>
-        <a href="#tui-auth-prompt" class="milestone-card-link">
+        <a href="#memory-foundation" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
                     <span class="ms-num">4</span>
-                    <span class="ms-name">TUI Auth Prompt</span>
+                    <span class="ms-name">Memory Foundation</span>
                 </div>
-                <span class="pattern-tag">Component, State Machine</span> 
-                <p class="ms-count">4 Task(s)</p>
-                <ul class="ms-task-list"><li>4.1 - Provider auth wizard using Sequence component</li><li>4.2 - Wire auth prompt into provider selection flow</li><li>4.3 - Wire model scanning through ProviderImpl auth</li><li>4.4 - Picker shows auth-required placeholders and triggers auth prompt</li></ul>
+                <span class="pattern-tag">Configuration Scaffold, Namespace Resolution</span> 
+                <p class="ms-count">2 Task(s)</p>
+                <ul class="ms-task-list"><li>4.1 - Add memory config and namespace paths</li><li>4.2 - Persist and expose memory config</li></ul>
             </div>
         </a>
-        <a href="#error-handling-&-fallback" class="milestone-card-link">
+        <a href="#run-execution-and-output-modes" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
                     <span class="ms-num">5</span>
-                    <span class="ms-name">Error Handling &amp; Fallback</span>
+                    <span class="ms-name">Run Execution and Output Modes</span>
                 </div>
-                <span class="pattern-tag">Circuit Breaker</span> 
-                <p class="ms-count">2 Task(s)</p>
-                <ul class="ms-task-list"><li>5.1 - 401 detection and auto-refresh with re-auth prompt</li><li>5.2 - Unsupported provider error and placeholder error for non-openai dialects</li></ul>
+                <span class="pattern-tag">Headless Runner, Output Adapter, Autosave</span> 
+                <p class="ms-count">4 Task(s)</p>
+                <ul class="ms-task-list"><li>5.1 - Build run execution service</li><li>5.2 - Implement run output modes</li><li>5.3 - Add CLI stream JSONL protocol</li><li>5.4 - Apply run auth and limits</li></ul>
+            </div>
+        </a>
+        <a href="#agent-tools" class="milestone-card-link">
+            <div class="milestone-card">
+                <div class="ms-header">
+                    <span class="ms-num">6</span>
+                    <span class="ms-name">Agent Tools</span>
+                </div>
+                <span class="pattern-tag">Tool Adapter, Registry Guard, Blocking Delegation</span> 
+                <p class="ms-count">3 Task(s)</p>
+                <ul class="ms-task-list"><li>6.1 - Register list_agents tool</li><li>6.2 - Register call_agent tool</li><li>6.3 - Register inline_agent tool</li></ul>
+            </div>
+        </a>
+        <a href="#cleanup-and-validation" class="milestone-card-link">
+            <div class="milestone-card">
+                <div class="ms-header">
+                    <span class="ms-num">7</span>
+                    <span class="ms-name">Cleanup and Validation</span>
+                </div>
+                <span class="pattern-tag">Strangler Cleanup, Regression Tests</span> 
+                <p class="ms-count">3 Task(s)</p>
+                <ul class="ms-task-list"><li>7.1 - Drop incognito CLI flag</li><li>7.2 - Remove legacy root CLI behavior</li><li>7.3 - Add focused regression tests</li></ul>
             </div>
         </a>
         </div>
     </section>
     
         
-        <section id="provider-data-model" class="milestone-section">
+        <section id="cli-command-model" class="milestone-section">
             <div class="section-header">
                 <span class="section-num">1</span>
-                <h2>Provider Data Model</h2>
-                <span class="pattern-badge">Interface Segregation, Strategy</span> 
+                <h2>CLI Command Model</h2>
+                <span class="pattern-badge">Command Tree, Explicit Mode Selection</span> 
             </div>
             
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
-                <div class="cell-value">Replace ProviderConfig with a proper Provider struct that carries auth method, dialect, credentials, and callback hooks</div>
+                <div class="cell-value">Refactor the existing Cobra CLI into explicit root, tui, run, server, and gnu command paths with stable flag semantics.</div>
             </div>
             
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">ProviderConfig renamed to Provider with AuthMethod, Dialect, Credentials fields; old endpoints.json format migrated</div>
+                <div class="cell-value">Root and tui open the TUI, run executes non-TUI, server and gnu are visible not-implemented commands, prompt no longer implies headless, and CLI parsing is centralized outside main.go.</div>
             </div>
             
             <div class="diagram-canvas">
@@ -304,248 +326,281 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
                     <span class="icon">📐</span>
                     <span class="label">Architecture & Flow</span>
                 </div>
-                <pre class="mermaid">classDiagram
-    class Provider {
-        +string Name
-        +string BaseURL
-        +AuthMethod AuthMethod
-        +string Dialect
-        +ProviderCredentials Credentials
-        +ModelsURL() string
-        +ChatURL() string
-    }
-    class ProviderCredentials {
-        +string APIKey
-        +OAuthCreds OAuth
-    }
-    class OAuthCreds {
-        +string AccessToken
-        +string RefreshToken
-        +time.Time ExpiresAt
-    }
-    class AuthMethod  {
-        none
-        api_key
-        oauth
-    }
-    Provider --> ProviderCredentials
-    ProviderCredentials --> OAuthCreds</pre>
+                <pre class="mermaid">flowchart TD
+    Root[squid-os root] --> TUI[tui command]
+    Root --> Run[run command]
+    Root --> Server[server command]
+    Root --> GNU[gnu command]
+    TUI --> Textarea[prefill textarea]
+    Run --> NewRun[new run]
+    Run --> Continue[continue session]
+    Run --> AgentRun[named agent run]</pre>
             </div>
             <div class="task-list">
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 1.1</span>
-                        <span class="task-name">Provider struct with auth and dialect fields</span>
+                        <span class="task-name">Extract CLI command construction</span>
                         <span class="layer-badge" style="background:#c586c0">refactor</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Replace ProviderConfig with Provider struct. AuthMethod is an array of supported methods, user picks one via ActiveAuthMethod in credentials. Known providers have hardcoded URLs, custom providers need BaseURL from user.</span>
+                        <span class="cell-value">Create an internal CLI package that builds the Cobra command tree and keeps main.go as a thin bootstrap.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Establish the data model for extensible provider authentication and API dialect support</span>
+                        <span class="cell-value">Centralized command construction prevents CLI behavior from spreading through main.go as the command surface grows.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/config/endpoints.go</li></ul>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/cli</li><li class="file-mod"><span class="action-sym">~</span>  main.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package config
+                    <pre><code class="language-go">package cli
 
-type AuthMethod string
-
-const (
-	AuthNone   AuthMethod = &quot;none&quot;
-	AuthAPIKey AuthMethod = &quot;api_key&quot;
-	AuthOAuth  AuthMethod = &quot;oauth&quot;
-)
-
-type Dialect string
-
-const (
-	DialectOpenAICompatible Dialect = &quot;openai&quot;
-	DialectAnthropic        Dialect = &quot;anthropic&quot;
-	DialectGemini           Dialect = &quot;gemini&quot;
-)
-
-type Provider struct {
-	Name             string            `json:&quot;name&quot;`
-	BaseURL          string            `json:&quot;base_url,omitempty&quot;`
-	SupportedAuth    []AuthMethod      `json:&quot;supported_auth&quot;`
-	Dialect          Dialect           `json:&quot;dialect&quot;`
-	Credentials      *ProviderCreds    `json:&quot;credentials,omitempty&quot;`
-	NeedsConfig      bool              `json:&quot;needs_config,omitempty&quot;`
+type Dependencies struct {
+    // paths, settings, endpoints, history loaders, and program launch hooks
 }
 
-type ProviderCreds struct {
-	ActiveAuthMethod AuthMethod    `json:&quot;active_auth_method&quot;`
-	APIKey           string        `json:&quot;api_key,omitempty&quot;`
-	OAuth            *OAuthCreds   `json:&quot;oauth,omitempty&quot;`
+func NewRootCommand(deps Dependencies) *cobra.Command {
+    // Build root, tui, run, server, and gnu commands.
 }
 
-type OAuthCreds struct {
-	AccessToken  string    `json:&quot;access_token&quot;`
-	RefreshToken string    `json:&quot;refresh_token&quot;`
-	ExpiresAt    time.Time `json:&quot;expires_at&quot;`
-}
-
-// IsConfigured returns true if the provider has valid credentials to use
-func (p Provider) IsConfigured() bool {
-	if p.Credentials == nil {
-		return false
-	}
-	if len(p.SupportedAuth) == 0 {
-		return true // no auth needed
-	}
-	switch p.Credentials.ActiveAuthMethod {
-	case AuthAPIKey:
-		return p.Credentials.APIKey != &quot;&quot;
-	case AuthOAuth:
-		return p.Credentials.OAuth != nil &amp;&amp; p.Credentials.OAuth.AccessToken != &quot;&quot;
-	default:
-		return false
-	}
-}
-
-// NeedsURL returns true if provider requires a user-provided base URL
-func (p Provider) NeedsURL() bool {
-	return p.IsKnownProvider() == false
-}
-
-// IsKnownProvider returns true for built-in providers with hardcoded URLs
-func (p Provider) IsKnownProvider() bool {
-	known := []string{&quot;openai&quot;, &quot;openai-codex&quot;, &quot;anthropic&quot;, &quot;gemini&quot;, &quot;fireworks&quot;, &quot;openrouter&quot;}
-	for _, k := range known {
-		if p.Name == k {
-			return true
-		}
-	}
-	return false
-}
-
-func (p Provider) ChatURL() string {
-	if p.IsKnownProvider() {
-		return p.getKnownChatURL()
-	}
-	if p.Dialect == DialectAnthropic {
-		return p.BaseURL + &quot;/v1/messages&quot;
-	}
-	return p.BaseURL + &quot;/v1/chat/completions&quot;
-}
-
-func (p Provider) ModelsURL() string {
-	if p.IsKnownProvider() {
-		return p.getKnownModelsURL()
-	}
-	if p.Dialect == DialectOpenAICompatible {
-		return p.BaseURL + &quot;/v1/models&quot;
-	}
-	return &quot;&quot;
+func Execute(deps Dependencies) error {
+    // Entrypoint called by main.go.
 }</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Provider has SupportedAuth []AuthMethod (array of what the provider supports)</li><li>ProviderCreds has ActiveAuthMethod (single chosen method) plus APIKey/OAuth</li><li>IsConfigured checks if the active method has valid credentials</li><li>NeedsURL returns true for custom providers, false for known ones</li><li>IsKnownProvider identifies built-in providers with hardcoded URLs</li><li>ChatURL/ModelsURL use hardcoded URLs for known providers, BaseURL for custom</li></ul>
+                    <ul class="acceptance-list"><li>main.go delegates command creation/execution to internal/cli.</li><li>Root, tui, run, server, and gnu commands are constructed in one package.</li><li>go build passes with no behavior changes beyond command routing.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 1.2</span>
-                        <span class="task-name">Migrate EndpointsConfig and update all call sites</span>
-                        <span class="layer-badge" style="background:#c586c0">refactor</span>
+                        <span class="task-name">Implement root and TUI option parsing</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Update EndpointsConfig with new Provider struct. Default endpoints include vllm/ollama (need URL config) and openai (hardcoded URL, supports api_key + oauth). All call sites updated.</span>
+                        <span class="cell-value">Add root and tui options for session selection, prompt prefill, model, thinking, working directory, agent system, tool, skill, and callable agent scopes.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Ensure the entire codebase uses the new Provider model instead of the flat ProviderConfig</span>
+                        <span class="cell-value">TUI boot needs the same explicit session setup surface as run without treating prompt as headless execution.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/config/endpoints.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/stream.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/app.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/model.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/models.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/headless/headless.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/cli</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/app.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/ui_session.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">type EndpointsConfig struct {
-	Providers []Provider `json:&quot;providers&quot;`
+                    <pre><code class="language-go">type TUIOptions struct {
+    Prompt string
+    SessionName string
+    Model string
+    Thinking string
+    WorkingDir string
+    AgentName string
+    AgentSystem string
+    ToolNames []string
+    SkillNames []string
+    ActiveSkill string
+    CallableAgentNames []string
 }
 
-func DefaultEndpoints() EndpointsConfig {
-	return EndpointsConfig{
-		Providers: []Provider{
-			{
-				Name:          &quot;vllm&quot;,
-				BaseURL:       &quot;&quot;,
-				SupportedAuth: []AuthMethod{AuthNone},
-				Dialect:       DialectOpenAICompatible,
-				NeedsConfig:   true, // needs URL from user
-			},
-			{
-				Name:          &quot;ollama&quot;,
-				BaseURL:       &quot;&quot;,
-				SupportedAuth: []AuthMethod{AuthNone},
-				Dialect:       DialectOpenAICompatible,
-				NeedsConfig:   true, // needs URL from user
-			},
-			{
-				Name:          &quot;openai&quot;,
-				SupportedAuth: []AuthMethod{AuthAPIKey, AuthOAuth},
-				Dialect:       DialectOpenAICompatible,
-			},
-		},
-	}
-}
-
-func ResolveProvider(endpoints EndpointsConfig, name string) *Provider {
-	for i, p := range endpoints.Providers {
-		if p.Name == name {
-			return &amp;endpoints.Providers[i]
-		}
-	}
-	return nil
+func RunTUI(opts TUIOptions, deps Dependencies) error {
+    // Load or create session, prefill textarea, then launch Bubble Tea.
 }</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>DefaultEndpoints returns vllm and ollama with AuthNone and DialectOpenAICompatible</li><li>ResolveProvider finds by name, returns nil if not found</li><li>All call sites in stream.go, headless.go, models.go updated from ProviderConfig to Provider</li><li>No compile errors across entire codebase</li></ul>
+                    <ul class="acceptance-list"><li>squid-os opens TUI.</li><li>squid-os tui opens TUI.</li><li>--prompt on root or tui pre-fills textarea and does not execute a run.</li><li>--session on root or tui opens the named saved session.</li><li>TUI bootstrap options are passed through a typed options object.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 1.3</span>
+                        <span class="task-name">Implement complete run option parsing</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Add run options for inline runs, named agents, session continuation, stdin composition, output mode, autosave, auth, memory, scopes, active skill, and limits.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">run is the explicit non-TUI execution surface and must carry the full runtime override contract.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/cli</li><li class="file-mod"><span class="action-sym">~</span>  internal/headless/headless.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type RunOptions struct {
+    AgentName string
+    PositionalAgent string
+    SessionName string
+    Prompt string
+    Stdin string
+    Mode string
+    Model string
+    Thinking string
+    WorkingDir string
+    AgentSystem string
+    ToolNames []string
+    SkillNames []string
+    ActiveSkill string
+    CallableAgentNames []string
+    Autosave bool
+    AutosaveName string
+    AuthMode string
+    MemoryNamespace string
+    MemoryInstructions string
+    Limits LimitOptions
+}
+
+type LimitOptions struct {
+    MaxSteps int
+    MaxTools int
+    MaxTime string
+    MaxToolResultTokens int
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>squid-os run executes only through the explicit run command.</li><li>squid-os run name and squid-os run --agent name resolve equivalently.</li><li>Differing positional agent and --agent values fail clearly.</li><li>--prompt and stdin compose predictably.</li><li>--session adds a new turn to an existing session rather than rebuilding bootstrap.</li><li>Bootstrap replacement flags are rejected with --session where required by the prep docs.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 1.4</span>
+                        <span class="task-name">Preserve version and stub commands</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Wire --version to the canonical version source and expose server and gnu as help-visible not-implemented commands.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">The expanded CLI must preserve existing version behavior while reserving future product surfaces cleanly.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/cli</li><li class="file-mod"><span class="action-sym">~</span>  internal/version.go</li><li class="file-mod"><span class="action-sym">~</span>  main.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type CommandInfo struct {
+    Name string
+    Short string
+    NotImplemented bool
+}
+
+func NewVersionCommandSource() string {
+    // Return canonical app version used by CLI, TUI header, and user agents.
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>--version prints the canonical Squid-OS version and exits.</li><li>server appears in help and returns a clear not implemented response.</li><li>gnu appears in help as shell GNU tool generation migration surface and returns not implemented.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 1.5</span>
+                        <span class="task-name">Add bash and zsh completion</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Add shell completion for command names, static enum values, and dynamic sessions, skills, agents, and tool names where practical.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Completion is part of the CLI product contract and makes the larger command surface usable.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/cli</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/skills</li><li class="file-mod"><span class="action-sym">~</span>  internal/agent</li><li class="file-mod"><span class="action-sym">~</span>  internal/tools</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type CompletionProvider interface {
+    Sessions(prefix string) []string
+    Skills(prefix string) []string
+    Agents(prefix string) []string
+    Tools(prefix string) []string
+}
+
+func AttachCompletions(cmd *cobra.Command, provider CompletionProvider) {
+    // Register dynamic and static completions.
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>--session completion suggests saved session names.</li><li>--skill and --skills completion suggest installed skills.</li><li>--agent and --agents completion suggest installed agents.</li><li>--tools completion suggests registered tools or a generated registry-backed list.</li><li>Static flags complete values for thinking, save, mode, memory namespace, and auth mode.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div></div>
         </section>
-        <section id="provider-interface" class="milestone-section">
+        <section id="agent-registry-and-session-metadata" class="milestone-section">
             <div class="section-header">
                 <span class="section-num">2</span>
-                <h2>Provider Interface</h2>
-                <span class="pattern-badge">Strategy, Interface Segregation</span> 
+                <h2>Agent Registry and Session Metadata</h2>
+                <span class="pattern-badge">Registry, Configuration Object, Provenance Metadata</span> 
             </div>
             
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
-                <div class="cell-value">Define a Provider interface with callback methods that each dialect implements -- avoids big switch statements, follows existing component callback pattern</div>
+                <div class="cell-value">Introduce global agents as first-class runtime presets with registry discovery, YAML loading, environment visibility, and session metadata.</div>
             </div>
             
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">Provider interface defined with PrepareRequest, has dialect-specific implementations, engine dispatches via interface</div>
+                <div class="cell-value">Agents live under config agents, can be listed and loaded, appear in environment, and sessions persist root Agent plus available Agents separately from Skill and Skills.</div>
             </div>
             
             <div class="diagram-canvas">
@@ -554,340 +609,191 @@ func ResolveProvider(endpoints EndpointsConfig, name string) *Provider {
                     <span class="label">Architecture & Flow</span>
                 </div>
                 <pre class="mermaid">classDiagram
-    class ProviderImpl {
-        +PrepareRequest(req) error
-        +GetAccessToken() string
-        +NeedsAuth() bool
-        +IsExpired() bool
-        +Refresh() error
-    }
-    class OpenAIProvider {
-        +PrepareRequest(req) error
-        +GetAccessToken() string
-        +Refresh() error
-    }
-    class LocalProvider {
-        +PrepareRequest(req) error
-    }
-    class ProviderRegistry {
-        +Get(name) ProviderImpl
-        +Register(p ProviderImpl)
-    }
-    class Engine {
-        +provider ProviderImpl
-        +Stream(ctx, msgs, tools) chan
-    }
-    ProviderImpl --|> OpenAIProvider
-    ProviderImpl --|> LocalProvider
-    Engine ..> ProviderImpl
-    ProviderRegistry ..> ProviderImpl</pre>
+    class AgentDefinition
+    class AgentRegistry
+    class SessionAgent
+    class SessionAgents
+    AgentRegistry --> AgentDefinition
+    SessionAgent --> AgentDefinition
+    SessionAgents --> AgentRegistry</pre>
             </div>
             <div class="task-list">
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 2.1</span>
-                        <span class="task-name">Define ProviderImpl interface and registry</span>
+                        <span class="task-name">Add agent config path and registry</span>
                         <span class="layer-badge" style="background:#569cd6">feature</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Create chat/provider.go with ProviderImpl interface (PrepareRequest, GetAccessToken, NeedsAuth, IsExpired) and a registry map</span>
+                        <span class="cell-value">Create internal/agent with definition structs, YAML loading, registry scanning, and config path support for the agents directory.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Each dialect implements its own auth preparation -- no switch statement, extensible like component callbacks</span>
+                        <span class="cell-value">Agents become a first-class global preset system like skills instead of a run-command special case.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/provider.go</li></ul>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/agent</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/paths.go</li><li class="file-mod"><span class="action-sym">~</span>  go.mod</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package chat
+                    <pre><code class="language-go">package agent
 
-import (
-	&quot;net/http&quot;
-	&quot;sync&quot;
-)
-
-type ProviderImpl interface {
-	// PrepareRequest modifies the outgoing request with auth headers.
-	// Returns error if credentials are missing or expired and cannot be refreshed.
-	PrepareRequest(req *http.Request) error
-	
-	// GetAccessToken returns the current access token (for logging/debugging).
-	GetAccessToken() string
-	
-	// NeedsAuth returns true if this provider requires authentication.
-	NeedsAuth() bool
-	
-	// IsExpired returns true if OAuth credentials have expired.
-	IsExpired() bool
-	
-	// Refresh attempts to refresh OAuth tokens. Returns error if not applicable or failed.
-	Refresh() error
+type Definition struct {
+    Name string
+    Description string
+    Mode string
+    AuthMode string
+    Model string
+    Thinking bool
+    WorkingDirectory string
+    System string
+    Tools []string
+    Skills []string
+    Agents []string
+    Memory MemoryConfig
+    Limits LimitsConfig
 }
 
-var (
-	providerRegistry = make(map[string]ProviderImpl)
-	registryMu       sync.RWMutex
-)
-
-func RegisterProvider(name string, impl ProviderImpl) {
-	registryMu.Lock()
-	defer registryMu.Unlock()
-	providerRegistry[name] = impl
+type Entry struct {
+    Name string
+    Description string
+    Path string
 }
 
-func GetProvider(name string) ProviderImpl {
-	registryMu.RLock()
-	defer registryMu.RUnlock()
-	return providerRegistry[name]
+type Registry struct {
+    // Scanned agent entries indexed by name.
 }
-</code></pre>
+
+func InitRegistry(baseDir string) (*Registry, error) {
+    // Create agents directory and scan definitions.
+}</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>ProviderImpl interface has PrepareRequest, GetAccessToken, NeedsAuth, IsExpired, Refresh methods</li><li>Registry uses sync.RWMutex for thread safety</li><li>RegisterProvider and GetProvider work correctly</li><li>No existing code breaks -- old Engine path still compiles</li></ul>
+                    <ul class="acceptance-list"><li>Paths includes an Agents directory under the Squid-OS config root.</li><li>EnsureDirs creates the agents directory.</li><li>Registry lists agent names and descriptions.</li><li>Registry loads a full definition by name.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 2.2</span>
-                        <span class="task-name">Implement local/no-auth provider as default</span>
+                        <span class="task-name">Add Agent and Agents session metadata</span>
                         <span class="layer-badge" style="background:#569cd6">feature</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Create a no-auth provider implementation that returns nil from PrepareRequest (passthrough for vllm/ollama), register it by default</span>
+                        <span class="cell-value">Extend SessionMeta with singular Agent provenance and plural Agents availability scope.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Existing local providers (vllm, ollama) need to continue working with no auth, serving as the base case</span>
+                        <span class="cell-value">The root agent that started a session is provenance, while Agents is the callable subagent access list.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/local_provider.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/config/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/session.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package chat
-
-import &quot;net/http&quot;
-
-type LocalProvider struct{}
-
-func (l *LocalProvider) PrepareRequest(req *http.Request) error { return nil }
-func (l *LocalProvider) GetAccessToken() string                { return &quot;&quot; }
-func (l *LocalProvider) NeedsAuth() bool                       { return false }
-func (l *LocalProvider) IsExpired() bool                       { return false }
-func (l *LocalProvider) Refresh() error                        { return nil }
-
-func init() {
-	RegisterProvider(&quot;vllm&quot;, &amp;LocalProvider{})
-	RegisterProvider(&quot;ollama&quot;, &amp;LocalProvider{})
+                    <pre><code class="language-go">type SessionAgent struct {
+    Name string
 }
-</code></pre>
+
+type SessionAgents struct {
+    Initial []string
+    Current []string
+}
+
+type SessionMeta struct {
+    Agent SessionAgent
+    Agents SessionAgents
+    // Existing session metadata remains distinct.
+}</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>LocalProvider PrepareRequest is a no-op</li><li>NeedsAuth returns false</li><li>vllm and ollama registered in init</li><li>Existing Engine usage with local providers still works unchanged</li></ul>
+                    <ul class="acceptance-list"><li>Session Agent stores the root owning agent name without initial/current.</li><li>Session Agents stores initial/current callable agent names.</li><li>Agent remains distinct from Skill.</li><li>Agents remains distinct from Skills and Tools.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 2.3</span>
-                        <span class="task-name">Wire Engine to use ProviderImpl for auth</span>
+                        <span class="task-name">Expose agents in environment</span>
                         <span class="layer-badge" style="background:#569cd6">feature</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Update Engine to accept a ProviderImpl, call PrepareRequest before each HTTP call, fall back to old behavior if no provider impl found</span>
+                        <span class="cell-value">Initialize the agent registry before session bootstrap and add an Agents section to the generated environment.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Bridge the gap between the new provider interface and the existing Engine streaming logic</span>
+                        <span class="cell-value">The model should discover available agents the same way it discovers skills.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/engine.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/environment/environment.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/environment/loader.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/app.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/headless/headless.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">type Engine struct {
-	ChatURL  string
-	Model    string
-	Thinking bool
-	provider ProviderImpl
-	client   *http.Client
+                    <pre><code class="language-go">type AgentInfo struct {
+    Name string
+    Description string
 }
 
-func NewEngine(chatURL, model string, thinking bool, provider ProviderImpl) *Engine {
-	return &amp;Engine{
-		ChatURL:  chatURL,
-		Model:    model,
-		Thinking: thinking,
-		provider: provider,
-		client:   &amp;http.Client{Timeout: 0},
-	}
+type Environment struct {
+    Agents []AgentInfo
+    // Existing environment sections remain.
 }
 
-// In Stream(), after creating the request:
-if e.provider != nil {
-	if err := e.provider.PrepareRequest(req); err != nil {
-		ch &lt;- StreamEvent{Error: fmt.Errorf(&quot;provider auth: %w&quot;, err)}
-		return
-	}
-}
-</code></pre>
+func FormatEnvironment(env Environment) string {
+    // Render Agents section like Skills.
+}</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Engine accepts ProviderImpl in NewEngine</li><li>PrepareRequest called before every outgoing HTTP request</li><li>Auth error returns StreamEvent with Error, does not panic</li><li>Backward compatible -- nil provider works as before (no auth header)</li><li>All call sites of NewEngine in stream.go and headless.go updated</li></ul>
+                    <ul class="acceptance-list"><li>Environment includes an Agents section with name and description.</li><li>Agent registry initialization happens before NewSession environment injection.</li><li>Existing Skills environment behavior remains unchanged.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
-            </div>
-            <div class="task-card">
-                <div class="task-header">
-                    <div class="task-title-row">
-                        <span class="task-num"># 2.4</span>
-                        <span class="task-name">Generic Sequence component for multi-step wizards</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
-                    </div>
-                </div>
-                <div class="task-grid">
-                    <div class="task-cell">
-                        <span class="cell-label">What</span>
-                        <span class="cell-value">Create component/sequence.go — a tea.Model that chains multiple child components (Input, Picker, Question) with a shared context map</span>
-                    </div>
-                    <div class="task-cell">
-                        <span class="cell-label">Why</span>
-                        <span class="cell-value">Reusable wizard abstraction for provider auth and future multi-step flows (tool questions, skill install). Components remain standalone and unchanged.</span>
-                    </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/ui/component/sequence.go</li></ul>
-                </div>
-                    
-                <div class="task-cell full-width snippet-block">
-                    <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package component
-
-import (
-	tea &quot;github.com/charmbracelet/bubbletea&quot;
-)
-
-type SequenceStep struct {
-	Key       string     // name for the result in shared context
-	Component tea.Model  // child component to run
-}
-
-type Sequence struct {
-	Steps    []SequenceStep
-	Current  int
-	Context  map[string]any  // accumulated results keyed by Step.Key
-	OnDone   func(map[string]any) tea.Cmd
-	OnCancel func() tea.Cmd
-}
-
-func (s *Sequence) Init() tea.Cmd {
-	return s.Steps[s.Current].Component.Init()
-}
-
-func (s *Sequence) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	current := &amp;s.Steps[s.Current]
-	newChild, cmd := current.Component.Update(msg)
-	
-	// Check if child is done (returned a different type or nil cmd with done signal)
-	if isDone(newChild) {
-		// Extract result and store in context under step&#x27;s key
-		s.Context[current.Key] = extractResult(newChild)
-		
-		if s.Current+1 &lt; len(s.Steps) {
-			s.Current++
-			return s, s.Steps[s.Current].Component.Init()
-		}
-		return s, s.OnDone(s.Context)
-	}
-	
-	current.Component = newChild
-	return s, cmd
-}
-
-func (s *Sequence) View() string {
-	return s.Steps[s.Current].Component.View()
-}
-
-// isDone checks if a child component signaled completion
-// Each component type has its own signal (e.g., Input returns empty cmd on enter)
-func isDone(m tea.Model) bool {
-	// Implementation depends on how child signals completion
-	// For now: if Update returns the same model type but with a Done flag
-}
-
-// extractResult pulls the output value from a completed component
-func extractResult(m tea.Model) any {
-	switch c := m.(type) {
-	case *Input:
-		return c.Value
-	case *Picker:
-		return c.Selected
-	case *Question:
-		return struct{ Index int; Text string }{c.Selected, c.Instructions}
-	default:
-		return nil
-	}
-}
-</code></pre>
-                </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Sequence implements tea.Model (Init, Update, View)</li><li>Steps are defined as SequenceStep with Key name and child Component</li><li>Shared context map stores results keyed by each step&#x27;s Key</li><li>On step completion: result extracted, stored in context, advances to next step</li><li>On all steps done: calls OnDone with full context map</li><li>OnCancel callback supported</li><li>Child components remain unchanged — they don&#x27;t know about Sequence</li><li>Works with existing Input, Picker, Question components</li></ul>
-                </div>
-                </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div></div>
         </section>
-        <section id="openai-oauth-(no-browser)" class="milestone-section">
+        <section id="runtime-options-and-turn-preparation" class="milestone-section">
             <div class="section-header">
                 <span class="section-num">3</span>
-                <h2>OpenAI OAuth (No-Browser)</h2>
-                <span class="pattern-badge">PKCE, Strategy</span> 
+                <h2>Runtime Options and Turn Preparation</h2>
+                <span class="pattern-badge">Application Service, Explicit State Transition</span> 
             </div>
             
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
-                <div class="cell-value">Implement OpenAI OAuth 2.0 PKCE flow without browser automation -- user copies URL, pastes authorization code back in TUI</div>
+                <div class="cell-value">Resolve settings, agent definitions, CLI options, and session continuation into concrete session/run options, then prepare each turn consistently before streaming.</div>
             </div>
             
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">User can authenticate with OpenAI subscription via paste-code flow, tokens auto-refresh, works on server and desktop</div>
+                <div class="cell-value">TUI, run, session continuation, and agent tools use the same resolved options and transition injection happens after the user message and before stream start.</div>
             </div>
             
             <div class="diagram-canvas">
@@ -896,203 +802,244 @@ func extractResult(m tea.Model) any {
                     <span class="label">Architecture & Flow</span>
                 </div>
                 <pre class="mermaid">sequenceDiagram
-    participant U as User
-    participant T as TUI
-    participant O as OpenAI Auth Server
-    participant A as OpenAI API
-
-    T->>U: Display auth URL + PKCE challenge
-    U->>O: Opens URL in browser, logs in
-    O->>U: Redirects with ?code=XYZ
-    U->>T: Pastes authorization code
-    T->>O: Exchanges code + code_verifier for tokens
-    O->>T: Returns access_token, refresh_token, expires_in
-    T->>T: Stores credentials in endpoints.json
-    T->>A: API call with Bearer token
-    A->>T: Response
-    Note over T: Auto-refresh when expires_at within 5min</pre>
+    participant Entry as CLI or TUI
+    participant Resolve as ResolveOptions
+    participant Session as ChatSession
+    participant Turn as PrepareTurn
+    participant Loop as RunLoop
+    Entry->>Resolve: settings agent flags session
+    Resolve->>Session: create or load session
+    Entry->>Session: append user message
+    Entry->>Turn: desired next turn options
+    Turn->>Session: inject transitions
+    Entry->>Loop: stream prepared session</pre>
             </div>
             <div class="task-list">
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 3.1</span>
-                        <span class="task-name">OpenAI OAuth PKCE implementation</span>
+                        <span class="task-name">Add runtime option resolver</span>
                         <span class="layer-badge" style="background:#569cd6">feature</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Create chat/openai_provider.go with full PKCE OAuth flow: code challenge generation, token exchange, auto-refresh, and PrepareRequest that injects Bearer token</span>
+                        <span class="cell-value">Add a small resolver that maps settings, optional agent definition, CLI options, and session continuation context into concrete runtime options.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Enable OpenAI subscription authentication -- the primary auth use case for cloud providers</span>
+                        <span class="cell-value">One resolver prevents precedence, model parsing, autosave, auth, and scope rules from diverging across TUI, run, and agent tools.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/openai_provider.go</li></ul>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/runtime</li><li class="file-mod"><span class="action-sym">~</span>  internal/cli</li><li class="file-mod"><span class="action-sym">~</span>  internal/agent</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/settings.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package chat
+                    <pre><code class="language-go">package runtime
 
-import (
-	&quot;crypto/rand&quot;
-	&quot;crypto/sha256&quot;
-	&quot;encoding/base64&quot;
-	&quot;fmt&quot;
-	&quot;net/http&quot;
-	&quot;net/url&quot;
-	&quot;time&quot;
-)
-
-const (
-	openaiClientID      = &quot;app_EMoamEEZ73f0CkXaXp7hrann&quot;
-	openaiAuthURL       = &quot;https://auth.openai.com/oauth/authorize&quot;
-	openaiTokenURL      = &quot;https://auth.openai.com/oauth/token&quot;
-	openaiBaseURL       = &quot;https://api.openai.com&quot;
-)
-
-type OpenAIProvider struct {
-	codeVerifier string
-	creds        *ProviderCreds
+type Inputs struct {
+    Settings config.Settings
+    Agent *agent.Definition
+    CLI CLIOptions
+    ExistingSession *config.SessionDoc
 }
 
-func NewOpenAIProviderWithKey(apiKey string) *OpenAIProvider {
-	return &amp;OpenAIProvider{
-		creds: &amp;ProviderCreds{APIKey: apiKey},
-	}
+type Options struct {
+    AgentName string
+    Provider string
+    Model string
+    Thinking config.ThinkingConfig
+    AgentSystem string
+    ToolNames []string
+    SkillNames []string
+    ActiveSkill string
+    CallableAgentNames []string
+    Autosave AutosaveOptions
+    AuthMode string
+    Memory memory.Config
+    Limits Limits
+    OutputMode string
 }
 
-// StartOAuth returns the authorization URL the user must visit.
-func (o *OpenAIProvider) StartOAuth(redirectURI string) (authURL string, err error) {
-	// Generate 32-byte code verifier
-	o.codeVerifier = generatePKCEVerifier()
-	challenge := generateCodeChallenge(o.codeVerifier)
-	
-	params := url.Values{
-		&quot;client_id&quot;:                {openaiClientID},
-		&quot;response_type&quot;:            {&quot;code&quot;},
-		&quot;code_challenge&quot;:           {challenge},
-		&quot;code_challenge_method&quot;:    {&quot;S256&quot;},
-		&quot;redirect_uri&quot;:             {redirectURI},
-	}
-	return openaiAuthURL + &quot;?&quot; + params.Encode(), nil
-}
-
-// FinishOAuth exchanges the authorization code for tokens.
-func (o *OpenAIProvider) FinishOAuth(code string) error {
-	// POST to token endpoint with code + code_verifier
-	// Store returned access_token, refresh_token, expires_at
-}
-
-func (o *OpenAIProvider) PrepareRequest(req *http.Request) error {
-	token := o.getCurrentToken()
-	if token == &quot;&quot; {
-		return fmt.Errorf(&quot;openai: no credentials configured&quot;)
-	}
-	req.Header.Set(&quot;Authorization&quot;, &quot;Bearer &quot;+token)
-	return nil
-}
-
-func (o *OpenAIProvider) Refresh() error {
-	// If API key mode, nothing to refresh
-	// If OAuth mode, use refresh_token to get new tokens
-}
-
-func generatePKCEVerifier() string {
-	b := make([]byte, 32)
-	rand.Read(b)
-	return base64.RawURLEncoding.EncodeToString(b)
-}
-
-func generateCodeChallenge(verifier string) string {
-	h := sha256.Sum256([]byte(verifier))
-	return base64.RawURLEncoding.EncodeToString(h[:])
-}
-</code></pre>
+func Resolve(inputs Inputs) (Options, error) {
+    // Apply CLI, then agent, then settings precedence.
+}</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>PKCE code verifier is 32 random bytes, base64url encoded</li><li>Code challenge is SHA256 of verifier, base64url encoded</li><li>StartOAuth returns full authorization URL with correct OpenAI client ID</li><li>FinishOAuth exchanges code for tokens and stores them</li><li>PrepareRequest injects Bearer token (OAuth or API key)</li><li>Refresh swaps expired OAuth token using refresh_token</li><li>Returns error when no credentials configured</li></ul>
+                    <ul class="acceptance-list"><li>CLI values override agent definition values.</li><li>Agent definition values override settings defaults.</li><li>Combined provider/model strings are parsed consistently.</li><li>--session rejects bootstrap replacement options such as root agent and agent system replacement.</li><li>Resolved options include tools, skills, active skill, callable agents, autosave, auth, memory, and limits.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 3.2</span>
-                        <span class="task-name">OpenAI provider registration and credential persistence</span>
+                        <span class="task-name">Expand session bootstrap config</span>
                         <span class="layer-badge" style="background:#569cd6">feature</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Register openai and openai-codex providers, wire credential loading/saving from endpoints.json ProviderCreds into OpenAIProvider on init</span>
+                        <span class="cell-value">Extend SessionConfig and NewSession so resolved runtime options create complete session metadata and bootstrap messages.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Credentials survive across sessions -- user doesn&#x27;t re-auth on every restart</span>
+                        <span class="cell-value">Session creation should receive explicit inputs for agent, scopes, memory, autosave, auth, and limits instead of reading scattered global state.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/openai_provider.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/endpoints.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/environment/loader.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">// In LoadEndpoints or a new init function:
-func LoadProviderImpl(p Provider) ProviderImpl {
-	switch p.Name {
-	case &quot;openai&quot;, &quot;openai-codex&quot;:
-		impl := &amp;OpenAIProvider{}
-		if p.Credentials != nil {
-			impl.creds = p.Credentials
-		}
-		return impl
-	default:
-		return &amp;LocalProvider{}
-	}
+                    <pre><code class="language-go">type SessionConfig struct {
+    Provider string
+    Model string
+    Thinking config.ThinkingConfig
+    SystemPromptFile string
+    AgentName string
+    AgentSystem string
+    ToolNames []string
+    SkillNames []string
+    ActiveSkill string
+    CallableAgentNames []string
+    WorkingDir string
+    Memory memory.Config
+    Autosave AutosaveOptions
+    AuthMode string
+    Limits Limits
 }
 
-// Save credentials back after OAuth completes:
-func (o *OpenAIProvider) GetCredentials() *ProviderCreds {
-	return o.creds
+func NewSession(cfg SessionConfig, paths config.Paths) *Session {
+    // Append Base System, Environment System, optional Agent System, config, and tools metadata.
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>New sessions persist root Agent and callable Agents metadata.</li><li>New sessions can set active Skill separately from available Skills.</li><li>NewSession injects agent0 when Agent System text exists.</li><li>Base System, Environment System, and Agent System remain separate concepts.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 3.3</span>
+                        <span class="task-name">Add shared PrepareTurn</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Move next-turn transition injection into a shared PrepareTurn function called after user append and before StartStream.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Model, thinking, active skill, and availability changes must behave the same in TUI, run, session continuation, and future automation.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/turn.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/stream.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/run</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type PrepareTurnOptions struct {
+    Inference config.InferenceConfig
+    ActiveSkill string
+    ToolNames []string
+    SkillNames []string
+    CallableAgentNames []string
+}
+
+func PrepareTurn(s *Session, opts PrepareTurnOptions) error {
+    // Insert transition messages after the latest user message.
+    // Update current inference and availability scopes.
 }
 </code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>LoadProviderImpl returns OpenAIProvider for openai/openai-codex names</li><li>Existing OAuth credentials from endpoints.json are loaded into provider</li><li>New credentials can be marshaled back to endpoints.json</li><li>Local providers still return LocalProvider</li></ul>
+                    <ul class="acceptance-list"><li>PrepareTurn inserts transitions immediately after the user message they affect.</li><li>TUI sendMessage no longer owns model/thinking/skill transition logic.</li><li>run --session uses PrepareTurn before streaming.</li><li>StartStream remains focused on starting provider streaming and does not hide history mutation.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 3.4</span>
+                        <span class="task-name">Model autosave as session runtime config</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Represent autosave settings in resolved options and session metadata so TUI and run can persist automatically through one concept.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Autosave is the existing persistence behavior and should replace incognito-style special cases and run-only save wording.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/config/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/settings.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/runtime</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/session_persistence.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type AutosaveOptions struct {
+    Enabled bool
+    Name string
+}
+
+type SessionMeta struct {
+    Autosave AutosaveOptions
+    // Existing metadata omitted.
+}
+</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>Resolved runtime options include autosave enabled and optional autosave name.</li><li>Session metadata can persist autosave configuration.</li><li>Manual save remains separate from autosave.</li><li>Existing TUI autosave behavior can be mapped to the new config.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div></div>
         </section>
-        <section id="tui-auth-prompt" class="milestone-section">
+        <section id="memory-foundation" class="milestone-section">
             <div class="section-header">
                 <span class="section-num">4</span>
-                <h2>TUI Auth Prompt</h2>
-                <span class="pattern-badge">Component, State Machine</span> 
+                <h2>Memory Foundation</h2>
+                <span class="pattern-badge">Configuration Scaffold, Namespace Resolution</span> 
             </div>
             
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
-                <div class="cell-value">Add a TUI prompt component that guides user through provider setup on first use -- displays auth URL, collects paste-back code, or collects API key directly</div>
+                <div class="cell-value">Add memory namespace config, path resolution, session metadata, and environment exposure without implementing a full memory engine.</div>
             </div>
             
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">User sees guided prompt on first use of an auth-required provider, completes setup in TUI, credentials saved</div>
+                <div class="cell-value">workspace, global, and agent memory resolve to clear paths, memory instructions appear in environment, and memory metadata persists on sessions.</div>
             </div>
             
             <div class="diagram-canvas">
@@ -1100,348 +1047,133 @@ func (o *OpenAIProvider) GetCredentials() *ProviderCreds {
                     <span class="icon">📐</span>
                     <span class="label">Architecture & Flow</span>
                 </div>
-                <pre class="mermaid">stateDiagram-v2
-    [*] --> DetectMissingCreds
-    DetectMissingCreds --> ShowAuthOptions: user selects provider
-    ShowAuthOptions --> EnterAPIKey: user chooses api_key
-    ShowAuthOptions --> ShowOAuthURL: user chooses oauth
-    EnterAPIKey --> ValidateKey: user pastes key
-    ShowOAuthURL --> WaitForCode: user copies URL, opens browser
-    WaitForCode --> ExchangeCode: user pastes auth code
-    ValidateKey --> SaveCreds: key accepted
-    ExchangeCode --> SaveCreds: tokens received
-    SaveCreds --> [*]</pre>
+                <pre class="mermaid">flowchart TD
+    Agent[agent memory config] --> Resolve[resolve memory]
+    CLI[CLI memory override] --> Resolve
+    Settings[settings memory dir] --> Resolve
+    WorkDir[working directory] --> Resolve
+    Resolve --> Session[session memory metadata]
+    Resolve --> Env[environment memory section]</pre>
             </div>
             <div class="task-list">
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 4.1</span>
-                        <span class="task-name">Provider auth wizard using Sequence component</span>
+                        <span class="task-name">Add memory config and namespace paths</span>
                         <span class="layer-badge" style="background:#569cd6">feature</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Build provider auth flow in app layer using Sequence component: URL entry → auth method picker → credential entry. No new component file needed.</span>
+                        <span class="cell-value">Create internal/memory with config types and helpers that resolve workspace, global, and agent namespaces to concrete paths.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Leverage generic Sequence component for clean multi-step auth wizard. Reuses existing Input, Picker, and Question components.</span>
+                        <span class="cell-value">Memory needs a stable structural foundation before any retrieval or writeback engine exists.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/app/auth_setup.go</li></ul>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/memory</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/paths.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/runtime</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">package app
+                    <pre><code class="language-go">package memory
 
-// buildAuthWizard creates a Sequence for provider configuration:
-// Step 1: If custom provider (vllm/ollama), prompt for BaseURL via Input
-// Step 2: If multiple auth methods, show Picker to choose method
-// Step 3: If API key, show Input for key entry
-// Step 3: If OAuth, show Question with URL, then Input for code
-// OnDone: save credentials, re-scan models
-func (m *Model) buildAuthWizard(p *config.Provider) *component.Sequence {
-	var steps []component.SequenceStep
-	
-	if p.NeedsURL() {
-		steps = append(steps, component.SequenceStep{
-			Key: &quot;baseURL&quot;,
-			Component: &amp;component.Input{
-				Label: &quot;Enter &quot; + p.Name + &quot; base URL (e.g., http://localhost:8080)&quot;,
-			},
-		})
-	}
-	
-	if len(p.SupportedAuth) &gt; 1 {
-		methods := []string{}
-		for _, a := range p.SupportedAuth {
-			methods = append(methods, string(a))
-		}
-		steps = append(steps, component.SequenceStep{
-			Key: &quot;authMethod&quot;,
-			Component: &amp;component.Picker{
-				Title:   &quot;Choose authentication method for &quot; + p.Name,
-				Options: methods,
-			},
-		})
-	}
-	
-	// Auth step depends on chosen method or single available method
-	// (built dynamically based on prior steps — see buildAuthStep)
-	
-	return &amp;component.Sequence{
-		Steps: steps,
-		OnDone: func(ctx map[string]any) tea.Cmd {
-			return m.onProviderConfigComplete(p, ctx)
-		},
-		OnCancel: func() tea.Cmd {
-			return m.returnToModelPicker()
-		},
-	}
+type Namespace string
+
+const (
+    NamespaceWorkspace Namespace = &quot;workspace&quot;
+    NamespaceGlobal Namespace = &quot;global&quot;
+    NamespaceAgent Namespace = &quot;agent&quot;
+)
+
+type Config struct {
+    Namespace Namespace
+    Path string
+    Instructions string
 }
 
-func (m *Model) onProviderConfigComplete(p *config.Provider, ctx map[string]any) tea.Cmd {
-	// Apply context values to provider
-	if baseURL, ok := ctx[&quot;baseURL&quot;].(string); ok {
-		p.BaseURL = baseURL
-	}
-	if method, ok := ctx[&quot;authMethod&quot;].(string); ok {
-		p.Credentials = &amp;config.ProviderCreds{
-			ActiveAuthMethod: config.AuthMethod(method),
-		}
-		if method == &quot;api_key&quot; {
-			p.Credentials.APIKey = ctx[&quot;apiKey&quot;].(string)
-		} else if method == &quot;oauth&quot; {
-			// Trigger OAuth flow with the code
-			// (handled separately as OAuth needs network call)
-		}
-	}
-	
-	// Save and re-scan
-	m.saveProvider(*p)
-	m.refreshModels()
-	return m.setChatMode()
+func ResolvePath(namespace Namespace, workingDir string, paths config.Paths, agentName string) (string, error) {
+    // workspace -&gt; workingDir/memory
+    // global -&gt; configured memory directory
+    // agent -&gt; config agents agent-name memory
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>workspace namespace resolves to working-directory/memory.</li><li>global namespace resolves to configured memory dir.</li><li>agent namespace resolves under config agents agent-name memory.</li><li>No memory retrieval or writeback engine is added in this task.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 4.2</span>
+                        <span class="task-name">Persist and expose memory config</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Add memory metadata to sessions and update environment generation to show namespace, resolved path, instructions, and current memory index content.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">The model needs explicit memory intent and location even while the memory engine remains deferred.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/config/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/environment/environment.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/environment/loader.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/session.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type SessionMemory struct {
+    Namespace string
+    Path string
+    Instructions string
+}
+
+type Environment struct {
+    MemoryNamespace string
+    MemoryPath string
+    MemoryInstructions string
+    Memory string
 }
 </code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Uses Sequence component to chain auth steps</li><li>Custom providers (vllm/ollama) prompt for BaseURL via Input step</li><li>Providers with multiple auth methods show Picker step</li><li>Providers with single auth method skip Picker, go straight to credential</li><li>API key mode uses Input step with masked display</li><li>OAuth mode shows URL via Question, then Input for code paste</li><li>OnDone saves credentials and re-scans model list</li><li>OnCancel returns to model picker without saving</li><li>No new component file — logic in app layer using existing components</li></ul>
+                    <ul class="acceptance-list"><li>Session metadata stores resolved memory namespace, path, and instructions.</li><li>Environment includes memory namespace and resolved path.</li><li>Environment includes memory instructions when configured.</li><li>Existing memory index display still works.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
-            </div>
-            <div class="task-card">
-                <div class="task-header">
-                    <div class="task-title-row">
-                        <span class="task-num"># 4.2</span>
-                        <span class="task-name">Wire auth prompt into provider selection flow</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
-                    </div>
-                </div>
-                <div class="task-grid">
-                    <div class="task-cell">
-                        <span class="cell-label">What</span>
-                        <span class="cell-value">Before sending message, check if provider is fully configured. If not, show config wizard. Also auto-refresh expired OAuth tokens before sending.</span>
-                    </div>
-                    <div class="task-cell">
-                        <span class="cell-label">Why</span>
-                        <span class="cell-value">Integrate the auth prompt into the existing model/provider selection so user is guided through setup at the right moment</span>
-                    </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/model.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/stream.go</li></ul>
-                </div>
-                    
-                <div class="task-cell full-width snippet-block">
-                    <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">// Before sending message, check if provider is configured:
-func (m *Model) ensureProviderConfigured() (bool, tea.Cmd) {
-	p := config.ResolveProvider(m.endpoints, m.settings.Provider)
-	if p == nil {
-		return false, nil
-	}
-	
-	if !p.IsConfigured() {
-		// Show config wizard
-		return true, m.showProviderConfig(p)
-	}
-	
-	// Check if OAuth creds are about to expire
-	impl := chat.LoadProviderImpl(*p)
-	if impl != nil &amp;&amp; impl.IsExpired() {
-		if err := impl.Refresh(); err != nil {
-			// Refresh failed, show re-config wizard
-			return true, m.showProviderConfig(p)
-		}
-		// Refresh succeeded, save updated creds
-		m.saveProvider(*p)
-	}
-	return false, nil
-}</code></pre>
-                </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>sendMessage checks if provider IsConfigured before sending</li><li>Unconfigured provider triggers config wizard instead of sending</li><li>Expired OAuth tokens auto-refresh before sending</li><li>Failed refresh triggers config wizard for re-auth</li><li>Config cancel gracefully returns without sending</li></ul>
-                </div>
-                </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
-            </div>
-            <div class="task-card">
-                <div class="task-header">
-                    <div class="task-title-row">
-                        <span class="task-num"># 4.3</span>
-                        <span class="task-name">Wire model scanning through ProviderImpl auth</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
-                    </div>
-                </div>
-                <div class="task-grid">
-                    <div class="task-cell">
-                        <span class="cell-label">What</span>
-                        <span class="cell-value">ScanModels returns sentinel entries for unconfigured providers (&lt;not configured&gt;) and expired creds (&lt;auth expired&gt;). Both trigger the universal config wizard.</span>
-                    </div>
-                    <div class="task-cell">
-                        <span class="cell-label">Why</span>
-                        <span class="cell-value">Model scanner needs auth to fetch models from authenticated providers, and must surface auth-required providers as selectable placeholders in the picker</span>
-                    </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/models.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/provider.go</li></ul>
-                </div>
-                    
-                <div class="task-cell full-width snippet-block">
-                    <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">func ScanModels(ctx context.Context, endpoints config.EndpointsConfig) []ModelEntry {
-	var mu sync.Mutex
-	var models []ModelEntry
-	var wg sync.WaitGroup
-
-	for _, provider := range endpoints.Providers {
-		wg.Add(1)
-		go func(p config.Provider) {
-			defer wg.Done()
-			
-			// If provider needs initial config (URL or auth), return sentinel
-			if !p.IsConfigured() {
-				mu.Lock()
-				models = append(models, ModelEntry{
-					ID:          &quot;&lt;not configured&gt;&quot;,
-					Provider:    p.Name,
-					NeedsConfig: true,
-				})
-				mu.Unlock()
-				return
-			}
-			
-			impl := LoadProviderImpl(p)
-			entries, err := FetchModelsDetailWithAuth(ctx, p, impl)
-			if err != nil {
-				// If 401, creds may be expired - return sentinel
-				if isAuthError(err) {
-					mu.Lock()
-					models = append(models, ModelEntry{
-						ID:          &quot;&lt;auth expired&gt;&quot;,
-						Provider:    p.Name,
-						NeedsConfig: true,
-					})
-					mu.Unlock()
-				}
-				return
-			}
-			
-			mu.Lock()
-			models = append(models, entries...)
-			mu.Unlock()
-		}(provider)
-	}
-	wg.Wait()
-	return models
-}</code></pre>
-                </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Unconfigured providers return &lt;not configured&gt; sentinel</li><li>Providers with expired/invalid creds return &lt;auth expired&gt; sentinel</li><li>Both sentinel types have NeedsConfig flag set to true</li><li>Local providers with no auth need still show &lt;not configured&gt; if URL missing</li><li>ModelEntry has NeedsConfig flag (replaces NeedsAuth) for broader coverage</li></ul>
-                </div>
-                </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
-            </div>
-            <div class="task-card">
-                <div class="task-header">
-                    <div class="task-title-row">
-                        <span class="task-num"># 4.4</span>
-                        <span class="task-name">Picker shows auth-required placeholders and triggers auth prompt</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
-                    </div>
-                </div>
-                <div class="task-grid">
-                    <div class="task-cell">
-                        <span class="cell-label">What</span>
-                        <span class="cell-value">Model picker shows &lt;not configured&gt; and &lt;auth expired&gt; sentinels. Selecting one opens the universal config wizard. On completion, saves provider and re-scans.</span>
-                    </div>
-                    <div class="task-cell">
-                        <span class="cell-label">Why</span>
-                        <span class="cell-value">User needs to discover and authenticate providers through the model picker since that is the primary interaction point</span>
-                    </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/model.go</li></ul>
-                </div>
-                    
-                <div class="task-cell full-width snippet-block">
-                    <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">// In model picker display logic:
-func renderModelEntry(e ModelEntry) string {
-	if e.NeedsConfig {
-		label := e.ID
-		if e.ID == &quot;&lt;auth expired&gt;&quot; {
-			label = &quot;re-authenticate&quot;
-		}
-		return fmt.Sprintf(&quot;  %s: click to %s&quot;, e.Provider, label)
-	}
-	return fmt.Sprintf(&quot;  %s: %s&quot;, e.Provider, e.ID)
-}
-
-// On model selection:
-func (m *Model) onModelSelected(entry ModelEntry) (Model, tea.Cmd) {
-	if entry.NeedsConfig {
-		// Trigger config wizard for this provider
-		p := config.ResolveProvider(m.endpoints, entry.Provider)
-		return m, m.showProviderConfig(p)
-	}
-	// Normal model selection
-	m.settings.Provider = entry.Provider
-	m.settings.Model = entry.ID
-	return m, nil
-}
-
-// After successful config, re-scan models:
-func (m *Model) onProviderConfigComplete(updated config.Provider) (Model, tea.Cmd) {
-	// Save updated provider back to endpoints
-	m.saveProvider(updated)
-	
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	models := chat.ScanModels(ctx, m.endpoints)
-	m.populateModelList(models)
-	return m, nil
-}</code></pre>
-                </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Picker displays &lt;not configured&gt; for providers missing URL or creds</li><li>Picker displays &lt;auth expired&gt; for providers with invalid creds</li><li>Selecting sentinel opens provider config wizard</li><li>Wizard completion saves provider and re-scans model list</li><li>Normal model selection unchanged for configured providers</li></ul>
-                </div>
-                </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div></div>
         </section>
-        <section id="error-handling-&-fallback" class="milestone-section">
+        <section id="run-execution-and-output-modes" class="milestone-section">
             <div class="section-header">
                 <span class="section-num">5</span>
-                <h2>Error Handling &amp; Fallback</h2>
-                <span class="pattern-badge">Circuit Breaker</span> 
+                <h2>Run Execution and Output Modes</h2>
+                <span class="pattern-badge">Headless Runner, Output Adapter, Autosave</span> 
             </div>
             
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
-                <div class="cell-value">Handle auth failures gracefully -- expired tokens trigger re-prompt, 401 errors trigger credential refresh or re-auth</div>
+                <div class="cell-value">Make run execute prepared sessions through the shared loop with autosave, session continuation, auth mapping, limits, and output modes.</div>
             </div>
             
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">Expired tokens auto-refresh before retry, 401 errors prompt for re-auth, unsupported providers return clear error</div>
+                <div class="cell-value">run supports final_message, silent, stream JSONL, structured not implemented, autosaves saved runs, and keeps stdout/stderr contracts clean.</div>
             </div>
             
             <div class="diagram-canvas">
@@ -1449,125 +1181,534 @@ func (m *Model) onProviderConfigComplete(updated config.Provider) (Model, tea.Cm
                     <span class="icon">📐</span>
                     <span class="label">Architecture & Flow</span>
                 </div>
-                <pre class="mermaid">flowchart LR
-    A[HTTP Request] --> B{Status Code}
-    B -->|200| C[Success]
-    B -->|401| D{Has RefreshToken}
-    D -->|Yes| E[Refresh Token]
-    E --> F{Retry}
-    F -->|200| C
-    F -->|401| G[Show Re-auth Prompt]
-    D -->|No| G
-    B -->|403| H[Permission Error Message]
-    B -->|Other| I[Standard Error]</pre>
+                <pre class="mermaid">flowchart TD
+    Run[run command] --> Resolve[resolve options]
+    Resolve --> Session[create or load session]
+    Session --> Turn[prepare turn]
+    Turn --> Loop[run loop]
+    Loop --> Output[output adapter]
+    Loop --> Autosave[autosave if enabled]</pre>
             </div>
             <div class="task-list">
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 5.1</span>
-                        <span class="task-name">401 detection and auto-refresh with re-auth prompt</span>
+                        <span class="task-name">Build run execution service</span>
                         <span class="layer-badge" style="background:#569cd6">feature</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">In Engine Stream, detect 401 response, attempt token refresh, retry once, then return error that triggers re-auth prompt</span>
+                        <span class="cell-value">Create a run package that creates or loads a session, appends prompt input, prepares the turn, runs RunLoop, and applies autosave.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Expired tokens are common -- auto-refresh avoids bothering the user, re-auth prompt is the last resort</span>
+                        <span class="cell-value">run should become the canonical non-TUI execution path instead of a special headless shortcut.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/engine.go</li></ul>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/run</li><li class="file-mod"><span class="action-sym">~</span>  internal/headless/headless.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/loop.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/cli</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">// In Stream(), after getting a non-200 response:
-if resp.StatusCode == http.StatusUnauthorized {
-	// Try refreshing credentials
-	if e.provider != nil &amp;&amp; e.provider.IsExpired() {
-		if err := e.provider.Refresh(); err == nil {
-			// Retry with new token
-			req2, _ := http.NewRequestWithContext(ctx, &quot;POST&quot;, e.ChatURL, bytes.NewReader(body))
-			req2.Header.Set(&quot;Content-Type&quot;, &quot;application/json&quot;)
-			e.provider.PrepareRequest(req2)
-			// ... repeat the request ...
-		}
-	}
-	// If refresh failed or not available, return error that triggers re-auth
-	ch &lt;- StreamEvent{Error: fmt.Errorf(&quot;authentication failed -- re-configure provider %s&quot;, e.providerName)}
-	return
+                    <pre><code class="language-go">package run
+
+type Request struct {
+    Options runtime.Options
+    SessionName string
+    Prompt string
 }
-</code></pre>
+
+type Result struct {
+    FinalText string
+    SavedSessionName string
+}
+
+func Execute(ctx context.Context, req Request) (Result, error) {
+    // Load or create session, append prompt, prepare turn, run loop, autosave.
+}</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>401 response triggers token refresh attempt before showing error</li><li>Successful refresh retries the request with new token</li><li>Failed refresh returns error message that triggers re-auth prompt</li><li>Providers without refresh capability return clear error</li></ul>
+                    <ul class="acceptance-list"><li>run executes a fresh inline prompt without launching TUI.</li><li>run with a named agent creates a session from that agent.</li><li>run --session appends a new turn to an existing saved session.</li><li>autosave writes a session when enabled and reports only the saved session name.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
             </div>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 5.2</span>
-                        <span class="task-name">Unsupported provider error and placeholder error for non-openai dialects</span>
+                        <span class="task-name">Implement run output modes</span>
                         <span class="layer-badge" style="background:#569cd6">feature</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">When user configures a provider with a dialect that has no implementation yet (anthropic, gemini), return a clear error explaining it&#x27;s not yet supported</span>
+                        <span class="cell-value">Add output adapters for final_message, silent, stream, and structured mode handling.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Scope is OpenAI only for now -- other providers should fail gracefully with a helpful message, not a cryptic panic</span>
+                        <span class="cell-value">Automation needs predictable stdout and stderr behavior for each run mode.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/provider.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/run</li><li class="file-mod"><span class="action-sym">~</span>  internal/cli</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">// In LoadProviderImpl:
-func LoadProviderImpl(p config.Provider) ProviderImpl {
-	switch p.Name {
-	case &quot;openai&quot;, &quot;openai-codex&quot;:
-		return newOpenAIFromConfig(p)
-	default:
-		if p.Dialect != config.DialectOpenAICompatible {
-			return &amp;UnsupportedProvider{Dialect: p.Dialect}
-		}
-		return &amp;LocalProvider{}
-	}
-}
+                    <pre><code class="language-go">type OutputMode string
 
-type UnsupportedProvider struct {
-	Dialect string
-}
+const (
+    OutputFinalMessage OutputMode = &quot;final_message&quot;
+    OutputStream OutputMode = &quot;stream&quot;
+    OutputSilent OutputMode = &quot;silent&quot;
+    OutputStructured OutputMode = &quot;structured&quot;
+)
 
-func (u *UnsupportedProvider) PrepareRequest(req *http.Request) error {
-	return fmt.Errorf(&quot;provider dialect %q not yet supported -- only openai-compatible providers are currently available&quot;, u.Dialect)
+type OutputWriter interface {
+    WriteResult(result Result) error
 }
-// ... other interface methods return appropriate stubs
 </code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Anthropic dialect returns clear unsupported error from PrepareRequest</li><li>Gemini dialect returns clear unsupported error</li><li>OpenAI and local providers work normally</li><li>Error message guides user on what IS supported</li></ul>
+                    <ul class="acceptance-list"><li>final_message prints the final assistant answer to stdout.</li><li>silent prints no final assistant answer to stdout.</li><li>saved session name goes to stderr for final_message and silent when autosaved.</li><li>structured returns a clear not implemented error for phase 1.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ cd ~/src/squid-os &amp;&amp; go build ./...</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 5.3</span>
+                        <span class="task-name">Add CLI stream JSONL protocol</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Map loop events and selected session lifecycle events into JSONL stream output with timestamps, roles, message IDs, and tool call IDs.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">stream mode needs a stable machine-readable CLI boundary without redesigning provider streaming.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/run</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/loop.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type StreamEnvelope struct {
+    Event string
+    Timestamp string
+    Role string
+    MessageID string
+    ToolCallID string
+    Tool string
+    Text string
+    Saved bool
+    SessionName string
+    StopReason string
+}
+
+func WriteStreamEvent(env StreamEnvelope) error {
+    // Write one JSON object per line.
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>stream emits session_start as the first JSONL event.</li><li>session_start includes saved session name only when saved.</li><li>stream events include timestamps.</li><li>message, thinking, tool call, tool execution, permission request, error, session_event, and finished events are valid JSONL.</li><li>stream mode does not duplicate saved session metadata to stderr on success.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 5.4</span>
+                        <span class="task-name">Apply run auth and limits</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Map agent/run auth modes onto existing authorization behavior and enforce practical phase-1 run limits.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Non-TUI runs and agent tools must be deterministic and bounded without inventing separate auth or limit systems.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/run</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/loop.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/tool_exec.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/runtime</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type Limits struct {
+    MaxSteps int
+    MaxTools int
+    MaxTime time.Duration
+    MaxToolResultTokens int
+}
+
+type AuthMode string
+
+func ApplyRunPolicies(opts runtime.Options) chat.RunLoopOptions {
+    // Map auth and limits into loop/tool execution options.
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>max tool result tokens continues to be enforced.</li><li>max steps, max tools, and max time are modeled and enforced where practical.</li><li>auth-required behavior maps to configured non-TUI policy.</li><li>No separate agent-tool auth subsystem is introduced.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div></div>
+        </section>
+        <section id="agent-tools" class="milestone-section">
+            <div class="section-header">
+                <span class="section-num">6</span>
+                <h2>Agent Tools</h2>
+                <span class="pattern-badge">Tool Adapter, Registry Guard, Blocking Delegation</span> 
+            </div>
+            
+            <div class="ms-overview-box">
+                <span class="cell-label">Objective</span>
+                <div class="cell-value">Add list_agents, call_agent, and inline_agent tools using the agent registry and run execution model.</div>
+            </div>
+            
+            <div class="ms-success-box">
+                <span class="cell-label success">Success Criteria</span>
+                <div class="cell-value">The model can list agents, call an allowed named agent as a blocking final-answer subtask, and run inline agent definitions from tool arguments.</div>
+            </div>
+            
+            <div class="diagram-canvas">
+                <div class="diagram-header">
+                    <span class="icon">📐</span>
+                    <span class="label">Architecture & Flow</span>
+                </div>
+                <pre class="mermaid">flowchart TD
+    Parent[parent session] --> Tool[agent tool]
+    Tool --> List[list_agents]
+    Tool --> Call[call_agent]
+    Tool --> Inline[inline_agent]
+    Call --> RunNamed[run named agent]
+    Inline --> RunInline[run inline profile]
+    RunNamed --> Result[final answer result]
+    RunInline --> Result</pre>
+            </div>
+            <div class="task-list">
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 6.1</span>
+                        <span class="task-name">Register list_agents tool</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Add a list_agents tool that returns agent names and descriptions using the agent registry and documented callable-agent behavior.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">The model needs explicit agent discovery just like it has skill_list for skills.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/tools/agents.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/tools/tools.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/agent</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">var ListAgentsTool = Tool{
+    Name: &quot;list_agents&quot;
+    Description: &quot;List available agents with names and descriptions.&quot;
+    // Schema has no required arguments.
+}
+
+func executeListAgents(args map[string]interface{}) ToolResult {
+    // Read agent registry and return compact name plus description list.
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>list_agents is registered in the tool registry.</li><li>list_agents returns agent names and descriptions.</li><li>The implementation clearly chooses or labels installed versus callable agent listing behavior.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 6.2</span>
+                        <span class="task-name">Register call_agent tool</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Add call_agent as a blocking named-agent tool with arguments for agent name, prompt, and limits.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Provides simple phase-1 sub-agent delegation while keeping full child-session orchestration out of scope.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/tools/agents.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/run</li><li class="file-mod"><span class="action-sym">~</span>  internal/agent</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/tool_exec.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type CallAgentArgs struct {
+    Agent string
+    Prompt string
+    Limits Limits
+}
+
+func executeCallAgent(args CallAgentArgs, ctx ToolContext) ToolResult {
+    // Verify Agent is allowed by current session Agents scope.
+    // Execute named agent through run service with final-answer output.
+}
+</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>call_agent requires agent and prompt.</li><li>call_agent accepts limits for the delegated subtask.</li><li>call_agent rejects agents not allowed by the current session Agents scope.</li><li>called agent uses its own configured tools, skills, agents, memory, system, and model.</li><li>call_agent returns only the final answer as the tool result.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 6.3</span>
+                        <span class="task-name">Register inline_agent tool</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Add inline_agent as a blocking tool whose agent-like profile is defined directly in tool arguments instead of an installed preset.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Supports ad hoc delegation without requiring users to create a registry agent file first.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/tools/agents.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/run</li><li class="file-mod"><span class="action-sym">~</span>  internal/runtime</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type InlineAgentArgs struct {
+    Prompt string
+    System string
+    Model string
+    ToolNames []string
+    SkillNames []string
+    CallableAgentNames []string
+    AuthMode string
+    Limits Limits
+}
+
+func executeInlineAgent(args InlineAgentArgs, ctx ToolContext) ToolResult {
+    // Build runtime options from inline arguments and run blocking.
+}
+</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>inline_agent does not require registry lookup.</li><li>inline_agent profile source is the tool arguments.</li><li>inline_agent runs blocking and returns the final answer.</li><li>inline_agent uses the normal run execution path.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div></div>
+        </section>
+        <section id="cleanup-and-validation" class="milestone-section">
+            <div class="section-header">
+                <span class="section-num">7</span>
+                <h2>Cleanup and Validation</h2>
+                <span class="pattern-badge">Strangler Cleanup, Regression Tests</span> 
+            </div>
+            
+            <div class="ms-overview-box">
+                <span class="cell-label">Objective</span>
+                <div class="cell-value">Remove obsolete incognito and legacy CLI behavior, then validate the new architecture with focused regression tests.</div>
+            </div>
+            
+            <div class="ms-success-box">
+                <span class="cell-label success">Success Criteria</span>
+                <div class="cell-value">Incognito and implicit headless prompt behavior are gone, version remains preserved, and tests cover CLI parsing, agents, runtime resolution, PrepareTurn, run output, and agent tools.</div>
+            </div>
+            
+            <div class="diagram-canvas">
+                <div class="diagram-header">
+                    <span class="icon">📐</span>
+                    <span class="label">Architecture & Flow</span>
+                </div>
+                <pre class="mermaid">flowchart TD
+    Legacy[legacy CLI behavior] --> Remove[remove hidden mode switches]
+    Incognito[incognito mode] --> Autosave[explicit autosave config]
+    Tests[focused tests] --> Build[go build and go test]
+    Build --> Done[ready for implementation review]</pre>
+            </div>
+            <div class="task-list">
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 7.1</span>
+                        <span class="task-name">Drop incognito CLI flag</span>
+                        <span class="layer-badge" style="background:#c586c0">refactor</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Remove the incognito CLI flag from main.go. Incognito toggle (alt+i) remains in the app — it keeps the session alive and just stops saving/history.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">The incognito feature is useful for privacy (no history, no save). Keep it as an in-app toggle, just remove the CLI startup flag.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  main.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/cli</li><li class="file-mod"><span class="action-sym">~</span>  internal/keymap.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">func main() {
+    // incognito flag removed from CLI parsing
+    // incognito remains as in-app toggle (alt+i)
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>No incognito flag in CLI argument parsing.</li><li>App still toggles incognito via alt+i.</li><li>Incognito still blocks history and session saves.</li><li>Toggle off reloads session from disk (discarding incognito changes).</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 7.2</span>
+                        <span class="task-name">Remove legacy root CLI behavior</span>
+                        <span class="layer-badge" style="background:#c586c0">refactor</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Remove implicit headless-on-prompt behavior and legacy root image handling that no longer fit the explicit command model.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Root command should consistently mean TUI while non-TUI execution belongs only under run.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/cli</li><li class="file-mod"><span class="action-sym">~</span>  internal/headless/headless.go</li><li class="file-mod"><span class="action-sym">~</span>  main.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">func RunRoot(opts TUIOptions) error {
+    // Root always launches TUI.
+}
+
+func RunExplicit(opts RunOptions) error {
+    // Non-TUI execution lives under squid-os run.
+}
+</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>Root --prompt does not start non-TUI execution.</li><li>Non-TUI execution requires the run command.</li><li>Unsupported legacy flags are removed or rejected clearly.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go build ./...</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 7.3</span>
+                        <span class="task-name">Add focused regression tests</span>
+                        <span class="layer-badge" style="background:#4ec9b0">test</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Add tests for CLI parsing, agent registry loading, runtime precedence, PrepareTurn injection, run outputs, memory paths, and agent tools.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">The new architecture crosses many entrypoints and needs tests to prevent behavior drift.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/cli/*_test.go</li><li class="file-add"><span class="action-sym">+</span>  internal/agent/*_test.go</li><li class="file-add"><span class="action-sym">+</span>  internal/runtime/*_test.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/*_test.go</li><li class="file-add"><span class="action-sym">+</span>  internal/run/*_test.go</li><li class="file-add"><span class="action-sym">+</span>  internal/memory/*_test.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">func TestRunAgentFlagConflict(t *testing.T) {
+    // Positional agent and --agent mismatch should fail.
+}
+
+func TestPrepareTurnTransitionPlacement(t *testing.T) {
+    // Transitions should appear after the user message.
+}
+
+func TestWorkspaceMemoryPath(t *testing.T) {
+    // workspace memory resolves to working-directory/memory.
+}
+</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>Tests cover positional agent and --agent equivalence and conflict.</li><li>Tests cover --prompt plus stdin composition.</li><li>Tests cover --session continuation rejecting bootstrap replacement flags.</li><li>Tests cover PrepareTurn transition placement.</li><li>Tests cover stream session_start output and saved session name behavior.</li><li>Tests cover agent registry scan/load and agent tool contracts.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./...</span> </div>
             </div></div>
         </section>
     </div>

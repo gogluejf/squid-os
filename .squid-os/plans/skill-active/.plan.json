@@ -1,218 +1,218 @@
 {
-  "plan_name": "skill-active",
-  "title": "Active Skill State",
-  "why": "Track loaded skill on the session like working_dir, allow Tab cycling, and inject a synthetic message on change when the user sends their next message. State lives entirely in SessionSkill struct \u2014 no Model-level tracking.",
-  "outcomes": "User can cycle skills with Tab, skill_load sets Next, change is reflected via synthetic message on next turn, persists on save/load, cleared on new session",
-  "milestones": [
-    {
-      "number": "1",
-      "name": "Config",
-      "pattern": [
-        "Data struct (self-contained in Session)"
-      ],
-      "objective": "Add SessionSkill struct with Current and Next to the Session config",
-      "success": "Session file persists both Current and Next, restored on load, footer can read it",
-      "diagram": "classDiagram\n    class SessionSkill {\n        +Current string\n        +Next string\n    }\n    class Session {\n        +Skill SessionSkill\n    }\n    class SessionFile {\n        +Session Session\n    }\n    SessionFile --> Session\n    Session --> SessionSkill",
-      "tasks": [
+    "plan_name": "skill-active",
+    "title": "Active Skill State",
+    "milestones": [
         {
-          "number": "1.1",
-          "name": "Add SessionSkill to config",
-          "type": "feature",
-          "what": "Add SessionSkill struct and embed it in Session in config/session.go",
-          "why": "Self-contained skill state on the session \u2014 Current is committed, Next is pending change",
-          "files": [
-            "~ internal/config/session.go"
-          ],
-          "snippet": [
-            "type SessionSkill struct {\n    Current string `json:\"current\"`\n    Next    string `json:\"next\"`\n}\n\ntype Session struct {\n    // ... existing fields ...\n    Skill SessionSkill `json:\"skill\"`\n}"
-          ],
-          "acceptance": [
-            "Both fields always persist (no omitempty)",
-            "Default zero value is {\"\": \"\"} \u2014 no skill"
-          ],
-          "verify": [
-            "go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "2",
-      "name": "Tab Cycling",
-      "pattern": [
-        "Key binding on session state"
-      ],
-      "objective": "Tab in ModeChat cycles through [none] + registered skills, sets Next, autosaves Current",
-      "success": "Tab cycles skills on session.Skill, shows notification, autosaves immediately",
-      "diagram": "stateDiagram-v2\n    [*] --> none\n    none --> skillA\n    skillA --> skillB\n    skillB --> none",
-      "tasks": [
+            "number": "1",
+            "name": "Config",
+            "pattern": [
+                "Data struct (self-contained in Session)"
+            ],
+            "objective": "Add SessionSkill struct with Current and Next to the Session config",
+            "success": "Session file persists both Current and Next, restored on load, footer can read it",
+            "diagram": "classDiagram\n    class SessionSkill {\n        +Current string\n        +Next string\n    }\n    class Session {\n        +Skill SessionSkill\n    }\n    class SessionFile {\n        +Session Session\n    }\n    SessionFile --> Session\n    Session --> SessionSkill",
+            "tasks": [
+                {
+                    "number": "1.1",
+                    "name": "Add SessionSkill to config",
+                    "type": "feature",
+                    "what": "Add SessionSkill struct and embed it in Session in config/session.go",
+                    "why": "Self-contained skill state on the session \u2014 Current is committed, Next is pending change",
+                    "files": [
+                        "~ internal/config/session.go"
+                    ],
+                    "snippet": [
+                        "type SessionSkill struct {\n    Current string `json:\"current\"`\n    Next    string `json:\"next\"`\n}\n\ntype Session struct {\n    // ... existing fields ...\n    Skill SessionSkill `json:\"skill\"`\n}"
+                    ],
+                    "acceptance": [
+                        "Both fields always persist (no omitempty)",
+                        "Default zero value is {\"\": \"\"} \u2014 no skill"
+                    ],
+                    "verify": [
+                        "go build ./..."
+                    ]
+                }
+            ]
+        },
         {
-          "number": "2.1",
-          "name": "Implement cycleSkill on Tab",
-          "type": "feature",
-          "what": "Intercept Tab in ModeChat to cycle skills, set Next, autosave",
-          "why": "Let the user manually switch the loaded skill via Tab",
-          "files": [
-            "~ internal/app/input.go",
-            "~ internal/app/app.go"
-          ],
-          "snippet": [
-            "case msg.Type == tea.KeyTab && !msg.Alt && m.mode == ModeChat:\n    return m.cycleSkill()",
-            "func (m Model) cycleSkill() (Model, tea.Cmd) {\n    options := []string{\"\"}\n    if reg := skills.GetRegistry(); reg != nil {\n        for _, e := range reg.List() {\n            options = append(options, e.Name)\n        }\n    }\n    current := m.session.file.Session.Skill.Next\n    if current == \"\" {\n        current = m.session.file.Session.Skill.Current\n    }\n    idx := 0\n    for i, s := range options {\n        if s == current {\n            idx = i\n            break\n        }\n    }\n    next := options[(idx+1)%len(options)]\n    m.session.file.Session.Skill.Next = next\n    label := next\n    if next == \"\" {\n        label = \"[no skill]\"\n    }\n    m.setNotification(ui.NotificationInfo, \"skill: \" + label)\n    m.updateViewportContent()\n    return m.autoSave()\n}"
-          ],
-          "acceptance": [
-            "Tab cycles: empty -> skill1 -> skill2 -> ... -> empty (loop)",
-            "If Next is already set, cycling continues from Next (not Current)",
-            "Sets Next on session.Skill",
-            "Autosaves after each cycle",
-            "Shows notification with skill name or [no skill]"
-          ],
-          "verify": [
-            "go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "3",
-      "name": "Tool Side-Effect",
-      "pattern": [
-        "Post-execution hook (mirrors set_working_dir in stream.go)"
-      ],
-      "objective": "skill_load tool sets Skill.Next as a side effect, autosaves",
-      "success": "After skill_load succeeds, session.Skill.Next is set and autosaved",
-      "diagram": "sequenceDiagram\n    participant M as Model\n    participant T as Tool Execute Loop\n    participant S as skill_load\n    M->>T: Execute tool call\n    T->>S: skill_load(args)\n    S-->>T: result success\n    T->>M: if name == skill_load\n    T->>M: session.Skill.Next = args.name\n    M->>M: autoSave",
-      "tasks": [
+            "number": "2",
+            "name": "Tab Cycling",
+            "pattern": [
+                "Key binding on session state"
+            ],
+            "objective": "Tab in ModeChat cycles through [none] + registered skills, sets Next, autosaves Current",
+            "success": "Tab cycles skills on session.Skill, shows notification, autosaves immediately",
+            "diagram": "stateDiagram-v2\n    [*] --> none\n    none --> skillA\n    skillA --> skillB\n    skillB --> none",
+            "tasks": [
+                {
+                    "number": "2.1",
+                    "name": "Implement cycleSkill on Tab",
+                    "type": "feature",
+                    "what": "Intercept Tab in ModeChat to cycle skills, set Next, autosave",
+                    "why": "Let the user manually switch the loaded skill via Tab",
+                    "files": [
+                        "~ internal/app/input.go",
+                        "~ internal/app/app.go"
+                    ],
+                    "snippet": [
+                        "case msg.Type == tea.KeyTab && !msg.Alt && m.mode == ModeChat:\n    return m.cycleSkill()",
+                        "func (m Model) cycleSkill() (Model, tea.Cmd) {\n    options := []string{\"\"}\n    if reg := skills.GetRegistry(); reg != nil {\n        for _, e := range reg.List() {\n            options = append(options, e.Name)\n        }\n    }\n    current := m.session.file.Session.Skill.Next\n    if current == \"\" {\n        current = m.session.file.Session.Skill.Current\n    }\n    idx := 0\n    for i, s := range options {\n        if s == current {\n            idx = i\n            break\n        }\n    }\n    next := options[(idx+1)%len(options)]\n    m.session.file.Session.Skill.Next = next\n    label := next\n    if next == \"\" {\n        label = \"[no skill]\"\n    }\n    m.setNotification(ui.NotificationInfo, \"skill: \" + label)\n    m.updateViewportContent()\n    return m.autoSave()\n}"
+                    ],
+                    "acceptance": [
+                        "Tab cycles: empty -> skill1 -> skill2 -> ... -> empty (loop)",
+                        "If Next is already set, cycling continues from Next (not Current)",
+                        "Sets Next on session.Skill",
+                        "Autosaves after each cycle",
+                        "Shows notification with skill name or [no skill]"
+                    ],
+                    "verify": [
+                        "go build ./..."
+                    ]
+                }
+            ]
+        },
         {
-          "number": "3.1",
-          "name": "skill_load sets Next post-execution",
-          "type": "feature",
-          "what": "Add post-execution hook for skill_load in stream.go next to set_working_dir",
-          "why": "When the model calls skill_load, set Skill.Next and autosave so the footer reflects it",
-          "files": [
-            "~ internal/app/stream.go"
-          ],
-          "snippet": [
-            "// After set_working_dir block in stream.go tool loop:\nif p.name == \"skill_load\" && result.Status == tools.ResultStatusSuccess {\n    if name, ok := args[\"name\"].(string); ok {\n        m.session.file.Session.Skill.Next = name\n        m, _ = m.autoSave()\n    }\n}"
-          ],
-          "acceptance": [
-            "After successful skill_load, session.Skill.Next is set",
-            "Autosaves after setting Next",
-            "Failed skill_load does not change Next"
-          ],
-          "verify": [
-            "go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "4",
-      "name": "Synthetic Message on Send",
-      "pattern": [
-        "Pre-send check in sendMessage"
-      ],
-      "objective": "On user send, if Next != Current inject synthetic skill-load message, then liquidate Next into Current",
-      "success": "Transition produces synthetic with label skill-load and param name; Next is cleared, Current updated; no extra save needed (autosave already ran)",
-      "diagram": "flowchart LR\n    A[sendMessage] --> B{Skill.Next != Skill.Current}\n    B -->|yes| C[Generate synthetic skill-load msg]\n    B -->|no| D[append user msg]\n    C --> E[append synthetic before user msg]\n    E --> D\n    D --> F[Current = Next, Next = \"\"]",
-      "tasks": [
+            "number": "3",
+            "name": "Tool Side-Effect",
+            "pattern": [
+                "Post-execution hook (mirrors set_working_dir in stream.go)"
+            ],
+            "objective": "skill_load tool sets Skill.Next as a side effect, autosaves",
+            "success": "After skill_load succeeds, session.Skill.Next is set and autosaved",
+            "diagram": "sequenceDiagram\n    participant M as Model\n    participant T as Tool Execute Loop\n    participant S as skill_load\n    M->>T: Execute tool call\n    T->>S: skill_load(args)\n    S-->>T: result success\n    T->>M: if name == skill_load\n    T->>M: session.Skill.Next = args.name\n    M->>M: autoSave",
+            "tasks": [
+                {
+                    "number": "3.1",
+                    "name": "skill_load sets Next post-execution",
+                    "type": "feature",
+                    "what": "Add post-execution hook for skill_load in stream.go next to set_working_dir",
+                    "why": "When the model calls skill_load, set Skill.Next and autosave so the footer reflects it",
+                    "files": [
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "// After set_working_dir block in stream.go tool loop:\nif p.name == \"skill_load\" && result.Status == tools.ResultStatusSuccess {\n    if name, ok := args[\"name\"].(string); ok {\n        m.session.file.Session.Skill.Next = name\n        m, _ = m.autoSave()\n    }\n}"
+                    ],
+                    "acceptance": [
+                        "After successful skill_load, session.Skill.Next is set",
+                        "Autosaves after setting Next",
+                        "Failed skill_load does not change Next"
+                    ],
+                    "verify": [
+                        "go build ./..."
+                    ]
+                }
+            ]
+        },
         {
-          "number": "4.1",
-          "name": "Inject synthetic skill-load message on send",
-          "type": "feature",
-          "what": "In sendMessage(), before appending user message, check if Skill.Next != Skill.Current and inject synthetic skill-load message, then liquidate",
-          "why": "When the skill has changed, the model needs to know via a synthetic message before the user message",
-          "files": [
-            "~ internal/app/stream.go"
-          ],
-          "snippet": [
-            "func (m Model) sendMessage() (Model, tea.Cmd) {\n    // ... existing start ...\n\n    // Check for skill change\n    if m.session.file.Session.Skill.Next != m.session.file.Session.Skill.Current {\n        old := m.session.file.Session.Skill.Current\n        nxt := m.session.file.Session.Skill.Next\n        m.injectSkillChangeSynthetic(old, nxt)\n        m.session.file.Session.Skill.Current = nxt\n        m.session.file.Session.Skill.Next = \"\"\n    }\n\n    // ... rest of sendMessage (append user msg, start stream) ...",
-            "func (m *Model) injectSkillChangeSynthetic(old string, nxt string) {\n    var text string\n    if nxt == \"\" {\n        text = fmt.Sprintf(\"Skill %q has been unloaded by the user. Don't use the previously loaded skill anymore.\", old)\n    } else if old == \"\" {\n        text = m.getSkillText(nxt)\n    } else {\n        text = fmt.Sprintf(\"Skill changed from %q to %q. Stop using the previous skill and use the new one instead.\\n\\n\", old, nxt)\n        text += m.getSkillText(nxt)\n    }\n    m.session.appendMsg(config.Message{\n        ID:          fmt.Sprintf(\"msg_%d\", len(m.session.file.Messages)+1),\n        Role:        config.RoleSynthetic,\n        CreatedAt:   time.Now(),\n        Text:        text,\n        Label:       \"skill-load\",\n        Params:      map[string]string{\"name\": nxt},\n        InputTokens: countTokensApprox(text),\n    })\n}",
-            "func (m *Model) getSkillText(name string) string {\n    reg := skills.GetRegistry()\n    if reg == nil {\n        return fmt.Sprintf(\"Loaded skill: %s\", name)\n    }\n    sk, err := reg.Load(name)\n    if err != nil {\n        return fmt.Sprintf(\"Loaded skill: %s\", name)\n    }\n    text := fmt.Sprintf(\"Loaded skill: %s\\n\\n\", name)\n    if sk.Body != \"\" {\n        text += sk.Body\n    }\n    return text\n}"
-          ],
-          "acceptance": [
-            "empty -> skill: synthetic 'Loaded skill: X' + body, param name=X",
-            "skill-A -> skill-B: synthetic 'Skill changed from A to B' + new body, param name=B",
-            "skill-A -> empty: synthetic 'Skill A unloaded', param name=empty",
-            "Label is skill-load",
-            "After synthetic injection, Current = Next, Next cleared",
-            "If Next == Current, no synthetic injected"
-          ],
-          "verify": [
-            "go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "5",
-      "name": "Clear State",
-      "pattern": [
-        "Reset on session lifecycle"
-      ],
-      "objective": "Zero out Skill on new session / incognito",
-      "success": "No leftover skill state when starting fresh",
-      "diagram": "flowchart LR\n    A[clearSession] --> B[Skill = SessionSkill{}]\n    C[toggleIncognito] --> B",
-      "tasks": [
+            "number": "4",
+            "name": "Synthetic Message on Send",
+            "pattern": [
+                "Pre-send check in sendMessage"
+            ],
+            "objective": "On user send, if Next != Current inject synthetic skill-load message, then liquidate Next into Current",
+            "success": "Transition produces synthetic with label skill-load and param name; Next is cleared, Current updated; no extra save needed (autosave already ran)",
+            "diagram": "flowchart LR\n    A[sendMessage] --> B{Skill.Next != Skill.Current}\n    B -->|yes| C[Generate synthetic skill-load msg]\n    B -->|no| D[append user msg]\n    C --> E[append synthetic before user msg]\n    E --> D\n    D --> F[Current = Next, Next = \"\"]",
+            "tasks": [
+                {
+                    "number": "4.1",
+                    "name": "Inject synthetic skill-load message on send",
+                    "type": "feature",
+                    "what": "In sendMessage(), before appending user message, check if Skill.Next != Skill.Current and inject synthetic skill-load message, then liquidate",
+                    "why": "When the skill has changed, the model needs to know via a synthetic message before the user message",
+                    "files": [
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "func (m Model) sendMessage() (Model, tea.Cmd) {\n    // ... existing start ...\n\n    // Check for skill change\n    if m.session.file.Session.Skill.Next != m.session.file.Session.Skill.Current {\n        old := m.session.file.Session.Skill.Current\n        nxt := m.session.file.Session.Skill.Next\n        m.injectSkillChangeSynthetic(old, nxt)\n        m.session.file.Session.Skill.Current = nxt\n        m.session.file.Session.Skill.Next = \"\"\n    }\n\n    // ... rest of sendMessage (append user msg, start stream) ...",
+                        "func (m *Model) injectSkillChangeSynthetic(old string, nxt string) {\n    var text string\n    if nxt == \"\" {\n        text = fmt.Sprintf(\"Skill %q has been unloaded by the user. Don't use the previously loaded skill anymore.\", old)\n    } else if old == \"\" {\n        text = m.getSkillText(nxt)\n    } else {\n        text = fmt.Sprintf(\"Skill changed from %q to %q. Stop using the previous skill and use the new one instead.\\n\\n\", old, nxt)\n        text += m.getSkillText(nxt)\n    }\n    m.session.appendMsg(config.Message{\n        ID:          fmt.Sprintf(\"msg_%d\", len(m.session.file.Messages)+1),\n        Role:        config.RoleSynthetic,\n        CreatedAt:   time.Now(),\n        Text:        text,\n        Label:       \"skill-load\",\n        Params:      map[string]string{\"name\": nxt},\n        InputTokens: countTokensApprox(text),\n    })\n}",
+                        "func (m *Model) getSkillText(name string) string {\n    reg := skills.GetRegistry()\n    if reg == nil {\n        return fmt.Sprintf(\"Loaded skill: %s\", name)\n    }\n    sk, err := reg.Load(name)\n    if err != nil {\n        return fmt.Sprintf(\"Loaded skill: %s\", name)\n    }\n    text := fmt.Sprintf(\"Loaded skill: %s\\n\\n\", name)\n    if sk.Body != \"\" {\n        text += sk.Body\n    }\n    return text\n}"
+                    ],
+                    "acceptance": [
+                        "empty -> skill: synthetic 'Loaded skill: X' + body, param name=X",
+                        "skill-A -> skill-B: synthetic 'Skill changed from A to B' + new body, param name=B",
+                        "skill-A -> empty: synthetic 'Skill A unloaded', param name=empty",
+                        "Label is skill-load",
+                        "After synthetic injection, Current = Next, Next cleared",
+                        "If Next == Current, no synthetic injected"
+                    ],
+                    "verify": [
+                        "go build ./..."
+                    ]
+                }
+            ]
+        },
         {
-          "number": "5.1",
-          "name": "Clear Skill on new session / incognito",
-          "type": "feature",
-          "what": "Reset session.file.Session.Skill to zero value in clearSession() and toggleIncognito()",
-          "why": "A fresh session should not carry over a previously loaded skill",
-          "files": [
-            "~ internal/app/session.go"
-          ],
-          "snippet": [
-            "func (m Model) clearSession() (Model, tea.Cmd) {\n    m.session.file.Session.Skill = config.SessionSkill{}\n    // ...",
-            "func (m Model) toggleIncognito() (Model, tea.Cmd) {\n    m.session.file.Session.Skill = config.SessionSkill{}\n    // ..."
-          ],
-          "acceptance": [
-            "clearSession zeros both Current and Next",
-            "toggleIncognito zeros both Current and Next"
-          ],
-          "verify": [
-            "go build ./..."
-          ]
-        }
-      ]
-    },
-    {
-      "number": "6",
-      "name": "Footer Display",
-      "pattern": [
-        "UI render using session state"
-      ],
-      "objective": "Footer shows skill state: Next if set, otherwise Current",
-      "success": "Footer displays current/pending skill info from SessionSkill",
-      "diagram": "flowchart LR\n    A[Footer render] --> B{Skill.Next != \"\"}\n    B -->|yes| C[display Next]\n    B -->|no| D{Skill.Current != \"\"}\n    D -->|yes| E[display Current]\n    D -->|no| F[display none]",
-      "tasks": [
+            "number": "5",
+            "name": "Clear State",
+            "pattern": [
+                "Reset on session lifecycle"
+            ],
+            "objective": "Zero out Skill on new session / incognito",
+            "success": "No leftover skill state when starting fresh",
+            "diagram": "flowchart LR\n    A[clearSession] --> B[Skill = SessionSkill{}]\n    C[toggleIncognito] --> B",
+            "tasks": [
+                {
+                    "number": "5.1",
+                    "name": "Clear Skill on new session / incognito",
+                    "type": "feature",
+                    "what": "Reset session.file.Session.Skill to zero value in clearSession() and toggleIncognito()",
+                    "why": "A fresh session should not carry over a previously loaded skill",
+                    "files": [
+                        "~ internal/app/session.go"
+                    ],
+                    "snippet": [
+                        "func (m Model) clearSession() (Model, tea.Cmd) {\n    m.session.file.Session.Skill = config.SessionSkill{}\n    // ...",
+                        "func (m Model) toggleIncognito() (Model, tea.Cmd) {\n    m.session.file.Session.Skill = config.SessionSkill{}\n    // ..."
+                    ],
+                    "acceptance": [
+                        "clearSession zeros both Current and Next",
+                        "toggleIncognito zeros both Current and Next"
+                    ],
+                    "verify": [
+                        "go build ./..."
+                    ]
+                }
+            ]
+        },
         {
-          "number": "6.1",
-          "name": "Display skill in footer",
-          "type": "feature",
-          "what": "Add SessionSkill to FooterData, display it in line2 footer (after auth mode, before working dir)",
-          "why": "User needs to see what skill is currently loaded or pending",
-          "files": [
-            "~ internal/ui/footer.go",
-            "~ internal/app/render.go"
-          ],
-          "snippet": [
-            "type FooterData struct {\n    // ... existing fields ...\n    Skill config.SessionSkill\n}",
-            "// In buildFooterData:\nreturn ui.FooterData{\n    // ... existing ...\n    Skill: m.session.file.Session.Skill,\n}",
-            "// In RenderFooter line2, after authLabel:\nvar skillLabel string\nif data.Skill.Next != \"\" {\n    skillLabel = style.FooterValueStyle.Render(\"[skill: \" + data.Skill.Next + \"]\")\n} else if data.Skill.Current != \"\" {\n    skillLabel = style.FooterValueStyle.Render(\"[skill: \" + data.Skill.Current + \"]\")\n}\nleft2 := thinkLabel + authLabel + skillLabel + style.FooterValueStyle.Render(\" \") + curDirLabel"
-          ],
-          "acceptance": [
-            "When Next is set, footer shows [skill: Next]",
-            "When Next is empty but Current is set, footer shows [skill: Current]",
-            "When both empty, no skill label shown",
-            "Skill label appears between auth mode and working dir"
-          ],
-          "verify": [
-            "go build ./..."
-          ]
+            "number": "6",
+            "name": "Footer Display",
+            "pattern": [
+                "UI render using session state"
+            ],
+            "objective": "Footer shows skill state: Next if set, otherwise Current",
+            "success": "Footer displays current/pending skill info from SessionSkill",
+            "diagram": "flowchart LR\n    A[Footer render] --> B{Skill.Next != \"\"}\n    B -->|yes| C[display Next]\n    B -->|no| D{Skill.Current != \"\"}\n    D -->|yes| E[display Current]\n    D -->|no| F[display none]",
+            "tasks": [
+                {
+                    "number": "6.1",
+                    "name": "Display skill in footer",
+                    "type": "feature",
+                    "what": "Add SessionSkill to FooterData, display it in line2 footer (after auth mode, before working dir)",
+                    "why": "User needs to see what skill is currently loaded or pending",
+                    "files": [
+                        "~ internal/ui/footer.go",
+                        "~ internal/app/render.go"
+                    ],
+                    "snippet": [
+                        "type FooterData struct {\n    // ... existing fields ...\n    Skill config.SessionSkill\n}",
+                        "// In buildFooterData:\nreturn ui.FooterData{\n    // ... existing ...\n    Skill: m.session.file.Session.Skill,\n}",
+                        "// In RenderFooter line2, after authLabel:\nvar skillLabel string\nif data.Skill.Next != \"\" {\n    skillLabel = style.FooterValueStyle.Render(\"[skill: \" + data.Skill.Next + \"]\")\n} else if data.Skill.Current != \"\" {\n    skillLabel = style.FooterValueStyle.Render(\"[skill: \" + data.Skill.Current + \"]\")\n}\nleft2 := thinkLabel + authLabel + skillLabel + style.FooterValueStyle.Render(\" \") + curDirLabel"
+                    ],
+                    "acceptance": [
+                        "When Next is set, footer shows [skill: Next]",
+                        "When Next is empty but Current is set, footer shows [skill: Current]",
+                        "When both empty, no skill label shown",
+                        "Skill label appears between auth mode and working dir"
+                    ],
+                    "verify": [
+                        "go build ./..."
+                    ]
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ],
+    "problem": "Track loaded skill on the session like working_dir, allow Tab cycling, and inject a synthetic message on change when the user sends their next message. State lives entirely in SessionSkill struct \u2014 no Model-level tracking.",
+    "goal": "User can cycle skills with Tab, skill_load sets Next, change is reflected via synthetic message on next turn, persists on save/load, cleared on new session"
 }

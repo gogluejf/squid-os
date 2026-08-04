@@ -1,0 +1,364 @@
+{
+  "tasks": {
+    "1.1": {
+      "number": "1.1",
+      "status": "done",
+      "name": "Extract CLI command construction",
+      "milestone": "CLI Command Model",
+      "milestone_number": "1",
+      "summary": {
+        "done": "Created internal/cli with an explicit root, tui, run, server, and gnu command tree; moved production startup wiring behind typed dependencies; reduced main.go to error-reporting bootstrap.",
+        "lessons_learned": "The former CLI and application boot logic were entirely coupled in main.go, so production dependency wiring was separated from command construction.",
+        "confidence": "high",
+        "tradeoffs": "The run command temporarily delegates to the existing headless implementation until the planned run service replaces it in milestone 5.",
+        "decisions": "No compatibility layer, legacy aliases, or dead flags; root and tui are explicit TUI entrypoints and placeholders fail clearly.",
+        "failures": "None"
+      }
+    },
+    "1.2": {
+      "number": "1.2",
+      "status": "done",
+      "name": "Implement root and TUI option parsing",
+      "milestone": "CLI Command Model",
+      "milestone_number": "1",
+      "summary": {
+        "done": "Added typed root/tui options; root and tui both launch interactive mode; prompt prefills the textarea; named sessions load explicitly; model, thinking, working directory, system, tools, skills, active skill, and callable agents flow into startup/session state.",
+        "lessons_learned": "The in-app new-session path required a shared session-config helper after removing the positional constructor.",
+        "confidence": "high",
+        "failures": "None",
+        "decisions": "Used a typed app.StartupOptions object and distinct agent0 system message; no option is routed through global CLI variables.",
+        "tradeoffs": "Agent registry validation is deferred to milestone 2, but agent provenance and callable scopes already persist structurally."
+      }
+    },
+    "1.3": {
+      "number": "1.3",
+      "status": "done",
+      "name": "Implement complete run option parsing",
+      "milestone": "CLI Command Model",
+      "milestone_number": "1",
+      "summary": {
+        "lessons_learned": "Optional booleans require pointer semantics to distinguish an explicit false override from an omitted flag.",
+        "tradeoffs": "Execution still uses the temporary headless adapter until internal/run is built in milestone 5; parsing and validation are complete now.",
+        "done": "Implemented the complete typed run grammar: inline/named agent forms, continuation, stdin composition, output/save/auth/memory/scope/skill/limit flags, agent conflict detection, and continuation compatibility validation.",
+        "confidence": "high",
+        "decisions": "Prompt and stdin compose with a blank-line separator; positional agent is canonical; bootstrap replacements are rejected for continued sessions.",
+        "failures": "None"
+      }
+    },
+    "1.4": {
+      "number": "1.4",
+      "status": "done",
+      "name": "Preserve version and stub commands",
+      "milestone": "CLI Command Model",
+      "milestone_number": "1",
+      "summary": {
+        "lessons_learned": "None",
+        "confidence": "high",
+        "tradeoffs": "None",
+        "failures": "None",
+        "done": "Preserved Cobra --version using internal/version.Full and exposed help-visible server and gnu commands with explicit not-implemented errors.",
+        "decisions": "Reserved commands are real command surfaces, not hidden flags or aliases."
+      }
+    },
+    "1.5": {
+      "number": "1.5",
+      "status": "done",
+      "name": "Add bash and zsh completion",
+      "milestone": "CLI Command Model",
+      "milestone_number": "1",
+      "summary": {
+        "confidence": "high",
+        "failures": "None",
+        "decisions": "Completion providers are dependency-injected and registry-backed.",
+        "done": "Added bash/zsh-compatible Cobra completion for dynamic sessions, skills, agents, and tools plus static thinking, save, mode, memory namespace, and auth values.",
+        "tradeoffs": "Completion initializes lightweight registries lazily rather than booting the app.",
+        "lessons_learned": "None"
+      }
+    },
+    "2.1": {
+      "number": "2.1",
+      "status": "done",
+      "name": "Add agent config path and registry",
+      "milestone": "Agent Registry and Session Metadata",
+      "milestone_number": "2",
+      "summary": {
+        "failures": "None",
+        "tradeoffs": "Malformed agent folders are skipped during discovery; explicit Load still reports missing agents.",
+        "done": "Added config agents path, directory creation, YAML agent definition types, deterministic folder/agent.yaml registry scanning, lightweight listing, and full definition loading.",
+        "confidence": "high",
+        "decisions": "Agent definitions mirror skill folder discovery and use yaml.v3; Thinking is a pointer to preserve omitted-vs-false semantics.",
+        "lessons_learned": "None"
+      }
+    },
+    "2.2": {
+      "number": "2.2",
+      "status": "done",
+      "name": "Add Agent and Agents session metadata",
+      "milestone": "Agent Registry and Session Metadata",
+      "milestone_number": "2",
+      "summary": {
+        "decisions": "Agent is immutable provenance while Agents is mutable availability scope.",
+        "failures": "None",
+        "lessons_learned": "None",
+        "done": "Added singular root Agent provenance and plural initial/current callable Agents metadata; wired both into new session bootstrap separately from Skill, Skills, and Tools.",
+        "confidence": "high",
+        "tradeoffs": "None"
+      }
+    },
+    "2.3": {
+      "number": "2.3",
+      "status": "done",
+      "name": "Expose agents in environment",
+      "milestone": "Agent Registry and Session Metadata",
+      "milestone_number": "2",
+      "summary": {
+        "tradeoffs": "None",
+        "confidence": "high",
+        "done": "Added registry-backed Agents environment section and agents config path; initialized agent registry before session environment injection.",
+        "decisions": "Environment discovery remains lightweight name/description metadata.",
+        "lessons_learned": "None",
+        "failures": "None"
+      }
+    },
+    "3.1": {
+      "number": "3.1",
+      "status": "done",
+      "name": "Add runtime option resolver",
+      "milestone": "Runtime Options and Turn Preparation",
+      "milestone_number": "3",
+      "summary": {
+        "failures": "None",
+        "confidence": "high",
+        "tradeoffs": "Agent YAML invalid durations remain ignored while explicit CLI durations fail clearly.",
+        "decisions": "Optional values preserve omitted versus explicit false/zero semantics.",
+        "lessons_learned": "Agent depth needs explicit-set metadata because zero is meaningful.",
+        "done": "Added centralized settings-agent-CLI-session runtime resolution with precedence, model parsing, scopes, autosave, auth, memory, limits, and agent depth."
+      }
+    },
+    "3.2": {
+      "number": "3.2",
+      "status": "done",
+      "name": "Expand session bootstrap config",
+      "milestone": "Runtime Options and Turn Preparation",
+      "milestone_number": "3",
+      "summary": {
+        "confidence": "high",
+        "lessons_learned": "None",
+        "failures": "None",
+        "done": "Expanded session bootstrap and metadata for agent system, root/callable agents, active skill, memory, autosave, auth, limits, and depth.",
+        "decisions": "Base, environment, and agent system messages remain separate layers.",
+        "tradeoffs": "None"
+      }
+    },
+    "3.3": {
+      "number": "3.3",
+      "status": "done",
+      "name": "Add shared PrepareTurn",
+      "milestone": "Runtime Options and Turn Preparation",
+      "milestone_number": "3",
+      "summary": {
+        "tradeoffs": "None",
+        "confidence": "high",
+        "decisions": "StartStream performs no transcript transition mutations.",
+        "failures": "None",
+        "done": "Added shared PrepareTurn and routed both TUI and run continuation through it before streaming.",
+        "lessons_learned": "None"
+      }
+    },
+    "3.4": {
+      "number": "3.4",
+      "status": "done",
+      "name": "Model autosave as session runtime config",
+      "milestone": "Runtime Options and Turn Preparation",
+      "milestone_number": "3",
+      "summary": {
+        "confidence": "high",
+        "lessons_learned": "None",
+        "tradeoffs": "None",
+        "decisions": "Manual save and autosave remain separate.",
+        "failures": "None",
+        "done": "Modeled autosave in resolved runtime and persisted session metadata; run service autosaves with optional names."
+      }
+    },
+    "4.1": {
+      "number": "4.1",
+      "status": "done",
+      "name": "Add memory config and namespace paths",
+      "milestone": "Memory Foundation",
+      "milestone_number": "4",
+      "summary": {
+        "tradeoffs": "None",
+        "lessons_learned": "None",
+        "done": "Added internal/memory namespace config and workspace/global/agent path resolution.",
+        "decisions": "Memory package accepts minimal path inputs to avoid config coupling.",
+        "failures": "None",
+        "confidence": "high"
+      }
+    },
+    "4.2": {
+      "number": "4.2",
+      "status": "done",
+      "name": "Persist and expose memory config",
+      "milestone": "Memory Foundation",
+      "milestone_number": "4",
+      "summary": {
+        "confidence": "high",
+        "decisions": "Environment reads index.md from the resolved namespace path.",
+        "done": "Persisted resolved memory metadata and exposed namespace, path, instructions, and index content in environment.",
+        "tradeoffs": "None",
+        "failures": "None",
+        "lessons_learned": "None"
+      }
+    },
+    "5.1": {
+      "number": "5.1",
+      "status": "done",
+      "name": "Build run execution service",
+      "milestone": "Run Execution and Output Modes",
+      "milestone_number": "5",
+      "summary": {
+        "done": "Built canonical internal/run service for fresh/named/continued sessions, PrepareTurn, RunLoop, deadlines, and autosave; removed internal/headless.",
+        "decisions": "There is one non-TUI execution path.",
+        "tradeoffs": "None",
+        "lessons_learned": "None",
+        "failures": "None",
+        "confidence": "high"
+      }
+    },
+    "5.2": {
+      "number": "5.2",
+      "status": "done",
+      "name": "Implement run output modes",
+      "milestone": "Run Execution and Output Modes",
+      "milestone_number": "5",
+      "summary": {
+        "failures": "None",
+        "lessons_learned": "None",
+        "confidence": "high",
+        "done": "Implemented final_message, silent, stream, and structured-not-implemented output behavior with clean stdout/stderr contracts.",
+        "decisions": "Saved names use stderr except stream mode.",
+        "tradeoffs": "None"
+      }
+    },
+    "5.3": {
+      "number": "5.3",
+      "status": "done",
+      "name": "Add CLI stream JSONL protocol",
+      "milestone": "Run Execution and Output Modes",
+      "milestone_number": "5",
+      "summary": {
+        "done": "Added timestamped JSONL session, message, thinking, tool, permission, error, and finished event mapping.",
+        "decisions": "session_start is emitted before execution.",
+        "failures": "None",
+        "lessons_learned": "None",
+        "tradeoffs": "Protocol maps current loop boundaries without redesigning providers.",
+        "confidence": "high"
+      }
+    },
+    "5.4": {
+      "number": "5.4",
+      "status": "done",
+      "name": "Apply run auth and limits",
+      "milestone": "Run Execution and Output Modes",
+      "milestone_number": "5",
+      "summary": {
+        "failures": "None",
+        "lessons_learned": "None",
+        "tradeoffs": "None",
+        "done": "Applied non-TUI auth mapping plus max steps, tools, time, tool-result tokens, and agent-depth policies.",
+        "confidence": "high",
+        "decisions": "Limits are passed into the shared loop/tool executor."
+      }
+    },
+    "6.1": {
+      "number": "6.1",
+      "status": "done",
+      "name": "Register list_agents tool",
+      "milestone": "Agent Tools",
+      "milestone_number": "6",
+      "summary": {
+        "done": "Registered list_agents and restricted output to session-callable agents.",
+        "tradeoffs": "None",
+        "decisions": "Empty scope means no callable agents, not all installed agents.",
+        "lessons_learned": "None",
+        "failures": "None",
+        "confidence": "high"
+      }
+    },
+    "6.2": {
+      "number": "6.2",
+      "status": "done",
+      "name": "Register call_agent tool",
+      "milestone": "Agent Tools",
+      "milestone_number": "6",
+      "summary": {
+        "done": "Registered blocking call_agent requiring agent and prompt, enforcing scope/depth, and returning final stdout.",
+        "decisions": "Called agents resolve their own preset; caller passes limits and working directory.",
+        "tradeoffs": "Phase 1 self-invokes the Squid-OS binary as planned.",
+        "lessons_learned": "None",
+        "failures": "None",
+        "confidence": "high"
+      }
+    },
+    "6.3": {
+      "number": "6.3",
+      "status": "done",
+      "name": "Register inline_agent tool",
+      "milestone": "Agent Tools",
+      "milestone_number": "6",
+      "summary": {
+        "tradeoffs": "Inline execution reuses CLI run through self-invocation.",
+        "lessons_learned": "None",
+        "done": "Registered blocking inline_agent requiring only prompt with optional system/model/scopes/auth/limits.",
+        "confidence": "high",
+        "decisions": "No registry name is required for inline profiles.",
+        "failures": "None"
+      }
+    },
+    "7.1": {
+      "number": "7.1",
+      "status": "done",
+      "name": "Drop incognito CLI flag",
+      "milestone": "Cleanup and Validation",
+      "milestone_number": "7",
+      "summary": {
+        "done": "Removed incognito from CLI startup while preserving the in-app alt+i privacy toggle and persistence blocking.",
+        "lessons_learned": "None",
+        "decisions": "Incognito remains application state only.",
+        "failures": "None",
+        "confidence": "high",
+        "tradeoffs": "None"
+      }
+    },
+    "7.2": {
+      "number": "7.2",
+      "status": "done",
+      "name": "Remove legacy root CLI behavior",
+      "milestone": "Cleanup and Validation",
+      "milestone_number": "7",
+      "summary": {
+        "confidence": "high",
+        "lessons_learned": "None",
+        "done": "Removed implicit headless prompt behavior, root image flag, obsolete image startup setter, and deprecated headless package.",
+        "decisions": "Root always means TUI; run is the only non-TUI command.",
+        "failures": "None",
+        "tradeoffs": "None"
+      }
+    },
+    "7.3": {
+      "number": "7.3",
+      "status": "done",
+      "name": "Add focused regression tests",
+      "milestone": "Cleanup and Validation",
+      "milestone_number": "7",
+      "summary": {
+        "confidence": "high",
+        "lessons_learned": "Corrected four pre-existing fmt formatting defects surfaced by vet.",
+        "done": "Added focused regressions for CLI conflicts/stdin/continuation, agent registry, runtime precedence/depth/time, PrepareTurn, memory paths, outputs/JSONL, and agent tool guards.",
+        "tradeoffs": "None",
+        "failures": "None",
+        "decisions": "Final gates include build, test, vet, and diff check."
+      }
+    }
+  }
+}

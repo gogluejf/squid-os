@@ -1,0 +1,545 @@
+{
+  "plan_name": "distribution-installation",
+  "title": "Distribution, Installation, Completion, and Release Documentation",
+  "why": "Squid-OS currently has a source-only installer, a system-first Makefile install target, generated-but-uninstalled shell completion, outdated README instructions, and no automated multi-platform release pipeline. Users need one predictable installation experience whether they download a release, build from source, or run under WSL2.",
+  "outcomes": "User-local make install and uninstall workflows, a secure release-binary install.sh, friendly Bash and Zsh completion installation, explicit WSL2 support, automated Linux and macOS release artifacts, checksums and provenance, CI validation, and an accurate getting-started README.",
+  "milestones": [
+    {
+      "number": "1",
+      "name": "User-Local Installation Contract",
+      "pattern": [
+        "Convention over Configuration, Shared Installation Layout"
+      ],
+      "objective": "Define one XDG-aware installation layout and reusable install behavior shared by source builds, release downloads, and shell completion.",
+      "success": "All installation paths target ~/.local by default, support PREFIX overrides, avoid sudo by default, treat WSL2 as Linux, and agree on binary and completion destinations.",
+      "diagram": "flowchart TD\n    Source[Source checkout] --> Contract[Installation contract]\n    Release[Release archive] --> Contract\n    WSL[WSL2 Linux environment] --> Contract\n    Contract --> Binary[User binary directory]\n    Contract --> Bash[Bash completion directory]\n    Contract --> Zsh[Zsh completion directory]",
+      "tasks": [
+        {
+          "number": "1.1",
+          "name": "Define installation paths and platform support",
+          "type": "feature",
+          "what": "Add a small installation helper contract for resolving user-local binary and completion destinations from PREFIX, HOME, XDG_DATA_HOME, OS, and shell inputs.",
+          "why": "Make, install.sh, and the CLI completion installer must use identical destinations and explicitly support Linux, WSL2, and macOS without duplicating path logic.",
+          "files": [
+            "+ internal/install",
+            "+ internal/install/paths_test.go"
+          ],
+          "snippet": [
+            "package install\n\ntype Platform string\n\nconst (\n    PlatformLinux Platform = \"linux\"\n    PlatformDarwin Platform = \"darwin\"\n)\n\ntype Layout struct {\n    Prefix        string\n    BinaryPath    string\n    BashCompletionPath string\n    ZshCompletionPath  string\n}\n\nfunc ResolveLayout(platform Platform, home, prefix, xdgDataHome string) (Layout, error) {\n    // Resolve one user-local installation contract.\n}"
+          ],
+          "acceptance": [
+            "Default prefix resolves to HOME/.local.",
+            "PREFIX overrides the default for source and system-wide installs.",
+            "XDG_DATA_HOME controls user completion data locations where applicable.",
+            "Linux and WSL2 resolve through the same Linux layout.",
+            "macOS resolves a documented user-local layout.",
+            "Unsupported native Windows returns a clear error."
+          ],
+          "verify": [
+            "go test ./internal/install",
+            "go test ./..."
+          ]
+        },
+        {
+          "number": "1.2",
+          "name": "Add PATH readiness and shell guidance",
+          "type": "feature",
+          "what": "Add reusable checks that determine whether the installed binary directory is currently discoverable and produce shell-specific activation guidance.",
+          "why": "Installers should make squid-os immediately understandable without silently or repeatedly editing shell startup files.",
+          "files": [
+            "~ internal/install",
+            "+ internal/install/shell_test.go"
+          ],
+          "snippet": [
+            "package install\n\ntype Shell string\n\nconst (\n    ShellBash Shell = \"bash\"\n    ShellZsh  Shell = \"zsh\"\n)\n\ntype Activation struct {\n    BinaryOnPath bool\n    RestartCommand string\n    ProfileHint string\n}\n\nfunc CheckActivation(shell Shell, binaryDir, currentPath string) Activation {\n    // Report exact next steps without modifying shell profiles.\n}"
+          ],
+          "acceptance": [
+            "PATH checks use path components rather than substring matching.",
+            "Bash and Zsh guidance names the correct startup profile and restart command.",
+            "WSL2 Bash receives normal Linux guidance.",
+            "No helper silently edits .bashrc, .profile, or .zshrc.",
+            "Repeated checks remain idempotent and produce stable output."
+          ],
+          "verify": [
+            "go test ./internal/install"
+          ]
+        },
+        {
+          "number": "1.3",
+          "name": "Add cross-platform installation contract tests",
+          "type": "test",
+          "what": "Add table-driven fixtures covering Linux, WSL2, macOS, XDG overrides, custom PREFIX values, missing HOME, and unsupported platforms.",
+          "why": "The installation contract is security- and usability-sensitive and must remain consistent before Make, shell scripts, and CLI commands depend on it.",
+          "files": [
+            "+ internal/install/install_test.go"
+          ],
+          "snippet": [
+            "package install\n\nfunc TestInstallationMatrix(t *testing.T) {\n    // Linux user-local layout\n    // WSL2 Linux-equivalent layout\n    // macOS user-local layout\n    // XDG and PREFIX overrides\n    // invalid environment failures\n}"
+          ],
+          "acceptance": [
+            "Tests cover Linux amd64 and arm64 layouts.",
+            "Tests identify WSL2 but preserve Linux artifact and path behavior.",
+            "Tests cover macOS amd64 and arm64 layouts.",
+            "Tests cover paths containing spaces.",
+            "Tests cover missing or malformed environment values with clear failures."
+          ],
+          "verify": [
+            "go test ./internal/install -run Installation",
+            "go test ./..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "2",
+      "name": "Source Install and Shell Completion",
+      "pattern": [
+        "Idempotent Installer, Command Adapter"
+      ],
+      "objective": "Make a source checkout install a production binary and shell completion into the shared user-local layout, with explicit uninstall behavior and no default sudo requirement.",
+      "success": "make install builds and installs squid-os under ~/.local by default, completion install and uninstall work for Bash and Zsh, raw Cobra generation remains available, and repeated operations are safe.",
+      "diagram": "flowchart LR\n    Checkout[Git checkout] --> Make[make install]\n    Make --> Build[Versioned binary]\n    Make --> Complete[Completion installer]\n    Build --> Prefix[Selected prefix]\n    Complete --> Bash[Bash completion]\n    Complete --> Zsh[Zsh completion]\n    Prefix --> Verify[Installation verification]",
+      "tasks": [
+        {
+          "number": "2.1",
+          "name": "Implement user-local Make install lifecycle",
+          "type": "chore",
+          "what": "Replace the fallback-copy Makefile with explicit build, install, uninstall, completion, clean, test, and verify targets using PREFIX and DESTDIR.",
+          "why": "Source users need deterministic installation without hidden sudo attempts or fallback destinations.",
+          "files": [
+            "~ Makefile"
+          ],
+          "snippet": [
+            "BINARY := squid-os\nPREFIX ?= $(HOME)/.local\nDESTDIR ?=\nBINDIR := $(DESTDIR)$(PREFIX)/bin\n\n.PHONY: build install uninstall completion test verify clean\n\ninstall: build\n\t# Install binary and detected-shell completion into the shared layout.\n\nuninstall:\n\t# Remove only files owned by squid-os installation.\n"
+          ],
+          "acceptance": [
+            "make build embeds the canonical version and git commit metadata.",
+            "make install defaults to HOME/.local/bin/squid-os.",
+            "make install PREFIX=/usr/local supports an explicit system-wide destination.",
+            "DESTDIR supports packaging without changing logical PREFIX.",
+            "make install creates missing destination directories.",
+            "make uninstall removes the binary and installed completion without deleting unrelated directories.",
+            "No Make target silently invokes sudo."
+          ],
+          "verify": [
+            "make clean build",
+            "make install PREFIX=/tmp/tmp.AV3V6KgFRf",
+            "make test",
+            "make verify"
+          ]
+        },
+        {
+          "number": "2.2",
+          "name": "Add completion install and uninstall commands",
+          "type": "feature",
+          "what": "Extend the Cobra completion command with install and uninstall subcommands for Bash and Zsh, using the shared installation layout and optional shell auto-detection.",
+          "why": "Users should not need to redirect generated scripts manually, while package managers must retain raw completion generation.",
+          "files": [
+            "~ internal/cli",
+            "~ internal/install",
+            "+ internal/cli/completion_install_test.go"
+          ],
+          "snippet": [
+            "type CompletionInstallOptions struct {\n    Shell  install.Shell\n    Prefix string\n}\n\nfunc InstallCompletion(options CompletionInstallOptions) (string, error) {\n    // Generate completion and atomically install it at the resolved path.\n}\n\nfunc UninstallCompletion(options CompletionInstallOptions) error {\n    // Remove only the selected squid-os completion file.\n}"
+          ],
+          "acceptance": [
+            "squid-os completion install auto-detects Bash or Zsh from SHELL.",
+            "squid-os completion install bash and zsh work explicitly.",
+            "squid-os completion uninstall removes the matching completion file.",
+            "Raw squid-os completion bash and zsh continue writing scripts to stdout.",
+            "Installation uses atomic file replacement and creates parent directories.",
+            "The command prints the installed path and any required shell restart guidance.",
+            "The completion command never modifies PATH or shell startup files."
+          ],
+          "verify": [
+            "go test ./internal/cli -run Completion",
+            "go test ./..."
+          ]
+        },
+        {
+          "number": "2.3",
+          "name": "Integrate and test source installation end to end",
+          "type": "test",
+          "what": "Wire Make installation to generated completion artifacts and add an isolated-prefix smoke test for install, repeat install, command execution, completion presence, and uninstall.",
+          "why": "The source workflow must prove that binary and completion installation operate together without touching the developer machine during CI.",
+          "files": [
+            "~ Makefile",
+            "+ scripts/test-install-source.sh"
+          ],
+          "snippet": [
+            "#!/usr/bin/env bash\nset -euo pipefail\n\n# Install into a temporary PREFIX.\n# Verify binary version and completion files.\n# Repeat installation to prove idempotence.\n# Uninstall and verify owned files are removed.\n"
+          ],
+          "acceptance": [
+            "The smoke test installs entirely under a temporary directory.",
+            "The installed binary runs --version and --help successfully.",
+            "Bash and Zsh completion files are generated from the installed binary.",
+            "A second install succeeds without duplicate files or profile changes.",
+            "Uninstall leaves unrelated sentinel files untouched.",
+            "The test runs on Linux and WSL2 without sudo."
+          ],
+          "verify": [
+            "bash scripts/test-install-source.sh",
+            "make verify"
+          ]
+        }
+      ]
+    },
+    {
+      "number": "3",
+      "name": "Release Binary Installer",
+      "pattern": [
+        "Bootstrap Installer, Fail Closed Verification"
+      ],
+      "objective": "Replace the source-building install.sh with a stable downloader that selects a published artifact, verifies it, installs user-locally, and installs completion.",
+      "success": "curl install.sh downloads the correct Linux, WSL2, or macOS artifact, verifies authenticated release metadata when available and SHA-256 integrity always, installs without sudo by default, and provides exact PATH activation guidance.",
+      "diagram": "sequenceDiagram\n    participant User\n    participant Script as install.sh\n    participant Release as GitHub Release\n    participant Local as User local prefix\n    User->>Script: Run installer\n    Script->>Script: Detect OS architecture shell WSL2\n    Script->>Release: Download archive metadata checksum signature\n    Script->>Script: Verify provenance and checksum\n    Script->>Local: Atomically install binary\n    Script->>Local: Install shell completion\n    Script-->>User: Print version paths and activation steps",
+      "tasks": [
+        {
+          "number": "3.1",
+          "name": "Resolve release version and platform artifact",
+          "type": "feature",
+          "what": "Rewrite install.sh detection and release resolution for latest or pinned versions across Linux, WSL2, and macOS on amd64 and arm64.",
+          "why": "The downloader must select one deterministic published artifact and fail clearly on unsupported systems before making changes.",
+          "files": [
+            "~ install.sh",
+            "+ scripts/test-install-release.sh"
+          ],
+          "snippet": [
+            "#!/bin/sh\nset -eu\n\n# Inputs: SQUID_OS_VERSION, SQUID_OS_PREFIX, SQUID_OS_GITHUB_REPOSITORY.\n# Detect linux or darwin and amd64 or arm64.\n# Treat WSL2 as linux and select the linux artifact.\n# Resolve latest release only when no version is pinned.\n"
+          ],
+          "acceptance": [
+            "Linux amd64 and arm64 map to matching release archives.",
+            "WSL2 amd64 and arm64 map to Linux release archives.",
+            "macOS amd64 and arm64 map to Darwin release archives.",
+            "SQUID_OS_VERSION pins a specific tag without querying latest.",
+            "Repository and download base can be overridden for deterministic tests and mirrors.",
+            "Native Windows and unsupported architectures fail before downloading.",
+            "The script is POSIX shell compatible or clearly requires Bash with a validated interpreter."
+          ],
+          "verify": [
+            "bash scripts/test-install-release.sh detection",
+            "shellcheck install.sh scripts/test-install-release.sh"
+          ]
+        },
+        {
+          "number": "3.2",
+          "name": "Verify release integrity and authenticity",
+          "type": "feature",
+          "what": "Download release checksums and verification metadata, authenticate them when supported, and verify the selected archive before extraction.",
+          "why": "Checksums catch corruption, while signatures or CI provenance provide a stronger trust signal against artifact substitution.",
+          "files": [
+            "~ install.sh",
+            "+ docs/release-security.md",
+            "~ scripts/test-install-release.sh"
+          ],
+          "snippet": [
+            "# Verification policy\n# 1. Verify signed checksum or release attestation when the configured tool is available.\n# 2. Always verify the selected archive against checksums.txt.\n# 3. Fail closed on mismatch, malformed metadata, or missing checksum entry.\n# 4. Document the curl installer bootstrap trust boundary.\n"
+          ],
+          "acceptance": [
+            "CI-generated checksums.txt is mandatory for installation.",
+            "The selected archive SHA-256 must match exactly before extraction.",
+            "The installer supports sha256sum and macOS shasum -a 256.",
+            "Checksum mismatch, missing entry, and malformed metadata stop installation without replacing an existing binary.",
+            "The plan selects and documents either GitHub artifact attestations, Cosign, or Minisign as the authenticity mechanism.",
+            "The public verification identity or key and rotation procedure are documented outside release artifacts.",
+            "Documentation explains that curl-pipe-shell still trusts the fetched installer."
+          ],
+          "verify": [
+            "bash scripts/test-install-release.sh verification",
+            "shellcheck install.sh"
+          ]
+        },
+        {
+          "number": "3.3",
+          "name": "Install release binary and completion safely",
+          "type": "feature",
+          "what": "Install the verified binary atomically under the selected prefix, install completion for the detected shell, and report activation or PATH guidance.",
+          "why": "A successful download must produce the same predictable layout as make install without leaving partial upgrades or surprising profile edits.",
+          "files": [
+            "~ install.sh",
+            "~ scripts/test-install-release.sh"
+          ],
+          "snippet": [
+            "#!/bin/sh\n\n# Extract into a temporary directory.\n# Validate the binary with --version.\n# Atomically replace PREFIX/bin/squid-os.\n# Generate and install completion using the installed binary.\n# Print exact activation guidance without silently editing profiles.\n"
+          ],
+          "acceptance": [
+            "Default installation uses HOME/.local and requires no sudo.",
+            "SQUID_OS_PREFIX supports an explicit alternative destination.",
+            "Existing installations remain intact if download, verification, extraction, or validation fails.",
+            "Bash or Zsh completion is installed when the shell is recognized.",
+            "Unknown shells still install the binary and print manual completion instructions.",
+            "The final output reports installed version, binary path, completion path, and whether PATH is ready.",
+            "Repeated installation and upgrades are idempotent.",
+            "Temporary files are cleaned on success, failure, and interruption."
+          ],
+          "verify": [
+            "bash scripts/test-install-release.sh install",
+            "shellcheck install.sh"
+          ]
+        },
+        {
+          "number": "3.4",
+          "name": "Test release installer against local fixtures",
+          "type": "test",
+          "what": "Build local release fixtures and exercise install.sh through a local HTTP server for supported platforms, pinned/latest versions, upgrades, failures, and rollback.",
+          "why": "Installer regressions must be reproducible in CI without mutating user directories or relying on GitHub availability.",
+          "files": [
+            "~ scripts/test-install-release.sh",
+            "+ testdata/install"
+          ],
+          "snippet": [
+            "#!/usr/bin/env bash\nset -euo pipefail\n\n# Build fake archives and checksum metadata.\n# Serve fixtures from localhost.\n# Run install.sh with isolated HOME and PREFIX.\n# Assert success, rejection, rollback, cleanup, and completion behavior.\n"
+          ],
+          "acceptance": [
+            "Tests cover Linux amd64 and arm64 artifact names.",
+            "Tests cover WSL2 selecting Linux artifacts through injectable detection fixtures.",
+            "Tests cover Darwin amd64 and arm64 artifact names without requiring macOS execution.",
+            "Tests cover pinned and mocked-latest releases.",
+            "Tests cover checksum mismatch, missing metadata, HTTP failure, invalid archive, and invalid binary rollback.",
+            "Tests prove the installer never writes outside isolated HOME, PREFIX, and temporary directories."
+          ],
+          "verify": [
+            "bash scripts/test-install-release.sh all"
+          ]
+        }
+      ]
+    },
+    {
+      "number": "4",
+      "name": "Continuous Integration and Release Automation",
+      "pattern": [
+        "Reproducible Build, Tagged Release Pipeline, Supply Chain Attestation"
+      ],
+      "objective": "Validate every change and publish reproducible Linux and macOS release archives, checksums, provenance, and release notes from version tags.",
+      "success": "Pull requests run code and installer gates; version tags produce amd64 and arm64 artifacts for Linux and macOS; checksums and attestations are published automatically; no release script is rewritten per version.",
+      "diagram": "flowchart TD\n    Change[Push or pull request] --> CI[Validation workflow]\n    CI --> Go[Build test vet]\n    CI --> Shell[Shell lint and installer fixtures]\n    Tag[Version tag] --> Release[Release workflow]\n    Release --> Matrix[Linux Darwin amd64 arm64]\n    Matrix --> Archives[Versioned archives]\n    Archives --> Checksums[Checksums]\n    Archives --> Provenance[Attestations]\n    Checksums --> GitHub[GitHub Release]\n    Provenance --> GitHub",
+      "tasks": [
+        {
+          "number": "4.1",
+          "name": "Add continuous integration quality gates",
+          "type": "chore",
+          "what": "Add a GitHub Actions workflow for Go build/test/vet, formatting checks, shell lint, source-install smoke tests, and release-installer fixture tests.",
+          "why": "Installation and release code needs the same mandatory validation as application code before merge.",
+          "files": [
+            "+ .github/workflows/ci.yml",
+            "~ Makefile"
+          ],
+          "snippet": [
+            "name: CI\n\non:\n  push:\n  pull_request:\n\njobs:\n  go:\n    # Build, test, vet, and formatting checks.\n  install:\n    # ShellCheck and isolated installer tests.\n"
+          ],
+          "acceptance": [
+            "CI runs on pushes and pull requests.",
+            "CI runs go build, go test, go vet, and gofmt verification.",
+            "CI runs ShellCheck on maintained shell scripts.",
+            "CI runs source and release installer tests in isolated directories.",
+            "CI uses pinned major action versions and least-privilege permissions.",
+            "make verify reproduces the primary CI checks locally."
+          ],
+          "verify": [
+            "make verify",
+            "actionlint .github/workflows/ci.yml"
+          ]
+        },
+        {
+          "number": "4.2",
+          "name": "Configure reproducible cross-platform releases",
+          "type": "chore",
+          "what": "Add GoReleaser configuration for static Linux and macOS amd64 and arm64 binaries, deterministic archives, checksums, changelog generation, and version metadata.",
+          "why": "Release artifacts must match install.sh naming exactly and be generated consistently from tags rather than developer machines.",
+          "files": [
+            "+ .goreleaser.yaml",
+            "~ internal/version/version.go",
+            "~ Makefile"
+          ],
+          "snippet": [
+            "version: 2\n\nbuilds:\n  - id: squid-os\n    binary: squid-os\n    env:\n      - CGO_ENABLED=0\n    goos:\n      - linux\n      - darwin\n    goarch:\n      - amd64\n      - arm64\n\nchecksum:\n  name_template: checksums.txt\n"
+          ],
+          "acceptance": [
+            "Artifacts are produced for linux amd64, linux arm64, darwin amd64, and darwin arm64.",
+            "Archive names exactly match install.sh resolution rules.",
+            "Builds use CGO_ENABLED=0 unless a verified platform dependency requires otherwise.",
+            "Version and git commit metadata derive from the release tag and commit.",
+            "checksums.txt includes every published archive.",
+            "Snapshot releases can be generated locally without publishing."
+          ],
+          "verify": [
+            "goreleaser check",
+            "goreleaser release --snapshot --clean",
+            "make verify"
+          ]
+        },
+        {
+          "number": "4.3",
+          "name": "Publish tagged releases with provenance",
+          "type": "chore",
+          "what": "Add a tag-triggered GitHub Actions workflow that validates, runs GoReleaser, publishes artifacts and checksums, and emits the selected authenticity metadata.",
+          "why": "Users need automatic releases whose artifacts can be verified by install.sh and traced to an authorized CI workflow.",
+          "files": [
+            "+ .github/workflows/release.yml",
+            "~ .goreleaser.yaml",
+            "~ docs/release-security.md"
+          ],
+          "snippet": [
+            "name: Release\n\non:\n  push:\n    tags:\n      - \"v*\"\n\npermissions:\n  contents: write\n  id-token: write\n  attestations: write\n\njobs:\n  release:\n    # Validate tag and tests.\n    # Build and publish through GoReleaser.\n    # Publish GitHub artifact attestations or selected signatures.\n"
+          ],
+          "acceptance": [
+            "Only semantic version tags matching the documented policy publish releases.",
+            "The workflow runs tests before publishing.",
+            "GitHub permissions are scoped to the release job and required capabilities.",
+            "Archives, checksums.txt, and authenticity metadata appear on one GitHub Release.",
+            "Release notes are generated consistently and can be edited before final publication when configured.",
+            "The workflow fails if expected artifacts or verification metadata are missing.",
+            "The install script does not need modification for each version."
+          ],
+          "verify": [
+            "actionlint .github/workflows/release.yml",
+            "goreleaser check"
+          ]
+        },
+        {
+          "number": "4.4",
+          "name": "Validate release artifacts and installer compatibility",
+          "type": "test",
+          "what": "Add a CI dry-run job that inspects snapshot archives, verifies checksums and version metadata, and installs the host-compatible artifact through install.sh fixtures.",
+          "why": "GoReleaser and install.sh can each pass independently while disagreeing on names or archive contents; this test closes that integration gap.",
+          "files": [
+            "~ .github/workflows/ci.yml",
+            "~ scripts/test-install-release.sh"
+          ],
+          "snippet": [
+            "# Release compatibility checks\n# - Build snapshot artifacts.\n# - Assert the complete OS and architecture name matrix.\n# - Verify archive contents and checksums.\n# - Serve artifacts locally and run install.sh.\n# - Execute the installed binary.\n"
+          ],
+          "acceptance": [
+            "The expected four release archives are present.",
+            "Each archive contains a squid-os executable and required release metadata only.",
+            "Every archive has a checksums.txt entry.",
+            "The installed host artifact reports the snapshot version and commit.",
+            "Any artifact naming drift between GoReleaser and install.sh fails CI."
+          ],
+          "verify": [
+            "goreleaser release --snapshot --clean",
+            "bash scripts/test-install-release.sh dist"
+          ]
+        }
+      ]
+    },
+    {
+      "number": "5",
+      "name": "Getting Started and Maintainer Documentation",
+      "pattern": [
+        "Documentation as Product, Single Source of Truth"
+      ],
+      "objective": "Replace outdated startup documentation with a concise first-run path, source and release installation guidance, WSL2 support, completion behavior, upgrades, uninstall, and maintainer release procedures.",
+      "success": "A new user can install and run Squid-OS from README alone; WSL2 status and native Windows scope are explicit; maintainers can cut and verify a release; website download guidance matches the repository.",
+      "diagram": "flowchart TD\n    Visitor[New visitor] --> README[README quick start]\n    README --> Curl[Curl release install]\n    README --> Source[Source make install]\n    README --> WSL[WSL2 guidance]\n    Curl --> FirstRun[First run]\n    Source --> FirstRun\n    WSL --> FirstRun\n    Maintainer[Maintainer] --> ReleaseDoc[Release runbook]\n    ReleaseDoc --> Tag[Tag and publish]\n    Tag --> Verify[Verify release and installer]",
+      "tasks": [
+        {
+          "number": "5.1",
+          "name": "Rewrite README quick start and installation guide",
+          "type": "doc",
+          "what": "Rewrite the README opening, prerequisites, installation, first run, CLI examples, completion, upgrade, uninstall, configuration, and platform support sections.",
+          "why": "The current README documents removed headless/incognito flags, obsolete files, a source-building installer, and stale Go requirements.",
+          "files": [
+            "~ README.md"
+          ],
+          "snippet": [
+            "# Squid-OS\n\n<!-- Product summary and current screenshot -->\n\n## Install\n\n### Release binary\n```sh\ncurl -fsSL https://raw.githubusercontent.com/gogluejf/squid-os/master/install.sh | sh\n```\n\n### Build from source\n```sh\ngit clone https://github.com/gogluejf/squid-os.git\ncd squid-os\nmake install\n```\n\n## First run\n```sh\nsquid-os\nsquid-os run --prompt \"hello\"\n```\n"
+          ],
+          "acceptance": [
+            "README leads with a concise product description and valid screenshot path.",
+            "Release installation and source installation are distinct and accurate.",
+            "README documents HOME/.local default, PATH guidance, PREFIX override, upgrade, and uninstall.",
+            "README documents automatic and manual Bash/Zsh completion installation.",
+            "README explicitly supports Linux, WSL2, and macOS and states native Windows is unsupported.",
+            "CLI examples use current tui and run grammar with no removed flags.",
+            "Referenced source files and commands exist.",
+            "Security wording explains checksum/provenance verification and curl installer trust."
+          ],
+          "verify": [
+            "make docs-check",
+            "make verify"
+          ]
+        },
+        {
+          "number": "5.2",
+          "name": "Document platform support and installation troubleshooting",
+          "type": "doc",
+          "what": "Add a focused installation document covering Linux, WSL2, macOS, shell discovery, PATH activation, completion locations, custom prefixes, proxies, and common failures.",
+          "why": "The README should stay concise while users still need precise recovery steps for environment-specific installation issues.",
+          "files": [
+            "+ docs/installation.md",
+            "~ README.md"
+          ],
+          "snippet": [
+            "# Installation\n\n## Supported platforms\n- Linux amd64 and arm64\n- WSL2 amd64 and arm64 using Linux artifacts\n- macOS amd64 and arm64\n- Native Windows not currently supported\n\n## Troubleshooting\n<!-- PATH, shell completion, permissions, proxies, checksum failures, custom prefixes -->\n"
+          ],
+          "acceptance": [
+            "WSL2 instructions explain that it uses Linux artifacts and installs inside the Linux filesystem.",
+            "Documentation recommends cloning/building inside the WSL filesystem rather than mounted Windows paths for performance.",
+            "Bash and Zsh completion paths and reload commands are documented.",
+            "Custom PREFIX, XDG_DATA_HOME, and noninteractive environment variables are documented.",
+            "Troubleshooting covers command not found, completion not loading, permission errors, verification failures, and unsupported platforms.",
+            "No documentation recommends sudo for the default user-local install."
+          ],
+          "verify": [
+            "make docs-check"
+          ]
+        },
+        {
+          "number": "5.3",
+          "name": "Add maintainer release runbook",
+          "type": "doc",
+          "what": "Document versioning, pre-release checks, tag creation, automated publication, artifact verification, installer smoke tests, rollback, and verification-identity maintenance.",
+          "why": "Release automation is only reliable when maintainers have an explicit operational and security procedure.",
+          "files": [
+            "+ docs/releasing.md",
+            "~ docs/release-security.md"
+          ],
+          "snippet": [
+            "# Releasing Squid-OS\n\n## Before tagging\n```sh\nmake verify\nmake release-snapshot\n```\n\n## Publish\n```sh\ngit tag vX.Y.Z\ngit push origin vX.Y.Z\n```\n\n## Verify\n<!-- GitHub Release artifacts, checksums, attestations, and install.sh smoke test -->\n"
+          ],
+          "acceptance": [
+            "The runbook defines the semantic version and tag policy.",
+            "The runbook requires a clean tree and passing local verification before tagging.",
+            "The runbook explains the automated workflow and expected artifact matrix.",
+            "The runbook includes post-release install.sh verification for latest and pinned versions.",
+            "Rollback or yanking guidance avoids silently replacing immutable release artifacts.",
+            "Authenticity identity/key rotation and compromise response are documented."
+          ],
+          "verify": [
+            "make docs-check"
+          ]
+        },
+        {
+          "number": "5.4",
+          "name": "Align website downloads and validate documentation",
+          "type": "doc",
+          "what": "Update website installation/download guidance to match README and add automated checks for stale commands, local links, referenced files, and release URLs.",
+          "why": "Multiple public installation surfaces must not diverge as the CLI and release workflow evolve.",
+          "files": [
+            "~ website/download.html",
+            "~ website/index.html",
+            "+ scripts/check-docs.sh",
+            "~ Makefile"
+          ],
+          "snippet": [
+            "#!/usr/bin/env bash\nset -euo pipefail\n\n# Validate local Markdown links and referenced paths.\n# Reject removed CLI flags and obsolete installer commands.\n# Check that documented release artifact names match configuration.\n"
+          ],
+          "acceptance": [
+            "Website download instructions show release install and source make install separately.",
+            "Website states Linux, WSL2, macOS, architecture support, and native Windows scope accurately.",
+            "Website completion and PATH wording matches README.",
+            "Documentation checks reject removed --headless and CLI --incognito examples.",
+            "Documentation checks validate local README/docs links and referenced files.",
+            "make docs-check runs locally and in CI."
+          ],
+          "verify": [
+            "bash scripts/check-docs.sh",
+            "make docs-check",
+            "make verify"
+          ]
+        }
+      ]
+    }
+  ]
+}

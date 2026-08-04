@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body { font-family: monospace; background: #1a1b26; color: #a9b1d6; padding: 2rem; max-width: 900px; margin: 0 auto; }
+h1 { color: #7aa2f7; border-bottom: 1px solid #292e42; padding-bottom: 0.5rem; }
+h2 { color: #bb9af7; margin-top: 2rem; }
+h3 { color: #7dcfff; }
+code { background: #16161e; padding: 2px 6px; border-radius: 3px; color: #e0af68; }
+pre { background: #16161e; padding: 1rem; border-radius: 6px; overflow-x: auto; line-height: 1.5; }
+pre code { background: none; padding: 0; color: #a9b1d6; }
+.del { background: #4a0000; color: #f7768e; padding: 1px 4px; }
+.add { background: #1a4a00; color: #9ece6a; padding: 1px 4px; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+th, td { border: 1px solid #292e42; padding: 6px 10px; text-align: left; }
+th { background: #1a1b26; color: #7aa2f7; }
+td { background: #16161e; }
+.note { background: #1f2335; border-left: 3px solid #7aa2f7; padding: 0.75rem 1rem; margin: 1rem 0; }
+</style>
+</head>
+<body>
+
+<h1>Style Label Consolidation — message.go + styles.go</h1>
+
+<p>Refactor all message renderers to use a unified <code>StyleLabel</code>-based approach. Pre-build every label type inline (like <code>ToolStyle()</code> / <code>SkillStyle()</code>), then pass the label directly to <code>DrawCanvas</code>.</p>
+
+<h2>Problem</h2>
+
+<p>Every renderer in <code>message.go</code> scatters its styles across many independent vars in styles.go:</p>
+
+<table>
+<tr><th>Renderer</th><th>Individual vars used</th></tr>
+<tr><td>System</td><td><code>SystemLabel</code>, <code>SystemParam</code>, <code>CanvasStatInline</code>, <code>TextMuted</code>, <code>BgApp</code></td></tr>
+<tr><td>Internal</td><td><code>InternalMsgLabel</code>, <code>InternalParam</code>, <code>CanvasStatInline</code>, <code>TextMuted</code>, <code>BgApp</code></td></tr>
+<tr><td>Synthetic</td><td><code>InternalLabel</code>, <code>InternalParam</code>, <code>CanvasStatInline</code>, <code>TextMuted</code>, <code>BgApp</code></td></tr>
+<tr><td>Thinking</td><td><code>ThinkingLabel</code>, <code>CanvasStatInline</code>, <code>TextMuted</code>, <code>BgApp</code></td></tr>
+<tr><td>Tool</td><td><code>ToolLabel</code>, <code>ToolParamOnTool</code>, <code>ToolStatOnTool</code>, <code>ToolErrorOnTool</code>, <code>ToolResultOnTool</code>, <code>BgCode</code></td></tr>
+</table>
+
+<p>That's a lot of standalone vars that should just be inline in a single struct. Tools already do it right with <code>ToolStyle()</code> and <code>SkillStyle()</code>.</p>
+
+<h2>Plan</h2>
+
+<h3>Step 1: Final StyleLabel struct</h3>
+
+<pre><code>type StyleLabel struct {
+    Label   lipgloss.Style  // label text (e.g. tool name, "thinking")
+    Param   lipgloss.Style  // param/display value
+    Dim     lipgloss.Style  // stats chips, separators, muted inline text
+    Content lipgloss.Style  // body content when expanded
+    Error   lipgloss.Style  // error text (fallback to Content if not set)
+    Bg      string          // box background color name
+    Fg      string          // default foreground color name
+}
+</code></pre>
+
+<p><code>Dim</code> is used for stats (tokens, duration) — not a separate <code>Stat</code> field.</p>
+
+<h3>Step 2: Inline pre-builders — replace all standalone vars</h3>
+
+<p>Build every StyleLabel inline, exactly like <code>ToolStyle()</code> does. No more standalone <code>InternalMsgLabel</code>, <code>SystemLabel</code>, <code>CanvasStatInline</code>, etc. All styles live inside the label:</p>
+
+<pre><code>func SystemStyleLabel() StyleLabel {
+    bg := lipgloss.Color(P.BgApp)
+    return StyleLabel{
+        Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSystemLabel)),
+        Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSystemParam)),
+        Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+        Content: lipgloss.NewStyle().Foreground(lipgloss.Color(P.TextMuted)),
+        Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+        Bg:      P.BgApp,
+        Fg:      P.TextMuted,
+    }
+}
+
+func InternalStyleLabel() StyleLabel {
+    bg := lipgloss.Color(P.BgApp)
+    return StyleLabel{
+        Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextInternalLabel)),
+        Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextInternalParam)),
+        Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+        Content: lipgloss.NewStyle().Foreground(lipgloss.Color(P.TextMuted)),
+        Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+        Bg:      P.BgApp,
+        Fg:      P.TextMuted,
+    }
+}
+
+func SyntheticStyleLabel() StyleLabel {
+    bg := lipgloss.Color(P.BgApp)
+    return StyleLabel{
+        Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextWarning)),
+        Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextInternalParam)),
+        Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+        Content: lipgloss.NewStyle().Foreground(lipgloss.Color(P.TextMuted)),
+        Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+        Bg:      P.BgApp,
+        Fg:      P.TextMuted,
+    }
+}
+
+func ThinkingStyleLabel() StyleLabel {
+    bg := lipgloss.Color(P.BgApp)
+    return StyleLabel{
+        Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextMuted)),
+        Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+        Content: lipgloss.NewStyle().Foreground(lipgloss.Color(P.TextMuted)),
+        Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+        Bg:      P.BgApp,
+        Fg:      P.TextMuted,
+    }
+}
+</code></pre>
+
+<p>Then <strong>delete all the standalone vars</strong> they replaced:</p>
+
+<pre><code><span class="del">SystemLabel, SystemParam, InternalMsgLabel, InternalParam,</span>
+<span class="del">InternalLabel, ThinkingLabel, CanvasStatInline,</span>
+<span class="del">ToolLabel, ToolParamOnTool, ToolCheckOnTool, ToolErrOnTool,</span>
+<span class="del">ToolStatOnTool, ToolResultOnTool, ToolErrorOnTool</span>
+</code></pre>
+
+<p>Update <code>ToolStyle()</code> and <code>SkillStyle()</code> to add <code>Content</code>, <code>Error</code>, <code>Bg</code>, <code>Fg</code>:</p>
+
+<pre><code>func ToolStyle() StyleLabel {
+    bg := lipgloss.Color(P.BgCode)
+    return StyleLabel{
+        Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextAccent)),
+        Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextToolParam)),
+        Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+        Content: lipgloss.NewStyle().Foreground(lipgloss.Color(P.TextDim)),
+        Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+        Bg:      P.BgCode,
+        Fg:      P.TextDim,
+    }
+}
+
+func SkillStyle() StyleLabel {
+    bg := lipgloss.Color(P.BgCode)
+    return StyleLabel{
+        Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("178")),
+        Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("180")),
+        Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+        Content: lipgloss.NewStyle().Foreground(lipgloss.Color(P.TextDim)),
+        Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+        Bg:      P.BgCode,
+        Fg:      P.TextDim,
+    }
+}
+</code></pre>
+
+<h3>Step 3: Refactor DrawCanvas to take StyleLabel</h3>
+
+<pre><code>// Before
+func DrawCanvas(parts []string, content []string, fg, bg string, topGap, width, marginBottom int) string
+
+// After
+func DrawCanvas(parts []string, content []string, s StyleLabel, topGap, width, marginBottom int) string
+</code></pre>
+
+<p>Inside DrawCanvas:</p>
+<ul>
+<li>Box style uses <code>s.Bg</code> and <code>s.Fg</code></li>
+<li>Separator/arrow use <code>s.Bg</code> for background</li>
+<li>Content section gets <code>s.Content</code> applied (wrap it)</li>
+</ul>
+
+<h3>Step 4: Update helpers</h3>
+
+<pre><code>func drawCanvasSpan(parts, content []string, s StyleLabel, width int) string {
+    return DrawCanvas(parts, content, s, 1, width, 0)
+}
+
+func drawToolBox(parts, content []string, s StyleLabel, boxWidth int) string {
+    return DrawCanvas(parts, content, s, 2, boxWidth, 1)
+}
+
+func drawUserBox(parts, content []string, s StyleLabel, boxWidth int) string {
+    return DrawCanvas(parts, content, s, 1, boxWidth, 1)
+}
+</code></pre>
+
+<h3>Step 5: Simplify renderers</h3>
+
+<pre><code>// Before — scattered style refs
+func renderThinking(...) string {
+    parts := []string{
+        style.ThinkingLabel.Render("thinking"),
+        style.CanvasStatInline.Render(tokenChipOutput(...)),
+    }
+    ...
+    return drawCanvasSpan(parts, content, style.P.TextMuted, width)
+}
+
+// After — single label
+func renderThinking(...) string {
+    s := style.ThinkingStyleLabel()
+    parts := []string{
+        s.Label.Render("thinking"),
+        s.Dim.Render(tokenChipOutput(...)),
+    }
+    ...
+    return drawCanvasSpan(parts, content, s, width)
+}
+</code></pre>
+
+<p>Same pattern for all renderers. Stats use <code>s.Dim</code>, labels use <code>s.Label</code>, params use <code>s.Param</code>.</p>
+
+<h2>What gets deleted from styles.go</h2>
+
+<p>Every standalone style var that is now inlined into a StyleLabel builder:</p>
+
+<pre><code><span class="del">CanvasStatInline</span>
+<span class="del">ThinkingLabel</span>
+<span class="del">InternalLabel</span>
+<span class="del">SystemLabel</span>
+<span class="del">SystemParam</span>
+<span class="del">InternalMsgLabel</span>
+<span class="del">InternalParam</span>
+<span class="del">ToolLabel</span>
+<span class="del">ToolParamOnTool</span>
+<span class="del">ToolCheckOnTool</span>
+<span class="del">ToolErrOnTool</span>
+<span class="del">ToolStatOnTool</span>
+<span class="del">ToolResultOnTool</span>
+<span class="del">ToolErrorOnTool</span>
+</code></pre>
+
+<p>Keeping (not message-specific):</p>
+
+<pre><code>CanvasSpan, UserHeaderStyle, UserHeaderAttStyle,
+AssistantHeaderStyle, TopHeaderStyle,
+FooterStyle, FooterKeyStyle, FooterDimStyle, FooterValueStyle,
+HeadingStyle, BulletStyle,
+ErrorStyle, WarningStyle, InfoStyle, TextMutedStyle,
+AttachmentStyle, StatusLineStyle,
+IncognitoStyle, IncognitoHeaderStyle,
+CommandStyle, CommandDescStyle, CommandSelectedStyle
+</code></pre>
+
+<h2>File Changes</h2>
+
+<h3>styles.go</h3>
+<ul>
+<li>Expand <code>StyleLabel</code>: add <code>Content</code>, <code>Error</code>, <code>Bg</code>, <code>Fg</code> (keep <code>Dim</code>)</li>
+<li>Add builder functions: <code>SystemStyleLabel()</code>, <code>InternalStyleLabel()</code>, <code>SyntheticStyleLabel()</code>, <code>ThinkingStyleLabel()</code></li>
+<li>Update <code>ToolStyle()</code>, <code>SkillStyle()</code> to fill new fields</li>
+<li>Delete all standalone style vars that are now inlined</li>
+</ul>
+
+<h3>message.go</h3>
+<ul>
+<li><code>DrawCanvas</code>: <code>(fg, bg string)</code> → <code>(s StyleLabel)</code>, use <code>s.Bg</code>/<code>s.Fg</code>/<code>s.Content</code></li>
+<li>All helpers: take <code>StyleLabel</code> instead of <code>fg string</code></li>
+<li>All renderers: call <code>style.XxxStyleLabel()</code>, use <code>s.Label</code>, <code>s.Dim</code>, <code>s.Param</code>, <code>s.Content</code></li>
+<li>Streaming renderers: same treatment</li>
+</ul>
+
+</body>
+</html>

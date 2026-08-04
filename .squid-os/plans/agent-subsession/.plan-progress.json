@@ -1,0 +1,95 @@
+{
+  "tasks": {
+    "1.1": {
+      "number": "1.1",
+      "status": "not_started",
+      "name": "Move streamState into chatSession",
+      "milestone": "Session Architecture",
+      "milestone_number": "1"
+    },
+    "1.2": {
+      "number": "1.2",
+      "status": "not_started",
+      "name": "Replace Model.session with session map",
+      "milestone": "Session Architecture",
+      "milestone_number": "1"
+    },
+    "1.3": {
+      "number": "1.3",
+      "status": "not_started",
+      "name": "Update all Model methods to use activeSession()",
+      "milestone": "Session Architecture",
+      "milestone_number": "1"
+    },
+    "1.4": {
+      "number": "1.4",
+      "status": "not_started",
+      "name": "Derive Model.mode from active session state",
+      "milestone": "Session Architecture",
+      "milestone_number": "1"
+    },
+    "2.1": {
+      "number": "2.1",
+      "status": "not_started",
+      "name": "Define agent_call tool schema",
+      "milestone": "agent_call Tool",
+      "milestone_number": "2"
+    },
+    "2.2": {
+      "number": "2.2",
+      "status": "not_started",
+      "name": "Implement spawnChildSession and runStreamLoop",
+      "milestone": "agent_call Tool",
+      "milestone_number": "2"
+    },
+    "2.3": {
+      "number": "2.3",
+      "status": "not_started",
+      "name": "Implement agent_call Execute in executeTools",
+      "milestone": "agent_call Tool",
+      "milestone_number": "2"
+    },
+    "3.1": {
+      "number": "3.1",
+      "status": "not_started",
+      "name": "Add session switch keybinding",
+      "milestone": "Multi-session TUI",
+      "milestone_number": "3"
+    },
+    "3.2": {
+      "number": "3.2",
+      "status": "not_started",
+      "name": "Update viewport and footer to bind to active session",
+      "milestone": "Multi-session TUI",
+      "milestone_number": "3"
+    },
+    "4.1": {
+      "number": "4.1",
+      "status": "not_started",
+      "name": "Add tagged stream events and session-aware routing",
+      "milestone": "Event Loop & Stream Multiplexing",
+      "milestone_number": "4"
+    },
+    "4.2": {
+      "number": "4.2",
+      "status": "not_started",
+      "name": "Refactor handleStreamEvent to target chatSession",
+      "milestone": "Event Loop & Stream Multiplexing",
+      "milestone_number": "4"
+    },
+    "5.1": {
+      "number": "5.1",
+      "status": "not_started",
+      "name": "Add ParentID to Session and child persistence helpers",
+      "milestone": "Session Persistence",
+      "milestone_number": "5"
+    },
+    "6.1": {
+      "number": "6.1",
+      "status": "not_started",
+      "name": "Refactor headless.Run to use shared stream engine",
+      "milestone": "Headless Unification",
+      "milestone_number": "6"
+    }
+  }
+}

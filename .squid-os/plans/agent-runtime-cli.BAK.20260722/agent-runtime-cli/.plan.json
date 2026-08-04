@@ -1,0 +1,680 @@
+{
+  "plan_name": "agent-runtime-cli",
+  "title": "Agent Runtime and CLI Architecture",
+  "why": "Squid-OS needs a clean explicit CLI, first-class agent presets, session continuation, autosave-aware run execution, memory scaffolding, and bounded agent tool delegation without scattering behavior across main.go and TUI-only paths.",
+  "outcomes": "A mode-driven CLI, global agent registry, expanded session metadata, shared turn preparation, memory namespace foundation, run output modes, autosave behavior, and phase-1 agent tools.",
+  "milestones": [
+    {
+      "number": "1",
+      "name": "CLI Command Model",
+      "pattern": [
+        "Command Tree, Explicit Mode Selection"
+      ],
+      "objective": "Refactor the existing Cobra CLI into explicit root, tui, run, server, and gnu command paths with stable flag semantics.",
+      "success": "Root and tui open the TUI, run executes non-TUI, server and gnu are visible not-implemented commands, prompt no longer implies headless, and CLI parsing is centralized outside main.go.",
+      "diagram": "flowchart TD\n    Root[squid-os root] --> TUI[tui command]\n    Root --> Run[run command]\n    Root --> Server[server command]\n    Root --> GNU[gnu command]\n    TUI --> Textarea[prefill textarea]\n    Run --> NewRun[new run]\n    Run --> Continue[continue session]\n    Run --> AgentRun[named agent run]",
+      "tasks": [
+        {
+          "number": "1.1",
+          "name": "Extract CLI command construction",
+          "type": "refactor",
+          "what": "Create an internal CLI package that builds the Cobra command tree and keeps main.go as a thin bootstrap.",
+          "why": "Centralized command construction prevents CLI behavior from spreading through main.go as the command surface grows.",
+          "files": [
+            "+ internal/cli",
+            "~ main.go"
+          ],
+          "snippet": [
+            "package cli\n\ntype Dependencies struct {\n    // paths, settings, endpoints, history loaders, and program launch hooks\n}\n\nfunc NewRootCommand(deps Dependencies) *cobra.Command {\n    // Build root, tui, run, server, and gnu commands.\n}\n\nfunc Execute(deps Dependencies) error {\n    // Entrypoint called by main.go.\n}"
+          ],
+          "acceptance": [
+            "main.go delegates command creation/execution to internal/cli.",
+            "Root, tui, run, server, and gnu commands are constructed in one package.",
+            "go build passes with no behavior changes beyond command routing."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "1.2",
+          "name": "Implement root and TUI option parsing",
+          "type": "feature",
+          "what": "Add root and tui options for session selection, prompt prefill, model, thinking, working directory, agent system, tool, skill, and callable agent scopes.",
+          "why": "TUI boot needs the same explicit session setup surface as run without treating prompt as headless execution.",
+          "files": [
+            "~ internal/cli",
+            "~ internal/app/app.go",
+            "~ internal/app/ui_session.go"
+          ],
+          "snippet": [
+            "type TUIOptions struct {\n    Prompt string\n    SessionName string\n    Model string\n    Thinking string\n    WorkingDir string\n    AgentName string\n    AgentSystem string\n    ToolNames []string\n    SkillNames []string\n    ActiveSkill string\n    CallableAgentNames []string\n}\n\nfunc RunTUI(opts TUIOptions, deps Dependencies) error {\n    // Load or create session, prefill textarea, then launch Bubble Tea.\n}"
+          ],
+          "acceptance": [
+            "squid-os opens TUI.",
+            "squid-os tui opens TUI.",
+            "--prompt on root or tui pre-fills textarea and does not execute a run.",
+            "--session on root or tui opens the named saved session.",
+            "TUI bootstrap options are passed through a typed options object."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "1.3",
+          "name": "Implement complete run option parsing",
+          "type": "feature",
+          "what": "Add run options for inline runs, named agents, session continuation, stdin composition, output mode, autosave, auth, memory, scopes, active skill, and limits.",
+          "why": "run is the explicit non-TUI execution surface and must carry the full runtime override contract.",
+          "files": [
+            "~ internal/cli",
+            "~ internal/headless/headless.go"
+          ],
+          "snippet": [
+            "type RunOptions struct {\n    AgentName string\n    PositionalAgent string\n    SessionName string\n    Prompt string\n    Stdin string\n    Mode string\n    Model string\n    Thinking string\n    WorkingDir string\n    AgentSystem string\n    ToolNames []string\n    SkillNames []string\n    ActiveSkill string\n    CallableAgentNames []string\n    Autosave bool\n    AutosaveName string\n    AuthMode string\n    MemoryNamespace string\n    MemoryInstructions string\n    Limits LimitOptions\n}\n\ntype LimitOptions struct {\n    MaxSteps int\n    MaxTools int\n    MaxTime string\n    MaxToolResultTokens int\n}"
+          ],
+          "acceptance": [
+            "squid-os run executes only through the explicit run command.",
+            "squid-os run name and squid-os run --agent name resolve equivalently.",
+            "Differing positional agent and --agent values fail clearly.",
+            "--prompt and stdin compose predictably.",
+            "--session adds a new turn to an existing session rather than rebuilding bootstrap.",
+            "Bootstrap replacement flags are rejected with --session where required by the prep docs."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "1.4",
+          "name": "Preserve version and stub commands",
+          "type": "feature",
+          "what": "Wire --version to the canonical version source and expose server and gnu as help-visible not-implemented commands.",
+          "why": "The expanded CLI must preserve existing version behavior while reserving future product surfaces cleanly.",
+          "files": [
+            "~ internal/cli",
+            "~ internal/version.go",
+            "~ main.go"
+          ],
+          "snippet": [
+            "type CommandInfo struct {\n    Name string\n    Short string\n    NotImplemented bool\n}\n\nfunc NewVersionCommandSource() string {\n    // Return canonical app version used by CLI, TUI header, and user agents.\n}"
+          ],
+          "acceptance": [
+            "--version prints the canonical Squid-OS version and exits.",
+            "server appears in help and returns a clear not implemented response.",
+            "gnu appears in help as shell GNU tool generation migration surface and returns not implemented."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "1.5",
+          "name": "Add bash and zsh completion",
+          "type": "feature",
+          "what": "Add shell completion for command names, static enum values, and dynamic sessions, skills, agents, and tool names where practical.",
+          "why": "Completion is part of the CLI product contract and makes the larger command surface usable.",
+          "files": [
+            "~ internal/cli",
+            "~ internal/config/session.go",
+            "~ internal/skills",
+            "~ internal/agent",
+            "~ internal/tools"
+          ],
+          "snippet": [
+            "type CompletionProvider interface {\n    Sessions(prefix string) []string\n    Skills(prefix string) []string\n    Agents(prefix string) []string\n    Tools(prefix string) []string\n}\n\nfunc AttachCompletions(cmd *cobra.Command, provider CompletionProvider) {\n    // Register dynamic and static completions.\n}"
+          ],
+          "acceptance": [
+            "--session completion suggests saved session names.",
+            "--skill and --skills completion suggest installed skills.",
+            "--agent and --agents completion suggest installed agents.",
+            "--tools completion suggests registered tools or a generated registry-backed list.",
+            "Static flags complete values for thinking, save, mode, memory namespace, and auth mode."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "2",
+      "name": "Agent Registry and Session Metadata",
+      "pattern": [
+        "Registry, Configuration Object, Provenance Metadata"
+      ],
+      "objective": "Introduce global agents as first-class runtime presets with registry discovery, YAML loading, environment visibility, and session metadata.",
+      "success": "Agents live under config agents, can be listed and loaded, appear in environment, and sessions persist root Agent plus available Agents separately from Skill and Skills.",
+      "diagram": "classDiagram\n    class AgentDefinition\n    class AgentRegistry\n    class SessionAgent\n    class SessionAgents\n    AgentRegistry --> AgentDefinition\n    SessionAgent --> AgentDefinition\n    SessionAgents --> AgentRegistry",
+      "tasks": [
+        {
+          "number": "2.1",
+          "name": "Add agent config path and registry",
+          "type": "feature",
+          "what": "Create internal/agent with definition structs, YAML loading, registry scanning, and config path support for the agents directory.",
+          "why": "Agents become a first-class global preset system like skills instead of a run-command special case.",
+          "files": [
+            "+ internal/agent",
+            "~ internal/config/paths.go",
+            "~ go.mod"
+          ],
+          "snippet": [
+            "package agent\n\ntype Definition struct {\n    Name string\n    Description string\n    Mode string\n    AuthMode string\n    Model string\n    Thinking bool\n    WorkingDirectory string\n    System string\n    Tools []string\n    Skills []string\n    Agents []string\n    Memory MemoryConfig\n    Limits LimitsConfig\n}\n\ntype Entry struct {\n    Name string\n    Description string\n    Path string\n}\n\ntype Registry struct {\n    // Scanned agent entries indexed by name.\n}\n\nfunc InitRegistry(baseDir string) (*Registry, error) {\n    // Create agents directory and scan definitions.\n}"
+          ],
+          "acceptance": [
+            "Paths includes an Agents directory under the Squid-OS config root.",
+            "EnsureDirs creates the agents directory.",
+            "Registry lists agent names and descriptions.",
+            "Registry loads a full definition by name."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "2.2",
+          "name": "Add Agent and Agents session metadata",
+          "type": "feature",
+          "what": "Extend SessionMeta with singular Agent provenance and plural Agents availability scope.",
+          "why": "The root agent that started a session is provenance, while Agents is the callable subagent access list.",
+          "files": [
+            "~ internal/config/session.go",
+            "~ internal/chat/session.go"
+          ],
+          "snippet": [
+            "type SessionAgent struct {\n    Name string\n}\n\ntype SessionAgents struct {\n    Initial []string\n    Current []string\n}\n\ntype SessionMeta struct {\n    Agent SessionAgent\n    Agents SessionAgents\n    // Existing session metadata remains distinct.\n}"
+          ],
+          "acceptance": [
+            "Session Agent stores the root owning agent name without initial/current.",
+            "Session Agents stores initial/current callable agent names.",
+            "Agent remains distinct from Skill.",
+            "Agents remains distinct from Skills and Tools."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "2.3",
+          "name": "Expose agents in environment",
+          "type": "feature",
+          "what": "Initialize the agent registry before session bootstrap and add an Agents section to the generated environment.",
+          "why": "The model should discover available agents the same way it discovers skills.",
+          "files": [
+            "~ internal/environment/environment.go",
+            "~ internal/environment/loader.go",
+            "~ internal/app/app.go",
+            "~ internal/headless/headless.go"
+          ],
+          "snippet": [
+            "type AgentInfo struct {\n    Name string\n    Description string\n}\n\ntype Environment struct {\n    Agents []AgentInfo\n    // Existing environment sections remain.\n}\n\nfunc FormatEnvironment(env Environment) string {\n    // Render Agents section like Skills.\n}"
+          ],
+          "acceptance": [
+            "Environment includes an Agents section with name and description.",
+            "Agent registry initialization happens before NewSession environment injection.",
+            "Existing Skills environment behavior remains unchanged."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "3",
+      "name": "Runtime Options and Turn Preparation",
+      "pattern": [
+        "Application Service, Explicit State Transition"
+      ],
+      "objective": "Resolve settings, agent definitions, CLI options, and session continuation into concrete session/run options, then prepare each turn consistently before streaming.",
+      "success": "TUI, run, session continuation, and agent tools use the same resolved options and transition injection happens after the user message and before stream start.",
+      "diagram": "sequenceDiagram\n    participant Entry as CLI or TUI\n    participant Resolve as ResolveOptions\n    participant Session as ChatSession\n    participant Turn as PrepareTurn\n    participant Loop as RunLoop\n    Entry->>Resolve: settings agent flags session\n    Resolve->>Session: create or load session\n    Entry->>Session: append user message\n    Entry->>Turn: desired next turn options\n    Turn->>Session: inject transitions\n    Entry->>Loop: stream prepared session",
+      "tasks": [
+        {
+          "number": "3.1",
+          "name": "Add runtime option resolver",
+          "type": "feature",
+          "what": "Add a small resolver that maps settings, optional agent definition, CLI options, and session continuation context into concrete runtime options.",
+          "why": "One resolver prevents precedence, model parsing, autosave, auth, and scope rules from diverging across TUI, run, and agent tools.",
+          "files": [
+            "+ internal/runtime",
+            "~ internal/cli",
+            "~ internal/agent",
+            "~ internal/config/settings.go"
+          ],
+          "snippet": [
+            "package runtime\n\ntype Inputs struct {\n    Settings config.Settings\n    Agent *agent.Definition\n    CLI CLIOptions\n    ExistingSession *config.SessionDoc\n}\n\ntype Options struct {\n    AgentName string\n    Provider string\n    Model string\n    Thinking config.ThinkingConfig\n    AgentSystem string\n    ToolNames []string\n    SkillNames []string\n    ActiveSkill string\n    CallableAgentNames []string\n    Autosave AutosaveOptions\n    AuthMode string\n    Memory memory.Config\n    Limits Limits\n    OutputMode string\n}\n\nfunc Resolve(inputs Inputs) (Options, error) {\n    // Apply CLI, then agent, then settings precedence.\n}"
+          ],
+          "acceptance": [
+            "CLI values override agent definition values.",
+            "Agent definition values override settings defaults.",
+            "Combined provider/model strings are parsed consistently.",
+            "--session rejects bootstrap replacement options such as root agent and agent system replacement.",
+            "Resolved options include tools, skills, active skill, callable agents, autosave, auth, memory, and limits."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "3.2",
+          "name": "Expand session bootstrap config",
+          "type": "feature",
+          "what": "Extend SessionConfig and NewSession so resolved runtime options create complete session metadata and bootstrap messages.",
+          "why": "Session creation should receive explicit inputs for agent, scopes, memory, autosave, auth, and limits instead of reading scattered global state.",
+          "files": [
+            "~ internal/chat/session.go",
+            "~ internal/config/session.go",
+            "~ internal/environment/loader.go"
+          ],
+          "snippet": [
+            "type SessionConfig struct {\n    Provider string\n    Model string\n    Thinking config.ThinkingConfig\n    SystemPromptFile string\n    AgentName string\n    AgentSystem string\n    ToolNames []string\n    SkillNames []string\n    ActiveSkill string\n    CallableAgentNames []string\n    WorkingDir string\n    Memory memory.Config\n    Autosave AutosaveOptions\n    AuthMode string\n    Limits Limits\n}\n\nfunc NewSession(cfg SessionConfig, paths config.Paths) *Session {\n    // Append Base System, Environment System, optional Agent System, config, and tools metadata.\n}"
+          ],
+          "acceptance": [
+            "New sessions persist root Agent and callable Agents metadata.",
+            "New sessions can set active Skill separately from available Skills.",
+            "NewSession injects agent0 when Agent System text exists.",
+            "Base System, Environment System, and Agent System remain separate concepts."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "3.3",
+          "name": "Add shared PrepareTurn",
+          "type": "feature",
+          "what": "Move next-turn transition injection into a shared PrepareTurn function called after user append and before StartStream.",
+          "why": "Model, thinking, active skill, and availability changes must behave the same in TUI, run, session continuation, and future automation.",
+          "files": [
+            "+ internal/chat/turn.go",
+            "~ internal/chat/session.go",
+            "~ internal/app/stream.go",
+            "~ internal/run"
+          ],
+          "snippet": [
+            "type PrepareTurnOptions struct {\n    Inference config.InferenceConfig\n    ActiveSkill string\n    ToolNames []string\n    SkillNames []string\n    CallableAgentNames []string\n}\n\nfunc PrepareTurn(s *Session, opts PrepareTurnOptions) error {\n    // Insert transition messages after the latest user message.\n    // Update current inference and availability scopes.\n}\n"
+          ],
+          "acceptance": [
+            "PrepareTurn inserts transitions immediately after the user message they affect.",
+            "TUI sendMessage no longer owns model/thinking/skill transition logic.",
+            "run --session uses PrepareTurn before streaming.",
+            "StartStream remains focused on starting provider streaming and does not hide history mutation."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "3.4",
+          "name": "Model autosave as session runtime config",
+          "type": "feature",
+          "what": "Represent autosave settings in resolved options and session metadata so TUI and run can persist automatically through one concept.",
+          "why": "Autosave is the existing persistence behavior and should replace incognito-style special cases and run-only save wording.",
+          "files": [
+            "~ internal/config/session.go",
+            "~ internal/config/settings.go",
+            "~ internal/runtime",
+            "~ internal/app/session_persistence.go"
+          ],
+          "snippet": [
+            "type AutosaveOptions struct {\n    Enabled bool\n    Name string\n}\n\ntype SessionMeta struct {\n    Autosave AutosaveOptions\n    // Existing metadata omitted.\n}\n"
+          ],
+          "acceptance": [
+            "Resolved runtime options include autosave enabled and optional autosave name.",
+            "Session metadata can persist autosave configuration.",
+            "Manual save remains separate from autosave.",
+            "Existing TUI autosave behavior can be mapped to the new config."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "4",
+      "name": "Memory Foundation",
+      "pattern": [
+        "Configuration Scaffold, Namespace Resolution"
+      ],
+      "objective": "Add memory namespace config, path resolution, session metadata, and environment exposure without implementing a full memory engine.",
+      "success": "workspace, global, and agent memory resolve to clear paths, memory instructions appear in environment, and memory metadata persists on sessions.",
+      "diagram": "flowchart TD\n    Agent[agent memory config] --> Resolve[resolve memory]\n    CLI[CLI memory override] --> Resolve\n    Settings[settings memory dir] --> Resolve\n    WorkDir[working directory] --> Resolve\n    Resolve --> Session[session memory metadata]\n    Resolve --> Env[environment memory section]",
+      "tasks": [
+        {
+          "number": "4.1",
+          "name": "Add memory config and namespace paths",
+          "type": "feature",
+          "what": "Create internal/memory with config types and helpers that resolve workspace, global, and agent namespaces to concrete paths.",
+          "why": "Memory needs a stable structural foundation before any retrieval or writeback engine exists.",
+          "files": [
+            "+ internal/memory",
+            "~ internal/config/paths.go",
+            "~ internal/runtime"
+          ],
+          "snippet": [
+            "package memory\n\ntype Namespace string\n\nconst (\n    NamespaceWorkspace Namespace = \"workspace\"\n    NamespaceGlobal Namespace = \"global\"\n    NamespaceAgent Namespace = \"agent\"\n)\n\ntype Config struct {\n    Namespace Namespace\n    Path string\n    Instructions string\n}\n\nfunc ResolvePath(namespace Namespace, workingDir string, paths config.Paths, agentName string) (string, error) {\n    // workspace -> workingDir/memory\n    // global -> configured memory directory\n    // agent -> config agents agent-name memory\n}"
+          ],
+          "acceptance": [
+            "workspace namespace resolves to working-directory/memory.",
+            "global namespace resolves to configured memory dir.",
+            "agent namespace resolves under config agents agent-name memory.",
+            "No memory retrieval or writeback engine is added in this task."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "4.2",
+          "name": "Persist and expose memory config",
+          "type": "feature",
+          "what": "Add memory metadata to sessions and update environment generation to show namespace, resolved path, instructions, and current memory index content.",
+          "why": "The model needs explicit memory intent and location even while the memory engine remains deferred.",
+          "files": [
+            "~ internal/config/session.go",
+            "~ internal/environment/environment.go",
+            "~ internal/environment/loader.go",
+            "~ internal/chat/session.go"
+          ],
+          "snippet": [
+            "type SessionMemory struct {\n    Namespace string\n    Path string\n    Instructions string\n}\n\ntype Environment struct {\n    MemoryNamespace string\n    MemoryPath string\n    MemoryInstructions string\n    Memory string\n}\n"
+          ],
+          "acceptance": [
+            "Session metadata stores resolved memory namespace, path, and instructions.",
+            "Environment includes memory namespace and resolved path.",
+            "Environment includes memory instructions when configured.",
+            "Existing memory index display still works."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "5",
+      "name": "Run Execution and Output Modes",
+      "pattern": [
+        "Headless Runner, Output Adapter, Autosave"
+      ],
+      "objective": "Make run execute prepared sessions through the shared loop with autosave, session continuation, auth mapping, limits, and output modes.",
+      "success": "run supports final_message, silent, stream JSONL, structured not implemented, autosaves saved runs, and keeps stdout/stderr contracts clean.",
+      "diagram": "flowchart TD\n    Run[run command] --> Resolve[resolve options]\n    Resolve --> Session[create or load session]\n    Session --> Turn[prepare turn]\n    Turn --> Loop[run loop]\n    Loop --> Output[output adapter]\n    Loop --> Autosave[autosave if enabled]",
+      "tasks": [
+        {
+          "number": "5.1",
+          "name": "Build run execution service",
+          "type": "feature",
+          "what": "Create a run package that creates or loads a session, appends prompt input, prepares the turn, runs RunLoop, and applies autosave.",
+          "why": "run should become the canonical non-TUI execution path instead of a special headless shortcut.",
+          "files": [
+            "+ internal/run",
+            "~ internal/headless/headless.go",
+            "~ internal/chat/loop.go",
+            "~ internal/cli"
+          ],
+          "snippet": [
+            "package run\n\ntype Request struct {\n    Options runtime.Options\n    SessionName string\n    Prompt string\n}\n\ntype Result struct {\n    FinalText string\n    SavedSessionName string\n}\n\nfunc Execute(ctx context.Context, req Request) (Result, error) {\n    // Load or create session, append prompt, prepare turn, run loop, autosave.\n}"
+          ],
+          "acceptance": [
+            "run executes a fresh inline prompt without launching TUI.",
+            "run with a named agent creates a session from that agent.",
+            "run --session appends a new turn to an existing saved session.",
+            "autosave writes a session when enabled and reports only the saved session name."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "5.2",
+          "name": "Implement run output modes",
+          "type": "feature",
+          "what": "Add output adapters for final_message, silent, stream, and structured mode handling.",
+          "why": "Automation needs predictable stdout and stderr behavior for each run mode.",
+          "files": [
+            "~ internal/run",
+            "~ internal/cli"
+          ],
+          "snippet": [
+            "type OutputMode string\n\nconst (\n    OutputFinalMessage OutputMode = \"final_message\"\n    OutputStream OutputMode = \"stream\"\n    OutputSilent OutputMode = \"silent\"\n    OutputStructured OutputMode = \"structured\"\n)\n\ntype OutputWriter interface {\n    WriteResult(result Result) error\n}\n"
+          ],
+          "acceptance": [
+            "final_message prints the final assistant answer to stdout.",
+            "silent prints no final assistant answer to stdout.",
+            "saved session name goes to stderr for final_message and silent when autosaved.",
+            "structured returns a clear not implemented error for phase 1."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "5.3",
+          "name": "Add CLI stream JSONL protocol",
+          "type": "feature",
+          "what": "Map loop events and selected session lifecycle events into JSONL stream output with timestamps, roles, message IDs, and tool call IDs.",
+          "why": "stream mode needs a stable machine-readable CLI boundary without redesigning provider streaming.",
+          "files": [
+            "~ internal/run",
+            "~ internal/chat/loop.go"
+          ],
+          "snippet": [
+            "type StreamEnvelope struct {\n    Event string\n    Timestamp string\n    Role string\n    MessageID string\n    ToolCallID string\n    Tool string\n    Text string\n    Saved bool\n    SessionName string\n    StopReason string\n}\n\nfunc WriteStreamEvent(env StreamEnvelope) error {\n    // Write one JSON object per line.\n}"
+          ],
+          "acceptance": [
+            "stream emits session_start as the first JSONL event.",
+            "session_start includes saved session name only when saved.",
+            "stream events include timestamps.",
+            "message, thinking, tool call, tool execution, permission request, error, session_event, and finished events are valid JSONL.",
+            "stream mode does not duplicate saved session metadata to stderr on success."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "5.4",
+          "name": "Apply run auth and limits",
+          "type": "feature",
+          "what": "Map agent/run auth modes onto existing authorization behavior and enforce practical phase-1 run limits.",
+          "why": "Non-TUI runs and agent tools must be deterministic and bounded without inventing separate auth or limit systems.",
+          "files": [
+            "~ internal/run",
+            "~ internal/chat/loop.go",
+            "~ internal/chat/tool_exec.go",
+            "~ internal/runtime"
+          ],
+          "snippet": [
+            "type Limits struct {\n    MaxSteps int\n    MaxTools int\n    MaxTime time.Duration\n    MaxToolResultTokens int\n}\n\ntype AuthMode string\n\nfunc ApplyRunPolicies(opts runtime.Options) chat.RunLoopOptions {\n    // Map auth and limits into loop/tool execution options.\n}"
+          ],
+          "acceptance": [
+            "max tool result tokens continues to be enforced.",
+            "max steps, max tools, and max time are modeled and enforced where practical.",
+            "auth-required behavior maps to configured non-TUI policy.",
+            "No separate agent-tool auth subsystem is introduced."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "6",
+      "name": "Agent Tools",
+      "pattern": [
+        "Tool Adapter, Registry Guard, Blocking Delegation"
+      ],
+      "objective": "Add list_agents, call_agent, and inline_agent tools using the agent registry and run execution model.",
+      "success": "The model can list agents, call an allowed named agent as a blocking final-answer subtask, and run inline agent definitions from tool arguments.",
+      "diagram": "flowchart TD\n    Parent[parent session] --> Tool[agent tool]\n    Tool --> List[list_agents]\n    Tool --> Call[call_agent]\n    Tool --> Inline[inline_agent]\n    Call --> RunNamed[run named agent]\n    Inline --> RunInline[run inline profile]\n    RunNamed --> Result[final answer result]\n    RunInline --> Result",
+      "tasks": [
+        {
+          "number": "6.1",
+          "name": "Register list_agents tool",
+          "type": "feature",
+          "what": "Add a list_agents tool that returns agent names and descriptions using the agent registry and documented callable-agent behavior.",
+          "why": "The model needs explicit agent discovery just like it has skill_list for skills.",
+          "files": [
+            "+ internal/tools/agents.go",
+            "~ internal/tools/tools.go",
+            "~ internal/agent"
+          ],
+          "snippet": [
+            "var ListAgentsTool = Tool{\n    Name: \"list_agents\"\n    Description: \"List available agents with names and descriptions.\"\n    // Schema has no required arguments.\n}\n\nfunc executeListAgents(args map[string]interface{}) ToolResult {\n    // Read agent registry and return compact name plus description list.\n}"
+          ],
+          "acceptance": [
+            "list_agents is registered in the tool registry.",
+            "list_agents returns agent names and descriptions.",
+            "The implementation clearly chooses or labels installed versus callable agent listing behavior."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "6.2",
+          "name": "Register call_agent tool",
+          "type": "feature",
+          "what": "Add call_agent as a blocking named-agent tool with arguments for agent name, prompt, and limits.",
+          "why": "Provides simple phase-1 sub-agent delegation while keeping full child-session orchestration out of scope.",
+          "files": [
+            "~ internal/tools/agents.go",
+            "~ internal/run",
+            "~ internal/agent",
+            "~ internal/chat/tool_exec.go"
+          ],
+          "snippet": [
+            "type CallAgentArgs struct {\n    Agent string\n    Prompt string\n    Limits Limits\n}\n\nfunc executeCallAgent(args CallAgentArgs, ctx ToolContext) ToolResult {\n    // Verify Agent is allowed by current session Agents scope.\n    // Execute named agent through run service with final-answer output.\n}\n"
+          ],
+          "acceptance": [
+            "call_agent requires agent and prompt.",
+            "call_agent accepts limits for the delegated subtask.",
+            "call_agent rejects agents not allowed by the current session Agents scope.",
+            "called agent uses its own configured tools, skills, agents, memory, system, and model.",
+            "call_agent returns only the final answer as the tool result."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "6.3",
+          "name": "Register inline_agent tool",
+          "type": "feature",
+          "what": "Add inline_agent as a blocking tool whose agent-like profile is defined directly in tool arguments instead of an installed preset.",
+          "why": "Supports ad hoc delegation without requiring users to create a registry agent file first.",
+          "files": [
+            "~ internal/tools/agents.go",
+            "~ internal/run",
+            "~ internal/runtime"
+          ],
+          "snippet": [
+            "type InlineAgentArgs struct {\n    Prompt string\n    System string\n    Model string\n    ToolNames []string\n    SkillNames []string\n    CallableAgentNames []string\n    AuthMode string\n    Limits Limits\n}\n\nfunc executeInlineAgent(args InlineAgentArgs, ctx ToolContext) ToolResult {\n    // Build runtime options from inline arguments and run blocking.\n}\n"
+          ],
+          "acceptance": [
+            "inline_agent does not require registry lookup.",
+            "inline_agent profile source is the tool arguments.",
+            "inline_agent runs blocking and returns the final answer.",
+            "inline_agent uses the normal run execution path."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "7",
+      "name": "Cleanup and Validation",
+      "pattern": [
+        "Strangler Cleanup, Regression Tests"
+      ],
+      "objective": "Remove obsolete incognito and legacy CLI behavior, then validate the new architecture with focused regression tests.",
+      "success": "Incognito and implicit headless prompt behavior are gone, version remains preserved, and tests cover CLI parsing, agents, runtime resolution, PrepareTurn, run output, and agent tools.",
+      "diagram": "flowchart TD\n    Legacy[legacy CLI behavior] --> Remove[remove hidden mode switches]\n    Incognito[incognito mode] --> Autosave[explicit autosave config]\n    Tests[focused tests] --> Build[go build and go test]\n    Build --> Done[ready for implementation review]",
+      "tasks": [
+        {
+          "number": "7.1",
+          "name": "Drop incognito CLI flag",
+          "type": "refactor",
+          "what": "Remove the incognito CLI flag from main.go. Incognito toggle (alt+i) remains in the app \u2014 it keeps the session alive and just stops saving/history.",
+          "why": "The incognito feature is useful for privacy (no history, no save). Keep it as an in-app toggle, just remove the CLI startup flag.",
+          "files": [
+            "~ main.go",
+            "~ internal/cli",
+            "~ internal/keymap.go"
+          ],
+          "snippet": [
+            "func main() {\n    // incognito flag removed from CLI parsing\n    // incognito remains as in-app toggle (alt+i)\n}"
+          ],
+          "acceptance": [
+            "No incognito flag in CLI argument parsing.",
+            "App still toggles incognito via alt+i.",
+            "Incognito still blocks history and session saves.",
+            "Toggle off reloads session from disk (discarding incognito changes)."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "7.2",
+          "name": "Remove legacy root CLI behavior",
+          "type": "refactor",
+          "what": "Remove implicit headless-on-prompt behavior and legacy root image handling that no longer fit the explicit command model.",
+          "why": "Root command should consistently mean TUI while non-TUI execution belongs only under run.",
+          "files": [
+            "~ internal/cli",
+            "~ internal/headless/headless.go",
+            "~ main.go"
+          ],
+          "snippet": [
+            "func RunRoot(opts TUIOptions) error {\n    // Root always launches TUI.\n}\n\nfunc RunExplicit(opts RunOptions) error {\n    // Non-TUI execution lives under squid-os run.\n}\n"
+          ],
+          "acceptance": [
+            "Root --prompt does not start non-TUI execution.",
+            "Non-TUI execution requires the run command.",
+            "Unsupported legacy flags are removed or rejected clearly."
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        },
+        {
+          "number": "7.3",
+          "name": "Add focused regression tests",
+          "type": "test",
+          "what": "Add tests for CLI parsing, agent registry loading, runtime precedence, PrepareTurn injection, run outputs, memory paths, and agent tools.",
+          "why": "The new architecture crosses many entrypoints and needs tests to prevent behavior drift.",
+          "files": [
+            "+ internal/cli/*_test.go",
+            "+ internal/agent/*_test.go",
+            "+ internal/runtime/*_test.go",
+            "+ internal/chat/*_test.go",
+            "+ internal/run/*_test.go",
+            "+ internal/memory/*_test.go"
+          ],
+          "snippet": [
+            "func TestRunAgentFlagConflict(t *testing.T) {\n    // Positional agent and --agent mismatch should fail.\n}\n\nfunc TestPrepareTurnTransitionPlacement(t *testing.T) {\n    // Transitions should appear after the user message.\n}\n\nfunc TestWorkspaceMemoryPath(t *testing.T) {\n    // workspace memory resolves to working-directory/memory.\n}\n"
+          ],
+          "acceptance": [
+            "Tests cover positional agent and --agent equivalence and conflict.",
+            "Tests cover --prompt plus stdin composition.",
+            "Tests cover --session continuation rejecting bootstrap replacement flags.",
+            "Tests cover PrepareTurn transition placement.",
+            "Tests cover stream session_start output and saved session name behavior.",
+            "Tests cover agent registry scan/load and agent tool contracts."
+          ],
+          "verify": [
+            "go test ./..."
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,199 @@
+{
+  "tasks": {
+    "1.1": {
+      "number": "1.1",
+      "status": "done",
+      "name": "Add GoAI dependency and BuildGoAIModel to Provider interface",
+      "milestone": "GoAI Engine Spine",
+      "milestone_number": "1",
+      "summary": {
+        "decisions": "BuildGoAIModel takes model string as parameter since ProviderSettings lacks a Model field. Old transport methods removed from interface \u2014 callers patched to compile. Adapter package kept in place for now (task 2.4 removes it).",
+        "tradeoffs": "Model is passed as parameter to BuildGoAIModel rather than stored in ProviderSettings since that struct doesn't carry model state. OAuth refresh logic moved into CachedTokenSource fetch function for lazy refresh during streaming.",
+        "lessons_learned": "GoAI provider packages use functional options (openai.Chat(model, opts...)). CachedTokenSource handles OAuth refresh transparently. Provider interface must be uniform \u2014 non-OAuth providers return errors for auth flow methods.",
+        "failures": "None",
+        "confidence": "high",
+        "done": "Added goai v0.8.5 to go.mod. Replaced Provider interface: removed PrepareRequest, GetChatURL, GetModelsURL, IsExpired, Refresh. Added BuildGoAIModel(model string) (LanguageModel, bool, error) and ListModels(ctx) ([]string, error). Added auth flow methods (StartDeviceAuth, PollDeviceAuth, StartOAuth, FinishOAuth, GetCredentials) to interface. Implemented BuildGoAIModel and ListModels on all 5 providers (openai, codex, ollama, vllm, litellm) with correct auth wiring (API key, OAuth via CachedTokenSource). Stubbed Engine.Stream() to call BuildGoAIModel (full GoAI streaming in task 1.2). Updated models.go to use ListModels instead of GetModelsURL+PrepareRequest. Updated provider_setup.go to remove IsExpired/Refresh calls."
+      }
+    },
+    "1.2": {
+      "number": "1.2",
+      "status": "done",
+      "name": "Replace Engine adapter transport with GoAI stream bridge",
+      "milestone": "GoAI Engine Spine",
+      "milestone_number": "1",
+      "summary": {
+        "tradeoffs": "Kept existing ChatMessage-based caller contract for now and converted to GoAI messages inside engine to avoid forcing task 2.1 early. Enforced single streamed tool call only, dropping additional tool calls in the same turn to avoid malformed multi-tool payloads on Qwen-compatible providers. Still preserves old BuildAPIMessages temporarily until GoAI-native message builder lands in task 2.1.",
+        "confidence": "medium",
+        "lessons_learned": "GoAI raw chunk metadata for tool streaming is provider-dependent, so safest behavior for now is first-tool-only buffering plus final complete tool-call flush. This aligns with the user constraint that Qwen should never be allowed to emit 2 tool calls in a turn.",
+        "decisions": "Used GoAI StreamText raw Stream() consumption so we can preserve tool-call delta events for the TUI. Kept ThinkParser fallback wiring via parseThinking bool from BuildGoAIModel. Flushed buffered tool calls once at finish and emitted ToolDuration on StreamEvent instead of embedding duration in ToolCall.",
+        "done": "Rewrote internal/chat/engine.go to bridge through GoAI StreamText with MaxSteps(1). Engine now builds LanguageModel via provider.BuildGoAIModel(model), converts ChatMessage history to goai provider.Message, converts local tools to goai.Tool definitions without Execute handlers, and translates GoAI StreamChunk output into existing StreamEvent values. Removed engine dependency on old provider transport methods and adapter-driven request execution. Added tool delta buffering, finish handling, and single-tool-call enforcement for Qwen/compat stability.",
+        "failures": "None"
+      }
+    },
+    "1.3": {
+      "number": "1.3",
+      "status": "done",
+      "name": "Preserve thinking behavior with provider-aware parsing fallback",
+      "milestone": "GoAI Engine Spine",
+      "milestone_number": "1",
+      "summary": {
+        "decisions": "Thinking mode is now selected per provider via BuildGoAIModel(model) return bool rather than by transport dialect. Native ChunkReasoning is trusted when available; local parsing is only a compatibility fallback.",
+        "lessons_learned": "The important distinction is not provider name but whether reasoning arrives as separate chunk types or inline text. Preserving the old parser bootstrap for all providers would corrupt native reasoning streams.",
+        "tradeoffs": "Kept the legacy parser bootstrap only for parseThinkingFromText providers, not globally. This avoids misclassifying normal text as hidden reasoning on providers that already emit native ChunkReasoning.",
+        "failures": "None",
+        "done": "Completed provider-aware thinking fallback in internal/chat/engine.go. Providers whose BuildGoAIModel returns parseThinkingFromText=true continue using the local ThinkParser on ChunkText for inline <think> content. Providers with native reasoning support now pass ChunkReasoning directly into StreamEvent. InThinking state is preserved for parsed providers and reset on native text chunks.",
+        "confidence": "high"
+      }
+    },
+    "2.1": {
+      "number": "2.1",
+      "status": "done",
+      "name": "Replace API message builder with GoAI message builder",
+      "milestone": "Provider and Message Refactor",
+      "milestone_number": "2",
+      "summary": {
+        "failures": "None",
+        "confidence": "high",
+        "lessons_learned": "The right migration boundary is config.Message -> goai provider.Message, not config.Message -> ChatMessage -> provider.Message. Tool execution metadata remains owned by config.Message and should not be overwritten by GoAI merge helpers.",
+        "decisions": "Preserved legacy behavior of concatenating all system prompts into one system message. Assistant messages now carry PartReasoning when ThinkingText exists so round-trips do not lose model reasoning context.",
+        "done": "Replaced the old API-shaped message builder with BuildGoAIMessages in internal/chat/engine.go. The new builder converts config.Message history directly to goai provider.Message, including system text, user multimodal parts, assistant text/reasoning/tool-call parts, tool-result messages, and synthetic assistant messages. Updated app and headless callers to use BuildGoAIMessages. Added mergeResponseMessages helper to map GoAI ResponseMessages back into config.Message while preserving existing metadata fields already tracked elsewhere.",
+        "tradeoffs": "Kept ChatMessage types in engine.go temporarily for compatibility during the migration, but the live call path now uses GoAI provider.Message. mergeResponseMessages is added now even though the current stream path does not yet persist full TextResult-based merge state."
+      }
+    },
+    "2.2": {
+      "number": "2.2",
+      "status": "done",
+      "name": "Implement BuildGoAIModel and ListModels on each provider, remove transport methods",
+      "milestone": "Provider and Message Refactor",
+      "milestone_number": "2",
+      "summary": {
+        "failures": "None",
+        "decisions": "Provider auth refresh is handled lazily inside CachedTokenSource instead of preflight interface methods. ListModels owns its own auth and HTTP logic per provider, eliminating the old split URL+PrepareRequest pattern.",
+        "tradeoffs": "BuildGoAIModel takes model as an argument rather than reading from ProviderSettings because model selection lives in app settings, not provider endpoint config. ListModels currently returns IDs only; richer context-length metadata can be layered later if needed.",
+        "confidence": "high",
+        "lessons_learned": "Task 2.2 was largely completed during 1.1/1.2 because removing the old interface required moving provider responsibilities early. The important follow-up was verifying no dead references to removed transport methods remained anywhere in the app.",
+        "done": "Verified and finalized BuildGoAIModel(model) and ListModels(ctx) implementations across all 5 active providers. OpenAI and Codex use openai.Chat with API key or OAuth CachedTokenSource; Codex also injects Originator/User-Agent/ChatGPT-Account-Id headers and returns parseThinkingFromText=true. Ollama uses ollama.Chat with base URL and no auth. vLLM uses vllm.Chat with base URL and optional API key. LiteLLM uses compat.Chat with base URL and x-litellm-api-key header. Confirmed old transport methods are fully removed from the Provider interface and no remaining compile path references them."
+      }
+    },
+    "2.3": {
+      "number": "2.3",
+      "status": "done",
+      "name": "Clean provider_setup.go to use only Provider interface",
+      "milestone": "Provider and Message Refactor",
+      "milestone_number": "2",
+      "summary": {
+        "done": "Removed provider-specific branching from internal/app/provider_setup.go. Device auth flow now initializes providers generically via provider.Lookup, stores the provider interface instance in sequence state, and uses only interface methods for StartDeviceAuth, PollDeviceAuth, GetCredentials, GetDeviceAuthID, and SetDeviceState. Added GetDeviceAuthID and SetDeviceState to the generic Provider interface with no-op implementations on non-device-auth providers.",
+        "decisions": "Provider auth wizard state now stores provider.Provider directly instead of reconstructing concrete OpenAI/Codex types with switches. Non-device-auth providers implement safe no-op device-state methods.",
+        "lessons_learned": "To truly eliminate type assertions from provider_setup.go, every piece of auth state transfer used by the wizard must be represented on the interface \u2014 not just the start/poll methods.",
+        "confidence": "high",
+        "failures": "None",
+        "tradeoffs": "Extended the generic Provider interface with two device-auth state methods so provider_setup.go could remain fully interface-driven without concrete type assertions. These methods are auth-flow specific rather than transport specific, so they fit the provider abstraction better than leaving provider_setup.go provider-aware."
+      }
+    },
+    "2.4": {
+      "number": "2.4",
+      "status": "done",
+      "name": "Delete adapter package and obsolete request-shaping code",
+      "milestone": "Provider and Message Refactor",
+      "milestone_number": "2",
+      "summary": {
+        "failures": "None",
+        "lessons_learned": "Once the stream path moved to GoAI and provider transport methods disappeared, the adapter package became fully deletable with no residual dependencies.",
+        "tradeoffs": "Kept a small amount of compatibility scaffolding in engine.go (legacy ChatMessage type and helper comments) while the live path is now fully GoAI-driven. Those can be simplified further in later cleanup without affecting the migration behavior.",
+        "done": "Deleted internal/chat/adapter entirely (adapter.go, chatcompletions.go, codex.go) and verified the project builds without any remaining adapter imports or request-shaping/SSE parser dependencies. Engine now contains only GoAI bridge logic, message conversion, and tool-delta handling.",
+        "decisions": "Removed dead code instead of preserving compatibility wrappers. Verification was based on zero remaining adapter references plus full project build success.",
+        "confidence": "high"
+      }
+    },
+    "3.1": {
+      "number": "3.1",
+      "status": "done",
+      "name": "Build pending tool entries directly from StreamEvent with duration",
+      "milestone": "App Stream and Tool Entry Simplification",
+      "milestone_number": "3",
+      "summary": {
+        "lessons_learned": "The clean separation is: deltas are useful for telemetry, but finalized tool calls must be the only source of truth for execution. That removes a whole class of malformed-assembly bugs.",
+        "failures": "None",
+        "tradeoffs": "Kept ToolCallDelta handling only for streaming metrics and UI liveliness, not for instruction construction. This preserves token/time tracking without making execution correctness depend on fragmented deltas.",
+        "confidence": "high",
+        "decisions": "Execution loop now reads tool name/arguments from entries[i].Instruction instead of transient partial state. Pending authorization indexing now refers to pendingTools/finalized entries rather than partial delta buffers.",
+        "done": "Refactored internal/app/stream.go so tool execution no longer depends on streamed delta assembly. StreamEvent.ToolCalls is now the canonical source of pending tool entries: complete ToolCallEntry values are created directly from finalized streamed tool calls, including Instruction.DurationMs from StreamEvent.ToolDuration. streamState now stores pendingTools (finalized entries) instead of partialTools. The UI still renders pending tool boxes using those finalized entries via toStreamingToolCalls()."
+      }
+    },
+    "3.2": {
+      "number": "3.2",
+      "status": "done",
+      "name": "Keep local tool execution loop and timing metrics on clean entries",
+      "milestone": "App Stream and Tool Entry Simplification",
+      "milestone_number": "3",
+      "summary": {
+        "failures": "None",
+        "decisions": "Preserved two-phase timing: model/tool-stream timing on Instruction.DurationMs and local tool runtime on Execution.DurationMs. This keeps observability intact without coupling execution to delta buffering.",
+        "lessons_learned": "Once entries become the single source of truth, the execution loop simplifies naturally: everything downstream should read from ToolCallEntry, not from stream-time scratch state.",
+        "done": "Verified and preserved the local tool execution loop in internal/app/stream.go while switching it to consume finalized ToolCallEntry instructions. Authorization, preview, file validation, working-dir updates, skill-load state updates, and execution metrics all now operate on entries[i].Instruction rather than transient partial tool state. Stream-phase timing remains stored in Instruction.DurationMs and execution-phase timing remains stored in Execution.DurationMs.",
+        "confidence": "high",
+        "tradeoffs": "Execution loop structure stayed mostly intact because its approval/validation behavior is app-specific and already correct. The main change was narrowing its input to finalized entries so stream transport details no longer leak into execution correctness."
+      }
+    },
+    "3.3": {
+      "number": "3.3",
+      "status": "done",
+      "name": "Remove obsolete partial tool assembly state",
+      "milestone": "App Stream and Tool Entry Simplification",
+      "milestone_number": "3",
+      "summary": {
+        "done": "Removed the remaining obsolete partial tool assembly path. StreamEvent no longer carries ToolCallIdx/ToolCallName/ToolCallID/ToolCallType, and app-side stream handling no longer depends on delta-time assembly state. ToolCallDelta remains only as a lightweight metrics signal. Pending tool rendering and execution now both flow from finalized ToolCalls emitted by the engine.",
+        "decisions": "Finalized ToolCalls are now the sole source of truth for pending tool state. Delta metadata fields that existed only to support old assembly logic were removed rather than repurposed.",
+        "lessons_learned": "Once execution and rendering both consume finalized entries, most of the old tool-stream reconstruction machinery becomes obviously dead and can be deleted safely.",
+        "tradeoffs": "Retained ToolCallDelta itself because it still contributes useful stream-phase token/timing metrics, even though correctness no longer depends on it. This preserves observability without preserving assembly complexity.",
+        "failures": "None",
+        "confidence": "high"
+      }
+    },
+    "4.1": {
+      "number": "4.1",
+      "status": "done",
+      "name": "Wire model scanning to use Provider.ListModels",
+      "milestone": "Model Discovery and Provider Coverage",
+      "milestone_number": "4",
+      "summary": {
+        "confidence": "high",
+        "done": "Verified internal/chat/models.go now scans models exclusively through provider.Lookup(name, settings).ListModels(ctx), with provider-independent sentinel handling for not configured, unsupported, auth failed, and unreachable states. StaticModels() entries are still included as fallback/default choices, and provider-specific URL/auth branching has been removed from the scan path.",
+        "lessons_learned": "Model discovery became much simpler once providers owned their own authenticated listing logic. The right abstraction boundary is provider.ListModels, not exposing URL/request details upward.",
+        "failures": "None",
+        "tradeoffs": "Context-length enrichment is currently unavailable from the simplified ListModels return shape ([]string), so ScanModels now prioritizes correctness and interface uniformity over richer metadata. Static models still provide useful fallback coverage when remote listing returns nothing.",
+        "decisions": "Kept the scan path provider-agnostic by relying only on Provider.ListModels and Provider.StaticModels. Sentinel generation remains at the app-facing model scan layer rather than moving into provider implementations."
+      }
+    },
+    "4.2": {
+      "number": "4.2",
+      "status": "done",
+      "name": "Wire BuildGoAIModel and provider_setup.go end-to-end for all 5 active providers",
+      "milestone": "Model Discovery and Provider Coverage",
+      "milestone_number": "4",
+      "summary": {
+        "done": "Verified end-to-end provider wiring across engine, model scan, and provider setup. Engine construction now uses provider.Lookup(settings.Name, settings) and BuildGoAIModel(model) exclusively. Model scanning uses Provider.ListModels(ctx). provider_setup.go now performs auth flows through Provider interface methods only, with no provider-name switch or concrete type assertion in the auth path. All 5 active providers are registered and reachable through the same interface/registry path.",
+        "tradeoffs": "This task is primarily an integration verification because most of the implementation landed incrementally in earlier tasks. The main work here was confirming no old handwritten transport path or provider-specific app logic remained.",
+        "lessons_learned": "The migration becomes stable once every high-level app path uses provider.Lookup + interface methods only. That prevents transport logic from leaking back into app code.",
+        "decisions": "Registry + Provider interface is the only app-facing integration seam: engine, model scanning, and auth setup all depend on it. OAuth refresh remains lazy inside CachedTokenSource rather than being orchestrated by app code.",
+        "confidence": "high",
+        "failures": "None"
+      }
+    },
+    "4.3": {
+      "number": "4.3",
+      "status": "done",
+      "name": "Document remaining GoAI providers for future migration",
+      "milestone": "Model Discovery and Provider Coverage",
+      "milestone_number": "4",
+      "summary": {
+        "tradeoffs": "Documented the deferred providers rather than partially implementing them, matching the plan\u2019s intent to stabilize the first 5-provider migration first. Listing guidance remains pragmatic: use authenticated list endpoints where stable, otherwise fall back to StaticModels.",
+        "failures": "None",
+        "lessons_learned": "The architecture is now generic enough that future provider additions should mostly be mechanical. The main variability is auth and model-listing support, not engine behavior.",
+        "done": "Added internal/chat/provider/goai-future-providers.md documenting the deferred GoAI provider migration set and their mapping to GoAI provider packages. The document covers Anthropic, Google, Bedrock, Azure, Vertex, Cohere, Mistral, xAI, Groq, DeepSeek, MiniMax, Fireworks, Together, DeepInfra, OpenRouter, Requesty, Perplexity, Cerebras, NVIDIA NIM, RunPod, Cloudflare, FPT Smart Cloud, and Llama.cpp, along with auth/listing guidance and the required interface pattern for follow-up implementation.",
+        "confidence": "high",
+        "decisions": "Placed the document beside the provider implementations so the follow-up migration work stays close to the interface and registry code. Explicitly recorded the rule that no future provider should reintroduce branching into engine/models/provider_setup."
+      }
+    }
+  }
+}

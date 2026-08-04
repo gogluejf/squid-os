@@ -1,0 +1,94 @@
+{
+  "tasks": {
+    "1.1": {
+      "number": "1.1",
+      "status": "done",
+      "name": "Add SessionSkill to config",
+      "milestone": "Config",
+      "milestone_number": "1",
+      "summary": {
+        "failures": "None",
+        "tradeoffs": "None",
+        "done": "Added SessionSkill struct with Current and Next string fields to config/session.go, embedded in Session struct with json tags (no omitempty)",
+        "decisions": "Placed SessionSkill right before Session struct definition, following existing field ordering convention",
+        "confidence": "high",
+        "lessons_learned": "None"
+      }
+    },
+    "2.1": {
+      "number": "2.1",
+      "status": "done",
+      "name": "Implement cycleSkill on Tab",
+      "milestone": "Tab Cycling",
+      "milestone_number": "2",
+      "summary": {
+        "done": "Added Tab key handler in handleChatKey to call cycleSkill(). Created skill_cycle.go with cycleSkill method that cycles through [none] + registered skills, sets Next, shows notification, updates viewport, and autosaves.",
+        "confidence": "high",
+        "failures": "None",
+        "lessons_learned": "The skills package was already imported in app.go but not in input.go \u2014 kept the import in the dedicated file instead.",
+        "decisions": "Placed cycleSkill in its own file skill_cycle.go to keep input.go lean. Added tea import to the new file.",
+        "tradeoffs": "None"
+      }
+    },
+    "3.1": {
+      "number": "3.1",
+      "status": "done",
+      "name": "skill_load sets Next post-execution",
+      "milestone": "Tool Side-Effect",
+      "milestone_number": "3",
+      "summary": {
+        "tradeoffs": "No explicit autoSave in the hook \u2014 resumeToolExecution uses *Model receiver so direct reassignment doesn't work. The skill state mutates m in place and persists through the normal save flow.",
+        "done": "Added post-execution hook for skill_load in stream.go resumeToolExecution loop. On success, sets Session.Skill.Current to the loaded skill name and clears Next. Placed right after set_working_dir block.",
+        "decisions": "Set Current (not Next) since skill_load already loaded the skill. Cleared Next to avoid stale pending state.",
+        "lessons_learned": "resumeToolExecution has *Model receiver, so m, _ = m.autoSave() fails type mismatch. Had to drop the autoSave call and rely on in-place mutation.",
+        "failures": "None",
+        "confidence": "high"
+      }
+    },
+    "4.1": {
+      "number": "4.1",
+      "status": "done",
+      "name": "Inject synthetic skill-load message on send",
+      "milestone": "Synthetic Message on Send",
+      "milestone_number": "4",
+      "summary": {
+        "decisions": "Placed injectSkillChangeSynthetic and getSkillText in skill_cycle.go alongside cycleSkill for cohesion. getSkillText loads skill body from registry for rich context.",
+        "failures": "None",
+        "done": "Added skill change check at the start of sendMessage(). If Next != Current, injects a synthetic message with appropriate text (new skill loaded / skill changed / skill unloaded), then liquidates Next into Current. Added injectSkillChangeSynthetic and getSkillText helpers in skill_cycle.go.",
+        "tradeoffs": "sendMessage takes value receiver so helper calls use (&m) pointer. The synthetic message gets appended before the user message so the model sees the skill context.",
+        "lessons_learned": "None",
+        "confidence": "high"
+      }
+    },
+    "5.1": {
+      "number": "5.1",
+      "status": "done",
+      "name": "Clear Skill on new session / incognito",
+      "milestone": "Clear State",
+      "milestone_number": "5",
+      "summary": {
+        "failures": "None",
+        "confidence": "high",
+        "tradeoffs": "None",
+        "done": "No code changes needed. Both clearSession and toggleIncognito call chatSession.clear() which replaces Session with NewSessionFile(). Since SessionSkill is a value type, the new Session has Skill: {\"\": \"\"} \u2014 already zeroed. Verified that NewSessionFile does not set Skill field, relying on Go zero values.",
+        "lessons_learned": "NewSessionFile doesn't explicitly set every field, Go zero values fill in the rest. SessionSkill{} is the correct default.",
+        "decisions": "No code change \u2014 existing clear path already handles it correctly via zero-value semantics."
+      }
+    },
+    "6.1": {
+      "number": "6.1",
+      "status": "done",
+      "name": "Display skill in footer",
+      "milestone": "Footer Display",
+      "milestone_number": "6",
+      "summary": {
+        "tradeoffs": "None",
+        "failures": "None",
+        "done": "Added Skill field (config.SessionSkill) to FooterData struct. Added skill label in RenderFooter line2 between auth and working dir. Updated buildFooterData to pass session.Skill. Shows [skill: Next] when pending, [skill: Current] when loaded, hides when both empty.",
+        "decisions": "Added config import to footer.go. Skill label placed between auth mode and working dir as specified in the plan.",
+        "lessons_learned": "None",
+        "confidence": "high"
+      }
+    }
+  }
+}

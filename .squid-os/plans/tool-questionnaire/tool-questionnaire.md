@@ -1,0 +1,245 @@
+# EPIC: Questionnaire Component & Auth Mode Refactor
+Why: Users need a reusable question-input component for the AI to collect information interactively. The existing auth mode pattern (yes/no + instructions) should be extracted into a generic questionnaire component that supports multiple prompt modes. This avoids duplicating the interaction pattern and enables interviews, structured data collection, and UX-friendly user input throughout the application.
+Outcomes: A reusable Questionnaire component supporting yes/no, radio, checkbox, and free-text prompt modes. The auth mode is refactored to use this component. The tool accepts an array of questions and returns structured answers. Consistent keyboard navigation (Tab/Shift+Tab/Enter) across all modes.
+
+## MILESTONE: 1 - Questionnaire Domain Model
+Pattern: Value Object / Enum
+Objective: Define the domain types for question types, question structure, and answer structure that the tool and UI will share.
+Success: QuestionType enum, Question struct, Answer struct compile and are importable by both the tool handler and the UI component.
+Diagram: QuestionType(yesno|radio|checkbox|text) → Question(id, type, prompt, options, required) → Answer(id, value, instructions) → QuestionnaireResult(answers array)
+
+### TASK: 1.1 - Add QuestionType enum
+Layer: Domain
+What: Add QuestionType enum with YesNo, Radio, Checkbox, Text constants in internal/domain/questionnaire.go.
+Why: Single source of truth for supported prompt modes, used by both tool schema validation and UI rendering.
+Files: + internal/domain/questionnaire.go
+Snippet: package domain\n\ntype QuestionType string\n\nconst (\n\tQuestionYesNo    QuestionType = "yesno"\n\tQuestionRadio    QuestionType = "radio"\n\tQuestionCheckbox QuestionType = "checkbox"\n\tQuestionText     QuestionType = "text"\n)\n\nfunc (qt QuestionType) Valid() bool {\n\tswitch qt {\n\tcase QuestionYesNo, QuestionRadio, QuestionCheckbox, QuestionText:\n\t\treturn true\n\t}\n\treturn false\n}\n
+Acceptance: Enum compiles, Valid() returns true for known types and false for unknown
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 1.2 - Add Question struct
+Layer: Domain
+What: Add Question struct with ID, Type, Prompt, Options, Required fields in internal/domain/questionnaire.go.
+Why: Represents a single question sent by the AI tool, carrying all metadata needed for rendering and validation.
+Files: ~ internal/domain/questionnaire.go
+Snippet: type Question struct {\n\tID       string              // unique question identifier\n\tType     QuestionType      // yesno, radio, checkbox, text\n\tPrompt   string          // the question text shown to user\n\tOptions  []string       // available choices (for radio/checkbox)\n\tRequired bool          // whether answer is mandatory\n}\n\nfunc (q Question) HasOptions() bool {\n\treturn q.Type == QuestionRadio || q.Type == QuestionCheckbox\n}\n\nfunc (q Question) SupportsInstructions() bool {\n\t// All question types support an optional instructions/notes field\n\treturn true\n}\n
+Acceptance: Struct compiles, HasOptions returns true for radio/checkbox, SupportsInstructions always true
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 1.3 - Add Answer struct
+Layer: Domain
+What: Add Answer struct with ID, Value (interface{}), Instructions fields in internal/domain/questionnaire.go.
+Why: Carries the user's response back to the AI. Value is interface{} to handle string (yesno/radio/text) or []string (checkbox).
+Files: ~ internal/domain/questionnaire.go
+Snippet: type Answer struct {\n\tID           string                  // matches Question.ID\n\tValue        interface{}          // string or []string\n\tInstructions string        // optional extra context from user\n}\n\ntype QuestionnaireResult struct {\n\tAnswers []Answer \n}\n
+Acceptance: Struct compiles, Answer.Value is interface{} to support multiple types
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+## MILESTONE: 2 - Questionnaire UI Component
+Pattern: Composite Component / State Machine
+Objective: Build the core QuestionnairePrompt UI component that renders questions sequentially, handles keyboard navigation between answer selection and text input, and collects structured answers.
+Success: QuestionnairePrompt renders questions one at a time, supports all four prompt modes with keyboard navigation (Tab/Shift+Tab/Enter), and produces a QuestionnaireResult on completion.
+Diagram: QuestionnairePrompt → iterates Questions → renders current Question → sub-component per type (YesNoPrompt / RadioPrompt / CheckboxPrompt / TextPrompt) → Tab switches to InstructionsInput → Shift+Tab returns to selector → Enter advances to next or submits
+
+### TASK: 2.1 - Add QuestionnairePrompt struct
+Layer: Interface
+What: Create QuestionnairePrompt struct in internal/ui/questionnaire.go with Questions, currentIndex, answers slice, textMode flag, and instructionBuffer.
+Why: Manages state across a multi-question flow: tracks current question, accumulated answers, and whether the user is in answer-selection or instruction-input mode.
+Files: + internal/ui/questionnaire.go
+Snippet: package ui\n\nimport (\n\t"squid-os/internal/domain"\n)\n\ntype QuestionnairePrompt struct {\n\tQuestions        []domain.Question\n\tCurrentIndex     int\n\tAnswers          []domain.Answer\n\tTextMode         bool       // true = user typing instructions\n\tInstructionBuf   string     // instruction text for current question\n\tWidth            int\n\t// Per-question answer state\n\tcurrentSelection int        // index for radio/checkbox, 0/1 for yesno\n\tcurrentText      string     // text input for text questions\n}\n\nfunc NewQuestionnairePrompt(questions []domain.Question, width int) *QuestionnairePrompt {\n\treturn &QuestionnairePrompt{\n\t\tQuestions:    questions,\n\t\tWidth:        width,\n\t\tAnswers:      make([]domain.Answer, 0, len(questions)),\n\t}\n}\n\nfunc (p *QuestionnairePrompt) Current() domain.Question {\n\tif p.CurrentIndex < len(p.Questions) {\n\t\treturn p.Questions[p.CurrentIndex]\n\t}\n\treturn domain.Question{}\n}\n\nfunc (p *QuestionnairePrompt) IsComplete() bool {\n\treturn p.CurrentIndex >= len(p.Questions)\n}\n\nfunc (p *QuestionnairePrompt) Result() domain.QuestionnaireResult {\n\treturn domain.QuestionnaireResult{Answers: p.Answers}\n}\n
+Acceptance: Struct compiles, NewQuestionnairePrompt initializes correctly, IsComplete returns true when all questions answered
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 2.2 - Implement QuestionnairePrompt Render
+Layer: Interface
+What: Add Render() method to QuestionnairePrompt that delegates to per-type renderers and shows progress indicator.
+Why: Displays the current question with appropriate input UI, progress bar, and navigation hints.
+Files: ~ internal/ui/questionnaire.go
+Snippet: func (p *QuestionnairePrompt) Render() string {\n\tif p.IsComplete() {\n\t\treturn "Questionnaire complete."\n\t}\n\tq := p.Current()\n\t\n\t// Progress line: "Question 2/5"\n\tprogress := fmt.Sprintf("[%d/%d]", p.CurrentIndex+1, len(p.Questions))\n\t\n\t// Prompt text\n\tpromptLine := q.Prompt\n\t\n\tvar answerBlock string\n\tif p.TextMode {\n\t\tanswerBlock = p.renderInstructionInput()\n\t} else {\n\t\tswitch q.Type {\n\t\tcase domain.QuestionYesNo:\n\t\t\tanswerBlock = p.renderYesNo(q)\n\t\tcase domain.QuestionRadio:\n\t\t\tanswerBlock = p.renderRadio(q)\n\t\tcase domain.QuestionCheckbox:\n\t\t\tanswerBlock = p.renderCheckbox(q)\n\t\tcase domain.QuestionText:\n\t\t\tanswerBlock = p.renderTextInput(q)\n\t\t}\n\t}\n\t\n\thint := p.navigationHint()\n\treturn style.StatusLineStyle.Width(p.Width).Render(\n\t\tfmt.Sprintf("  %s  %s\n  %s  %s", progress, promptLine, answerBlock, hint))\n}\n\nfunc (p *QuestionnairePrompt) navigationHint() string {\n\tif p.TextMode {\n\t\treturn "Enter to submit · Shift+Tab to return"\n\t}\n\treturn "←→ select · Tab for instructions · Enter to confirm"\n}\n
+Acceptance: Render outputs progress, prompt, answer block, and navigation hint. Delegates correctly per question type.
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 2.3 - Implement YesNo renderer
+Layer: Interface
+What: Add renderYesNo method that shows [Y]es / [N]o with selection highlight on current choice.
+Why: YesNo is the simplest mode and the basis for auth mode reuse. Selected option gets highlight style.
+Files: ~ internal/ui/questionnaire.go
+Snippet: func (p *QuestionnairePrompt) renderYesNo(q domain.Question) string {\n\tvar yes, no string\n\tif p.currentSelection == 0 {\n\t\tyes = style.SelectionStyle.Render("Yes")\n\t\tno = style.UnselectedStyle.Render("No")\n\t} else {\n\t\tyes = style.UnselectedStyle.Render("Yes")\n\t\tno = style.SelectionStyle.Render("No")\n\t}\n\treturn fmt.Sprintf("  %s / %s", yes, no)\n}\n
+Acceptance: Yes/No render with highlight on selected option
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 2.4 - Implement Radio renderer
+Layer: Interface
+What: Add renderRadio method that lists options with index numbers, highlights selected.
+Why: Single-select from a list of options. Each option gets a number prefix for keyboard navigation.
+Files: ~ internal/ui/questionnaire.go
+Snippet: func (p *QuestionnairePrompt) renderRadio(q domain.Question) string {\n\tparts := make([]string, len(q.Options))\n\tfor i, opt := range q.Options {\n\t\tif i == p.currentSelection {\n\t\t\tparts[i] = style.SelectionStyle.Render(fmt.Sprintf("[%d] %s", i+1, opt))\n\t\t} else {\n\t\t\tparts[i] = style.UnselectedStyle.Render(fmt.Sprintf("[%d] %s", i+1, opt))\n\t\t}\n\t}\n\treturn "  " + strings.Join(parts, "  ")\n}\n
+Acceptance: Options render with numbered prefixes, selected option highlighted
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 2.5 - Implement Checkbox renderer
+Layer: Interface
+What: Add renderCheckbox method with toggle selection (space to toggle each option), shows checked/unchecked state.
+Why: Multi-select from a list. Each option can be independently toggled. Selection tracked as a set of indices.
+Files: ~ internal/ui/questionnaire.go
+Snippet: // Add to QuestionnairePrompt struct:\n\tcheckedItems map[int]bool // tracks checked options for checkbox mode\n\nfunc (p *QuestionnairePrompt) renderCheckbox(q domain.Question) string {\n\tif p.checkedItems == nil {\n\t\tp.checkedItems = make(map[int]bool)\n\t}\n\tparts := make([]string, len(q.Options))\n\tfor i, opt := range q.Options {\n\t\tsymbol := "☐"\n\t\tif p.checkedItems[i] {\n\t\t\tsymbol = "☑"\n\t\t}\n\t\tparts[i] = style.UnselectedStyle.Render(fmt.Sprintf("%s [%d] %s", symbol, i+1, opt))\n\t}\n\treturn "  " + strings.Join(parts, "  ") + "  (Space to toggle, ←→ to navigate)"\n}\n
+Acceptance: Options show ☐/☑ state, selection tracked in checkedItems map
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 2.6 - Implement Text input renderer
+Layer: Interface
+What: Add renderTextInput that shows a dedicated inline text field for free-text answers, distinct from the shared textarea.
+Why: Free-text questions need their own input area scoped to this single question. Not the global textarea — a focused inline input with cursor.
+Files: ~ internal/ui/questionnaire.go
+Snippet: func (p *QuestionnairePrompt) renderTextInput(q domain.Question) string {\n\tplaceholder := q.Prompt\n\tif placeholder == "" {\n\t\tplaceholder = "Type your answer..."\n\t}\n\tinput := p.currentText\n\tif input == "" {\n\t\tinput = style.PlaceholderStyle.Render(placeholder)\n\t}\n\treturn "  > " + input + "█"\n}\n\nfunc (p *QuestionnairePrompt) renderInstructionInput() string {\n\tinput := p.InstructionBuf\n\tif input == "" {\n\t\tinput = style.PlaceholderStyle.Render("Optional instructions...")\n\t}\n\treturn "  Instructions: " + input + "█"\n}\n
+Acceptance: Text input renders inline with cursor indicator, placeholder when empty. Instruction input separate from question text.
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 2.7 - Implement QuestionnairePrompt key handler
+Layer: Interface
+What: Add HandleKey(msg tea.KeyMsg) method that processes navigation (←→, Tab, Shift+Tab, Enter, Space, Backspace, Runes) per question type.
+Why: Routes keyboard input to the correct action based on current question type and text mode. Core interaction logic for the component.
+Files: ~ internal/ui/questionnaire.go
+Snippet: func (p *QuestionnairePrompt) HandleKey(msg tea.KeyMsg) bool {\n\tq := p.Current()\n\t\n\t// Text mode — typing instructions\n\tif p.TextMode {\n\t\tswitch {\n\t\tcase key.Matches(msg, keys.Send):\n\t\t\tp.submitCurrent()\n\t\t\treturn true\n\t\tcase msg.Type == tea.KeyTab && msg.Modifiers.Contains(tea.ModShift):\n\t\t\tp.TextMode = false\n\t\t\treturn true\n\t\tcase msg.Type == tea.KeyRunes:\n\t\t\tp.InstructionBuf += string(msg.Runes)\n\t\t\treturn true\n\t\tcase msg.Type == tea.KeyBackspace:\n\t\t\tp.backspace(&p.InstructionBuf)\n\t\t\treturn true\n\t\t}\n\t\treturn false\n\t}\n\t\n\t// Answer selection mode\n\tswitch q.Type {\n\tcase domain.QuestionYesNo:\n\t\treturn p.handleYesNoKey(msg)\n\tcase domain.QuestionRadio:\n\t\treturn p.handleRadioKey(msg)\n\tcase domain.QuestionCheckbox:\n\t\treturn p.handleCheckboxKey(msg)\n\tcase domain.QuestionText:\n\t\treturn p.handleTextKey(msg)\n\t}\n\treturn false\n}\n\nfunc (p *QuestionnairePrompt) handleYesNoKey(msg tea.KeyMsg) bool {\n\tswitch {\n\tcase key.Matches(msg, keys.Left):\n\t\tp.currentSelection = 0\n\t\treturn true\n\tcase key.Matches(msg, keys.Right):\n\t\tp.currentSelection = 1\n\t\treturn true\n\tcase msg.Type == tea.KeyTab:\n\t\tp.TextMode = true\n\t\treturn true\n\tcase key.Matches(msg, keys.Send):\n\t\tp.submitCurrent()\n\t\treturn true\n\t}\n\treturn false\n}\n\nfunc (p *QuestionnairePrompt) submitCurrent() {\n\tq := p.Current()\n\tvar val interface{}\n\tswitch q.Type {\n\tcase domain.QuestionYesNo:\n\t\tval = p.currentSelection == 0\n\tcase domain.QuestionRadio:\n\t\tval = q.Options[p.currentSelection]\n\tcase domain.QuestionCheckbox:\n\t\tval = p.checkedIndices()\n\tcase domain.QuestionText:\n\t\tval = p.currentText\n\t}\n\tp.Answers = append(p.Answers, domain.Answer{\n\t\tID:           q.ID,\n\t\tValue:        val,\n\t\tInstructions: p.InstructionBuf,\n\t})\n\tp.CurrentIndex++\n\tp.TextMode = false\n\tp.InstructionBuf = ""\n\tp.currentSelection = 0\n\tp.currentText = ""\n\tp.checkedItems = nil\n}\n
+Acceptance: Key handler processes all modes correctly. submitCurrent builds the right Answer type per question. Advances index on submit.
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 2.8 - Implement Radio and Checkbox key handlers
+Layer: Interface
+What: Add handleRadioKey (←→ navigate, Enter submit, Tab instructions) and handleCheckboxKey (←→ navigate, Space toggle, Enter submit, Tab instructions).
+Why: Radio navigates with arrows and submits single selection. Checkbox navigates with arrows, toggles with space, and submits all checked items.
+Files: ~ internal/ui/questionnaire.go
+Snippet: func (p *QuestionnairePrompt) handleRadioKey(msg tea.KeyMsg) bool {\n\tq := p.Current()\n\tswitch {\n\tcase key.Matches(msg, keys.Left):\n\t\tif p.currentSelection > 0 {\n\t\t\tp.currentSelection--\n\t\t}\n\t\treturn true\n\tcase key.Matches(msg, keys.Right):\n\t\tif p.currentSelection < len(q.Options)-1 {\n\t\t\tp.currentSelection++\n\t\t}\n\t\treturn true\n\tcase msg.Type == tea.KeyTab:\n\t\tp.TextMode = true\n\t\treturn true\n\tcase key.Matches(msg, keys.Send):\n\t\tp.submitCurrent()\n\t\treturn true\n\t}\n\treturn false\n}\n\nfunc (p *QuestionnairePrompt) handleCheckboxKey(msg tea.KeyMsg) bool {\n\tq := p.Current()\n\tif p.checkedItems == nil {\n\t\tp.checkedItems = make(map[int]bool)\n\t}\n\tswitch {\n\tcase key.Matches(msg, keys.Left):\n\t\tif p.currentSelection > 0 {\n\t\t\tp.currentSelection--\n\t\t}\n\t\treturn true\n\tcase key.Matches(msg, keys.Right):\n\t\tif p.currentSelection < len(q.Options)-1 {\n\t\t\tp.currentSelection++\n\t\t}\n\t\treturn true\n\tcase msg.Type == tea.KeySpace:\n\t\tp.checkedItems[p.currentSelection] = !p.checkedItems[p.currentSelection]\n\t\treturn true\n\tcase msg.Type == tea.KeyTab:\n\t\tp.TextMode = true\n\t\treturn true\n\tcase key.Matches(msg, keys.Send):\n\t\tp.submitCurrent()\n\t\treturn true\n\t}\n\treturn false\n}\n\nfunc (p *QuestionnairePrompt) checkedIndices() []string {\n\tvar indices []string\n\tfor i, checked := range p.checkedItems {\n\t\tif checked {\n\t\t\tindices = append(indices, p.Questions[p.CurrentIndex].Options[i])\n\t\t}\n\t}\n\treturn indices\n}\n
+Acceptance: Radio navigates with arrows, checkbox toggles with space and navigates with arrows, both support Tab for instructions and Enter to submit
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+## MILESTONE: 3 - Questionnaire Tool
+Pattern: Tool Definition / Schema
+Objective: Register the questionnaire tool with the tool registry, defining its JSON schema (array of questions in, array of answers out) and execution handler that pauses for user input.
+Success: Tool is registered, accepts a batch of questions, pauses the stream in ModeQuestionnaire, and returns structured answers to the AI.
+Diagram: LLM calls questionnaire({questions: [...]}) → schema validates → execute pauses stream → sets ModeQuestionnaire → QuestionnairePrompt renders → user answers → tool returns {answers: [...]} → stream resumes
+
+### TASK: 3.1 - Register questionnaire tool with schema
+Layer: Infrastructure
+What: Create internal/tools/questionnaire.go with JSON schema defining the questions array parameter and register it in the tool registry.
+Why: The AI needs a tool definition to call. Schema enforces question structure (id, type, prompt, optional options).
+Files: + internal/tools/questionnaire.go
+Snippet: package tools\n\nimport "squid-os/internal/domain"\n\nvar Questionnaire = Tool{\n\tName:        "questionnaire",\n\tDescription: "Ask the user a series of questions and collect structured answers. Supports yesno, radio, checkbox, and text question types.",\n\tSchema: ,\n\tIsDestructive: func(args map[string]interface{}) bool { return false },\n\tExecute:       executeQuestionnaire,\n}\n
+Acceptance: Schema is valid JSON, tool is non-destructive, registered in tool registry
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 3.2 - Implement questionnaire Execute handler
+Layer: Infrastructure
+What: Add executeQuestionnaire that parses questions from args, stores them on the stream for the UI to pick up, and returns ToolResult with status indicating user interaction needed.
+Why: Unlike normal tools, questionnaire doesn't produce an immediate result — it pauses the stream and defers to the UI component. The execute handler sets up the questionnaire context and signals the stream to pause.
+Files: ~ internal/tools/questionnaire.go
+Snippet: func executeQuestionnaire(args map[string]interface{}) ToolResult {\n\tquestionsJSON, ok := args["questions"].([]interface{})\n\tif !ok || len(questionsJSON) == 0 {\n\t\treturn ToolResult{Status: ResultStatusError, Error: "questions is required and must be a non-empty array"}\n\t}\n\t// Parse questions into domain type\n\tvar questions []domain.Question\n\t// ... unmarshal questionsJSON into questions ...\n\t// Validation\n\tfor _, q := range questions {\n\t\tif !q.Type.Valid() {\n\t\t\treturn ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("invalid question type: %s", q.Type)}\n\t\t}\n\t\tif q.HasOptions() && len(q.Options) == 0 {\n\t\t\treturn ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("question %s requires options", q.ID)}\n\t\t}\n\t}\n\t// Store for the stream layer to pick up\n\t// This is set on a shared context that the stream layer reads\n\t// Return a special status indicating UI interaction needed\n\treturn ToolResult{\n\t\tStatus:      ResultStatusPending,\n\t\tResult:      "questionnaire_paused",\n\t\tQuestionnaire: questions, // custom field on ToolResult\n\t}\n}\n\n// Add to ToolResult struct:\ntype ToolResult struct {\n\t// ... existing fields ...\n\tQuestionnaire []domain.Question // set when questionnaire tool needs UI interaction\n}\n
+Acceptance: Execute validates questions, returns ResultStatusPending with Questionnaire populated
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+## MILESTONE: 4 - Stream Integration
+Pattern: Mode Interrupt / State Machine
+Objective: Integrate the questionnaire into the stream loop as a new mode (ModeQuestionnaire), handling the pause/resume cycle and wiring it into the key event dispatch.
+Success: When the questionnaire tool is called, the stream pauses in ModeQuestionnaire, the QuestionnairePrompt renders, user answers all questions, and the stream resumes with the structured result injected as a tool response.
+Diagram: stream → tool_calls → questionnaire returns Pending → set ModeQuestionnaire → init QuestionnairePrompt → render loop → user keys → HandleKey → submitCurrent per question → all complete → build ToolResult with answers JSON → resume stream
+
+### TASK: 4.1 - Add ModeQuestionnaire to modes
+Layer: Interface
+What: Add ModeQuestionnaire to the Mode enum in internal/app/modes.go and its String() method.
+Why: New mode for the questionnaire interaction flow, distinct from ModeAuthorize.
+Files: ~ internal/app/modes.go
+Snippet: const (\n\t// ... existing modes ...\n\tModeAuthorize\n\tModeQuestionnaire  // awaiting user questionnaire responses\n)\n\nfunc (m Mode) String() string {\n\t// ...\n\tcase ModeQuestionnaire:\n\t\treturn "questionnaire"\n\t// ...\n}\n
+Acceptance: ModeQuestionnaire compiles, String() returns "questionnaire"
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 4.2 - Add questionnaire context to streamState
+Layer: Application
+What: Add questionnairePrompt *ui.QuestionnairePrompt and questionnaireToolCall partialTool to streamState in stream.go.
+Why: The stream needs to hold the questionnaire UI state and know which tool call to resolve upon completion.
+Files: ~ internal/app/stream.go
+Snippet: // In streamState struct:\n\tquestionnairePrompt  *ui.QuestionnairePrompt  // non-nil when in ModeQuestionnaire\n\tquestionnaireToolIdx int                      // index into partialTools for the questionnaire call\n\nfunc (m *Model) setQuestionnaireMode(questions []domain.Question, toolIdx int) {\n\tm.mode = ModeQuestionnaire\n\tm.stream.active = false\n\tm.stream.questionnairePrompt = ui.NewQuestionnairePrompt(questions, m.width)\n\tm.stream.questionnaireToolIdx = toolIdx\n\tm.updateViewportContent()\n}\n
+Acceptance: streamState holds questionnaire context, setQuestionnaireMode initializes it from questions
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 4.3 - Detect questionnaire tool in executeTools
+Layer: Application
+What: In executeTools, check if the current partial is the questionnaire tool returning Pending. If so, call setQuestionnaireMode and return nil to pause the stream.
+Why: The stream needs to intercept the questionnaire's pending result and switch to the questionnaire mode instead of treating it as a normal tool result.
+Files: ~ internal/app/stream.go
+Snippet: // In executeTools, after tool.Execute(args):\n\tif result.Status == tools.ResultStatusPending && result.Questionnaire != nil {\n\t\tm.setQuestionnaireMode(result.Questionnaire, i)\n\t\treturn nil // pause stream\n\t}\n
+Acceptance: When questionnaire tool returns Pending, stream enters ModeQuestionnaire instead of continuing
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 4.4 - Render questionnaire in View and wire key dispatch
+Layer: Interface
+What: In render.go View(), add case for ModeQuestionnaire that renders questionnairePrompt. In update.go handleKey, add case for ModeQuestionnaire that routes to questionnairePrompt.HandleKey and handles completion.
+Why: Wires the questionnaire into the main View/Update cycle. On completion (IsComplete), resolves the tool call with the answers JSON and resumes the stream.
+Files: ~ internal/app/render.go
+Files: ~ internal/app/update.go
+Snippet: // render.go - in View():\ncase ModeQuestionnaire:\n\tif m.stream.questionnairePrompt != nil {\n\t\tsections = append(sections, m.stream.questionnairePrompt.Render())\n\t}\n\n// update.go - in handleKey():\ncase ModeQuestionnaire:\n\treturn m.handleQuestionnaireKey(msg)\n\n// handleQuestionnaireKey:\nfunc (m Model) handleQuestionnaireKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {\n qp := m.stream.questionnairePrompt\n if qp == nil {\n  return m, nil\n }\n if qp.HandleKey(msg) {\n  m.updateViewportContent()\n  if qp.IsComplete() {\n   return m.resolveQuestionnaire()\n  }\n  return m, nil\n }\n return m, nil\n}\n\nfunc (m *Model) resolveQuestionnaire() (tea.Model, tea.Cmd) {\n qp := m.stream.questionnairePrompt\n result := qp.Result()\n \n // Build the tool result with answers JSON\n answersJSON, _ := json.Marshal(result)\n \n // Mark the questionnaire tool call as completed with the answers\n idx := m.stream.questionnaireToolIdx\n // Update the partial tool's result\n m.stream.partialTools[idx].result = ToolResult{\n  Status: ResultStatusSuccess,\n  Result: string(answersJSON),\n }\n \n // Clear questionnaire state\n m.stream.questionnairePrompt = nil\n m.stream.questionnaireToolIdx = -1\n \n // Resume stream with the questionnaire answer\n return m.resumeStreamAfterTool(idx)\n}\n
+Acceptance: Questionnaire renders in View, key events route through HandleKey, on completion resolves with answers JSON and resumes stream
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+## MILESTONE: 5 - Auth Mode Refactor
+Pattern: Extract Component / Reuse
+Objective: Refactor the authorization mode (from tool-authorization plan) to use the questionnaire component instead of its own yes/no + instructions UI. The auth mode becomes a thin wrapper that builds a single-question questionnaire and interprets the result.
+Success: ModeAuthorize uses the questionnaire component with a single yesno question. The existing AuthorizationContext maps to a Question/Answer pair. No duplicated UI code.
+Diagram: ModeAuthorize → builds QuestionnairePrompt with single yesno question("Proceed with <tool>?") → user answers yes/no + optional instructions → resolveAuthorization maps Answer.Value (bool) + Answer.Instructions to AuthResult
+
+### TASK: 5.1 - Replace AuthorizationPrompt with QuestionnairePrompt for auth mode
+Layer: Application
+What: In setAuthMode(), replace the old ui.AuthorizationPrompt initialization with a QuestionnairePrompt containing a single yesno question. Update ModeAuthorize rendering to use the questionnaire prompt.
+Why: Eliminates code duplication — auth mode reuses the same questionnaire component instead of maintaining its own yes/no + instructions UI.
+Files: ~ internal/app/stream.go
+Files: ~ internal/app/render.go
+Snippet: // setAuthMode now uses questionnaire:\nfunc (m *Model) setAuthMode() {\n\tctx := m.stream.authorizationCtx\n\tquestions := []domain.Question{\n\t\t{\n\t\t\tID:     "auth_" + ctx.ToolName,\n\t\t\tType:   domain.QuestionYesNo,\n\t\t\tPrompt: fmt.Sprintf("Proceed with %s?", ctx.ToolName),\n\t\t\tRequired: true,\n\t\t},\n\t}\n\tm.mode = ModeAuthorize\n\tm.stream.active = false\n\tm.stream.questionnairePrompt = ui.NewQuestionnairePrompt(questions, m.width)\n\tm.stream.questionnaireToolIdx = m.stream.pendingToolIndex\n\tm.updateViewportContent()\n}\n\n// render.go — ModeAuthorize now uses the same questionnaire rendering:\ncase ModeAuthorize:\n\tif m.stream.questionnairePrompt != nil {\n\t\tsections = append(sections, m.stream.questionnairePrompt.Render())\n\t}\n
+Acceptance: setAuthMode initializes a questionnaire with a single yesno question. ModeAuthorize renders via questionnairePrompt
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 5.2 - Wire ModeAuthorize key handling through questionnaire
+Layer: Interface
+What: In handleKey, update ModeAuthorize case to use questionnairePrompt.HandleKey. On completion, map the questionnaire answer to AuthResult and call the existing resolveAuthorization.
+Why: Auth mode key handling now goes through the questionnaire component. On completion, the boolean answer maps to Accepted/Rejected and instructions map to WithInstructions variants.
+Files: ~ internal/app/update.go
+Snippet: // In handleKey():\ncase ModeAuthorize:\n\treturn m.handleAuthQuestionnaireKey(msg)\n\nfunc (m Model) handleAuthQuestionnaireKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {\n\tqp := m.stream.questionnairePrompt\n\tif qp == nil {\n\t\treturn m, nil\n\t}\n\tif qp.HandleKey(msg) {\n\t\tm.updateViewportContent()\n\t\tif qp.IsComplete() {\n\t\t\treturn m.resolveAuthFromQuestionnaire()\n\t\t}\n\t\treturn m, nil\n\t}\n\treturn m, nil\n}\n\nfunc (m *Model) resolveAuthFromQuestionnaire() (tea.Model, tea.Cmd) {\n\tqp := m.stream.questionnairePrompt\n\tresult := qp.Result()\n\tif len(result.Answers) == 0 {\n\t\treturn m, nil\n\t}\n\tanswer := result.Answers[0]\n\t\n\t// Map bool answer to AuthResult\n\taccepted := false\n\tif boolVal, ok := answer.Value.(bool); ok {\n\t\taccepted = boolVal\n\t}\n\t\n\tvar authResult AuthResult\n\tif accepted {\n\t\tif answer.Instructions != "" {\n\t\t\tauthResult = AuthAcceptedWithInstructions\n\t\t} else {\n\t\t\tauthResult = AuthAccepted\n\t\t}\n\t} else {\n\t\tif answer.Instructions != "" {\n\t\t\tauthResult = AuthRejectedWithInstructions\n\t\t} else {\n\t\t\tauthResult = AuthRejected\n\t\t}\n\t}\n\t\n\t// Clear questionnaire state\n\tm.stream.questionnairePrompt = nil\n\treturn m.resolveAuthorization(authResult, answer.Instructions)\n}\n
+Acceptance: ModeAuthorize key handling goes through questionnaire. On completion, answer maps correctly to the 4 AuthResult variants. resolveAuthorization receives the mapped result.
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+### TASK: 5.3 - Remove old AuthorizationPrompt struct
+Layer: Interface
+What: Delete internal/ui/authorization.go (or deprecate the AuthorizationPrompt struct) since its functionality is now subsumed by the questionnaire component.
+Why: Eliminates the duplicated yes/no + instructions UI. Auth mode now purely uses the questionnaire component.
+Files: - internal/ui/authorization.go
+Snippet: // Remove or comment out the entire AuthorizationPrompt struct and its methods.\n// The auth mode now uses QuestionnairePrompt with a single yesno question.\n
+Acceptance: File removed, no references to AuthorizationPrompt remain in the codebase
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+## MILESTONE: 6 - System Prompt Update
+Pattern: Instruction Injection
+Objective: Add instructions to the system prompt explaining the questionnaire tool — when to use it, how to structure questions, and how to interpret answers.
+Success: System prompt includes a questionnaire tool section explaining all four question types with examples.
+Diagram: sys-prompt.go → DefaultAssistantPrompt() adds questionnaire section → explains types (yesno, radio, checkbox, text) → explains answer format
+
+### TASK: 6.1 - Add questionnaire tool instructions to system prompt
+Layer: Infrastructure
+What: Add a questionnaire tool section to the default system prompt in internal/config/sys-prompt.go explaining when and how to use it.
+Why: The LLM needs to know when to use the questionnaire tool (interviews, structured data collection, confirmation) and how to format questions properly.
+Files: ~ internal/config/sys-prompt.go
+Snippet: ## Questionnaire Tool\n- Use the questionnaire tool when you need to collect structured information from the user through an interactive interview.\n- Question types:\n  - yesno: Simple yes/no question. Answer returns a boolean.\n  - radio: Single selection from a list. Provide options array. Answer returns the selected option string.\n  - checkbox: Multiple selection from a list. Provide options array. Answer returns an array of selected option strings.\n  - text: Free-text answer. Answer returns a string.\n- Each question must have a unique id, type, and prompt.\n- For radio/checkbox, provide an options array with the available choices.\n- The user can add optional instructions/notes to any answer.\n- Answers are returned as {"answers": [{"id": "...", "value": ..., "instructions": "..."}]}\n- Use this for interviews, onboarding, configuration, or any multi-step information gathering.\n
+Acceptance: System prompt contains questionnaire instructions with all four types and usage guidelines
+Verification: cd /home/goglue/src/squid-os && go build ./...
+
+## MILESTONE: 7 - ToolResult Extension
+Pattern: Schema Extension
+Objective: Extend the ToolResult struct to support the Pending status and the Questionnaire field, enabling tools to signal that they need UI interaction before completing.
+Success: ToolResult has ResultStatusPending constant and Questionnaire field. Stream layer checks for this status to decide whether to enter questionnaire mode.
+Diagram: ToolResult → adds ResultStatusPending, Questionnaire []domain.Question → executeTools checks status → if Pending with Questionnaire set, switches mode
+
+### TASK: 7.1 - Add ResultStatusPending and Questionnaire to ToolResult
+Layer: Infrastructure
+What: Add ResultStatusPending constant and Questionnaire []domain.Question field to ToolResult struct in internal/tools/tools.go.
+Why: Enables tools to signal that they need UI interaction. The stream layer detects this status and enters the appropriate mode (questionnaire).
+Files: ~ internal/tools/tools.go
+Snippet: const (\n\tResultStatusSuccess   = success\n\tResultStatusError     = error\n\tResultStatusPending   = pending // tool requires UI interaction\n)\n\ntype ToolResult struct {\n\tStatus        string\n\tResult        string\n\tError         string\n\tDestructive   bool\n\tFiles         []config.FileEntry\n\tQuestionnaire []domain.Question // populated when Status == ResultStatusPending\n}\n
+Acceptance: ResultStatusPending constant added, Questionnaire field on ToolResult, compiles cleanly
+Verification: cd /home/goglue/src/squid-os && go build ./...

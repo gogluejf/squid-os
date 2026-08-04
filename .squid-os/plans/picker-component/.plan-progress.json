@@ -1,0 +1,94 @@
+{
+  "tasks": {
+    "1.1": {
+      "number": "1.1",
+      "status": "done",
+      "name": "Picker types and core logic",
+      "milestone": "Picker Component",
+      "milestone_number": "1",
+      "summary": {
+        "done": "Added Picker, PickerItem, PickerAction, PickerDisplayMode types to ui/command.go. Implemented core methods: FilteredItems (case-insensitive on Label+Meta), SelectedItem (returns full PickerItem), HandleKey (Up/Down/Tab navigation, Enter for select, Esc for cancel, single-char filtering with backspace, OnSelectionChange callback), RenderHeight (heading + filter + windowed items, max 15), SetDefaultSelected (matches Value or Label case-insensitive), and isPrintable helper. Kept PickerList as deprecated for now \u2014 removal comes in milestone 2.4.",
+        "failures": "None",
+        "lessons_learned": "Had to add tea import to command.go since HandleKey takes tea.KeyMsg. The existing PickerList stays as deprecated for now since milestone 2 migrates all call sites.",
+        "decisions": "PickerAction and PickerDisplayMode are exported types so callers can pattern-match on results. PickerItem.Value is the canonical identity field \u2014 confirm logic extracts from Value, not by parsing formatted strings. PickerMaxItems constant replaces maxPickerItems (15 rows, centered window). HandleKey uses string comparison on msg.String() matching existing picker conventions rather than key.Matches bindings.",
+        "confidence": "high",
+        "tradeoffs": "isPrintable uses a simple range check instead of unicode.IsLetter to match existing picker behavior and avoid pulling in extra imports. OnSelectionChange is called on navigation AND filter changes \u2014 callers can react to live selection updates (e.g. session preview)."
+      }
+    },
+    "1.2": {
+      "number": "1.2",
+      "status": "done",
+      "name": "Picker rendering with column modes",
+      "milestone": "Picker Component",
+      "milestone_number": "1",
+      "summary": {
+        "lessons_learned": "Render and RenderHeight must stay tightly synced \u2014 both use PickerMaxItems=15 and the same windowing math. The global index mapping (globalStart + visible index) is needed for selection comparison since we render a subset.",
+        "failures": "None",
+        "done": "Implemented Picker.Render(width) with all 4 display modes (ModeSingleCol, ModeLabelMeta, ModeLabelDesc, ModeLabelValue). Dynamic label column width based on max label length in visible window (min 8, +2 gap). Selection highlighting with BgSelected/TextAccent for selected row, BgFooter/TextMuted for non-selected. Windowed rendering shows max 15 items centered around selection (matching RenderHeight). Filter hint line shown when filter non-empty. 'No matches' line when filtered list empty. ModeLabelDesc truncates description to available width. Helper functions: padRight, truncateRight.",
+        "decisions": "Used inline lipgloss styles matching existing PickerList pattern (no new style constants in style package). Windowing centers around selection (selected - 7 to selected + 7) matching existing PickerList behavior. Description truncation uses '\u2026' character for visual clarity.",
+        "confidence": "high",
+        "tradeoffs": "Label column width is dynamic per-visible-window rather than fixed \u2014 means it can shift slightly as you scroll, but avoids wasting space on short labels. ModeLabelValue falls back to Meta then Value for the right column since callers may set either."
+      }
+    },
+    "2.1": {
+      "number": "2.1",
+      "status": "done",
+      "name": "Replace PickerList in Model with single Picker field",
+      "milestone": "Migration",
+      "milestone_number": "2",
+      "summary": {
+        "decisions": "pickerContext string identifies picker type ('model', 'skill', 'session', 'image', 'system') replacing the implicit knowledge from which PickerList field was populated. confirmActivePicker dispatches on pickerContext to domain-specific confirm methods. PickerItem.Value is the canonical identity field for all picker types.",
+        "done": "Replaced 6 picker-related fields (modelPicker, skillPicker, sessionPicker, sessionPickerRaw, filePicker, filePickerFor) in Model struct with activePicker (ui.Picker), pickerContext (string), and pickerPayload (interface{}). Updated all call sites: modelsLoadedMsg handler in update.go builds PickerItem slice with ModeLabelValue, openSkillPicker in skill.go uses ModeLabelDesc, startLoad in session.go uses ModeLabelMeta with OnSelectionChange callback, executeCommand image/system cases use ModeSingleCol. Replaced handlePickerKey/confirmPicker with handleActivePicker/confirmActivePicker that delegate key handling to activePicker.HandleKey(). Updated recalcLayout and render.go to use activePicker for all picker modes. Removed dead code: sessionPickerSelectedRaw, filterSessionList, matchesFilter functions. Cleaned up unused imports across all modified files.",
+        "tradeoffs": "pickerPayload as interface{} for model entries avoids coupling \u2014 could also embed entries directly in the Picker items, but confirmModelPicker needs the full ModelEntry struct for provider/context fields not in PickerItem",
+        "lessons_learned": "Had to be careful with import cleanup \u2014 accidentally removed ui import from update.go when removing fmt. The OnSelectionChange callback on the Picker component elegantly replaces the manual previewSession calls after every navigation in the session picker.",
+        "confidence": "high",
+        "failures": "None"
+      }
+    },
+    "2.2": {
+      "number": "2.2",
+      "status": "done",
+      "name": "Refactor key handling and confirm logic",
+      "milestone": "Migration",
+      "milestone_number": "2",
+      "summary": {
+        "done": "Already completed as part of task 2.1. handlePickerKey and confirmPicker were replaced with handleActivePicker and confirmActivePicker in pickers.go. input.go routes all picker modes through handleActivePicker. recalcLayout uses activePicker.RenderHeight(). render.go uses activePicker.Render() for all picker modes. No stale references remain.",
+        "tradeoffs": "None \u2014 this task was subsumed by 2.1 which did a broader refactor",
+        "lessons_learned": "Task 2.1 was broader than planned \u2014 it already covered all the ground of 2.2. The plan's task boundaries overlapped significantly.",
+        "failures": "None",
+        "confidence": "high",
+        "decisions": "handleActivePicker handles viewport scroll keys (PageUp/PageDown/ScrollUp/ScrollDown) before delegating to activePicker.HandleKey for navigation/filtering/confirm/cancel"
+      }
+    },
+    "2.3": {
+      "number": "2.3",
+      "status": "done",
+      "name": "Migrate all picker creation sites",
+      "milestone": "Migration",
+      "milestone_number": "2",
+      "summary": {
+        "failures": "None",
+        "lessons_learned": "Tasks 2.1, 2.2, and 2.3 all overlap heavily. The plan over-partitioned the migration \u2014 replacing Model fields, key handling, and creation sites are naturally done together since they interdepend.",
+        "decisions": "None",
+        "done": "Already completed as part of task 2.1. All picker creation sites migrated: skill picker uses ModeLabelDesc, session picker uses ModeLabelMeta with OnSelectionChange callback, model picker uses ModeLabelValue, file/system pickers use ModeSingleCol. No NewPickerList calls remain in the codebase. sessionPickerRaw parallel array eliminated \u2014 raw name comes from PickerItem.Value.",
+        "tradeoffs": "None \u2014 subsumed by 2.1",
+        "confidence": "high"
+      }
+    },
+    "2.4": {
+      "number": "2.4",
+      "status": "done",
+      "name": "Clean up and remove old PickerList code",
+      "milestone": "Migration",
+      "milestone_number": "2",
+      "summary": {
+        "tradeoffs": "Removed CommandSelectedStyle reference from picker rendering (was only used by PickerList, Picker uses inline styles)",
+        "confidence": "high",
+        "decisions": "Completed the strangler pattern \u2014 old PickerList type fully removed after all call sites migrated",
+        "done": "Removed PickerList type, NewPickerList function, and all PickerList methods (FilteredItems, MoveUp, MoveDown, SelectedItem, RenderHeight, Render) from ui/command.go. Removed maxPickerItems constant and separator comment. Verified no PickerList or NewPickerList references remain in internal/.",
+        "failures": "None",
+        "lessons_learned": "None"
+      }
+    }
+  }
+}

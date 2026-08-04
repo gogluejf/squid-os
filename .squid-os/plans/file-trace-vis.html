@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan: file-trace-vis</title>
+<style>
+/*
+ * Planner Design System v0.3.0
+ * ─────────────────────────────
+ * Uses CSS variables from the host environment (claude.ai).
+ * Falls back to sensible dark-mode defaults if hosted standalone.
+ *
+ * Available host variables (auto light/dark):
+ *   --color-background-primary/-secondary/-tertiary
+ *   --color-text-primary/-secondary/-tertiary
+ *   --color-border-tertiary/-secondary/-primary
+ *   --color-background-info/-success/-warning/-danger
+ *   --color-text-info/-success/-warning/-danger
+ *   --color-border-info/-success/-warning/-danger
+ *   --font-sans / --font-mono
+ *   --border-radius-md (8px) / --border-radius-lg (12px)
+ *
+ * Standalone fallbacks (dark theme):
+ */
+:root {
+  --color-background-primary:   #161b22;
+  --color-background-secondary: #1c2333;
+  --color-background-tertiary:  #0d1117;
+  --color-background-info:      #1a2f4a;
+  --color-background-success:   #122d1f;
+  --color-background-warning:   #2d2a1a;
+  --color-background-danger:    #2d1a1a;
+  --color-text-primary:         #c9d1d9;
+  --color-text-secondary:       #8b949e;
+  --color-text-tertiary:        #6e7681;
+  --color-text-info:            #58a6ff;
+  --color-text-success:         #3fb950;
+  --color-text-warning:         #d29922;
+  --color-text-danger:          #f85149;
+  --color-border-tertiary:      rgba(255,255,255,0.08);
+  --color-border-secondary:     rgba(255,255,255,0.15);
+  --color-border-primary:       rgba(255,255,255,0.25);
+  --color-border-info:          rgba(88,166,255,0.4);
+  --color-border-success:       rgba(63,185,80,0.5);
+  --color-border-warning:       rgba(210,153,34,0.4);
+  --color-border-danger:        rgba(248,81,73,0.4);
+  --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono:  "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  background: var(--color-background-tertiary);
+  padding: 24px;
+}
+
+/* ── THEME TOGGLE (standalone only) ── */
+.theme-toggle {
+  position: fixed; top: 12px; right: 12px; z-index: 100;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-secondary);
+  font: 13px var(--font-sans); cursor: pointer;
+  transition: color 150ms ease;
+}
+.theme-toggle:hover { color: var(--color-text-primary); }
+
+/* ── LAYOUT ── */
+.plan-container { max-width: 960px; margin: 0 auto; }
+.plan-section   { margin-bottom: 40px; }
+
+/* ── HEADER ── */
+.plan-header {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 40px;
+}
+.plan-header__title {
+  font-size: 1.75rem; font-weight: 500;
+  color: var(--color-text-primary);
+  margin-bottom: 8px;
+}
+.plan-header__meta {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  font-size: 13px; color: var(--color-text-secondary);
+  margin-bottom: 14px;
+}
+.plan-header__objective {
+  font-size: 14px; line-height: 1.7;
+  color: var(--color-text-secondary);
+  padding: 12px 16px;
+  background: var(--color-background-info);
+  border-left: 2px solid var(--color-border-info);
+  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
+}
+
+/* ── SECTION HEADINGS ── */
+.section-title {
+  font-size: 13px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--color-text-tertiary);
+  margin-bottom: 16px;
+}
+
+/* ── STATE ANALYSIS ── */
+.state-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin-bottom: 12px;
+}
+.state-block {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 16px 18px;
+}
+.state-block__title {
+  font-size: 12px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .07em; margin-bottom: 10px;
+}
+.state-block--current .state-block__title { color: var(--color-text-tertiary); }
+.state-block--desired .state-block__title { color: var(--color-text-info); }
+.state-block__list { list-style: none; }
+.state-block__list li {
+  padding: 3px 0 3px 14px; position: relative;
+  font-size: 13px; line-height: 1.6; color: var(--color-text-secondary);
+}
+.state-block__list li::before {
+  content: "–"; position: absolute; left: 0;
+  color: var(--color-text-tertiary);
+}
+.gap-analysis {
+  background: var(--color-background-warning);
+  border: 0.5px solid var(--color-border-warning);
+  border-radius: var(--border-radius-md);
+  padding: 14px 18px;
+}
+.gap-analysis__title {
+  font-size: 12px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--color-text-warning);
+  margin-bottom: 8px;
+}
+
+/* ── DIAGRAM ── */
+.diagram-container {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 24px;
+  display: flex; flex-direction: column; align-items: center;
+}
+.diagram-canvas {
+  max-width: 100%;
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+}
+
+/* ── PHASE BLOCK ── */
+.phase-block {
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.phase-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px;
+  background: var(--color-background-secondary);
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+.phase-number {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  background: var(--color-background-info);
+  border: 0.5px solid var(--color-border-info);
+  color: var(--color-text-info);
+  font: 500 13px var(--font-mono);
+  border-radius: var(--border-radius-md);
+  flex-shrink: 0;
+}
+.phase-title  { font-size: 15px; font-weight: 500; color: var(--color-text-primary); flex-grow: 1; }
+.phase-step-count {
+  font-size: 12px; color: var(--color-text-secondary);
+  background: var(--color-background-tertiary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: 20px; padding: 2px 10px;
+}
+.phase-steps { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+/* ── STEP ── */
+.step {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+}
+.step__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 14px;
+  padding: 14px 18px 12px;
+}
+.step__number {
+  font: 500 11px var(--font-mono);
+  color: var(--color-text-secondary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: 6px;
+  padding: 3px 7px;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.step__title {
+  font-size: 15px; font-weight: 500;
+  color: var(--color-text-primary);
+  line-height: 1.4; padding-top: 2px;
+}
+.step__concept-badge {
+  font-size: 11px; font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: 20px; padding: 3px 10px;
+  white-space: nowrap; margin-top: 2px;
+}
+/* keep old badge variant classes for script compat, all map to same style */
+.step__concept-badge--primary,
+.step__concept-badge--accent,
+.step__concept-badge--success,
+.step__concept-badge--warning,
+.step__concept-badge--info { /* inherits base style above */ }
+
+.step__divider {
+  height: 0.5px;
+  background: var(--color-border-tertiary);
+  margin: 0 18px;
+}
+.step__body {
+  padding: 14px 18px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.step__description {
+  font-size: 14px; line-height: 1.7;
+  color: var(--color-text-secondary);
+}
+
+/* Shared field label */
+.step__files-title,
+.step__data-title,
+.step__contract-title,
+.step__example-title,
+.step__changes-title,
+.step__verification-title {
+  font-size: 11px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: .07em;
+  color: var(--color-text-tertiary);
+  margin-bottom: 6px;
+}
+
+/* Files */
+.step__files { display: flex; flex-direction: column; gap: 6px; }
+.step__file-path {
+  display: inline-block;
+  font: 12px var(--font-mono);
+  color: var(--color-text-info);
+  background: var(--color-background-info);
+  border: 0.5px solid var(--color-border-info);
+  border-radius: 6px;
+  padding: 3px 8px;
+  margin: 2px;
+}
+
+/* Data shapes */
+.step__data { display: flex; flex-direction: column; gap: 6px; }
+.step__data-code {
+  font: 12px/1.7 var(--font-mono);
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  padding: 10px 14px;
+  white-space: pre; overflow-x: auto;
+}
+
+/* Contract */
+.step__contract { display: flex; flex-direction: column; gap: 6px; }
+.step__contract-body {
+  font: 12px/1.7 var(--font-mono);
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  padding: 10px 14px;
+}
+
+/* Example — most important: left accent bar, no fill */
+.step__example { display: flex; flex-direction: column; gap: 6px; }
+.step__example-code {
+  font: 12px/1.7 var(--font-mono);
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-left: 2px solid var(--color-border-success);
+  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
+  padding: 12px 16px;
+  white-space: pre; overflow-x: auto;
+}
+
+/* Changes */
+.step__changes { display: flex; flex-direction: column; gap: 6px; }
+.step__changes-list { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.step__changes-list li {
+  display: flex; gap: 8px;
+  font-size: 13px; line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+.step__changes-list li::before {
+  content: "→"; color: var(--color-text-tertiary);
+  flex-shrink: 0; margin-top: 1px;
+}
+
+/* Verify */
+.step__verification { display: flex; flex-direction: column; gap: 6px; }
+.step__verification-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.step__verification-list li {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 13px; line-height: 1.6;
+  color: var(--color-text-secondary);
+  background: var(--color-background-success);
+  border: 0.5px solid var(--color-border-success);
+  border-radius: var(--border-radius-md);
+  padding: 7px 10px;
+}
+.step__verification-list li::before {
+  content: "✓"; color: var(--color-text-success);
+  flex-shrink: 0; margin-top: 1px; font-weight: 500;
+}
+
+/* ── CALLOUT ── */
+.callout {
+  border-radius: var(--border-radius-md);
+  padding: 12px 16px;
+  margin: 12px 0;
+  border-left: 2px solid;
+  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
+}
+.callout--info    { background: var(--color-background-info);    border-color: var(--color-border-info); }
+.callout--warning { background: var(--color-background-warning); border-color: var(--color-border-warning); }
+.callout--error   { background: var(--color-background-danger);  border-color: var(--color-border-danger); }
+.callout--success { background: var(--color-background-success); border-color: var(--color-border-success); }
+.callout__title {
+  font-size: 12px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .07em; margin-bottom: 6px;
+}
+.callout--info    .callout__title { color: var(--color-text-info); }
+.callout--warning .callout__title { color: var(--color-text-warning); }
+.callout--error   .callout__title { color: var(--color-text-danger); }
+.callout--success .callout__title { color: var(--color-text-success); }
+.callout__body { font-size: 13px; line-height: 1.7; color: var(--color-text-secondary); }
+
+/* ── SUMMARY ── */
+.summary {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 24px;
+}
+.summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+.summary__stat {
+  text-align: center; padding: 16px 12px;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-md);
+}
+.summary__stat-value {
+  display: block; font-size: 2rem; font-weight: 500;
+  color: var(--color-text-primary);
+}
+.summary__stat-label {
+  display: block; font-size: 11px;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase; letter-spacing: .07em;
+  margin-top: 4px;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 600px) {
+  body { padding: 14px; }
+  .state-grid { grid-template-columns: 1fr; }
+}
+
+/* ── PRINT ── */
+@media print {
+  body { background: white; padding: 0; }
+  .theme-toggle { display: none !important; }
+  .step, .phase-block { break-inside: avoid; }
+}
+
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="document.documentElement.classList.toggle('light')" title="Toggle light/dark theme">
+  <span class="theme-toggle__icon">&#9789;</span>
+  <span class="theme-toggle__label">Theme</span>
+</button>
+
+<div class="plan-container">
+
+  <!-- ========== HEADER ========== -->
+  <header class="plan-header">
+    <h1 class="plan-header__title">file-trace-vis</h1>
+    <div class="plan-header__meta">
+      <span class="plan-header__meta-item">&#128193; /home/goglue/src/squid-os</span>
+      <span class="plan-header__meta-item">&#128336; 2026-05-21 18:01:38</span>
+    </div>
+    <div class="plan-header__objective">
+      <strong>Objective:</strong> Add file tracking and diff capture to tool calls
+    </div>
+  </header>
+
+  <!-- ========== PLAN CONTENT ========== -->
+  <!-- 
+    This is where the plan data is injected by generate-plan.sh.
+    The plan content should use the design system classes defined in design-system.css.
+    
+    EXTENSIBILITY NOTE: The injected content can freely use any combination of:
+    - Component classes (step, concept-card, workflow, callout, badge, etc.)
+    - Utility classes (u-flex, u-gap-md, u-text-muted, etc.)
+    - Design tokens via inline style (var(--color-*), var(--space-*), etc.)
+    - Custom classes — just reference the tokens for visual consistency
+    
+    If a component doesn't exist for your needs, compose from primitives
+    or add inline markup using the token variables.
+  -->
+  <div class="plan-section">
+<h2 class="section-title">State Analysis</h2>
+<div class="state-grid">
+  <div class="state-block state-block--current">
+    <div class="state-block__title">Current State</div>
+    <ul class="state-block__list"><li>Tool calls return only Status, Result, Error — no file tracking</li><li>ToolCallEntry.Execution has no metadata about files touched</li><li>UI shows tool results as plain text, no visibility into what changed</li><li>No diff capture, no checksums, no file trace</li></ul>
+  </div>
+  <div class="state-block state-block--desired">
+    <div class="state-block__title">Desired State</div>
+    <ul class="state-block__list"><li>Each tool result tracks files: path, operation (write/create/edit/read/unlink/mkdir/rmdir), checksum, timestamp, diff</li><li>Checksums prevent editing files changed externally since last read</li><li>Bash uses strace to detect file modifications</li><li>UI displays affected files in green after each tool call (drawcanvas style)</li><li>Side-by-side diff (left old, right new, no overlap) for file changes</li></ul>
+  </div>
+</div>
+<div class="gap-analysis"><div class="gap-analysis__title">Gap Analysis</div><ul class="state-block__list"><li>Need FileEntry struct in config</li><li>Need Files field on ToolResult and ToolCallEntry.Execution</li><li>Need diff utility (standard library only, no external deps)</li><li>Need to instrument read_file, write_file, edit_file</li><li>Need strace wrapper for bash</li><li>Need FileTracker middleware for cross-tool checksum validation</li><li>Need UI rendering for file list and diff blocks</li></ul></div>
+</div>
+<div class="plan-section">
+<h2 class="section-title">Execution Workflow</h2>
+<div class="diagram-container">
+<canvas id="wf-canvas" width="860" height="616" class="diagram-canvas"></canvas>
+<script>
+(function(){
+  var c = document.getElementById('wf-canvas');
+  if (!c) return;
+  var ctx = c.getContext('2d');
+  var W = c.width;
+  var labels = ["Data Model","Diff Engine","File Tool Instrumentation","Bash File Tracking","Tool Execution Integration","UI Rendering","Consistency &amp; Cleanup"];
+  var metas  = ["Adds FileEntry struct and checksum utility","Creates diff package with side-by-side rendering","Instruments read_file, write_file, edit_file with tracking","Adds strace-based file tracking to bash tool","Creates FileTracker, extends ToolResult, integrates into stream","Adds file list, diff blocks, collapsed file count","JSON round-trip, backward compatibility"];
+  var crits  = [false,true,true,false,true,false,false];
+  var nW = 400, nH = 56, gap = 28, startY = 28;
+  var cx = Math.floor(W / 2);
+
+  for (var i = 0; i < labels.length; i++) {
+    var y = startY + i * (nH + gap);
+    var x = cx - Math.floor(nW / 2);
+    var isCrit = crits[i];
+
+    ctx.fillStyle   = isCrit ? '#2d1a1a' : '#1c2333';
+    ctx.strokeStyle = isCrit ? '#f85149' : '#30363d';
+    ctx.lineWidth = isCrit ? 2 : 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x, y, nW, nH, 8);
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = isCrit ? '#f85149' : '#58a6ff';
+    ctx.beginPath();
+    ctx.arc(x + 24, y + Math.floor(nH/2), 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0d1117';
+    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(i + 1, x + 24, y + Math.floor(nH/2));
+
+    ctx.fillStyle = '#c9d1d9';
+    ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(labels[i], x + 48, y + 10);
+
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(metas[i], x + 48, y + 30);
+
+    if (i < labels.length - 1) {
+      var ay = y + nH, ny = startY + (i+1) * (nH + gap);
+      ctx.strokeStyle = '#484f58'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(cx, ay); ctx.lineTo(cx, ny); ctx.stroke();
+      ctx.fillStyle = '#484f58';
+      ctx.beginPath();
+      ctx.moveTo(cx, ny);
+      ctx.lineTo(cx - 6, ny - 10);
+      ctx.lineTo(cx + 6, ny - 10);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+})();
+</script>
+</div></div>
+<div class="plan-section">
+<h2 class="section-title">Phases &amp; Steps</h2>
+<div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">1</span>
+  <h3 class="phase-title">Data Model</h3>
+  <span class="phase-step-count">1 steps</span>
+</div>
+<div class="phase-steps">
+<div class="step">
+<div class="step__header">
+  <span class="step__number">1.1</span>
+  <h4 class="step__title">Add FileEntry struct to config</h4>
+  <span class="step__concept-badge">Data Model</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Define FileEntry struct in config/session.go and add Files []FileEntry to ToolCallEntry.Execution.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/config/session.go</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">FileEntry struct: Path string, Trace string, Checksum string, Time time.Time, Diff string</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">New exported struct after ToolCallEntry definition</p></div>
+<div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">type FileEntry struct {
+	Path     string    `json:&quot;path&quot;`
+	Trace    string    `json:&quot;trace&quot;`
+	Checksum string    `json:&quot;checksum&quot;`
+	Time     time.Time `json:&quot;time&quot;`
+	Diff     string    `json:&quot;diff,omitempty&quot;`
+}
+
+// Add to the Execution anonymous struct in ToolCallEntry:
+	Execution struct {
+		Status     string          `json:&quot;status,omitempty&quot;`
+		Result     string          `json:&quot;result,omitempty&quot;`
+		Error      string          `json:&quot;error,omitempty&quot;`
+		Tokens     int             `json:&quot;tokens,omitempty&quot;`
+		DurationMs int64           `json:&quot;duration_ms&quot;`
+		Files      []FileEntry     `json:&quot;files,omitempty&quot;`
+	} `json:&quot;execution,omitempty&quot;`</pre></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Add FileEntry struct after ToolCallEntry definition</li><li>Add Files []FileEntry to the Execution struct inside ToolCallEntry</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./...</li></ul></div>
+</div></div>
+</div></div>
+<div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">2</span>
+  <h3 class="phase-title">Diff Engine</h3>
+  <span class="phase-step-count">1 steps</span>
+</div>
+<div class="phase-steps">
+<div class="step">
+<div class="step__header">
+  <span class="step__number">2.1</span>
+  <h4 class="step__title">Create diff utility package</h4>
+  <span class="step__concept-badge">Diff Engine</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Create internal/diff/diff.go with LCS-based side-by-side diff. Standard library only, no external deps.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/diff/diff.go</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">func Diff(oldContent, newContent string) string — returns formatted side-by-side diff or &quot;&quot; if identical</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">func Diff(oldContent, newContent string) string</p></div>
+<div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">package diff
+
+import (
+	&quot;fmt&quot;
+	&quot;strings&quot;
+)
+
+// Diff returns a side-by-side diff of oldContent vs newContent.
+// Left column shows old lines (- prefix for removed), right shows new (+ for added).
+// Unchanged lines appear in both columns with space prefix.
+// Returns &quot;&quot; if content is identical.
+func Diff(oldContent, newContent string) string {
+	if oldContent == newContent {
+		return &quot;&quot;
+	}
+	oldLines := strings.Split(oldContent, &quot;\n&quot;)
+	newLines := strings.Split(newContent, &quot;\n&quot;)
+	return formatSideBySide(oldLines, newLines)
+}
+
+func formatSideBySide(oldLines, newLines []string) string {
+	// 1. Compute LCS via dynamic programming
+	matrix := lcsMatrix(oldLines, newLines)
+	// 2. Backtrack to produce edit operations
+	ops := backtrack(matrix, oldLines, newLines)
+	// 3. Render side-by-side columns
+	return renderOps(ops, oldLines, newLines)
+}
+
+// lcsMatrix builds the DP table for LCS.
+func lcsMatrix(a, b []string) [][]int {
+	m, n := len(a), len(b)
+	matrix := make([][]int, m+1)
+	for i := 0; i &lt;= m; i++ {
+		matrix[i] = make([]int, n+1)
+	}
+	for i := 1; i &lt;= m; i++ {
+		for j := 1; j &lt;= n; j++ {
+			if a[i-1] == b[j-1] {
+				matrix[i][j] = matrix[i-1][j-1] + 1
+			} else if matrix[i-1][j] &gt; matrix[i][j-1] {
+				matrix[i][j] = matrix[i-1][j]
+			} else {
+				matrix[i][j] = matrix[i][j-1]
+			}
+		}
+	}
+	return matrix
+}
+
+type opType int
+const (
+	opEqual  opType = iota
+	opRemove          // in old only
+	opAdd             // in new only
+)
+
+type editOp struct {
+	typ  opType
+	i, j int // indices into old/new lines
+}
+
+func backtrack(matrix [][]int, a, b []string) []editOp {
+	var ops []editOp
+	i, j := len(a), len(b)
+	for i &gt; 0 || j &gt; 0 {
+		if i &gt; 0 &amp;&amp; j &gt; 0 &amp;&amp; a[i-1] == b[j-1] {
+			ops = append(ops, editOp{opEqual, i - 1, j - 1})
+			i--; j--
+		} else if j &gt; 0 &amp;&amp; (i == 0 || matrix[i][j-1] &gt;= matrix[i-1][j]) {
+			ops = append(ops, editOp{opAdd, i, j - 1})
+			j--
+		} else {
+			ops = append(ops, editOp{opRemove, i - 1, j})
+			i--
+		}
+	}
+	// Reverse to get forward order
+	for l, r := 0, len(ops)-1; l &lt; r; l, r = l+1, r-1 {
+		ops[l], ops[r] = ops[r], ops[l]
+	}
+	return ops
+}
+
+func renderOps(ops []editOp, oldLines, newLines []string) string {
+	// Collect aligned pairs (left, right) for each row
+	type row struct{ left, right string }
+	var rows []row
+	for _, op := range ops {
+		switch op.typ {
+		case opEqual:
+			rows = append(rows, row{&quot;  &quot; + oldLines[op.i], &quot;  &quot; + newLines[op.j]})
+		case opRemove:
+			rows = append(rows, row{&quot;- &quot; + oldLines[op.i], &quot;&quot;})
+		case opAdd:
+			rows = append(rows, row{&quot;&quot;, &quot;+ &quot; + newLines[op.j]})
+		}
+	}
+	// Determine max left column width
+	maxLeft := 20
+	for _, r := range rows {
+		if w := len(r.left); w &gt; maxLeft {
+			maxLeft = w
+		}
+	}
+	// Format with padding
+	var b strings.Builder
+	for _, r := range rows {
+		left := r.left
+		for len(left) &lt; maxLeft {
+			left += &quot; &quot;
+		}
+		b.WriteString(fmt.Sprintf(&quot;%s │ %s\n&quot;, left, r.right))
+	}
+	return strings.TrimRight(b.String(), &quot;\n&quot;)
+}</pre></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Create new file internal/diff/diff.go</li><li>Implement LCS-based line diff with backtrack</li><li>formatSideBySide produces aligned left/right columns with │ separator</li><li>&quot;-&quot; prefix on left for removed, &quot;+&quot; on right for added, &quot;  &quot; for unchanged</li><li>Return &quot;&quot; if content identical</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./...</li><li>go test ./internal/diff/...</li></ul></div>
+</div></div>
+</div></div>
+<div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">3</span>
+  <h3 class="phase-title">File Tool Instrumentation</h3>
+  <span class="phase-step-count">2 steps</span>
+</div>
+<div class="phase-steps">
+<div class="step">
+<div class="step__header">
+  <span class="step__number">3.1</span>
+  <h4 class="step__title">Instrument edit_file with diff capture and checksum</h4>
+  <span class="step__concept-badge">File Tool Instrumentation</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Modify EditFile to capture diff before applying, compute post-edit checksum, and attach FileEntry.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/tools/core.go</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">FileEntry with trace=&quot;edit&quot;, diff from diff.Diff(), checksum of resulting file</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">Modify existing EditFile Execute function</p></div>
+<div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">// In EditFile.Execute, restructure to capture diff:
+
+// 1. Read original (already done)
+oldContent := string(data)
+
+// 2. Compute new content
+newContent := oldContent
+if replaceAll {
+	for {
+		idx := indexStr(newContent, oldStr)
+		if idx == -1 {
+			break
+		}
+		newContent = newContent[:idx] + newStr + newContent[idx+len(oldStr):]
+	}
+} else {
+	idx := indexStr(newContent, oldStr)
+	if idx == -1 {
+		// No-op: still return FileEntry with trace=&quot;read&quot;
+		fe := config.FileEntry{
+			Path:     path,
+			Trace:    &quot;read&quot;,
+			Checksum: util.ComputeChecksum(data),
+			Time:     time.Now(),
+		}
+		return ToolResult{
+			Status: ResultStatusSuccess,
+			Result: &quot;old_string not found, no changes made&quot;,
+			Files:  []config.FileEntry{fe},
+		}
+	}
+	newContent = newContent[:idx] + newStr + newContent[idx+len(oldStr):]
+}
+
+// 3. Write if changed
+if oldContent != newContent {
+	if err := os.WriteFile(path, []byte(newContent), 0644); err != nil {
+		return ToolResult{Status: ResultStatusError, Error: ...}
+	}
+	diffText := diff.Diff(oldContent, newContent)
+	fe := config.FileEntry{
+		Path:     path,
+		Trace:    &quot;edit&quot;,
+		Checksum: util.ComputeChecksum([]byte(newContent)),
+		Time:     time.Now(),
+		Diff:     diffText,
+	}
+	return ToolResult{Status: ResultStatusSuccess, Result: msg, Files: []config.FileEntry{fe}}
+}
+
+// 4. No content change
+return ToolResult{Status: ResultStatusSuccess, Result: &quot;no changes made&quot;, Files: []config.FileEntry{{
+	Path: path, Trace: &quot;read&quot;, Checksum: util.ComputeChecksum(data), Time: time.Now(),
+}}}</pre></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Import &quot;squid-os/internal/diff&quot;, &quot;squid-os/internal/util&quot;, &quot;squid-os/internal/config&quot;, &quot;time&quot;</li><li>Compute new content in memory before writing</li><li>Capture diff.Diff(oldContent, newContent) only when content actually changes</li><li>Build FileEntry with appropriate trace, checksum, and diff</li><li>Always return Files (even on no-op, with trace=&quot;read&quot;)</li><li>Remove writeIfChanged helper (no longer needed, logic is inline now)</li><li>DEPS:      1.1, 1.2, 2.1</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./...</li></ul></div>
+</div></div>
+<div class="step">
+<div class="step__header">
+  <span class="step__number">3.2</span>
+  <h4 class="step__title">Instrument write_file with diff capture</h4>
+  <span class="step__concept-badge">File Tool Instrumentation</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Modify WriteFile to detect overwrite vs create, capture diff if overwriting, and build FileEntry.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/tools/core.go</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">FileEntry with trace=&quot;write&quot; or &quot;create&quot;, diff if overwriting existing file</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">Modify existing WriteFile Execute function</p></div>
+<div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">// In WriteFile.Execute:
+
+path = resolvePath(path)
+var trace, diffText string
+
+if _, statErr := os.Stat(path); statErr == nil {
+	// File exists — this is an overwrite, capture diff
+	oldData, readErr := os.ReadFile(path)
+	if readErr == nil {
+		diffText = diff.Diff(string(oldData), content)
+	}
+	trace = &quot;write&quot;
+} else {
+	trace = &quot;create&quot;
+}
+
+if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	return ToolResult{Status: ResultStatusError, Error: ...}
+}
+
+fe := config.FileEntry{
+	Path:     path,
+	Trace:    trace,
+	Checksum: util.ComputeChecksum([]byte(content)),
+	Time:     time.Now(),
+	Diff:     diffText,
+}
+return ToolResult{
+	Status:  ResultStatusSuccess,
+	Result:  fmt.Sprintf(&quot;file written: %s (%d bytes)&quot;, path, len(content)),
+	Files:   []config.FileEntry{fe},
+}</pre></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Import &quot;squid-os/internal/diff&quot;, &quot;squid-os/internal/util&quot;, &quot;squid-os/internal/config&quot;, &quot;time&quot;</li><li>Add os.Stat before write to detect overwrite</li><li>If file exists, read old content and compute diff</li><li>Set trace to &quot;write&quot; (overwrite) or &quot;create&quot; (new file)</li><li>Always attach FileEntry to result</li><li>DEPS:      1.1, 1.2, 2.1</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./...</li></ul></div>
+</div></div>
+</div></div>
+<div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">4</span>
+  <h3 class="phase-title">Bash File Tracking</h3>
+  <span class="phase-step-count">0 steps</span>
+</div>
+<div class="phase-steps">
+</div></div>
+<div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">5</span>
+  <h3 class="phase-title">Tool Execution Integration</h3>
+  <span class="phase-step-count">2 steps</span>
+</div>
+<div class="phase-steps">
+<div class="step">
+<div class="step__header">
+  <span class="step__number">5.1</span>
+  <h4 class="step__title">Add Files field to ToolResult</h4>
+  <span class="step__concept-badge">Tool Execution Integration</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Extend ToolResult with Files []config.FileEntry so tools can return file tracking data.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/tools/tools.go</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">ToolResult gains Files []config.FileEntry field</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">Modify ToolResult struct definition</p></div>
+<div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">import (
+	&quot;encoding/json&quot;
+	&quot;fmt&quot;
+	&quot;squid-os/internal/config&quot;
+	&quot;squid-os/internal/style&quot;
+)
+
+type ToolResult struct {
+	Status string               // ResultStatusSuccess or ResultStatusError
+	Result string               // output on success
+	Error  string               // error message on failure
+	Files  []config.FileEntry   // files touched by this tool
+}</pre></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Add Files []config.FileEntry field to ToolResult</li><li>Add import &quot;squid-os/internal/config&quot; to tools.go</li><li>DEPS:      1.1</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./...</li></ul></div>
+</div></div>
+<div class="step">
+<div class="step__header">
+  <span class="step__number">5.2</span>
+  <h4 class="step__title">Create FileTracker middleware</h4>
+  <span class="step__concept-badge">Tool Execution Integration</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Add FileTracker that accumulates file checksums across tool calls in a batch, validating before edit/write.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/tools/tracker.go (new file)</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">FileTracker with Track(entry), Validate(path), GetChecksum(path)</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">func NewFileTracker() *FileTracker
+           func (ft *FileTracker) Track(entry config.FileEntry)
+           func (ft *FileTracker) Validate(path string) error</p></div>
+<div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">package tools
+
+import (
+	&quot;fmt&quot;
+	&quot;os&quot;
+	&quot;squid-os/internal/config&quot;
+	&quot;squid-os/internal/util&quot;
+	&quot;sync&quot;
+)
+
+type FileTracker struct {
+	mu        sync.Mutex
+	checksums map[string]string
+}
+
+func NewFileTracker() *FileTracker {
+	return &amp;FileTracker{
+		checksums: make(map[string]string),
+	}
+}
+
+func (ft *FileTracker) Track(entry config.FileEntry) {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	ft.checksums[entry.Path] = entry.Checksum
+}
+
+func (ft *FileTracker) Validate(path string) error {
+	ft.mu.Lock()
+	defer ft.mu.Unlock()
+	stored, ok := ft.checksums[path]
+	if !ok {
+		return nil // not tracked, no conflict
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf(&quot;cannot read %s for validation: %w&quot;, path, err)
+	}
+	current := util.ComputeChecksum(data)
+	if current != stored {
+		return fmt.Errorf(&quot;file on disk changed: %s&quot;, path)
+	}
+	return nil
+}</pre></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Create new file internal/tools/tracker.go</li><li>Implement FileTracker with mutex-protected map</li><li>Track updates checksum from FileEntry</li><li>Validate compares stored checksum against disk</li><li>Returns descriptive error on mismatch</li><li>DEPS:      1.2, 5.1</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./...</li></ul></div>
+</div></div>
+</div></div>
+<div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">6</span>
+  <h3 class="phase-title">UI Rendering</h3>
+  <span class="phase-step-count">2 steps</span>
+</div>
+<div class="phase-steps">
+<div class="step">
+<div class="step__header">
+  <span class="step__number">6.1</span>
+  <h4 class="step__title">Add file list rendering to tool boxes</h4>
+  <span class="step__concept-badge">UI Rendering</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Add green-tinted file list after tool result content. Shows path, trace, and checksum prefix.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/ui/message.go</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">func renderFileList(files []config.FileEntry, s style.StyleLabel) string</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">func renderFileList(files []config.FileEntry, s style.StyleLabel) string</p></div>
+<div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">func renderFileList(files []config.FileEntry, s style.StyleLabel) string {
+	if len(files) == 0 {
+		return &quot;&quot;
+	}
+	var b strings.Builder
+	for _, f := range files {
+		checksum := f.Checksum
+		if len(checksum) &gt; 10 {
+			checksum = checksum[:10]
+		}
+		line := fmt.Sprintf(&quot;%s (%s) %s&quot;, f.Path, f.Trace, checksum)
+		b.WriteString(s.Content.Render(line) + &quot;\n&quot;)
+	}
+	return strings.TrimRight(b.String(), &quot;\n&quot;)
+}
+
+// In renderToolCallsInline, after appending result/error content:
+if len(tc.Execution.Files) &gt; 0 {
+	content = append(content, renderFileList(tc.Execution.Files, t.Style))
+}</pre></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Add renderFileList helper function in message.go</li><li>In renderToolCallsInline, after existing content appending, check len(tc.Execution.Files) &gt; 0</li><li>Append file list to content slice</li><li>Use tool's Content style for rendering (inherits tool bg/fg)</li><li>DEPS:      1.1, 5.3</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./...</li></ul></div>
+</div></div>
+<div class="step">
+<div class="step__header">
+  <span class="step__number">6.2</span>
+  <h4 class="step__title">Add diff block rendering</h4>
+  <span class="step__concept-badge">UI Rendering</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Add side-by-side diff blocks inside expanded tool calls after the file list.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/ui/message.go</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">For each FileEntry with non-empty Diff, append pre-formatted diff as styled content</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">Modify renderToolCallsInline to include diff blocks</p></div>
+<div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">// In renderToolCallsInline, after renderFileList:
+for _, f := range tc.Execution.Files {
+	if f.Diff != &quot;&quot; {
+		// Diff is pre-formatted side-by-side text from diff.Diff()
+		// Wrap in content style for consistent bg/fg
+		content = append(content, t.Style.Content.Render(f.Diff))
+	}
+}</pre></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>After renderFileList in content, loop over tc.Execution.Files</li><li>For each with non-empty Diff, append as styled content block</li><li>Diff is plain pre-formatted text with side-by-side columns</li><li>Content style handles background/foreground consistency</li><li>DEPS:      6.1, 2.1</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./...</li></ul></div>
+</div></div>
+</div></div>
+<div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">7</span>
+  <h3 class="phase-title">Consistency &amp; Cleanup</h3>
+  <span class="phase-step-count">2 steps</span>
+</div>
+<div class="phase-steps">
+<div class="step">
+<div class="step__header">
+  <span class="step__number">7.1</span>
+  <h4 class="step__title">Verify JSON serialization round-trip</h4>
+  <span class="step__concept-badge">Consistency &amp; Cleanup</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Verify FileEntry serializes/deserializes correctly, especially time.Time handling.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/config/session.go</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">Verify FileEntry JSON tags, time serializes as RFC3339</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">N/A — verification step</p></div>
+<div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">func TestFileEntryRoundTrip(t *testing.T) {
+	entry := config.FileEntry{
+		Path:     &quot;/tmp/test.txt&quot;,
+		Trace:    &quot;edit&quot;,
+		Checksum: &quot;abc123&quot;,
+		Time:     time.Now(),
+		Diff:     &quot;  hello │  hello\n- old  │ + new&quot;,
+	}
+	data, _ := json.Marshal(entry)
+	var entry2 config.FileEntry
+	json.Unmarshal(data, &amp;entry2)
+	if entry2.Path != entry.Path {
+		t.Errorf(&quot;path mismatch: %s != %s&quot;, entry2.Path, entry.Path)
+	}
+	if entry2.Diff != entry.Diff {
+		t.Errorf(&quot;diff mismatch&quot;)
+	}
+}</pre></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Review all json tags on FileEntry (should use RFC3339 for time.Time by default in Go)</li><li>Verify old sessions without Files field load fine (nil slice)</li><li>DEPS:      1.1</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go test ./internal/config/...</li></ul></div>
+</div></div>
+<div class="step">
+<div class="step__header">
+  <span class="step__number">7.2</span>
+  <h4 class="step__title">Verify backward compatibility</h4>
+  <span class="step__concept-badge">Consistency &amp; Cleanup</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Ensure existing session files without Files field load without errors, and UI handles nil Files gracefully.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/config/session.go, internal/ui/message.go</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">Files defaults to nil on old sessions, renderFileList handles nil</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">N/A — verification step</p></div>
+<div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">// renderFileList guards with len(files) == 0 check
+// Loop in renderToolCallsInline checks len(tc.Execution.Files) &gt; 0
+// nil slice has len() == 0, so all guards pass safely</pre></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Verify all render code paths handle nil Files (they use len() &gt; 0, which is safe for nil)</li><li>Load an existing .chat.json from disk, verify no panic</li><li>DEPS:      6.1</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./...</li><li>Load an old session file, verify it renders without error</li></ul></div>
+</div></div>
+</div></div>
+</div>
+<div class="plan-section">
+<h2 class="section-title">Summary</h2>
+<div class="summary">
+<div class="summary__grid">
+  <div class="summary__stat">
+    <span class="summary__stat-value">7</span>
+    <span class="summary__stat-label">Phases</span>
+  </div>
+  <div class="summary__stat">
+    <span class="summary__stat-value">10</span>
+    <span class="summary__stat-label">Steps</span>
+  </div>
+</div>
+</div>
+</div>
+
+
+</div>
+
+</body></html>

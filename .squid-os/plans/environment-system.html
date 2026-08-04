@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan: environment-system</title>
+<style>
+/*
+ * Planner Design System v0.3.0
+ * ─────────────────────────────
+ * Uses CSS variables from the host environment (claude.ai).
+ * Falls back to sensible dark-mode defaults if hosted standalone.
+ *
+ * Available host variables (auto light/dark):
+ *   --color-background-primary/-secondary/-tertiary
+ *   --color-text-primary/-secondary/-tertiary
+ *   --color-border-tertiary/-secondary/-primary
+ *   --color-background-info/-success/-warning/-danger
+ *   --color-text-info/-success/-warning/-danger
+ *   --color-border-info/-success/-warning/-danger
+ *   --font-sans / --font-mono
+ *   --border-radius-md (8px) / --border-radius-lg (12px)
+ *
+ * Standalone fallbacks (dark theme):
+ */
+:root {
+  --color-background-primary:   #161b22;
+  --color-background-secondary: #1c2333;
+  --color-background-tertiary:  #0d1117;
+  --color-background-info:      #1a2f4a;
+  --color-background-success:   #122d1f;
+  --color-background-warning:   #2d2a1a;
+  --color-background-danger:    #2d1a1a;
+  --color-text-primary:         #c9d1d9;
+  --color-text-secondary:       #8b949e;
+  --color-text-tertiary:        #6e7681;
+  --color-text-info:            #58a6ff;
+  --color-text-success:         #3fb950;
+  --color-text-warning:         #d29922;
+  --color-text-danger:          #f85149;
+  --color-border-tertiary:      rgba(255,255,255,0.08);
+  --color-border-secondary:     rgba(255,255,255,0.15);
+  --color-border-primary:       rgba(255,255,255,0.25);
+  --color-border-info:          rgba(88,166,255,0.4);
+  --color-border-success:       rgba(63,185,80,0.5);
+  --color-border-warning:       rgba(210,153,34,0.4);
+  --color-border-danger:        rgba(248,81,73,0.4);
+  --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono:  "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  background: var(--color-background-tertiary);
+  padding: 24px;
+}
+
+/* ── THEME TOGGLE (standalone only) ── */
+.theme-toggle {
+  position: fixed; top: 12px; right: 12px; z-index: 100;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-secondary);
+  font: 13px var(--font-sans); cursor: pointer;
+  transition: color 150ms ease;
+}
+.theme-toggle:hover { color: var(--color-text-primary); }
+
+/* ── LAYOUT ── */
+.plan-container { max-width: 960px; margin: 0 auto; }
+.plan-section   { margin-bottom: 40px; }
+
+/* ── HEADER ── */
+.plan-header {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 40px;
+}
+.plan-header__title {
+  font-size: 1.75rem; font-weight: 500;
+  color: var(--color-text-primary);
+  margin-bottom: 8px;
+}
+.plan-header__meta {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  font-size: 13px; color: var(--color-text-secondary);
+  margin-bottom: 14px;
+}
+.plan-header__objective {
+  font-size: 14px; line-height: 1.7;
+  color: var(--color-text-secondary);
+  padding: 12px 16px;
+  background: var(--color-background-info);
+  border-left: 2px solid var(--color-border-info);
+  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
+}
+
+/* ── SECTION HEADINGS ── */
+.section-title {
+  font-size: 13px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--color-text-tertiary);
+  margin-bottom: 16px;
+}
+
+/* ── STATE ANALYSIS ── */
+.state-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin-bottom: 12px;
+}
+.state-block {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 16px 18px;
+}
+.state-block__title {
+  font-size: 12px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .07em; margin-bottom: 10px;
+}
+.state-block--current .state-block__title { color: var(--color-text-tertiary); }
+.state-block--desired .state-block__title { color: var(--color-text-info); }
+.state-block__list { list-style: none; }
+.state-block__list li {
+  padding: 3px 0 3px 14px; position: relative;
+  font-size: 13px; line-height: 1.6; color: var(--color-text-secondary);
+}
+.state-block__list li::before {
+  content: "–"; position: absolute; left: 0;
+  color: var(--color-text-tertiary);
+}
+.gap-analysis {
+  background: var(--color-background-warning);
+  border: 0.5px solid var(--color-border-warning);
+  border-radius: var(--border-radius-md);
+  padding: 14px 18px;
+}
+.gap-analysis__title {
+  font-size: 12px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--color-text-warning);
+  margin-bottom: 8px;
+}
+
+/* ── DIAGRAM ── */
+.diagram-container {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 24px;
+  display: flex; flex-direction: column; align-items: center;
+}
+.diagram-canvas {
+  max-width: 100%;
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+}
+
+/* ── PHASE BLOCK ── */
+.phase-block {
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.phase-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px;
+  background: var(--color-background-secondary);
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+.phase-number {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  background: var(--color-background-info);
+  border: 0.5px solid var(--color-border-info);
+  color: var(--color-text-info);
+  font: 500 13px var(--font-mono);
+  border-radius: var(--border-radius-md);
+  flex-shrink: 0;
+}
+.phase-title  { font-size: 15px; font-weight: 500; color: var(--color-text-primary); flex-grow: 1; }
+.phase-step-count {
+  font-size: 12px; color: var(--color-text-secondary);
+  background: var(--color-background-tertiary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: 20px; padding: 2px 10px;
+}
+.phase-steps { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+/* ── STEP ── */
+.step {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+}
+.step__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 14px;
+  padding: 14px 18px 12px;
+}
+.step__number {
+  font: 500 11px var(--font-mono);
+  color: var(--color-text-secondary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: 6px;
+  padding: 3px 7px;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.step__title {
+  font-size: 15px; font-weight: 500;
+  color: var(--color-text-primary);
+  line-height: 1.4; padding-top: 2px;
+}
+.step__concept-badge {
+  font-size: 11px; font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: 20px; padding: 3px 10px;
+  white-space: nowrap; margin-top: 2px;
+}
+/* keep old badge variant classes for script compat, all map to same style */
+.step__concept-badge--primary,
+.step__concept-badge--accent,
+.step__concept-badge--success,
+.step__concept-badge--warning,
+.step__concept-badge--info { /* inherits base style above */ }
+
+.step__divider {
+  height: 0.5px;
+  background: var(--color-border-tertiary);
+  margin: 0 18px;
+}
+.step__body {
+  padding: 14px 18px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.step__description {
+  font-size: 14px; line-height: 1.7;
+  color: var(--color-text-secondary);
+}
+
+/* Shared field label */
+.step__files-title,
+.step__data-title,
+.step__contract-title,
+.step__example-title,
+.step__changes-title,
+.step__verification-title {
+  font-size: 11px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: .07em;
+  color: var(--color-text-tertiary);
+  margin-bottom: 6px;
+}
+
+/* Files */
+.step__files { display: flex; flex-direction: column; gap: 6px; }
+.step__file-path {
+  display: inline-block;
+  font: 12px var(--font-mono);
+  color: var(--color-text-info);
+  background: var(--color-background-info);
+  border: 0.5px solid var(--color-border-info);
+  border-radius: 6px;
+  padding: 3px 8px;
+  margin: 2px;
+}
+
+/* Data shapes */
+.step__data { display: flex; flex-direction: column; gap: 6px; }
+.step__data-code {
+  font: 12px/1.7 var(--font-mono);
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  padding: 10px 14px;
+  white-space: pre; overflow-x: auto;
+}
+
+/* Contract */
+.step__contract { display: flex; flex-direction: column; gap: 6px; }
+.step__contract-body {
+  font: 12px/1.7 var(--font-mono);
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  padding: 10px 14px;
+}
+
+/* Example — most important: left accent bar, no fill */
+.step__example { display: flex; flex-direction: column; gap: 6px; }
+.step__example-code {
+  font: 12px/1.7 var(--font-mono);
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-left: 2px solid var(--color-border-success);
+  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
+  padding: 12px 16px;
+  white-space: pre; overflow-x: auto;
+}
+
+/* Changes */
+.step__changes { display: flex; flex-direction: column; gap: 6px; }
+.step__changes-list { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.step__changes-list li {
+  display: flex; gap: 8px;
+  font-size: 13px; line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+.step__changes-list li::before {
+  content: "→"; color: var(--color-text-tertiary);
+  flex-shrink: 0; margin-top: 1px;
+}
+
+/* Verify */
+.step__verification { display: flex; flex-direction: column; gap: 6px; }
+.step__verification-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.step__verification-list li {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 13px; line-height: 1.6;
+  color: var(--color-text-secondary);
+  background: var(--color-background-success);
+  border: 0.5px solid var(--color-border-success);
+  border-radius: var(--border-radius-md);
+  padding: 7px 10px;
+}
+.step__verification-list li::before {
+  content: "✓"; color: var(--color-text-success);
+  flex-shrink: 0; margin-top: 1px; font-weight: 500;
+}
+
+/* ── CALLOUT ── */
+.callout {
+  border-radius: var(--border-radius-md);
+  padding: 12px 16px;
+  margin: 12px 0;
+  border-left: 2px solid;
+  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
+}
+.callout--info    { background: var(--color-background-info);    border-color: var(--color-border-info); }
+.callout--warning { background: var(--color-background-warning); border-color: var(--color-border-warning); }
+.callout--error   { background: var(--color-background-danger);  border-color: var(--color-border-danger); }
+.callout--success { background: var(--color-background-success); border-color: var(--color-border-success); }
+.callout__title {
+  font-size: 12px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .07em; margin-bottom: 6px;
+}
+.callout--info    .callout__title { color: var(--color-text-info); }
+.callout--warning .callout__title { color: var(--color-text-warning); }
+.callout--error   .callout__title { color: var(--color-text-danger); }
+.callout--success .callout__title { color: var(--color-text-success); }
+.callout__body { font-size: 13px; line-height: 1.7; color: var(--color-text-secondary); }
+
+/* ── SUMMARY ── */
+.summary {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 24px;
+}
+.summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+.summary__stat {
+  text-align: center; padding: 16px 12px;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-md);
+}
+.summary__stat-value {
+  display: block; font-size: 2rem; font-weight: 500;
+  color: var(--color-text-primary);
+}
+.summary__stat-label {
+  display: block; font-size: 11px;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase; letter-spacing: .07em;
+  margin-top: 4px;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 600px) {
+  body { padding: 14px; }
+  .state-grid { grid-template-columns: 1fr; }
+}
+
+/* ── PRINT ── */
+@media print {
+  body { background: white; padding: 0; }
+  .theme-toggle { display: none !important; }
+  .step, .phase-block { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="document.documentElement.classList.toggle('light')" title="Toggle light/dark theme">
+  <span class="theme-toggle__icon">&#9789;</span>
+  <span class="theme-toggle__label">Theme</span>
+</button>
+
+<div class="plan-container">
+
+  <!-- ========== HEADER ========== -->
+  <header class="plan-header">
+    <h1 class="plan-header__title">environment-system</h1>
+    <div class="plan-header__meta">
+      <span class="plan-header__meta-item">&#128193; /home/goglue/src/squid-os</span>
+      <span class="plan-header__meta-item">&#128336; 2026-05-20 15:13:30</span>
+    </div>
+    <div class="plan-header__objective">
+      <strong>Objective:</strong> Environment system: load sys1 message with OS info, skills, squid-os dirs, and project context after system prompt
+    </div>
+  </header>
+
+  <!-- ========== PLAN CONTENT ========== -->
+  <!-- 
+    This is where the plan data is injected by generate-plan.sh.
+    The plan content should use the design system classes defined in design-system.css.
+    
+    EXTENSIBILITY NOTE: The injected content can freely use any combination of:
+    - Component classes (step, concept-card, workflow, callout, badge, etc.)
+    - Utility classes (u-flex, u-gap-md, u-text-muted, etc.)
+    - Design tokens via inline style (var(--color-*), var(--space-*), etc.)
+    - Custom classes — just reference the tokens for visual consistency
+    
+    If a component doesn't exist for your needs, compose from primitives
+    or add inline markup using the token variables.
+  -->
+<div class="plan-section">
+<h2 class="section-title">State Analysis</h2>
+<div class="state-grid">
+  <div class="state-block state-block--current">
+    <div class="state-block__title">Current State</div>
+    <ul class="state-block__list"><li>- Settings has: Provider, Model, Thinking, SystemPromptFile, MaxHistory, LastSessionName, AutoSave, AutoLoadLastSession, ContextWindow, DebugEnabled</li><li>- Paths has: Root, Sessions, SysPrompts, Logs, Skills — no projectDir, memoryDir, tempFolder</li><li>- No Environment domain; env vars are hardcoded in system prompt</li><li>- No Project domain; no way to track working directory or project list</li><li>- No tools for listing/switching projects</li><li>- Footer shows model/provider/tokens — no working directory</li><li>- default.md system prompt may contain hardcoded paths</li><li>- chat_session.clear() pushes system prompt, config, tools messages — no environment message</li><li>- tools/init() hardcodes the list of tools; no working directory context</li></ul>
+  </div>
+  <div class="state-block state-block--desired">
+    <div class="state-block__title">Desired State</div>
+    <ul class="state-block__list"><li>- Settings has ProjectDir, MemoryDir, TempFolder with defaults ~/src, ~/memory, ~/tmp</li><li>- Paths has ProjectDir, MemoryDir, TempFolder derived from Settings</li><li>- Environment domain: OSInfo, Project, Environment structs with rich data</li><li>- Environment loads at init with: [OS] section, [Skill] section, [Squid-OS] section, [Project] section</li><li>- Environment injected as internal message after system prompt on new session</li><li>- Two new tools: list_projects and set_working_dir</li><li>- Footer shows working directory with (git) indicator</li><li>- default.md cleaned of hardcoded paths</li><li>- Working directory context available to bash/read/edit/write tools</li></ul>
+  </div>
+</div>
+<div class="gap-analysis"><div class="gap-analysis__title">Gap Analysis</div><ul class="state-block__list"><li>- Add 3 new Settings fields with defaults in DefaultSettings() and fail-fast validation</li><li>- Extend Paths with 3 new paths, ensure corresponding dirs</li><li>- Create internal/environment package with domain types and loader</li><li>- Create internal/environment/osinfo.go for OS info collection</li><li>- Create internal/environment/loader.go for the full environment message builder</li><li>- Modify chat_session.clear() to load and push environment message</li><li>- Modify Paths to accept projectDir, memoryDir, tempFolder from settings</li><li>- Add workingDir field to app Model</li><li>- Implement list_projects and set_working_dir tools with proper schemas</li><li>- Modify FooterData to include WorkingDir and GitStatus</li><li>- Update footer rendering to show project path</li><li>- Clean default.md of hardcoded paths</li><li>- Add environment refresh on working directory change</li></ul></div>
+</div><div class="plan-section">
+<h2 class="section-title">Execution Workflow</h2>
+<div class="diagram-container">
+<canvas id="wf-canvas" width="860" height="532" class="diagram-canvas"></canvas>
+<script>
+(function(){
+  var c = document.getElementById('wf-canvas');
+  if (!c) return;
+  var ctx = c.getContext('2d');
+  var W = c.width;
+  var labels = ["Phase 1: Settings and Paths","Phase 2: Environment Domain","Phase 3: Session Integration","Phase 4: Working Directory and Project Tools","Phase 5: Footer","Phase 6: Cleanup"];
+  var metas  = ["Add ProjectDir, MemoryDir, TempFolder to Settings and Paths structs","Create Environment, OSInfo, ProjectInfo structs and loader","Inject environment message after system prompt in chat_session","Add workingDir to Model, implement list_projects and set_working_dir tools","Show working directory with git status in footer","Clean default.md, update bash tool for working directory context"];
+  var crits  = [true,true,true,true,false,false];
+  var nW = 400, nH = 56, gap = 28, startY = 28;
+  var cx = Math.floor(W / 2);
+
+  for (var i = 0; i < labels.length; i++) {
+    var y = startY + i * (nH + gap);
+    var x = cx - Math.floor(nW / 2);
+    var isCrit = crits[i];
+
+    ctx.fillStyle   = isCrit ? '#2d1a1a' : '#1c2333';
+    ctx.strokeStyle = isCrit ? '#f85149' : '#30363d';
+    ctx.lineWidth = isCrit ? 2 : 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x, y, nW, nH, 8);
+    ctx.fill(); ctx.stroke();
+
+    // Phase number bubble
+    ctx.fillStyle = isCrit ? '#f85149' : '#58a6ff';
+    ctx.beginPath();
+    ctx.arc(x + 24, y + Math.floor(nH/2), 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0d1117';
+    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(i + 1, x + 24, y + Math.floor(nH/2));
+
+    // Label
+    ctx.fillStyle = '#c9d1d9';
+    ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(labels[i], x + 48, y + 10);
+
+    // Meta
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(metas[i], x + 48, y + 30);
+
+    // Arrow to next
+    if (i < labels.length - 1) {
+      var ay = y + nH, ny = startY + (i+1) * (nH + gap);
+      ctx.strokeStyle = '#484f58'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(cx, ay); ctx.lineTo(cx, ny); ctx.stroke();
+      ctx.fillStyle = '#484f58';
+      ctx.beginPath();
+      ctx.moveTo(cx, ny);
+      ctx.lineTo(cx - 6, ny - 10);
+      ctx.lineTo(cx + 6, ny - 10);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+})();
+</script>
+</div></div><div class="plan-section">
+<h2 class="section-title">Phases &amp; Steps</h2>
+<div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">1</span>
+  <h3 class="phase-title">Settings and Paths</h3>
+  <span class="phase-step-count">3 steps</span>
+</div>
+<div class="phase-steps"><div class="step">
+<div class="step__header">
+  <span class="step__number">1.1</span>
+  <h4 class="step__title">Add domain directory fields to Settings</h4>
+  <span class="step__concept-badge">Settings and Paths</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Add ProjectDir, MemoryDir, TempFolder to the Settings struct with fail-fast defaults so the rest of the app gets reliable paths from config.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/config/settings.go</code> </div>
+  <div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">Settings struct gains:
+            ProjectDir  string `json:&quot;project_dir&quot;`   (default: &quot;src&quot; — appended to home dir)
+            MemoryDir   string `json:&quot;memory_dir&quot;`    (default: &quot;memory&quot; — appended to home dir)
+            TempFolder  string `json:&quot;temp_folder&quot;`   (default: &quot;tmp&quot; — appended to home dir)</pre></div>
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">DefaultSettings() Settings — existing function, add three new defaults.</p></div>
+  <div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">    func DefaultSettings() Settings {
+        return Settings{
+            ...existing fields...,
+            ProjectDir:  &quot;src&quot;,
+            MemoryDir:   &quot;memory&quot;,
+            TempFolder:  &quot;tmp&quot;,
+        }
+    }</pre></div>
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Add three new string fields to Settings struct</li><li>   - Add corresponding defaults in DefaultSettings()</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles without error</li></ul></div>
+</div></div><div class="step">
+<div class="step__header">
+  <span class="step__number">1.2</span>
+  <h4 class="step__title">Extend Paths with domain directories</h4>
+  <span class="step__concept-badge">Settings and Paths</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Add ProjectDir, MemoryDir, TempFolder computed paths to the Paths struct so consumers get resolved absolute paths.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/config/paths.go</code> </div>
+  <div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">Paths struct gains:
+            ProjectDir string  // config/squid-os/../.. + settings.ProjectDir (i.e. ~/src)
+            MemoryDir  string  // ~ + settings.MemoryDir (i.e. ~/memory)
+            TempFolder string  // ~ + settings.TempFolder (i.e. ~/tmp)</pre></div>
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">    NewPaths(configDir string, homeDir string) Paths  // change signature to accept homeDir
+    (p Paths) ProjectDirPath() string  // returns resolved absolute path
+    (p Paths) MemoryDirPath() string   // returns resolved absolute path
+    (p Paths) TempDirPath() string     // returns resolved absolute path</p></div>
+  <div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">    type Paths struct {
+        Root       string
+        Sessions   string
+        SysPrompts string
+        Logs       string
+        Skills     string
+        ProjectDir string  // ~/src
+        MemoryDir  string  // ~/memory
+        TempFolder string  // ~/tmp
+    }
+
+    func NewPaths(configDir string, homeDir string, s Settings) Paths {
+        return Paths{
+            Root:       configDir,
+            Sessions:   filepath.Join(configDir, &quot;sessions&quot;),
+            SysPrompts: filepath.Join(configDir, &quot;sys-prompts&quot;),
+            Logs:       filepath.Join(configDir, &quot;logs&quot;),
+            Skills:     filepath.Join(configDir, &quot;skills&quot;),
+            ProjectDir: filepath.Join(homeDir, s.ProjectDir),
+            MemoryDir:  filepath.Join(homeDir, s.MemoryDir),
+            TempFolder: filepath.Join(homeDir, s.TempFolder),
+        }
+    }</pre></div>
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Add ProjectDir, MemoryDir, TempFolder to Paths struct</li><li>   - Change NewPaths signature to accept homeDir and Settings</li><li>   - Update EnsureDirs() to also create ProjectDir, MemoryDir, TempFolder if they don't exist</li><li>   - Update all callers of NewPaths (main.go, headless/headless.go) to pass homeDir and settings</li><li>   - ROLLBACK: Revert NewPaths signature, remove new fields, revert callers</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles without error</li></ul></div>
+</div></div><div class="step">
+<div class="step__header">
+  <span class="step__number">1.3</span>
+  <h4 class="step__title">Update main.go NewPaths call</h4>
+  <span class="step__concept-badge">Settings and Paths</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Pass homeDir and settings to NewPaths so the paths are resolved correctly.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">main.go</code> </div>
+  
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">paths := config.NewPaths(cfgDir, home, settings)</p></div>
+  
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Move settings load before NewPaths call (or pass settings after seeding defaults)</li><li>   - Change: paths := config.NewPaths(cfgDir) → paths := config.NewPaths(cfgDir, home, settings)</li><li>   - Ensure settings is loaded (via DefaultSettings() or LoadSettings) before NewPaths is called</li><li>   - Note: settings is loaded AFTER seeding in the current flow — we need to load defaults first just to resolve paths, then reload from file</li><li>   - Better approach: use DefaultSettings() for NewPaths, then LoadSettings(paths) for the actual config</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div></div>
+</div><div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">2</span>
+  <h3 class="phase-title">Environment Domain</h3>
+  <span class="phase-step-count">3 steps</span>
+</div>
+<div class="phase-steps"><div class="step">
+<div class="step__header">
+  <span class="step__number">2.1</span>
+  <h4 class="step__title">Create Environment struct</h4>
+  <span class="step__concept-badge">Environment Domain</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Define the Environment domain type that holds all sections of the sys1 environment message.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/environment/environment.go</code> </div>
+  <div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">    type Environment struct {
+        OS       OSInfo
+        Skills   []SkillEntry
+        SquidOS  SquidOSInfo
+        Project  *ProjectInfo  // nil if no working dir set
+    }
+
+    type OSInfo struct {
+        OS              string   // runtime.GOOS
+        Arch            string   // runtime.GOARCH
+        Home            string   // os.UserHomeDir()
+        GitInstalled    bool
+        TreeInstalled   bool
+    }
+
+    type SkillEntry struct {
+        Name        string
+        Description string
+    }
+
+    type SquidOSInfo struct {
+        SkillsDir     string
+        LogsDir       string
+        SysPromptsDir string
+        SessionsDir   string
+        DebugEnabled  bool
+    }
+
+    type ProjectInfo struct {
+        Path              string   // absolute path to working directory
+        IsUnderProjectDir bool     // is it under ~/src or equivalent
+        IsGitRepo        bool     // has .git
+        Projects         []ProjectEntry  // all projects (dirs with .git under ProjectDir)
+        FileTree         string   // tree output if git or under projects dir
+    }
+
+    type ProjectEntry struct {
+        Name    string
+        Path    string
+        IsGit   bool
+    }</pre></div>
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">N/A — struct definitions only</p></div>
+  <div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">    package environment
+
+    import (
+        &quot;runtime&quot;
+    )
+
+    type Environment struct {
+        OS       OSInfo
+        Skills   []SkillEntry
+        SquidOS  SquidOSInfo
+        Project  *ProjectInfo
+    }
+
+    type OSInfo struct {
+        OS              string
+        Arch            string
+        Home            string
+        GitInstalled    bool
+        TreeInstalled   bool
+    }
+
+    type SkillEntry struct {
+        Name        string
+        Description string
+    }
+
+    type SquidOSInfo struct {
+        SkillsDir     string
+        LogsDir       string
+        SysPromptsDir string
+        SessionsDir   string
+        DebugEnabled  bool
+    }
+
+    type ProjectInfo struct {
+        Path              string
+        IsUnderProjectDir bool
+        IsGitRepo        bool
+        Projects         []ProjectEntry
+        FileTree         string
+    }
+
+    type ProjectEntry struct {
+        Name    string
+        Path    string
+        IsGit   bool
+    }</pre></div>
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Create new package internal/environment/ with environment.go</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div><div class="step">
+<div class="step__header">
+  <span class="step__number">2.2</span>
+  <h4 class="step__title">Create OS info loader</h4>
+  <span class="step__concept-badge">Environment Domain</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Implement the OS section data collection.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/environment/osinfo.go</code> </div>
+  
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">    func CollectOSInfo(homeDir string) OSInfo</p></div>
+  <div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">    package environment
+
+    import (
+        &quot;os/exec&quot;
+        &quot;runtime&quot;
+    )
+
+    func CollectOSInfo(homeDir string) OSInfo {
+        return OSInfo{
+            OS:              runtime.GOOS,
+            Arch:            runtime.GOARCH,
+            Home:            homeDir,
+            GitInstalled:    exec.Command(&quot;git&quot;, &quot;--version&quot;).Run() == nil,
+            TreeInstalled:   exec.Command(&quot;tree&quot;, &quot;--version&quot;).Run() == nil,
+        }
+    }</pre></div>
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Create internal/environment/osinfo.go</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div><div class="step">
+<div class="step__header">
+  <span class="step__number">2.3</span>
+  <h4 class="step__title">Create Environment loader</h4>
+  <span class="step__concept-badge">Environment Domain</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Implement the full environment loader that assembles all sections and returns a formatted string for the sys1 message.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/environment/loader.go</code> </div>
+  <div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">Uses config.Paths, skills.SkillRegistry, runtime, os, os/exec</pre></div>
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">    func LoadEnvironment(paths config.Paths, settings config.Settings, homeDir string, workingDir string) Environment
+    func FormatEnvironment(env Environment) string</p></div>
+  <div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">    func LoadEnvironment(paths config.Paths, settings config.Settings, homeDir string, workingDir string) Environment {
+        env := Environment{
+            OS:       CollectOSInfo(homeDir),
+            Skills:   loadSkillEntries(paths.Skills),
+            SquidOS: SquidOSInfo{
+                SkillsDir:     paths.Skills,
+                LogsDir:       paths.Logs,
+                SysPromptsDir: paths.SysPrompts,
+                SessionsDir:   paths.Sessions,
+                DebugEnabled:  settings.DebugEnabled,
+            },
+            Project: loadProjectInfo(paths.ProjectDir, workingDir),
+        }
+        return env
+    }
+
+    func FormatEnvironment(env Environment) string {
+        var b strings.Builder
+        b.WriteString(&quot;# Environment
+
+&quot;)
+
+        // [OS] section
+        b.WriteString(&quot;## [OS]
+&quot;)
+        b.WriteString(fmt.Sprintf(&quot;OS: %s
+&quot;, env.OS.OS))
+        b.WriteString(fmt.Sprintf(&quot;Arch: %s
+&quot;, env.OS.Arch))
+        b.WriteString(fmt.Sprintf(&quot;Home: %s
+&quot;, env.OS.Home))
+        b.WriteString(fmt.Sprintf(&quot;Git: %s
+&quot;, boolOrNot(env.OS.GitInstalled)))
+        b.WriteString(fmt.Sprintf(&quot;Tree: %s
+&quot;, boolOrNot(env.OS.TreeInstalled)))
+        b.WriteString(&quot;
+&quot;)
+
+        // [Skill] section
+        b.WriteString(&quot;## [Skill]
+&quot;)
+        for _, s := range env.Skills {
+            b.WriteString(fmt.Sprintf(&quot;- %s: %s
+&quot;, s.Name, s.Description))
+        }
+        if len(env.Skills) == 0 {
+            b.WriteString(&quot;No skills loaded
+&quot;)
+        }
+        b.WriteString(&quot;
+&quot;)
+
+        // [Squid-OS] section
+        b.WriteString(&quot;## [Squid-OS]
+&quot;)
+        b.WriteString(fmt.Sprintf(&quot;Skills: %s
+&quot;, env.SquidOS.SkillsDir))
+        b.WriteString(fmt.Sprintf(&quot;Logs: %s
+&quot;, env.SquidOS.LogsDir))
+        b.WriteString(fmt.Sprintf(&quot;System Prompts: %s
+&quot;, env.SquidOS.SysPromptsDir))
+        b.WriteString(fmt.Sprintf(&quot;Sessions: %s
+&quot;, env.SquidOS.SessionsDir))
+        if env.SquidOS.DebugEnabled {
+            b.WriteString(&quot;Debug: enabled
+&quot;)
+        }
+        b.WriteString(&quot;
+&quot;)
+
+        // [Project] section
+        if env.Project != nil {
+            b.WriteString(&quot;## [Project]
+&quot;)
+            b.WriteString(fmt.Sprintf(&quot;Working Directory: %s
+&quot;, env.Project.Path))
+            b.WriteString(fmt.Sprintf(&quot;Under Project Dir: %s
+&quot;, boolOrNot(env.Project.IsUnderProjectDir)))
+            b.WriteString(fmt.Sprintf(&quot;Git Init: %s
+&quot;, boolOrNot(env.Project.IsGitRepo)))
+            if len(env.Project.Projects) &gt; 0 {
+                b.WriteString(&quot;Projects:
+&quot;)
+                for _, p := range env.Project.Projects {
+                    b.WriteString(fmt.Sprintf(&quot;- %s (%s)
+&quot;, p.Name, p.Path))
+                }
+            }
+            if env.Project.FileTree != &quot;&quot; {
+                b.WriteString(&quot;File Tree:
+&quot;)
+                b.WriteString(&quot;```
+&quot;)
+                b.WriteString(env.Project.FileTree)
+                b.WriteString(&quot;```
+&quot;)
+            }
+        }
+
+        return b.String()
+    }</pre></div>
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Create internal/environment/loader.go</li><li>   - Implement loadSkillEntries (reads from skills registry)</li><li>   - Implement loadProjectInfo (scans ProjectDir for .git dirs, builds tree if needed)</li><li>   - Implement boolOrNot helper</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div></div>
+</div><div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">3</span>
+  <h3 class="phase-title">Session Integration</h3>
+  <span class="phase-step-count">2 steps</span>
+</div>
+<div class="phase-steps"><div class="step">
+<div class="step__header">
+  <span class="step__number">3.1</span>
+  <h4 class="step__title">Add environment message to chat_session</h4>
+  <span class="step__concept-badge">Session Integration</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">After loading the system prompt in chat_session.clear(), load and push the environment as a second system-like message (RoleSystem with label &quot;Environment&quot;).</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/app/chat_session.go</code> </div>
+  <div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">Message with ID &quot;env0&quot;, Role RoleSystem, Label &quot;Environment&quot;</pre></div>
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">(cs *chatSession) clear(settings config.Settings, paths config.Paths) — modified
+    (cs *chatSession) updateEnvironment(paths config.Paths, settings config.Settings, homeDir string) — new method</p></div>
+  <div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">    In clear(): after pushing sys0 message:
+        // Push environment message (included in API as system role, after system prompt)
+        env := environment.LoadEnvironment(paths, settings, homeDir, &quot;&quot;)
+        envContent := environment.FormatEnvironment(env)
+        cs.appendMsg(config.Message{
+            ID:          &quot;env0&quot;,
+            Role:        config.RoleSystem,
+            Text:        envContent,
+            Label:       &quot;Environment&quot;,
+            Params:      map[string]string{&quot;working_dir&quot;: homeDir},
+            InputTokens: countTokensApprox(envContent),
+        })</pre></div>
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Modify chat_session.clear() to accept homeDir as additional parameter</li><li>   - Import &quot;squid-os/internal/environment&quot;</li><li>   - Push &quot;env0&quot; message after &quot;sys0&quot;</li><li>   - Add updateEnvironment() method to refresh env0 when working directory changes</li><li>   - Update all callers of clear() to pass homeDir</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div><div class="step">
+<div class="step__header">
+  <span class="step__number">3.2</span>
+  <h4 class="step__title">Update BuildAPIMessages to include environment</h4>
+  <span class="step__concept-badge">Session Integration</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">The environment message (env0) has RoleSystem, so BuildAPIMessages already includes it. But we need it to come AFTER the system prompt (sys0) — not replace it. Verify the current ordering.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/chat/engine.go</code> </div>
+  
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">BuildAPIMessages(paths, settings, messages) []ChatMessage — verify ordering</p></div>
+  
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>In BuildAPIMessages, the current code extracts the first RoleSystem message as system prompt. We need to handle the env0 message separately.</li><li>   - Modify BuildAPIMessages to: first find sys0 (system prompt), then find env0 (environment), then send both as separate system messages</li><li>   - The API message array becomes: [system prompt, environment, user/assistant/tool...]</li><li>   - Change: after adding system prompt, also scan for RoleSystem messages with ID &quot;env0&quot; and add them</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... and test that both system prompt and environment are in the API request</li></ul></div>
+</div></div></div>
+</div><div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">4</span>
+  <h3 class="phase-title">Working Directory and Project Tools</h3>
+  <span class="phase-step-count">4 steps</span>
+</div>
+<div class="phase-steps"><div class="step">
+<div class="step__header">
+  <span class="step__number">4.1</span>
+  <h4 class="step__title">Add workingDir to app Model</h4>
+  <span class="step__concept-badge">Working Directory and Project Tools</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Track the current working directory in the Model so tools and the footer can access it.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/app/app.go</code> </div>
+  <div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">workingDir string — current working directory, defaults to homeDir</pre></div>
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">func (m *Model) WorkingDir() string
+    func (m *Model) SetWorkingDir(path string) — updates workingDir and refreshes environment</p></div>
+  <div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">    // In Model struct, add:
+    workingDir string
+
+    func (m *Model) WorkingDir() string {
+        if m.workingDir == &quot;&quot; {
+            return m.paths.Root // fallback to config dir, should not happen
+        }
+        return m.workingDir
+    }
+
+    func (m *Model) SetWorkingDir(path string) {
+        m.workingDir = path
+        m.session.updateEnvironment(m.paths, m.settings, m.workingDir)
+        m.updateViewportContent()
+    }</pre></div>
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Add workingDir field to Model</li><li>   - Initialize workingDir in New() to homeDir (the home directory)</li><li>   - Add WorkingDir() and SetWorkingDir() methods</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div><div class="step">
+<div class="step__header">
+  <span class="step__number">4.2</span>
+  <h4 class="step__title">Implement list_projects tool</h4>
+  <span class="step__concept-badge">Working Directory and Project Tools</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Tool that returns a list of all git-initialized projects under the configured project directory.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/tools/core.go (or new internal/tools/projects.go)</code> </div>
+  <div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">ProjectEntry with Name, Path, IsGit</pre></div>
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">    list_projects: no parameters, returns JSON array of {name, path, is_git}</p></div>
+  <div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">    var ListProjects = Tool{
+        Name:        &quot;list_projects&quot;,
+        Description: &quot;List all projects under the configured project directory that have a .git folder.&quot;,
+        Schema: []byte(`{
+            &quot;type&quot;: &quot;object&quot;,
+            &quot;properties&quot;: {},
+            &quot;required&quot;: []
+        }`),
+        Execute: func(args map[string]interface{}) ToolResult {
+            // Scan ProjectDir for directories containing .git
+            entries, err := os.ReadDir(projectDir) // need to resolve projectDir
+            if err != nil {
+                return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf(&quot;failed to read project dir: %w&quot;, err)}
+            }
+            // ... build list, return as JSON
+        },
+    }</pre></div>
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Create internal/tools/projects.go with ListProjects tool</li><li>   - Add to tools.go init() list</li><li>   - Need to pass projectDir into the tool — use a global or inject via Registry</li><li>   - ROLLBACK: Remove from init() list, delete projects.go</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div><div class="step">
+<div class="step__header">
+  <span class="step__number">4.3</span>
+  <h4 class="step__title">Implement set_working_dir tool</h4>
+  <span class="step__concept-badge">Working Directory and Project Tools</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Tool that sets the current working directory and refreshes the environment.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/tools/projects.go</code> </div>
+  
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">    set_working_dir: {path: string} → result or error</p></div>
+  <div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">    var SetWorkingDir = Tool{
+        Name:        &quot;set_working_dir&quot;,
+        Description: &quot;Set the current working directory. Used by bash, read_file, write_file, edit_file as the default context.&quot;,
+        DisplayParam: &quot;path&quot;,
+        Schema: []byte(`{
+            &quot;type&quot;: &quot;object&quot;,
+            &quot;properties&quot;: {
+                &quot;path&quot;: {
+                    &quot;type&quot;: &quot;string&quot;,
+                    &quot;description&quot;: &quot;Absolute path to set as the working directory&quot;
+                }
+            },
+            &quot;required&quot;: [&quot;path&quot;]
+        }`),
+        Execute: func(args map[string]interface{}) ToolResult {
+            path, ok := args[&quot;path&quot;].(string)
+            if !ok || path == &quot;&quot; {
+                return ToolResult{Status: ResultStatusError, Error: &quot;path is required&quot;}
+            }
+            // Need to communicate back to the app to update workingDir
+            // This requires the tool to have access to the app model — tricky.
+            // Solution: return a special status with the path, and the app intercepts it.
+            // Or: make the Execute function accept a context or callback.
+            return ToolResult{Status: ResultStatusSuccess, Result: &quot;working directory set to &quot; + path}
+        },
+    }</pre></div>
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Add SetWorkingDir tool</li><li>   - The tool's Execute needs to communicate with the app model — see note below</li><li>   - After tool execution, check if the result is a working dir change and update the model</li><li>   - ROLLBACK: Remove from init() list</li><li>NOTE:      set_working_dir needs to reach into the app model. Since Tool.Execute is a standalone function, we need a callback or context mechanism. The cleanest approach: add a PostExecute hook in the app's executeTools() that checks if the tool name is &quot;set_working_dir&quot; and updates m.workingDir.</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div><div class="step">
+<div class="step__header">
+  <span class="step__number">4.4</span>
+  <h4 class="step__title">Add PostExecute hook for set_working_dir</h4>
+  <span class="step__concept-badge">Working Directory and Project Tools</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">In executeTools(), after running a tool, check if it's set_working_dir and update the app's working directory.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/app/stream.go</code> </div>
+  
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">(m *Model) executeTools(partials []partialTool) []config.ToolCallEntry — modified</p></div>
+  <div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">    // After result := tool.Execute(args):
+    if p.name == &quot;set_working_dir&quot; &amp;&amp; result.Status == tools.ResultStatusSuccess {
+        // Extract path from args
+        if pathVal, ok := args[&quot;path&quot;].(string); ok {
+            m.workingDir = pathVal
+            m.session.updateEnvironment(m.paths, m.settings, m.workingDir)
+            m.updateFooterWorkingDir()
+        }
+    }</pre></div>
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Add post-execution hook in executeTools() for set_working_dir</li><li>   - Call session.updateEnvironment() to refresh the environment message</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div></div>
+</div><div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">5</span>
+  <h3 class="phase-title">Footer</h3>
+  <span class="phase-step-count">1 steps</span>
+</div>
+<div class="phase-steps"><div class="step">
+<div class="step__header">
+  <span class="step__number">5.1</span>
+  <h4 class="step__title">Add WorkingDir and GitStatus to FooterData</h4>
+  <span class="step__concept-badge">Footer</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Extend the footer to show the current working directory with git status indicator.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/ui/footer.go</code> </div>
+  <div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">FooterData gains:
+            WorkingDir  string  // current working directory
+            IsGitRepo   bool    // whether working dir has .git</pre></div>
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">FooterData struct — add two fields</p></div>
+  <div class="step__example"><div class="step__example-title">Code Example</div><pre class="step__example-code">    type FooterData struct {
+        ...existing fields...
+        WorkingDir  string  // e.g. &quot;/home/goglue/src/squid-os&quot;
+        IsGitRepo   bool
+    }
+
+    // In line 1, append working dir to model label:
+    // Provider · Model [~/src/squid-os (git)]
+    workLabel := &quot;&quot;
+    if data.WorkingDir != &quot;&quot; {
+        wd := data.WorkingDir
+        // Show relative to home if possible
+        wd = strings.Replace(wd, &quot;/home/goglue&quot;, &quot;~&quot;, 1)
+        if data.IsGitRepo {
+            workLabel = fmt.Sprintf(&quot; [%s (git)]&quot;, wd)
+        } else {
+            workLabel = fmt.Sprintf(&quot; [%s]&quot;, wd)
+        }
+    }</pre></div>
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Add WorkingDir, IsGitRepo to FooterData</li><li>   - Update RenderFooter to show working directory after model label</li><li>   - Update buildFooterData() in app to populate the new fields</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div></div>
+</div><div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">6</span>
+  <h3 class="phase-title">Cleanup</h3>
+  <span class="phase-step-count">2 steps</span>
+</div>
+<div class="phase-steps"><div class="step">
+<div class="step__header">
+  <span class="step__number">6.1</span>
+  <h4 class="step__title">Clean default.md system prompt</h4>
+  <span class="step__concept-badge">Cleanup</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Remove hardcoded paths from the default system prompt — they are now provided by the environment system message.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/config/sys-prompt.go</code> </div>
+  
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">DefaultAssistantPrompt() string — modified</p></div>
+  
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Remove any hardcoded path references from DefaultAssistantPrompt()</li><li>   - Remove any references to $HOME, specific directories, or file paths that are now in the environment message</li><li>   - Keep the behavioral rules and general instructions</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div><div class="step">
+<div class="step__header">
+  <span class="step__number">6.2</span>
+  <h4 class="step__title">Update bash tool to use working directory</h4>
+  <span class="step__concept-badge">Cleanup</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">The bash tool should use the working directory as its execution context when available.</p>
+  <div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">internal/tools/bash.go</code> </div>
+  
+  <div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">Bash.Execute — modified to use workingDir as PWD</p></div>
+  
+  <div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>The bash tool needs access to the current working directory</li><li>   - Option: add a workingDir field to the Tool struct, or use an environment variable</li><li>   - Cleanest: set environment variable before exec.Command</li><li>   - But Execute is static... same problem as set_working_dir</li><li>   - Solution: the app model injects the working directory via environment variables or a callback</li><li>   - Add a func SetWorkingDirForTools(path string) in tools package that sets a package-level variable</li><li>   - In executeTools(), after tool execution, also update this variable</li></ul></div>
+  <div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... — compiles</li></ul></div>
+</div></div></div>
+</div>
+</div><div class="callout callout--info">
+<div class="callout__title">Coding Conventions</div>
+<div class="callout__body">- Rich Domain Data: return ready-to-use objects, not primitives that require assembly
+- Fail-Fast Configuration: no silent fallback defaults for required fields; panic or hard error at init
+- Class-based DDD: keep things as proper domain structs with clear responsibilities
+- Defaults in config file: defaults live in DefaultSettings(), not as fallback in calling functions
+- No hardcoded paths in system prompt: paths come from the environment system message
+- One logical commit per step: atomic changes, no mixing concerns</div>
+</div><div class="plan-section">
+<h2 class="section-title">Summary</h2>
+<div class="summary">
+<div class="summary__grid">
+  <div class="summary__stat">
+    <span class="summary__stat-value">6</span>
+    <span class="summary__stat-label">Phases</span>
+  </div>
+  <div class="summary__stat">
+    <span class="summary__stat-value">15</span>
+    <span class="summary__stat-label">Steps</span>
+  </div>
+</div>
+</div>
+</div>
+
+</div>
+</body></html>

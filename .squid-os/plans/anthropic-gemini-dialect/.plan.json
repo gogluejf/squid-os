@@ -1,0 +1,369 @@
+{
+  "plan_name": "anthropic-gemini-dialect",
+  "title": "Anthropic and Gemini Dialect Support",
+  "why": "Add native API support for Anthropic Claude and Google Gemini providers. Currently only OpenAI-compatible dialects are implemented. Both providers use fundamentally different request/response formats requiring dedicated adapters and providers.",
+  "outcomes": "Users can authenticate with Claude and Gemini API keys, select models from both providers, stream responses with tool calling support, and think/reasoning mode works where applicable.",
+  "milestones": [
+    {
+      "number": "1",
+      "name": "Anthropic Provider",
+      "pattern": [
+        "Provider Factory, Port & Adapter"
+      ],
+      "objective": "Implement the Anthropic provider registration, authentication, and URL resolution.",
+      "success": "Anthropic provider is registered, authenticates via API key, and resolves correct chat and models URLs.",
+      "diagram": "graph TD\n    A[init() registers anthropic provider] --> B[Provider factory creates AnthropicProvider]\n    B --> C[PrepareRequest sets x-api-key header]\n    B --> D[Dialect returns DialectAnthropic]\n    B --> E[GetChatURL returns messages endpoint]\n    B --> F[StaticModels returns Claude model list]",
+      "tasks": [
+        {
+          "number": "1.1",
+          "name": "Add Anthropic provider constants and config",
+          "type": "feature",
+          "what": "Add ProviderAnthropic constant and anthropic provider struct to config and provider packages.",
+          "why": "Establishes the provider name in the registry and enables users to configure Anthropic as a provider.",
+          "files": [
+            "+ internal/config/endpoints.go",
+            "+ internal/chat/provider/anthropic.go"
+          ],
+          "snippet": [
+            "const ProviderAnthropic = \"anthropic\"\n\ntype AnthropicProvider struct {\n    settings *config.ProviderSettings\n}\n\nfunc (a *AnthropicProvider) Dialect() config.Dialect {\n    return config.DialectAnthropic\n}\n\nfunc (a *AnthropicProvider) SupportedAuth() []config.AuthMethod {\n    return []config.AuthMethod{config.AuthAPIKey}\n}\n\nfunc (a *AnthropicProvider) DefaultBaseURL() string {\n    return \"https://api.anthropic.com\"\n}\n\nfunc (a *AnthropicProvider) GetChatURL() string {\n    base := a.settings.BaseURL\n    if base == \"\" { base = a.DefaultBaseURL() }\n    return base + \"/v1/messages\"\n}"
+          ],
+          "acceptance": [
+            "ProviderAnthropic constant is defined in config package",
+            "AnthropicProvider struct implements all Provider interface methods",
+            "Default base URL is https://api.anthropic.com",
+            "Chat URL resolves to /v1/messages",
+            "Dialect returns DialectAnthropic",
+            "SupportedAuth returns API key method",
+            "RequiresBaseURL returns false for the known cloud provider"
+          ],
+          "verify": [
+            "go build ./...",
+            "go test ./internal/chat/provider/..."
+          ]
+        },
+        {
+          "number": "1.2",
+          "name": "Implement Anthropic provider auth and models",
+          "type": "feature",
+          "what": "Add API key authentication via x-api-key header and anthropic-version header, plus Claude model list and PrepareRequest logic.",
+          "why": "Anthropic requires its own header-based authentication and versioning for request signing.",
+          "files": [
+            "~ internal/chat/provider/anthropic.go"
+          ],
+          "snippet": [
+            "// PrepareRequest sets Anthropic-specific headers\nfunc (a *AnthropicProvider) PrepareRequest(req *http.Request) error {\n    if a.settings.Credentials != nil && a.settings.Credentials.APIKey != \"\" {\n        req.Header.Set(\"x-api-key\", a.settings.Credentials.APIKey)\n    }\n    req.Header.Set(\"anthropic-version\", \"2023-06-01\")\n    req.Header.Set(\"anthropic-dangerous-direct-browser-access\", \"true\")\n    return nil\n}\n\nfunc (a *AnthropicProvider) StaticModels() []string {\n    return []string{\n        \"claude-opus-4-20250514\",\n        \"claude-sonnet-4-20250514\",\n        \"claude-sonnet-4-5-20250929\",\n        \"claude-haiku-3-5-20241022\",\n        \"claude-opus-4-20250514\",\n    }\n}"
+          ],
+          "acceptance": [
+            "PrepareRequest sets x-api-key header from credentials",
+            "PrepareRequest sets anthropic-version header",
+            "StaticModels returns known Claude model IDs",
+            "IsExpired returns false since API key auth does not expire",
+            "Refresh returns nil for API key providers"
+          ],
+          "verify": [
+            "go build ./...",
+            "go test ./internal/chat/provider/..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "2",
+      "name": "Anthropic Adapter",
+      "pattern": [
+        "Adapter Pattern, Vertical Slice"
+      ],
+      "objective": "Implement the Anthropic API adapter that translates internal messages/tools into Claude request format and parses Claude SSE events.",
+      "success": "Claude requests serialize correctly with system prompt, messages, tools, and thinking. SSE events parse text deltas, thinking deltas, tool call deltas, and completion.",
+      "diagram": "graph TD\n    A[BuildBody] --> B[Extract system prompt from messages]\n    A --> C[Convert messages to Anthropic format]\n    A --> D[Convert tools to Anthropic function tools]\n    A --> E[Set thinking block if enabled]\n    A --> F[Return JSON body]\n    G[ParseSSE] --> H{Event type}\n    H --> I[message_start]\n    H --> J[content_block_start]\n    H --> K[content_block_delta]\n    H --> L[content_block_stop]\n    H --> M[message_delta]\n    H --> N[message_stop]",
+      "tasks": [
+        {
+          "number": "2.1",
+          "name": "Implement Anthropic adapter BuildBody",
+          "type": "feature",
+          "what": "Create AnthropicAdapter with BuildBody that converts internal messages to Anthropic messages API format with system prompt, messages, tools, and thinking.",
+          "why": "Anthropic uses a distinct request format: system is a top-level string, messages use role/content with text blocks, and tools are separate from messages.",
+          "files": [
+            "+ internal/chat/adapter/anthropic.go"
+          ],
+          "snippet": [
+            "type AnthropicAdapter struct {}\n\n// Anthropic request structure\ntype anthropicRequest struct {\n    Model    string                   \n    System   interface{}              \n    Messages []anthropicMessage       \n    Tools    []anthropicTool          \n    MaxTokens int                     \n    Thinking *anthropicThinking       \n    Stream   bool                     \n}\n\ntype anthropicMessage struct {\n    Role    string           \n    Content interface{}      \n}\n\ntype anthropicTextBlock struct {\n    Type string \n    Text string \n}\n\ntype anthropicToolUseBlock struct {\n    Type     string \n    ID       string \n    Name     string \n    Input    map[string]interface{} \n}\n\ntype anthropicToolResultBlock struct {\n    Type       string \n    ToolUseID  string \n    Content    string \n}\n\n// Convert internal roles: system -> top-level, user/assistant stay, tool -> user with tool_result"
+          ],
+          "acceptance": [
+            "BuildBody extracts system prompt from system role messages and places it in the top-level system field",
+            "BuildBody converts user messages to role=user with text blocks",
+            "BuildBody converts assistant messages with tool calls to tool_use blocks",
+            "BuildBody converts tool result messages to user role with tool_result blocks",
+            "BuildBody converts tools to Anthropic function tool format with name, description, input_schema",
+            "BuildBody sets thinking block with budget when thinking is enabled",
+            "BuildBody sets max_tokens (e.g. 8192 for claude)",
+            "BuildBody sets stream to true"
+          ],
+          "verify": [
+            "go build ./...",
+            "go test ./internal/chat/adapter/..."
+          ]
+        },
+        {
+          "number": "2.2",
+          "name": "Implement Anthropic adapter ParseSSE",
+          "type": "feature",
+          "what": "Create ParseSSE for Anthropic that handles message_start, content_block_start, content_block_delta, content_block_stop, message_delta, and message_stop SSE events.",
+          "why": "Anthropic streams events with distinct types for text, thinking, and tool_use blocks that need mapping to AdapterEvent.",
+          "files": [
+            "~ internal/chat/adapter/anthropic.go"
+          ],
+          "snippet": [
+            "func (a *AnthropicAdapter) ParseSSE(payload string) *AdapterEvent {\n    // Parse event type from top-level type field\n    // message_start: extract stop_reason for done signal\n    // content_block_start: detect text vs tool_use vs thinking blocks\n    // content_block_delta: extract text delta, thinking delta, or tool_use arg delta\n    // content_block_stop: end of current block\n    // message_delta: extract stop_reason\n    // message_stop: done signal\n}"
+          ],
+          "acceptance": [
+            "ParseSSE handles message_stop event and returns Done=true",
+            "ParseSSE handles content_block_delta for text content and returns Text delta",
+            "ParseSSE handles content_block_delta for thinking blocks and returns Thinking delta",
+            "ParseSSE handles content_block_start for tool_use and initializes ToolCallName/ToolCallID",
+            "ParseSSE handles content_block_delta for tool_use input and returns ToolCallDelta",
+            "ParseSSE handles message_delta stop_reason and returns appropriate stop reason",
+            "ParseSSE returns nil for intermediate/skip events (ping, message_start without data, etc.)"
+          ],
+          "verify": [
+            "go build ./...",
+            "go test ./internal/chat/adapter/..."
+          ]
+        },
+        {
+          "number": "2.3",
+          "name": "Wire Anthropic dialect into engine",
+          "type": "feature",
+          "what": "Add DialectAnthropic case in engine.go NewEngine to instantiate AnthropicAdapter.",
+          "why": "The engine needs to route Anthropic dialect requests to the correct adapter.",
+          "files": [
+            "~ internal/chat/engine.go"
+          ],
+          "snippet": [
+            "var a adapter.APIAdapter\nswitch p.Dialect() {\ncase config.DialectOpenAICodex:\n    a = &adapter.CodexAdapter{}\ncase config.DialectAnthropic:\n    a = &adapter.AnthropicAdapter{}\ndefault:\n    a = &adapter.ChatCompletionsAdapter{}\n}"
+          ],
+          "acceptance": [
+            "Engine selects AnthropicAdapter when provider Dialect returns DialectAnthropic",
+            "Existing OpenAI-compatible and Codex adapters remain unaffected",
+            "go build succeeds with the new case"
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "3",
+      "name": "Gemini Provider",
+      "pattern": [
+        "Provider Factory, Port & Adapter"
+      ],
+      "objective": "Implement the Gemini provider registration, API key authentication, and URL resolution for Google's Generative Language API.",
+      "success": "Gemini provider is registered, authenticates via API key, and resolves correct generateContent and models URLs.",
+      "diagram": "graph TD\n    A[init() registers gemini provider] --> B[Provider factory creates GeminiProvider]\n    B --> C[PrepareRequest appends key query param]\n    B --> D[Dialect returns DialectGemini]\n    B --> E[GetChatURL returns generateContent endpoint]\n    B --> F[StaticModels returns Gemini model list]",
+      "tasks": [
+        {
+          "number": "3.1",
+          "name": "Add Gemini provider constants and config",
+          "type": "feature",
+          "what": "Add ProviderGemini constant and gemini provider struct with API key auth and URL resolution.",
+          "why": "Establishes the Gemini provider in the registry and enables users to configure Gemini as a provider with native API support.",
+          "files": [
+            "+ internal/config/endpoints.go",
+            "+ internal/chat/provider/gemini.go"
+          ],
+          "snippet": [
+            "const ProviderGemini = \"gemini\"\n\ntype GeminiProvider struct {\n    settings *config.ProviderSettings\n}\n\nfunc (g *GeminiProvider) Dialect() config.Dialect {\n    return config.DialectGemini\n}\n\nfunc (g *GeminiProvider) SupportedAuth() []config.AuthMethod {\n    return []config.AuthMethod{config.AuthAPIKey}\n}\n\nfunc (g *GeminiProvider) DefaultBaseURL() string {\n    return \"https://generativelanguage.googleapis.com\"\n}\n\nfunc (g *GeminiProvider) GetChatURL() string {\n    // Returns v1beta/models/MODEL:generateContent?key=API_KEY with streaming\n}"
+          ],
+          "acceptance": [
+            "ProviderGemini constant is defined in config package",
+            "GeminiProvider struct implements all Provider interface methods",
+            "Default base URL is https://generativelanguage.googleapis.com",
+            "Chat URL resolves to the generateContent endpoint with api version and streaming=true",
+            "Dialect returns DialectGemini",
+            "SupportedAuth returns API key method",
+            "RequiresBaseURL returns false for the known cloud provider",
+            "StaticModels returns known Gemini model IDs"
+          ],
+          "verify": [
+            "go build ./...",
+            "go test ./internal/chat/provider/..."
+          ]
+        },
+        {
+          "number": "3.2",
+          "name": "Implement Gemini provider auth and models",
+          "type": "feature",
+          "what": "Add API key authentication via query parameter and Gemini model list with PrepareRequest logic.",
+          "why": "Gemini authenticates via ?key=API_KEY query parameter appended to the URL, not via headers.",
+          "files": [
+            "~ internal/chat/provider/gemini.go"
+          ],
+          "snippet": [
+            "func (g *GeminiProvider) PrepareRequest(req *http.Request) error {\n    // Gemini uses query param auth - append key to URL\n    if g.settings.Credentials != nil && g.settings.Credentials.APIKey != \"\" {\n        u, _ := url.Parse(req.URL.String())\n        q := u.Query()\n        q.Set(\"key\", g.settings.Credentials.APIKey)\n        u.RawQuery = q.Encode()\n        req.URL = u\n    }\n    return nil\n}\n\nfunc (g *GeminiProvider) StaticModels() []string {\n    return []string{\n        \"gemini-2.5-pro\",\n        \"gemini-2.5-flash\",\n        \"gemini-2.5-flash-lite\",\n        \"gemini-2.0-flash\",\n    }\n}"
+          ],
+          "acceptance": [
+            "PrepareRequest appends ?key=API_KEY query parameter to the request URL",
+            "StaticModels returns known Gemini model IDs",
+            "IsExpired returns false for API key auth",
+            "Refresh returns nil for API key providers",
+            "Models URL returns the list models endpoint"
+          ],
+          "verify": [
+            "go build ./...",
+            "go test ./internal/chat/provider/..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "4",
+      "name": "Gemini Adapter",
+      "pattern": [
+        "Adapter Pattern, Vertical Slice"
+      ],
+      "objective": "Implement the Gemini API adapter that translates internal messages/tools into Gemini generateContent format and parses streaming response events.",
+      "success": "Gemini requests serialize correctly with contents, tools, and system instructions. Streaming events parse text deltas, function calls, and completion.",
+      "diagram": "graph TD\n    A[BuildBody] --> B[Extract system instructions from messages]\n    A --> C[Convert messages to Gemini contents with parts]\n    A --> D[Convert tools to Gemini function_declarations]\n    A --> E[Set thinking config if enabled]\n    A --> F[Return JSON body]\n    G[ParseSSE] --> H{Event structure}\n    H --> I[candidates with text parts]\n    H --> J[candidates with functionCall parts]\n    H --> K[usageMetadata for token counts]",
+      "tasks": [
+        {
+          "number": "4.1",
+          "name": "Implement Gemini adapter BuildBody",
+          "type": "feature",
+          "what": "Create GeminiAdapter with BuildBody that converts internal messages to Gemini generateContent format with system instructions, contents, tools, and thinking config.",
+          "why": "Gemini uses a distinct request format: system_instruction is separate from contents, messages map to parts with role alternation, and tools use function_declarations.",
+          "files": [
+            "+ internal/chat/adapter/gemini.go"
+          ],
+          "snippet": [
+            "type GeminiAdapter struct {}\n\n// Gemini request structure for generateContent\ntype geminiRequest struct {\n    Contents         []geminiContent     \n    Tools            []geminiTool        \n    SystemInstruction *geminiContent     \n    GenerationConfig *geminiGenConfig    \n}\n\ntype geminiContent struct {\n    Role  string           \n    Parts []geminiPart     \n}\n\ntype geminiPart struct {\n    Text         string                 \n    FunctionCall *geminiFunctionCall    \n    FunctionResponse *geminiFuncResp   \n}\n\n// Convert internal roles: system -> system_instruction, user/assistant -> role user/model, tool -> functionResponse"
+          ],
+          "acceptance": [
+            "BuildBody extracts system prompt into system_instruction content",
+            "BuildBody converts user messages to role=user with text parts",
+            "BuildBody converts assistant messages with tool calls to functionCall parts",
+            "BuildBody converts tool result messages to functionResponse parts with role=model",
+            "BuildBody converts tools to Gemini function_declarations with name, description, parameters",
+            "BuildBody sets thinking_config when thinking is enabled",
+            "BuildBody handles Gemini role convention (user vs model, not assistant)"
+          ],
+          "verify": [
+            "go build ./...",
+            "go test ./internal/chat/adapter/..."
+          ]
+        },
+        {
+          "number": "4.2",
+          "name": "Implement Gemini adapter ParseSSE",
+          "type": "feature",
+          "what": "Create ParseSSE for Gemini that handles the generateContent streaming response with candidates containing text parts and functionCall parts.",
+          "why": "Gemini streaming returns a single JSON object per SSE chunk with candidates containing incremental text or function calls.",
+          "files": [
+            "~ internal/chat/adapter/gemini.go"
+          ],
+          "snippet": [
+            "func (g *GeminiAdapter) ParseSSE(payload string) *AdapterEvent {\n    // Each SSE chunk is a complete JSON object\n    // with candidates array containing content with parts\n    // Parse text parts -> Text delta\n    // Parse functionCall parts -> ToolCallName, ToolCallDelta\n    // Parse usageMetadata with finishReason -> Done event\n}"
+          ],
+          "acceptance": [
+            "ParseSSE handles text parts in candidates and returns Text delta",
+            "ParseSSE handles functionCall parts and returns ToolCallName, ToolCallDelta with arguments",
+            "ParseSSE detects finishReason and returns Done with stop reason",
+            "ParseSSE handles multiple parts in a single chunk",
+            "ParseSSE returns nil for chunks with no meaningful content (usage-only)"
+          ],
+          "verify": [
+            "go build ./...",
+            "go test ./internal/chat/adapter/..."
+          ]
+        },
+        {
+          "number": "4.3",
+          "name": "Wire Gemini dialect into engine",
+          "type": "feature",
+          "what": "Add DialectGemini case in engine.go NewEngine to instantiate GeminiAdapter.",
+          "why": "The engine needs to route Gemini dialect requests to the correct adapter.",
+          "files": [
+            "~ internal/chat/engine.go"
+          ],
+          "snippet": [
+            "var a adapter.APIAdapter\nswitch p.Dialect() {\ncase config.DialectOpenAICodex:\n    a = &adapter.CodexAdapter{}\ncase config.DialectAnthropic:\n    a = &adapter.AnthropicAdapter{}\ncase config.DialectGemini:\n    a = &adapter.GeminiAdapter{}\ndefault:\n    a = &adapter.ChatCompletionsAdapter{}\n}"
+          ],
+          "acceptance": [
+            "Engine selects GeminiAdapter when provider Dialect returns DialectGemini",
+            "Existing OpenAI-compatible, Codex, and Anthropic adapters remain unaffected",
+            "go build succeeds with the new case"
+          ],
+          "verify": [
+            "go build ./..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "5",
+      "name": "Integration and Testing",
+      "pattern": [
+        "End-to-End Verification"
+      ],
+      "objective": "Verify both providers integrate correctly with the engine, UI model picker, and endpoint configuration.",
+      "success": "Both providers appear in the model picker, accept API key configuration, and can be selected for chat sessions.",
+      "diagram": "graph TD\n    A[User configures API key] --> B[Provider settings saved to endpoints.json]\n    B --> C[Provider lookup creates instance]\n    C --> D[Dialect determines adapter]\n    D --> E[Engine uses adapter for request/response]\n    E --> F[SSE stream parsed correctly]\n    F --> G[Text and tool calls delivered to UI]",
+      "tasks": [
+        {
+          "number": "5.1",
+          "name": "Add unit tests for Anthropic and Gemini adapters",
+          "type": "test",
+          "what": "Add unit tests for both AnthropicAdapter and GeminiAdapter covering BuildBody and ParseSSE with representative payloads.",
+          "why": "Ensures correctness of request serialization and response parsing for both new dialects before live testing.",
+          "files": [
+            "+ internal/chat/adapter/anthropic_test.go",
+            "+ internal/chat/adapter/gemini_test.go"
+          ],
+          "snippet": [
+            "// TestAnthropicAdapterBuildBody tests system extraction, user/assistant/tool messages, tools, and thinking\n// TestAnthropicAdapterParseSSE tests text delta, thinking delta, tool_use start/delta, and message_stop\n// TestGeminiAdapterBuildBody tests system_instruction, user/model contents, functionCall/functionResponse parts\n// TestGeminiAdapterParseSSE tests text parts, functionCall parts, and finishReason detection"
+          ],
+          "acceptance": [
+            "BuildBody test covers system prompt extraction for both adapters",
+            "BuildBody test covers user message conversion",
+            "BuildBody test covers assistant message with tool calls conversion",
+            "BuildBody test covers tool result message conversion",
+            "BuildBody test covers tool definition conversion",
+            "BuildBody test covers thinking mode toggle",
+            "ParseSSE test covers text streaming",
+            "ParseSSE test covers tool call streaming",
+            "ParseSSE test covers done/stop detection"
+          ],
+          "verify": [
+            "go test ./internal/chat/adapter/... -v"
+          ]
+        },
+        {
+          "number": "5.2",
+          "name": "Add unit tests for Anthropic and Gemini providers",
+          "type": "test",
+          "what": "Add unit tests for both provider structs covering auth, URL resolution, and metadata methods.",
+          "why": "Validates provider contract compliance and correct URL/header behavior.",
+          "files": [
+            "+ internal/chat/provider/anthropic_test.go",
+            "+ internal/chat/provider/gemini_test.go"
+          ],
+          "snippet": [
+            "// TestAnthropicProviderAuth verifies x-api-key header and anthropic-version header\n// TestAnthropicProviderURLs verifies GetChatURL and GetModelsURL resolution\n// TestGeminiProviderAuth verifies query parameter auth\n// TestGeminiProviderURLs verifies generateContent URL with streaming\n// TestIsConfigured verifies credential validation for both providers"
+          ],
+          "acceptance": [
+            "Anthropic provider test verifies API key header is set correctly",
+            "Anthropic provider test verifies anthropic-version header",
+            "Anthropic provider test verifies chat URL resolution",
+            "Gemini provider test verifies API key query param is appended",
+            "Gemini provider test verifies generateContent URL resolution",
+            "Both providers return correct dialect, supported auth, and static models"
+          ],
+          "verify": [
+            "go test ./internal/chat/provider/... -v"
+          ]
+        }
+      ]
+    }
+  ]
+}

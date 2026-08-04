@@ -1,0 +1,214 @@
+{
+  "tasks": {
+    "1.1": {
+      "number": "1.1",
+      "status": "done",
+      "name": "Provider struct with auth and dialect fields",
+      "milestone": "Provider Data Model",
+      "milestone_number": "1",
+      "summary": {
+        "done": "Created Provider struct with AuthMethod, Dialect, ProviderCreds, OAuthCreds types in endpoints.go. Added IsConfigured, NeedsURL, IsKnownProvider, ChatURL, ModelsURL methods. Added ResolveProvider helper. Legacy ProviderConfig alias for backward compatibility during migration.",
+        "lessons_learned": "Type alias doesn't bridge field-to-method transition \u2014 had to fix models.go call site immediately.",
+        "tradeoffs": "Used type alias ProviderConfig=Provider for build compatibility \u2014 will be removed in 1.2. Changed ModelsURL from field to method which required one call site fix in models.go (technically a 1.2 task but unavoidable).",
+        "failures": "None",
+        "confidence": "high",
+        "decisions": "Known providers: openai, openai-codex, anthropic, gemini, fireworks, openrouter. ChatURL returns hardcoded URLs for known providers, BaseURL-relative for custom."
+      }
+    },
+    "1.2": {
+      "number": "1.2",
+      "status": "done",
+      "name": "Migrate EndpointsConfig and update all call sites",
+      "milestone": "Provider Data Model",
+      "milestone_number": "1",
+      "summary": {
+        "decisions": "Legacy format detection: if first provider has no SupportedAuth and no Dialect, treat as old format. BaseURL extracted by stripping /v1/chat/completions or /v1/messages suffix from old chat_completions_url.",
+        "tradeoffs": "Migration happens at load time \u2014 existing users get automatic conversion on next launch. Updated embedded default endpoints.json to new format for clean new installs.",
+        "failures": "None",
+        "done": "Removed ProviderConfig alias, updated all call sites from ProviderConfig to Provider. Added DefaultEndpoints() with vllm/ollama/openai defaults. Added migration logic in LoadEndpoints to convert legacy flat JSON format (chat_completions_url/models_url) to new Provider struct. Updated default endpoints.json to new format.",
+        "lessons_learned": "Type alias wasn't sufficient for field-to-method transition \u2014 had to remove it and update call sites immediately.",
+        "confidence": "high"
+      }
+    },
+    "2.1": {
+      "number": "2.1",
+      "status": "done",
+      "name": "Define ProviderImpl interface and registry",
+      "milestone": "Provider Interface",
+      "milestone_number": "2",
+      "summary": {
+        "lessons_learned": "None",
+        "decisions": "Interface follows component callback pattern used elsewhere in squid-os. Registry keyed by provider name string.",
+        "tradeoffs": "Registry is global package-level \u2014 sufficient for single-process TUI app.",
+        "done": "Created internal/chat/provider.go with ProviderImpl interface (PrepareRequest, GetAccessToken, NeedsAuth, IsExpired, Refresh) and thread-safe registry with sync.RWMutex.",
+        "confidence": "high",
+        "failures": "None"
+      }
+    },
+    "2.2": {
+      "number": "2.2",
+      "status": "done",
+      "name": "Implement local/no-auth provider as default",
+      "milestone": "Provider Interface",
+      "milestone_number": "2",
+      "summary": {
+        "tradeoffs": "None",
+        "done": "Created LocalProvider with no-op implementations of all ProviderImpl methods. Registered vllm and ollama in init(). Existing Engine usage unchanged \u2014 nil provider still works as before.",
+        "failures": "None",
+        "decisions": "LocalProvider is a simple struct with all methods returning no-op values. Registered in init() so they're always available.",
+        "confidence": "high",
+        "lessons_learned": "None"
+      }
+    },
+    "2.3": {
+      "number": "2.3",
+      "status": "done",
+      "name": "Wire Engine to use ProviderImpl for auth",
+      "milestone": "Provider Interface",
+      "milestone_number": "2",
+      "summary": {
+        "done": "Added provider field to Engine struct. Updated NewEngine to accept ProviderImpl. Added PrepareRequest call before HTTP request in Stream(). Created LoadProviderImpl to bridge config Provider to runtime ProviderImpl. Updated all 3 call sites: sendMessage, startStream, headless.Run.",
+        "lessons_learned": "provider.go needed config import for LoadProviderImpl. Had to add config import after initial write.",
+        "confidence": "high",
+        "decisions": "LoadProviderImpl is the bridge between config.Provider data model and runtime ProviderImpl interface. Call sites resolve provider from endpoints using ResolveProvider, then pass to LoadProviderImpl.",
+        "failures": "None",
+        "tradeoffs": "LoadProviderImpl checks registry first then falls back to LocalProvider \u2014 simple but effective. Passes nil provider safely since LocalProvider.PrepareRequest is a no-op."
+      }
+    },
+    "2.4": {
+      "number": "2.4",
+      "status": "done",
+      "name": "Generic Sequence component for multi-step wizards",
+      "milestone": "Provider Interface",
+      "milestone_number": "2",
+      "summary": {
+        "tradeoffs": "Sequence implements Component interface (not tea.Model directly) to stay consistent with existing component pattern. The app layer wraps Sequence in its component slot. Used goroutine for sequential callback execution since tea.Sequential doesn't exist.",
+        "failures": "None",
+        "done": "Created Sequence component implementing the Component interface. Wraps child Prompt/Picker/Question callbacks to capture results in a shared context map. Advances through steps automatically. Supports OnDone and OnCancel callbacks. QuestionResult type for Question extraction.",
+        "lessons_learned": "tea.Sequential doesn't exist in bubbletea \u2014 had to use goroutine for sequential callback chaining. Sequence's Update returns tea.Cmd not (tea.Model, tea.Cmd) since it follows Component interface.",
+        "decisions": "Sequence wraps callbacks on each supported component type (Prompt, Picker, Question) rather than using reflection. This is explicit and type-safe. IsDone() lets the caller check completion; Done() fires OnDone explicitly.",
+        "confidence": "high"
+      }
+    },
+    "3.1": {
+      "number": "3.1",
+      "status": "done",
+      "name": "OpenAI OAuth PKCE implementation",
+      "milestone": "OpenAI OAuth (No-Browser)",
+      "milestone_number": "3",
+      "summary": {
+        "tradeoffs": "60-second buffer on expiration check to avoid edge-case re-auth. Token exchange uses PostForm for simplicity.",
+        "confidence": "high",
+        "failures": "None",
+        "done": "Created openai_provider.go with full PKCE OAuth flow: StartOAuth (generates PKCE challenge, returns auth URL), FinishOAuth (POST token exchange), PrepareRequest (injects Bearer token for API key or OAuth), Refresh (refresh_token grant), GetCredentials (for persistence). Supports both API key and OAuth modes via ActiveAuthMethod.",
+        "lessons_learned": "ProviderCreds is in config package \u2014 openai_provider.go needs the config import.",
+        "decisions": "Hardcoded OpenAI client ID and auth URLs. GetCredentials returns a shallow copy for persistence. Refresh supports token rotation if server returns new refresh_token."
+      }
+    },
+    "3.2": {
+      "number": "3.2",
+      "status": "done",
+      "name": "OpenAI provider registration and credential persistence",
+      "milestone": "OpenAI OAuth (No-Browser)",
+      "milestone_number": "3",
+      "summary": {
+        "lessons_learned": "None",
+        "confidence": "high",
+        "decisions": "Registry lookup happens first (for vllm/ollama), then name check for OpenAI, then LocalProvider fallback. OpenAIProvider.NewOpenAIProvider accepts nil creds gracefully.",
+        "failures": "None",
+        "tradeoffs": "LoadProviderImpl uses name-based dispatch (openai/openai-codex) rather than dialect \u2014 could use dialect check but name is more explicit for known providers.",
+        "done": "Updated LoadProviderImpl to handle openai/openai-codex by creating OpenAIProvider with loaded credentials from config.Provider. OpenAIProvider.GetCredentials() returns creds for persistence. Registry-based local providers (vllm/ollama) still work via init() registration."
+      }
+    },
+    "4.1": {
+      "number": "4.1",
+      "status": "done",
+      "name": "Provider auth wizard using Sequence component",
+      "milestone": "TUI Auth Prompt",
+      "milestone_number": "4",
+      "summary": {
+        "failures": "None",
+        "confidence": "high",
+        "decisions": "Captured 'm' as 'model' for closures since buildAuthWizard takes *Model receiver. setNotification called before tea.Batch since it returns nothing.",
+        "done": "Created auth_setup.go with showProviderConfig and buildAuthWizard. Uses Sequence to chain Prompt (for URL/key input), Picker (for auth method selection), and Question (for OAuth URL display). onProviderConfigComplete applies results to provider config, saves, and re-scans models. Added saveProvider helper on Model.",
+        "lessons_learned": "component.Input doesn't exist \u2014 used component.Prompt. Closures over *Model receiver need local capture to avoid double-deref in Sequence callbacks.",
+        "tradeoffs": "Multi-method path creates all credential steps (apiKey + oauthURL) and picks the right one in OnDone based on chosen auth method. Single-method path only creates the relevant step. Uses component.Prompt instead of non-existent component.Input."
+      }
+    },
+    "4.2": {
+      "number": "4.2",
+      "status": "done",
+      "name": "Wire auth prompt into provider selection flow",
+      "milestone": "TUI Auth Prompt",
+      "milestone_number": "4",
+      "summary": {
+        "decisions": "Added ensureProviderConfigured in auth_setup.go alongside showProviderConfig. Called at top of sendMessage before any message processing.",
+        "done": "Added ensureProviderConfigured that checks IsConfigured and auto-refreshes expired OAuth tokens. Wired into sendMessage as an early gate before proceeding with the request. Failed refresh shows re-config wizard.",
+        "lessons_learned": "None",
+        "tradeoffs": "ensureProviderConfigured returns (bool, tea.Cmd) \u2014 the bool tells the caller to short-circuit. On cancel, just returns to chat mode (message text stays in textarea for retry).",
+        "confidence": "high",
+        "failures": "None"
+      }
+    },
+    "4.3": {
+      "number": "4.3",
+      "status": "done",
+      "name": "Wire model scanning through ProviderImpl auth",
+      "milestone": "TUI Auth Prompt",
+      "milestone_number": "4",
+      "summary": {
+        "tradeoffs": "isAuthError uses string matching on error messages \u2014 works for our fmt.Errorf patterns. Providers without models endpoint (Anthropic) return nil (no entries, no error).",
+        "failures": "None",
+        "done": "Added NeedsConfig field to ModelEntry. Updated ScanModels to check IsConfigured and return sentinel entries. Added FetchModelsDetailWithAuth that applies provider auth via PrepareRequest. Added isAuthError helper for 401/403 detection.",
+        "decisions": "Added isAuthError in models.go (not provider.go) since it's specific to the scanning flow. Sentinel IDs use angle brackets to make them visually distinct in the picker.",
+        "lessons_learned": "None",
+        "confidence": "high"
+      }
+    },
+    "4.4": {
+      "number": "4.4",
+      "status": "done",
+      "name": "Picker shows auth-required placeholders and triggers auth prompt",
+      "milestone": "TUI Auth Prompt",
+      "milestone_number": "4",
+      "summary": {
+        "tradeoffs": "Sentinel Value set to provider name (not sentinel ID) for easier matching. Display label shows friendly action text ('configure' / 're-authenticate') instead of raw sentinel ID.",
+        "failures": "None",
+        "confidence": "high",
+        "lessons_learned": "None",
+        "done": "Updated buildModelPicker to detect NeedsConfig sentinel entries and display them as 'provider: configure' or 'provider: re-authenticate'. OnConfirm checks for sentinel and routes to showProviderConfig instead of normal selection. Normal model selection unchanged.",
+        "decisions": "Sentinels appear inline in the picker alongside real models. Value=provider name for sentinels since the ID is the sentinel marker, not actionable."
+      }
+    },
+    "5.1": {
+      "number": "5.1",
+      "status": "done",
+      "name": "401 detection and auto-refresh with re-auth prompt",
+      "milestone": "Error Handling & Fallback",
+      "milestone_number": "5",
+      "summary": {
+        "decisions": "Used req.GetBody for retry body re-read (Go 1.20+). Removed goto by restructuring: retry creates new request, checks status, falls through to stream processing on success. defer resp.Body.Close() moved after retry block.",
+        "failures": "None",
+        "done": "Added 401 detection in Engine Stream. On 401: attempts token refresh via provider.Refresh(), retries request with new token. If refresh fails or retry still gets non-OK, returns re-auth error. Moved defer resp.Body.Close() after retry block so it covers both original and retried response.",
+        "confidence": "high",
+        "tradeoffs": "LocalProvider.Refresh() returns nil (no-op) \u2014 means 401 on local providers won't retry, will fall to generic error. This is correct since local providers don't use auth.",
+        "lessons_learned": "goto in Go can't jump over variable declarations \u2014 had to restructure the flow entirely."
+      }
+    },
+    "5.2": {
+      "number": "5.2",
+      "status": "done",
+      "name": "Unsupported provider error and placeholder error for non-openai dialects",
+      "milestone": "Error Handling & Fallback",
+      "milestone_number": "5",
+      "summary": {
+        "tradeoffs": "UnsupportedProvider returned for any non-OpenAICompatible dialect that isn't in the registry. Error message clearly states what IS supported.",
+        "failures": "None",
+        "decisions": "Separate file for UnsupportedProvider keeps it isolated. PrepareRequest returns the user-facing error. Refresh also returns clear error.",
+        "done": "Created UnsupportedProvider in unsupported_provider.go with clear error messages for unimplemented dialects (Anthropic, Gemini). Updated LoadProviderImpl to return UnsupportedProvider for non-openai dialects. All ProviderImpl methods implemented with appropriate stubs.",
+        "lessons_learned": "None",
+        "confidence": "high"
+      }
+    }
+  }
+}

@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan: squid-art</title>
+<style>
+/*
+ * Planner Design System v0.3.0
+ * ─────────────────────────────
+ * Uses CSS variables from the host environment (claude.ai).
+ * Falls back to sensible dark-mode defaults if hosted standalone.
+ *
+ * Available host variables (auto light/dark):
+ *   --color-background-primary/-secondary/-tertiary
+ *   --color-text-primary/-secondary/-tertiary
+ *   --color-border-tertiary/-secondary/-primary
+ *   --color-background-info/-success/-warning/-danger
+ *   --color-text-info/-success/-warning/-danger
+ *   --color-border-info/-success/-warning/-danger
+ *   --font-sans / --font-mono
+ *   --border-radius-md (8px) / --border-radius-lg (12px)
+ *
+ * Standalone fallbacks (dark theme):
+ */
+:root {
+  --color-background-primary:   #161b22;
+  --color-background-secondary: #1c2333;
+  --color-background-tertiary:  #0d1117;
+  --color-background-info:      #1a2f4a;
+  --color-background-success:   #122d1f;
+  --color-background-warning:   #2d2a1a;
+  --color-background-danger:    #2d1a1a;
+  --color-text-primary:         #c9d1d9;
+  --color-text-secondary:       #8b949e;
+  --color-text-tertiary:        #6e7681;
+  --color-text-info:            #58a6ff;
+  --color-text-success:         #3fb950;
+  --color-text-warning:         #d29922;
+  --color-text-danger:          #f85149;
+  --color-border-tertiary:      rgba(255,255,255,0.08);
+  --color-border-secondary:     rgba(255,255,255,0.15);
+  --color-border-primary:       rgba(255,255,255,0.25);
+  --color-border-info:          rgba(88,166,255,0.4);
+  --color-border-success:       rgba(63,185,80,0.5);
+  --color-border-warning:       rgba(210,153,34,0.4);
+  --color-border-danger:        rgba(248,81,73,0.4);
+  --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono:  "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  background: var(--color-background-tertiary);
+  padding: 24px;
+}
+
+/* ── THEME TOGGLE (standalone only) ── */
+.theme-toggle {
+  position: fixed; top: 12px; right: 12px; z-index: 100;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-secondary);
+  font: 13px var(--font-sans); cursor: pointer;
+  transition: color 150ms ease;
+}
+.theme-toggle:hover { color: var(--color-text-primary); }
+
+/* ── LAYOUT ── */
+.plan-container { max-width: 960px; margin: 0 auto; }
+.plan-section   { margin-bottom: 40px; }
+
+/* ── HEADER ── */
+.plan-header {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 24px 28px;
+  margin-bottom: 40px;
+}
+.plan-header__title {
+  font-size: 1.75rem; font-weight: 500;
+  color: var(--color-text-primary);
+  margin-bottom: 8px;
+}
+.plan-header__meta {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  font-size: 13px; color: var(--color-text-secondary);
+  margin-bottom: 14px;
+}
+.plan-header__objective {
+  font-size: 14px; line-height: 1.7;
+  color: var(--color-text-secondary);
+  padding: 12px 16px;
+  background: var(--color-background-info);
+  border-left: 2px solid var(--color-border-info);
+  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
+}
+
+/* ── SECTION HEADINGS ── */
+.section-title {
+  font-size: 13px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--color-text-tertiary);
+  margin-bottom: 16px;
+}
+
+/* ── STATE ANALYSIS ── */
+.state-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin-bottom: 12px;
+}
+.state-block {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 16px 18px;
+}
+.state-block__title {
+  font-size: 12px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .07em; margin-bottom: 10px;
+}
+.state-block--current .state-block__title { color: var(--color-text-tertiary); }
+.state-block--desired .state-block__title { color: var(--color-text-info); }
+.state-block__list { list-style: none; }
+.state-block__list li {
+  padding: 3px 0 3px 14px; position: relative;
+  font-size: 13px; line-height: 1.6; color: var(--color-text-secondary);
+}
+.state-block__list li::before {
+  content: "–"; position: absolute; left: 0;
+  color: var(--color-text-tertiary);
+}
+.gap-analysis {
+  background: var(--color-background-warning);
+  border: 0.5px solid var(--color-border-warning);
+  border-radius: var(--border-radius-md);
+  padding: 14px 18px;
+}
+.gap-analysis__title {
+  font-size: 12px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .07em; color: var(--color-text-warning);
+  margin-bottom: 8px;
+}
+
+/* ── DIAGRAM ── */
+.diagram-container {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 24px;
+  display: flex; flex-direction: column; align-items: center;
+}
+.diagram-canvas {
+  max-width: 100%;
+  border-radius: var(--border-radius-md);
+  background: var(--color-background-secondary);
+}
+
+/* ── PHASE BLOCK ── */
+.phase-block {
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.phase-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 18px;
+  background: var(--color-background-secondary);
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+.phase-number {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  background: var(--color-background-info);
+  border: 0.5px solid var(--color-border-info);
+  color: var(--color-text-info);
+  font: 500 13px var(--font-mono);
+  border-radius: var(--border-radius-md);
+  flex-shrink: 0;
+}
+.phase-title  { font-size: 15px; font-weight: 500; color: var(--color-text-primary); flex-grow: 1; }
+.phase-step-count {
+  font-size: 12px; color: var(--color-text-secondary);
+  background: var(--color-background-tertiary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: 20px; padding: 2px 10px;
+}
+.phase-steps { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+/* ── STEP ── */
+.step {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+}
+.step__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 14px;
+  padding: 14px 18px 12px;
+}
+.step__number {
+  font: 500 11px var(--font-mono);
+  color: var(--color-text-secondary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-secondary);
+  border-radius: 6px;
+  padding: 3px 7px;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.step__title {
+  font-size: 15px; font-weight: 500;
+  color: var(--color-text-primary);
+  line-height: 1.4; padding-top: 2px;
+}
+.step__concept-badge {
+  font-size: 11px; font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: 20px; padding: 3px 10px;
+  white-space: nowrap; margin-top: 2px;
+}
+/* keep old badge variant classes for script compat, all map to same style */
+.step__concept-badge--primary,
+.step__concept-badge--accent,
+.step__concept-badge--success,
+.step__concept-badge--warning,
+.step__concept-badge--info { /* inherits base style above */ }
+
+.step__divider {
+  height: 0.5px;
+  background: var(--color-border-tertiary);
+  margin: 0 18px;
+}
+.step__body {
+  padding: 14px 18px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.step__description {
+  font-size: 14px; line-height: 1.7;
+  color: var(--color-text-secondary);
+}
+
+/* Shared field label */
+.step__files-title,
+.step__data-title,
+.step__contract-title,
+.step__example-title,
+.step__changes-title,
+.step__verification-title {
+  font-size: 11px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: .07em;
+  color: var(--color-text-tertiary);
+  margin-bottom: 6px;
+}
+
+/* Files */
+.step__files { display: flex; flex-direction: column; gap: 6px; }
+.step__file-path {
+  display: inline-block;
+  font: 12px var(--font-mono);
+  color: var(--color-text-info);
+  background: var(--color-background-info);
+  border: 0.5px solid var(--color-border-info);
+  border-radius: 6px;
+  padding: 3px 8px;
+  margin: 2px;
+}
+
+/* Data shapes */
+.step__data { display: flex; flex-direction: column; gap: 6px; }
+.step__data-code {
+  font: 12px/1.7 var(--font-mono);
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  padding: 10px 14px;
+  white-space: pre; overflow-x: auto;
+}
+
+/* Contract */
+.step__contract { display: flex; flex-direction: column; gap: 6px; }
+.step__contract-body {
+  font: 12px/1.7 var(--font-mono);
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-md);
+  padding: 10px 14px;
+}
+
+/* Example — most important: left accent bar, no fill */
+.step__example { display: flex; flex-direction: column; gap: 6px; }
+.step__example-code {
+  font: 12px/1.7 var(--font-mono);
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-left: 2px solid var(--color-border-success);
+  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
+  padding: 12px 16px;
+  white-space: pre; overflow-x: auto;
+}
+
+/* Changes */
+.step__changes { display: flex; flex-direction: column; gap: 6px; }
+.step__changes-list { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.step__changes-list li {
+  display: flex; gap: 8px;
+  font-size: 13px; line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+.step__changes-list li::before {
+  content: "→"; color: var(--color-text-tertiary);
+  flex-shrink: 0; margin-top: 1px;
+}
+
+/* Verify */
+.step__verification { display: flex; flex-direction: column; gap: 6px; }
+.step__verification-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.step__verification-list li {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 13px; line-height: 1.6;
+  color: var(--color-text-secondary);
+  background: var(--color-background-success);
+  border: 0.5px solid var(--color-border-success);
+  border-radius: var(--border-radius-md);
+  padding: 7px 10px;
+}
+.step__verification-list li::before {
+  content: "✓"; color: var(--color-text-success);
+  flex-shrink: 0; margin-top: 1px; font-weight: 500;
+}
+
+/* ── CALLOUT ── */
+.callout {
+  border-radius: var(--border-radius-md);
+  padding: 12px 16px;
+  margin: 12px 0;
+  border-left: 2px solid;
+  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
+}
+.callout--info    { background: var(--color-background-info);    border-color: var(--color-border-info); }
+.callout--warning { background: var(--color-background-warning); border-color: var(--color-border-warning); }
+.callout--error   { background: var(--color-background-danger);  border-color: var(--color-border-danger); }
+.callout--success { background: var(--color-background-success); border-color: var(--color-border-success); }
+.callout__title {
+  font-size: 12px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .07em; margin-bottom: 6px;
+}
+.callout--info    .callout__title { color: var(--color-text-info); }
+.callout--warning .callout__title { color: var(--color-text-warning); }
+.callout--error   .callout__title { color: var(--color-text-danger); }
+.callout--success .callout__title { color: var(--color-text-success); }
+.callout__body { font-size: 13px; line-height: 1.7; color: var(--color-text-secondary); }
+
+/* ── SUMMARY ── */
+.summary {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: 24px;
+}
+.summary__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+.summary__stat {
+  text-align: center; padding: 16px 12px;
+  background: var(--color-background-secondary);
+  border-radius: var(--border-radius-md);
+}
+.summary__stat-value {
+  display: block; font-size: 2rem; font-weight: 500;
+  color: var(--color-text-primary);
+}
+.summary__stat-label {
+  display: block; font-size: 11px;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase; letter-spacing: .07em;
+  margin-top: 4px;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 600px) {
+  body { padding: 14px; }
+  .state-grid { grid-template-columns: 1fr; }
+}
+
+/* ── PRINT ── */
+@media print {
+  body { background: white; padding: 0; }
+  .theme-toggle { display: none !important; }
+  .step, .phase-block { break-inside: avoid; }
+}
+
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="document.documentElement.classList.toggle('light')" title="Toggle light/dark theme">
+  <span class="theme-toggle__icon">&#9789;</span>
+  <span class="theme-toggle__label">Theme</span>
+</button>
+
+<div class="plan-container">
+
+  <!-- ========== HEADER ========== -->
+  <header class="plan-header">
+    <h1 class="plan-header__title">squid-art</h1>
+    <div class="plan-header__meta">
+      <span class="plan-header__meta-item">&#128193; /home/goglue/src/squid-os</span>
+      <span class="plan-header__meta-item">&#128336; 2026-05-21 01:55:34</span>
+    </div>
+    <div class="plan-header__objective">
+      <strong>Objective:</strong> Add centered squid pixel art in viewport when no user messages yet
+    </div>
+  </header>
+
+  <!-- ========== PLAN CONTENT ========== -->
+  <!-- 
+    This is where the plan data is injected by generate-plan.sh.
+    The plan content should use the design system classes defined in design-system.css.
+    
+    EXTENSIBILITY NOTE: The injected content can freely use any combination of:
+    - Component classes (step, concept-card, workflow, callout, badge, etc.)
+    - Utility classes (u-flex, u-gap-md, u-text-muted, etc.)
+    - Design tokens via inline style (var(--color-*), var(--space-*), etc.)
+    - Custom classes — just reference the tokens for visual consistency
+    
+    If a component doesn't exist for your needs, compose from primitives
+    or add inline markup using the token variables.
+  -->
+  <div class="plan-section">
+<h2 class="section-title">State Analysis</h2>
+<div class="state-grid">
+  <div class="state-block state-block--current">
+    <div class="state-block__title">Current State</div>
+    <ul class="state-block__list"><li>When a new session starts, the viewport shows only system/internal messages rendered as collapsed boxes</li><li>No visual welcome element — the viewport area below init messages is empty until the user sends a message</li><li>`updateViewportContent()` renders init messages but nothing else when no user messages exist</li></ul>
+  </div>
+  <div class="state-block state-block--desired">
+    <div class="state-block__title">Desired State</div>
+    <ul class="state-block__list"><li>When there are no user messages in the session, display a centered squid pixel art in the viewport</li><li>The art uses 1=filled, 0=empty on a 24x14 grid, rendered with lipgloss blocks</li><li>When the first user message is sent, the pixel art disappears — normal messages take over</li><li>The art is vertically centered in the viewport area above the textarea</li></ul>
+  </div>
+</div>
+<div class="gap-analysis"><div class="gap-analysis__title">Gap Analysis</div><ul class="state-block__list"><li>Need a `squidArt` function to render the pixel art as styled blocks</li><li>Need to detect &quot;no user messages&quot; state in `updateViewportContent()`</li><li>Need to vertically center the art within the viewport height</li><li>Need a style for the squid fill color that fits the existing palette</li></ul></div>
+</div>
+<div class="plan-section">
+<h2 class="section-title">Execution Workflow</h2>
+<div class="diagram-container">
+<canvas id="wf-canvas" width="860" height="196" class="diagram-canvas"></canvas>
+<script>
+(function(){
+  var c = document.getElementById('wf-canvas');
+  if (!c) return;
+  var ctx = c.getContext('2d');
+  var W = c.width;
+  var labels = ["Phase 1: Pixel Art Renderer","Phase 2: Integrate into Viewport Rendering"];
+  var metas  = ["New file, pure rendering","Modify existing render.go"];
+  var crits  = [true,false];
+  var nW = 400, nH = 56, gap = 28, startY = 28;
+  var cx = Math.floor(W / 2);
+
+  for (var i = 0; i < labels.length; i++) {
+    var y = startY + i * (nH + gap);
+    var x = cx - Math.floor(nW / 2);
+    var isCrit = crits[i];
+
+    ctx.fillStyle   = isCrit ? '#2d1a1a' : '#1c2333';
+    ctx.strokeStyle = isCrit ? '#f85149' : '#30363d';
+    ctx.lineWidth = isCrit ? 2 : 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x, y, nW, nH, 8);
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = isCrit ? '#f85149' : '#58a6ff';
+    ctx.beginPath();
+    ctx.arc(x + 24, y + Math.floor(nH/2), 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#0d1117';
+    ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(i + 1, x + 24, y + Math.floor(nH/2));
+
+    ctx.fillStyle = '#c9d1d9';
+    ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(labels[i], x + 48, y + 10);
+
+    ctx.fillStyle = '#8b949e';
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillText(metas[i], x + 48, y + 30);
+
+    if (i < labels.length - 1) {
+      var ay = y + nH, ny = startY + (i+1) * (nH + gap);
+      ctx.strokeStyle = '#484f58'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(cx, ay); ctx.lineTo(cx, ny); ctx.stroke();
+      ctx.fillStyle = '#484f58';
+      ctx.beginPath();
+      ctx.moveTo(cx, ny);
+      ctx.lineTo(cx - 6, ny - 10);
+      ctx.lineTo(cx + 6, ny - 10);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+})();
+</script>
+</div></div>
+<div class="plan-section">
+<h2 class="section-title">Phases &amp; Steps</h2>
+<div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">1</span>
+  <h3 class="phase-title">Pixel Art Renderer</h3>
+  <span class="phase-step-count">0 steps</span>
+</div>
+<div class="phase-steps">
+</div></div>
+<div class="phase-block">
+<div class="phase-header">
+  <span class="phase-number">2</span>
+  <h3 class="phase-title">Integrate into Viewport Rendering</h3>
+  <span class="phase-step-count">2 steps</span>
+</div>
+<div class="phase-steps">
+<div class="step">
+<div class="step__header">
+  <span class="step__number">2.1</span>
+  <h4 class="step__title">Add &quot;no messages&quot; check in updateViewportContent</h4>
+  <span class="step__concept-badge">Integrate into Viewport Rendering</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Modify updateViewportContent to detect when there are no user messages and append the squid art after init messages.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">/home/goglue/src/squid-os/internal/app/render.go</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">None — reuses existing chatSession and streamState types</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">No new public API — modify existing updateViewportContent() method on Model</p></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>In updateViewportContent(), after rendering all cached messages and streaming content, check if there are no user messages: `hasUserMsg := false; for _, msg := range m.session.file.Messages { if msg.Role == &quot;user&quot; { hasUserMsg = true; break } }`</li><li>If !hasUserMsg &amp;&amp; !m.stream.active, append the squid art to the viewport builder</li><li>Call `ui.RenderSquidArt(m.width, m.height)` to get the art string</li><li>Append it after the existing message rendering (after the for loop over renderedMessages and the streaming block)</li><li>The art needs to be appended as: `b.WriteString(ui.RenderSquidArt(m.width, m.height))`</li><li>Ensure the init messages (system, env, config, tools) still render above the art</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... &amp;&amp; echo &quot;build ok&quot;</li></ul></div>
+</div></div>
+<div class="step">
+<div class="step__header">
+  <span class="step__number">2.2</span>
+  <h4 class="step__title">Add viewport height calculation for centering</h4>
+  <span class="step__concept-badge">Integrate into Viewport Rendering</span>
+</div>
+<div class="step__divider"></div>
+<div class="step__body">
+  <p class="step__description">Ensure the viewport height passed to RenderSquidArt accounts for the textarea and footer rows so the art is visually centered in the available viewport area.</p>
+<div class="step__files"><div class="step__files-title">Files</div><code class="step__file-path">/home/goglue/src/squid-os/internal/app/render.go</code> </div>
+<div class="step__data"><div class="step__data-title">Data Shapes</div><pre class="step__data-code">None — uses existing m.viewport.Height() and model height</pre></div>
+<div class="step__contract"><div class="step__contract-title">Contract</div><p class="step__contract-body">No new function — pass `m.viewport.Height()` as viewport height</p></div>
+<div class="step__changes"><div class="step__changes-title">Changes</div><ul class="step__changes-list"><li>Call `ui.RenderSquidArt(m.width, m.viewport.Height())` — the viewport height is the actual scrollable area height</li><li>The squid art function handles centering within that height</li></ul></div>
+<div class="step__verification"><div class="step__verification-title">Verify</div><ul class="step__verification-list"><li>go build ./... &amp;&amp; echo &quot;build ok&quot;</li></ul></div>
+</div></div>
+</div></div>
+</div>
+<div class="callout callout--info">
+<div class="callout__title">Coding Conventions</div>
+<div class="callout__body">- Palette uses `P.BgApp` ("233", dark gray) for backgrounds — squid empty pixels use this
+- Palette uses `P.TextAccent` ("110", cyan) for accent — squid filled pixels use this
+- All rendering functions take `width int` as the viewport width
+- `DrawCanvas` uses lipgloss `Style.Render()` for styled blocks
+- New files go in the appropriate package directory (ui, app, style)
+- No global mutation — use pure functions where possible
+</div>
+</div>
+<div class="plan-section">
+<h2 class="section-title">Summary</h2>
+<div class="summary">
+<div class="summary__grid">
+  <div class="summary__stat">
+    <span class="summary__stat-value">2</span>
+    <span class="summary__stat-label">Phases</span>
+  </div>
+  <div class="summary__stat">
+    <span class="summary__stat-value">2</span>
+    <span class="summary__stat-label">Steps</span>
+  </div>
+</div>
+</div>
+</div>
+
+
+</div>
+
+</body></html>

@@ -1,0 +1,176 @@
+{
+  "tasks": {
+    "1.1": {
+      "number": "1.1",
+      "status": "done",
+      "name": "Add Authorization field and constants to Settings",
+      "milestone": "Authorization Setting",
+      "milestone_number": "1",
+      "summary": {
+        "done": "Added Authorization field with constants (auto, ask-on-write, ask-for-all) to Settings struct and ValidateAuthorization method that normalizes the value, falling back to auto.",
+        "tradeoffs": "None",
+        "confidence": "high",
+        "failures": "None",
+        "decisions": "Placed constants and validation in config package alongside Settings struct for co-location.",
+        "lessons_learned": "None"
+      }
+    },
+    "2.1": {
+      "number": "2.1",
+      "status": "done",
+      "name": "Add destructive to bash schema and validation",
+      "milestone": "Destructive Bash",
+      "milestone_number": "2",
+      "summary": {
+        "tradeoffs": "None",
+        "done": "Added destructive (boolean, required) to bash tool JSON schema and validation in Execute that returns an error if destructive is missing or non-boolean.",
+        "decisions": "Placed validation immediately after command validation in Execute, before any execution logic runs. Schema description includes concrete examples of destructive vs read-only commands to guide the LLM.",
+        "failures": "None",
+        "confidence": "high",
+        "lessons_learned": "None"
+      }
+    },
+    "2.2": {
+      "number": "2.2",
+      "status": "done",
+      "name": "Add IsDestructive helper to Tool for pre-execution checks",
+      "milestone": "Destructive Bash",
+      "milestone_number": "2",
+      "summary": {
+        "done": "Added IsDestructive func(map[string]interface{}) bool field to Tool struct. Set to always-true for write_file and edit_file. Set to read destructive arg from args for bash. All other tools (read_file, open, skill_load, skill_list, set_working_dir) leave it nil (never destructive).",
+        "failures": "None",
+        "tradeoffs": "None",
+        "decisions": "IsDestructive is a func field on Tool \u2014 nil means never destructive, allowing the authorization gate to check with a simple nil-guard. File tools always return true (always destructive by nature). Bash reads the value from args, tying destructiveness to what the LLM declared.",
+        "confidence": "high",
+        "lessons_learned": "None"
+      }
+    },
+    "3.1": {
+      "number": "3.1",
+      "status": "done",
+      "name": "Add authorization types and authorization context",
+      "milestone": "Authorization Gate",
+      "milestone_number": "3",
+      "summary": {
+        "confidence": "high",
+        "lessons_learned": "None",
+        "tradeoffs": "None",
+        "decisions": "Placed in app package since authorization bridges application orchestration and UI \u2014 not pure domain. Two-field AuthResult replaces prior four-variant enum.",
+        "failures": "None",
+        "done": "Created internal/app/authorization.go with AuthResult (Approved bool, Instructions string) and AuthorizationContext (ToolName, Args, ArgsJSON, DisplayValue, IsDestructive, Result) with IsActionable helper."
+      }
+    },
+    "3.2": {
+      "number": "3.2",
+      "status": "done",
+      "name": "Add authorization state to stream and Model.needsAuthorization",
+      "milestone": "Authorization Gate",
+      "milestone_number": "3",
+      "summary": {
+        "failures": "None",
+        "confidence": "high",
+        "decisions": "needsAuthorization is a simple switch on settings mode \u2014 no extra abstraction needed. Fields added to streamState since auth state is inherently tied to the streaming lifecycle.",
+        "done": "Added authorizationCtx *AuthorizationContext and pendingToolIndex int to streamState. Updated reset() to clear them. Added needsAuthorization method on Model that switches on settings mode (ask-for-all = always, ask-on-write = destructive only, auto = never).",
+        "tradeoffs": "None",
+        "lessons_learned": "None"
+      }
+    },
+    "3.3": {
+      "number": "3.3",
+      "status": "done",
+      "name": "Refactor executeTools to support authorization interruption per tool",
+      "milestone": "Authorization Gate",
+      "milestone_number": "3",
+      "summary": {
+        "done": "Replaced executeTools + executeOneTool with single resumeToolExecution(entries, startIndex) loop. Builds instruction entries upfront, iterates tool by tool with three sequential gates: apply collected auth result, auth check, file change validation, then execute. One appendAssistantMsg after the loop, no duplicated execution paths.",
+        "decisions": "Single function resumeToolExecution replaces all prior execution functions. Entries built upfront when nil (first call). startIndex allows resuming from any point. Auth result stored in authorizationCtx.Result by handleAuthorizeKey, consumed inline at the top of the loop iteration.",
+        "lessons_learned": "Original design had three functions (executeTools, executeOneTool, resolveAuthorization) with duplicated file validation, auth checks, and appendAssistantMsg logic. Refactoring to one loop eliminated all duplication. Key insight: handleAuthorizeKey stores the result, the loop consumes it \u2014 no separate resolve function needed.",
+        "failures": "Multiple iterations: first attempt kept executeOneTool and had a bug where approved auth didn't bypass the gate (would re-prompt same tool). Second attempt treated instructions as rejection instead of approval+terminate. Third attempt duplicated appendAssistantMsg inside the loop instead of after it. Fourth attempt left dead buildInstructionEntry code.",
+        "tradeoffs": "Uses goto doExecute to skip the auth gate when a collected approval is consumed \u2014 the cleanest way in Go without duplicating execution code.",
+        "confidence": "high"
+      }
+    },
+    "3.4": {
+      "number": "3.4",
+      "status": "done",
+      "name": "Implement executeSingleTool and resolveAuthorization",
+      "milestone": "Authorization Gate",
+      "milestone_number": "3",
+      "summary": {
+        "tradeoffs": "None \u2014 all resolution logic is now inside the single resumeToolExecution loop. No separate resolve function needed.",
+        "decisions": "resolveAuthorization, saveAndResume, and injectAndResume were all eliminated. The loop handles everything: approved \u2192 skip gate via goto, rejected \u2192 cancel+break, approved+instructions \u2192 execute then cancel remaining+break. After loop: one appendAssistantMsg, optional user message append, reset+startStream.",
+        "lessons_learned": "The auth result has three outcomes: approved (execute and continue), rejected (don't execute, cancel remaining), approved+instructions (execute then cancel remaining and inject). Instructions do NOT mean rejection \u2014 they mean execute this one, then we're done. DRY principle: appendAssistantMsg called exactly once after the loop, never inside it.",
+        "confidence": "high",
+        "failures": "Initial implementation had resolveAuthorization as a separate function duplicating the loop's auth check and appendAssistantMsg. Eliminated it entirely \u2014 handleAuthorizeKey now stores the result in authorizationCtx.Result and calls resumeToolExecution directly.",
+        "done": "Auth result consumed inline at top of loop when authorizationCtx exists and pendingToolIndex matches current index. Rejected \u2192 cancel remaining, break. Approved \u2192 goto doExecute (skip gate). Approved+instructions \u2192 capturedInstructions set, execute normally, then after execution cancel remaining and break."
+      }
+    },
+    "3.5": {
+      "number": "3.5",
+      "status": "done",
+      "name": "Implement continueAfterAuth and injectAndResume",
+      "milestone": "Authorization Gate",
+      "milestone_number": "3",
+      "summary": {
+        "failures": "None",
+        "decisions": "continueAfterAuth and injectAndResume eliminated. Post-loop handling is inline in resumeToolExecution: appendAssistantMsg(entries), if capturedInstructions != \"\" append user message, then reset + startStream. One path, no branching functions.",
+        "confidence": "high",
+        "lessons_learned": "The injection path and normal completion path both do the same thing: append assistant message, reset stream, start stream. The only difference is an optional user message appended in between. Factoring this into a single block after the loop eliminates duplication entirely.",
+        "tradeoffs": "None \u2014 simplification with no downsides.",
+        "done": "Post-loop block in resumeToolExecution: appends assistant message with all metrics, conditionally appends user message if capturedInstructions is set, calls stream.reset() + updateViewportContent() + startStream()."
+      }
+    },
+    "3.6": {
+      "number": "3.6",
+      "status": "done",
+      "name": "Wire authorization into handleStreamEvent tool_calls flow",
+      "milestone": "Authorization Gate",
+      "milestone_number": "3",
+      "summary": {
+        "lessons_learned": "handleStreamEvent simply calls resumeToolExecution(nil, 0) on tool_calls. The function handles everything \u2014 initial build, auth pauses, file validation, execution, post-loop save/inject. No intermediate state passing or bool return values needed.",
+        "done": "handleStreamEvent tool_calls branch calls resumeToolExecution(nil, 0). handleAuthorizeKey stores AuthResult in authorizationCtx.Result and calls resumeToolExecution(pendingEntries, pendingToolIndex). setAuthMode populates authPrompt with preview diff from tool.Preview. ModeAuthorize added to modes.go, AuthorizationPrompt renders in View, pendingEntries holds entries during auth pause.",
+        "decisions": "Single entry point from handleStreamEvent. handleAuthorizeKey directly stores result and resumes \u2014 no intermediate resolve function. View renders authPrompt instead of textarea in ModeAuthorize. Escape key treated as rejection.",
+        "confidence": "high",
+        "failures": "Original design had executeTools return (entries, bool) with handleStreamEvent branching on the bool. This required storing pendingEntries in handleStreamEvent and a separate save path. Simplified to resumeToolExecution handling everything internally.",
+        "tradeoffs": "authorizationCtx serves double duty: storing the pending auth request (when paused) and storing the collected result (when resuming). pendingToolIndex marks which tool the result applies to."
+      }
+    },
+    "4.1": {
+      "number": "4.1",
+      "status": "in_progress",
+      "name": "Add ModeAuthorize and AuthorizationPrompt component",
+      "milestone": "Authorization UI",
+      "milestone_number": "4",
+      "summary": {
+        "lessons_learned": "Already implemented in previous session \u2014 code matched the plan spec exactly.",
+        "decisions": "AuthorizationPrompt is a pure value struct (no state mutation). Render returns a string \u2014 no lipgloss components. Uses simple truncation for display values over 40 chars.",
+        "confidence": "high",
+        "done": "ModeAuthorize added to modes.go. AuthorizationPrompt struct created in internal/ui/authorization.go with yes/no selection, destructive icon, diff preview indicator, and text input mode. Render method produces formatted prompt with selection highlighting.",
+        "tradeoffs": "None",
+        "failures": "None"
+      }
+    },
+    "4.2": {
+      "number": "4.2",
+      "status": "in_progress",
+      "name": "Wire authorization prompt into Model, View, and input dispatch",
+      "milestone": "Authorization UI",
+      "milestone_number": "4",
+      "summary": {
+        "lessons_learned": "Already implemented in previous session \u2014 code matched the plan spec. The actual implementation simplified resolveAuthorization away (handled inline in resumeToolExecution loop).",
+        "done": "authPrompt field added to Model struct in app.go. setAuthMode populates it from authorizationCtx with diff preview from tool.Preview. View renders authPrompt instead of textarea in ModeAuthorize. handleAuthorizeKey handles \u2190/\u2192 selection, Tab/Alt+Tab for text mode, Enter to confirm (stores AuthResult and calls resumeToolExecution), Escape to reject. ModeAuthorize case wired in handleKey dispatch.",
+        "decisions": "handleAuthorizeKey stores result directly in authorizationCtx.Result then calls resumeToolExecution \u2014 no separate resolveAuthorization function needed. Tab enters text mode, Alt+Tab exits (Shift+Tab not used, Alt+Tab is more ergonomic for TUI).",
+        "confidence": "high",
+        "tradeoffs": "None",
+        "failures": "None"
+      }
+    },
+    "5.1": {
+      "number": "5.1",
+      "status": "not_started",
+      "name": "Update system prompt for destructive field",
+      "milestone": "System Prompt Update",
+      "milestone_number": "5"
+    }
+  }
+}

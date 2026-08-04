@@ -1,0 +1,138 @@
+{
+  "tasks": {
+    "1.1": {
+      "number": "1.1",
+      "status": "done",
+      "name": "Add on-demand preview at auth gate in resumeToolExecution",
+      "milestone": "Preview at Auth Gate & Smart Rendering",
+      "milestone_number": "1",
+      "summary": {
+        "lessons_learned": "write_file and edit_file already have Preview functions that use dry-run mode. The Preview return type is ToolResult which matches the Execution fields directly \u2014 no conversion needed.",
+        "done": "Added on-demand preview at the auth gate in resumeToolExecution. When a tool needs authorization, tool.Preview(args) is called first. On preview error, the tool is marked as error status and authorization is skipped entirely (continue to next tool). On preview success, Execution is populated with preview Result and Files (with ToolCallID set), and status is set to pending before showing the auth question.",
+        "decisions": "Used continue instead of break on preview failure so remaining tools can still execute. Preview data populates Execution before the auth question so the diff is visible in the viewport during authorization pause.",
+        "failures": "None",
+        "tradeoffs": "Preview runs even when the tool doesn't have a Preview function \u2014 in that case we just set pending without preview data, same as before. The continue on preview error means subsequent tools still get a chance to run.",
+        "confidence": "high"
+      }
+    },
+    "1.2": {
+      "number": "1.2",
+      "status": "done",
+      "name": "Render tools up to pending index with visible error messages",
+      "milestone": "Preview at Auth Gate & Smart Rendering",
+      "milestone_number": "1",
+      "summary": {
+        "lessons_learned": "Error rendering was already fine \u2014 no change needed there. The only new case was pending tools showing their preview diffs, and stopping iteration at the auth boundary.",
+        "confidence": "high",
+        "decisions": "Used status=pending as the natural boundary instead of a separate pendingIndex parameter \u2014 kept the render function pure with no extra state threading.",
+        "done": "Updated renderToolCallsInline with two changes: (1) diffs visible for pending status so preview file diffs show during auth pause, (2) stop rendering after the first pending tool since tools after it are just waiting placeholders.",
+        "failures": "None",
+        "tradeoffs": "Relying on status=pending as the stop signal instead of threading pendingIndex through the render chain. Pending only appears during auth pause."
+      }
+    },
+    "2.1": {
+      "number": "2.1",
+      "status": "done",
+      "name": "Save assistant message before tool loop with initial metrics",
+      "milestone": "Eager Save & In-Place Mutation",
+      "milestone_number": "2",
+      "summary": {
+        "lessons_learned": "The slice reference trick eliminates the need for sync. The stream.active flag during tool execution was a hidden bug \u2014 buildLiveSeqStat was double-counting the saved message's stats plus live stats. Setting active=false at stream end cleanly separates inference from execution phases.",
+        "decisions": "Full recompute of SequenceStat instead of incremental Accumulate \u2014 simpler, always correct, no state drift. Used Go slice semantics: entries shares underlying array with msg.ToolCalls, so mutations to entries[i] are automatically persisted. Stored msgIdx in streamState for resume instead of passing pendingEntries through callbacks.",
+        "done": "Made appendAssistantMsg return the index of the appended message. In resumeToolExecution: on first call, build all tool entries and save the assistant message eagerly before the tool loop with initial metrics (text, thinking, tool call instruction tokens). DurationTimeMs, TokensPerSecond, InputTokens start at 0. Added msgIdx field to streamState for auth resume tracking. Updated setAuthMode callbacks to pass nil entries (resume fetches from saved message via msgIdx). Removed stream.active=false from setAuthMode. Set stream.active=false after stream ends (event.Done with tool_calls) before entering tool execution \u2014 prevents buildLiveSeqStat double-counting during tool loop. Replaced incremental Accumulate with recomputeSequenceStats (full recompute from scratch) \u2014 simpler and correct. After loop: finalize metrics and recompute SequenceStat.",
+        "tradeoffs": "recomputeSequenceStats scans all assistant messages in a turn on every append/mutate \u2014 effectively zero cost (~20 msgs = <1\u03bcs) but eliminates fragile incremental state. Removed stream.active=true during tool execution as a side effect (formally task 2.3) because eager save makes the streaming render path unnecessary. Accumulate method is now dead code.",
+        "confidence": "high",
+        "failures": "None"
+      }
+    },
+    "2.2": {
+      "number": "2.2",
+      "status": "done",
+      "name": "Mutate saved message in place with incremental metrics",
+      "milestone": "Eager Save & In-Place Mutation",
+      "milestone_number": "2",
+      "summary": {
+        "done": "Added incremental metrics update after each tool execution in the loop: DurationTimeMs and InputTokens updated on the saved message, recomputeSequenceStats called, render cache invalidated and viewport updated. This gives crash resilience \u2014 if the app crashes mid-loop, the saved message reflects exactly which tools have executed with accurate metrics.",
+        "failures": "None",
+        "confidence": "high",
+        "tradeoffs": "Calling recomputeSequenceStats and updateViewportContent after every tool execution adds minimal overhead (~1\u03bcs for recompute, full viewport rebuild). Could optimize later if needed but keeps correctness simple.",
+        "decisions": "Declared msg pointer outside the loop for use in both the per-tool incremental update and the final post-loop update.",
+        "lessons_learned": "invalidateRenderAt is a no-op for already-cached slots \u2014 the render loop only appends new entries past len(renderedMessages). Use invalidateRenderFrom instead to truncate the cache from the mutated index forward."
+      }
+    },
+    "2.3": {
+      "number": "2.3",
+      "status": "done",
+      "name": "Simplify auth pause and reorder gates: file change before auth",
+      "milestone": "Eager Save & In-Place Mutation",
+      "milestone_number": "2",
+      "summary": {
+        "lessons_learned": "pendingEntries was dead code since 2.1 changed auth callbacks to call resumeToolExecution(nil, 0) \u2014 cleaning it up now avoids confusion.",
+        "tradeoffs": "File change check runs for all tools on auth path too (not just executed ones) \u2014 minor extra cost but avoids the edge case of authorizing a tool on a file that's already been modified.",
+        "failures": "None",
+        "confidence": "high",
+        "done": "Reordered gates: file change validation now runs before authorization (avoids pointless auth questions for changed files). Removed dead pendingEntries field from streamState \u2014 auth resume uses msgIdx from the saved message instead. stream.active=false was already removed from setAuthMode in task 2.1.",
+        "decisions": "Kept msgIdx in streamState (added in 2.1) as the single source of truth for the saved message index. Removed pendingEntries entirely since auth callbacks now pass nil and resume fetches from the saved message."
+      }
+    },
+    "2.4": {
+      "number": "2.4",
+      "status": "done",
+      "name": "Finalize remaining message metrics after loop completes",
+      "milestone": "Eager Save & In-Place Mutation",
+      "milestone_number": "2",
+      "summary": {
+        "tradeoffs": "flushToolMessage called on every tool execution \u2014 slight overhead from recomputeSequenceStats per tool but ensures consistent state. autoSave only at auth return and loop-done, not per-tool.",
+        "failures": "None",
+        "confidence": "high",
+        "done": "Added flushToolMessage helper (metrics + recomputeSequenceStats + invalidateRenderFrom). Called after each tool execution (live viewport), at auth return (with autoSave for crash resilience), and at loop-done (with autoSave before next stream). Two autoSave points cover all exit paths.",
+        "decisions": "Recompute from scratch instead of incremental finalize \u2014 consistent with the recomputeSequenceStats approach from 2.1."
+      }
+    },
+    "3.1": {
+      "number": "3.1",
+      "status": "done",
+      "name": "Clean up render.go and remove auth-pause special cases",
+      "milestone": "Cleanup & Edge Cases",
+      "milestone_number": "3",
+      "summary": {
+        "done": "Verified that render.go and the entire ui package have no authorizationCtx references or auth-pause special cases. The streaming render path only activates on stream.active with no branching for auth state. The cleanup work was already completed during earlier tasks (stream.active=false was removed from setAuthMode in 2.1, and pendingEntries was removed in 2.3). No code changes needed.",
+        "decisions": "No changes needed. The render path is already clean from eager save work done in milestones 1 and 2.",
+        "failures": "None",
+        "lessons_learned": "The authorizationCtx field still exists in stream.go for its functional use (managing the auth question and result), but it was never referenced in the render chain. The old workaround (m.stream.active || m.stream.authorizationCtx != nil) was already removed during earlier tasks.",
+        "confidence": "high",
+        "tradeoffs": "None - this was a verification task confirming prior work already achieved the goal"
+      }
+    },
+    "3.2": {
+      "number": "3.2",
+      "status": "done",
+      "name": "Handle rejection, captured instructions, and stream errors with eager save",
+      "milestone": "Cleanup & Edge Cases",
+      "milestone_number": "3",
+      "summary": {
+        "failures": "None",
+        "tradeoffs": "No code changes needed - the eager save architecture (entries sharing underlying array with saved message) naturally handles all edge cases through in-place mutation.",
+        "confidence": "high",
+        "done": "Verified all edge case handling paths against acceptance criteria. Rejection, captured instructions, stream errors, and user cancellation all correctly mutate the saved message since entries shares the underlying array with the persisted message's ToolCalls. flushToolMessage at loop-done ensures render cache invalidation for all exit paths. The error path in handleStreamEvent appends a synthetic error message without touching the already-saved assistant message with tool results.",
+        "decisions": "All edge cases already handled by the existing eager save implementation. The shared array semantics from task 2.1 mean that rejection/cancellation mutations are automatically persisted.",
+        "lessons_learned": "The entries slice sharing the underlying array with the saved message's ToolCalls is the key design decision that makes all these edge cases work automatically. Any mutation to entries[i] is a mutation to the saved message."
+      }
+    },
+    "3.3": {
+      "number": "3.3",
+      "status": "done",
+      "name": "Ensure multi-round tool chains work with eager save",
+      "milestone": "Cleanup & Edge Cases",
+      "milestone_number": "3",
+      "summary": {
+        "tradeoffs": "No code changes needed - the existing architecture naturally supports multi-round chains through independent msgIdx per round and session-scoped FileState.",
+        "confidence": "high",
+        "failures": "None",
+        "done": "Verified multi-round tool chains work correctly with eager save. Each round: stream.end -> resumeToolExecution saves new msgIdx -> tool loop mutates in place -> stream.reset() clears transient state -> startStream reads all saved messages via BuildAPIMessages -> new stream includes tool results from prior rounds. FileState on session.file persists across rounds since reset() only clears stream state. Each round gets an independent msgIdx (reset to -1 by stream.reset(), re-assigned on next tool_calls).",
+        "decisions": "No changes needed. Verified that stream.reset() preserves session.file.FileState and saved messages, startStream includes tool results in API messages, and each round gets its own msgIdx.",
+        "lessons_learned": "BuildAPIMessages generates both assistant messages with ToolCalls and tool role messages for executed tools - the API sees the full chain. stream.reset() clearing partialTools and msgIdx is correct since the next round rebuilds from scratch."
+      }
+    }
+  }
+}

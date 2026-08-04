@@ -47,12 +47,14 @@ func NewSession(cfg config.SessionConfig, paths config.Paths) *Session {
 	})
 
 	if cfg.AgentSystem != "" {
+		agentText := "## Agent [" + cfg.AgentName + "]\n\n" + cfg.AgentSystem
 		s.Append(config.Message{
 			ID:          "agent0",
 			Role:        config.RoleSystem,
-			Text:        cfg.AgentSystem,
+			Text:        agentText,
 			Label:       "Agent System",
-			InputTokens: CountTokensApproxString(cfg.AgentSystem),
+			Params:      map[string]string{"name": cfg.AgentName},
+			InputTokens: CountTokensApproxString(agentText),
 		})
 	}
 

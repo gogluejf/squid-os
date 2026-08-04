@@ -15,6 +15,7 @@ import (
 type HeaderData struct {
 	Incognito bool
 	Session   config.SessionInfo
+	Agent     string
 }
 
 // RenderHeader renders the top header bar, including the incognito indicator and session name.
@@ -35,16 +36,32 @@ func RenderHeader(data HeaderData, width int) string {
 	} else {
 		muted := bgStyle.Foreground(lipgloss.Color(style.P.TextMuted))
 		primary := bgStyle.Bold(true).Foreground(lipgloss.Color(style.P.TextSecondary))
+
+		var parts []string
+
+		// Session name with optional timestamp
 		if data.Session.Name != "" {
-			name := primary.Render(data.Session.Name)
 			if !data.Session.ModTime.IsZero() {
-				ts := muted.Render(util.FriendlyModDate(data.Session.ModTime)) + muted.Render(" · ")
-				right = ts + name
-			} else {
-				right = name
+				parts = append(parts, muted.Render(util.FriendlyModDate(data.Session.ModTime)))
 			}
+			parts = append(parts, primary.Render(data.Session.Name))
 		} else {
-			right = muted.Render("not saved")
+			parts = append(parts, muted.Render("not saved"))
+		}
+
+		// Agent label — colored with agent color, brackets stay muted
+		if data.Agent != "" {
+			agentStyle := bgStyle.Foreground(lipgloss.Color(style.P.TextAgent))
+			parts = append(parts, muted.Render("[agent: ") + agentStyle.Render(data.Agent) + muted.Render("]") )
+		}
+
+		// Join parts with " · " separator
+		right = muted.Render(" ")
+		for i, p := range parts {
+			if i > 0 {
+				right += muted.Render(" · ")
+			}
+			right += p
 		}
 	}
 

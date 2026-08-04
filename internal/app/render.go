@@ -52,6 +52,7 @@ func (m Model) View() string {
 	sections = append(sections, ui.RenderHeader(ui.HeaderData{
 		Incognito: m.incognito,
 		Session:   m.session.Info,
+		Agent:     m.session.Doc.Config.AgentName,
 	}, m.width))
 
 	// Viewport (messages)

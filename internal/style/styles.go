@@ -41,6 +41,8 @@ type Palette struct {
 	TextInfo           string // info/notice (muted)
 	TextSkill          string // skill label (yellow, matches SkillStyle)
 	TextSkillParam     string
+	TextAgent          string // agent tool label (orange)
+	TextAgentParam     string // agent tool param (darker orange)
 	TextSpinner        string // spinner / active indicator (pink)
 	TextAttachment     string // image attachment chip (orange)
 
@@ -79,6 +81,8 @@ var P = Palette{
 	TextInfo:           "243",
 	TextSkill:          "178", // matches SkillStyle label color
 	TextSkillParam:     "180",
+	TextAgent:          "207", // agent tool label (pink-orange)
+	TextAgentParam:     "205", // darker pink-orange for agent param
 	TextSpinner:        "205", // pink
 	TextAttachment:     "214", // orange
 
@@ -424,6 +428,24 @@ func SkillStyle() StyleLabel {
 		return StyleLabel{
 			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSkill)),
 			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextSkillParam)),
+			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
+			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),
+			Bg:      P.BgCode,
+			Fg:      P.TextDim,
+		}
+	})
+}
+
+var _agentLabel cachedBuilder
+
+// AgentStyle returns the style for agent tools (orange label, darker orange param).
+func AgentStyle() StyleLabel {
+	return _agentLabel.Get(func() StyleLabel {
+		bg := lipgloss.Color(P.BgCode)
+		return StyleLabel{
+			Label:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextAgent)),
+			Param:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextAgentParam)),
 			Dim:     lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
 			Content: lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextDim)),
 			Error:   lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color(P.TextError)),

@@ -16,7 +16,7 @@ import (
 var ListAgents = Tool{
 	Name:        "list_agents",
 	Description: "List callable agents.",
-	Style:       style.ToolStyle(),
+	Style:       style.AgentStyle(),
 	Schema: []byte(`{
 		"type": "object",
 		"properties": {},
@@ -29,7 +29,7 @@ var CallAgent = Tool{
 	Name:         "call_agent",
 	Description:  "Run an installed callable agent and return its final answer.",
 	DisplayParam: "agent",
-	Style:        style.ToolStyle(),
+	Style:        style.AgentStyle(),
 	Schema: []byte(`{
 		"type": "object",
 		"properties": {
@@ -63,7 +63,7 @@ var CallAgent = Tool{
 var InlineAgent = Tool{
 	Name:        "inline_agent",
 	Description: "Run an ad hoc inline agent and return its final answer.",
-	Style:       style.ToolStyle(),
+	Style:       style.AgentStyle(),
 	Schema: []byte(`{
 		"type": "object",
 		"properties": {

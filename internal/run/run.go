@@ -52,7 +52,7 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 	final := ""
 	finalPass := ""
 	paths := sessionRequest.Paths
-	for event := range chat.RunLoop(ctx, session, sessionRequest.Endpoints) {
+	for event := range chat.RunLoop(ctx, session, paths, sessionRequest.Endpoints) {
 		if request.OnEvent != nil {
 			request.OnEvent(event)
 		}

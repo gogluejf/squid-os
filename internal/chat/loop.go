@@ -231,7 +231,7 @@ type LoopEvent struct {
 	Cancelled   bool
 }
 
-func RunLoop(ctx context.Context, s *Session, endpoints config.EndpointsConfig) <-chan LoopEvent {
+func RunLoop(ctx context.Context, s *Session, paths config.Paths, endpoints config.EndpointsConfig) <-chan LoopEvent {
 	out := make(chan LoopEvent, 64)
 	go func() {
 		defer close(out)
@@ -261,15 +261,19 @@ func RunLoop(ctx context.Context, s *Session, endpoints config.EndpointsConfig) 
 					continue
 				case LoopError:
 					if res.IsAuthError {
+						_ = config.PersistProviderAuthState(paths, endpoints, s.CurrentInference().Provider)
 						res.MsgIdx = AppendAuthErrorMessage(s)
 					} else if res.SilentFailure {
+						_ = config.PersistRefreshedProvider(paths, endpoints, s.CurrentInference().Provider)
 						res.MsgIdx = AppendSilentFailureMessage(s)
 					} else {
+						_ = config.PersistRefreshedProvider(paths, endpoints, s.CurrentInference().Provider)
 						res.MsgIdx = AppendStreamErrorMessage(s, res.Error)
 					}
 					out <- LoopEvent{Type: LoopEventError, Error: res.Error, MsgIdx: res.MsgIdx, IsAuthError: res.IsAuthError}
 					return
 				case LoopDone:
+					_ = config.PersistRefreshedProvider(paths, endpoints, s.CurrentInference().Provider)
 					if res.Cancelled {
 						res.MsgIdx = AppendStreamCancelledMessage(s)
 					}

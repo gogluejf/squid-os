@@ -19,8 +19,7 @@ type Definition struct {
 }
 
 type SaveConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Name    string `yaml:"name"`
+	Enabled bool `yaml:"enabled"`
 }
 
 type MemoryConfig struct {

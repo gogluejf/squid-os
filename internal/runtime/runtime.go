@@ -101,7 +101,7 @@ func Resolve(in Inputs) (config.SessionConfig, error) {
 			}
 			cfg.AuthMode = mode
 		}
-		cfg.Autosave = config.SessionAutosave{Enabled: a.Save.Enabled, Name: a.Save.Name}
+		cfg.Autosave = config.SessionAutosave{Enabled: a.Save.Enabled, Name: a.Name}
 		if a.Thinking != nil {
 			cfg.Inference.Thinking.Enabled = *a.Thinking
 		}

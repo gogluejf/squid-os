@@ -41,7 +41,7 @@ func FormatProjectInfo(info *ProjectInfo) string {
 	return b.String()
 }
 
-// FindProjects scans the project directory for git-initialized repos.
+// FindProjects scans the project directory for all subdirectories.
 func FindProjects(projectDir string) []FolderEntry {
 	var entries []FolderEntry
 	if projectDir == "" {
@@ -58,12 +58,10 @@ func FindProjects(projectDir string) []FolderEntry {
 			continue
 		}
 		path := filepath.Join(projectDir, info.Name())
-		if git.HasGit(path) {
-			entries = append(entries, FolderEntry{
-				Name: info.Name(),
-				Path: path,
-			})
-		}
+		entries = append(entries, FolderEntry{
+			Name: info.Name(),
+			Path: path,
+		})
 	}
 
 	return entries

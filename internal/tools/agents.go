@@ -176,7 +176,7 @@ func executeAgentCLI(name, prompt string, values map[string]interface{}, cfg con
 	if name != "" {
 		argv = append(argv, name)
 	}
-	argv = append(argv, "--prompt", prompt, "--mode", "final_message", "--save=false", "--max-agent-depth", fmt.Sprint(cfg.Limits.MaxAgentDepth-1))
+	argv = append(argv, "--prompt", prompt, "--mode", "final_message", "--max-agent-depth", fmt.Sprint(cfg.Limits.MaxAgentDepth-1))
 	if cfg.WorkingDir != "" {
 		argv = append(argv, "--working-dir", cfg.WorkingDir)
 	}

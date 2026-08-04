@@ -20,6 +20,13 @@ type Result struct {
 	Session                     *chat.Session
 }
 
+func checkpointSave(paths config.Paths, name string, doc *config.SessionDoc) error {
+	if name == "" {
+		return nil
+	}
+	return config.SaveSessionDoc(paths, name, *doc)
+}
+
 func Execute(ctx context.Context, request Request) (Result, error) {
 	sessionRequest := request.Session
 	cfg := sessionRequest.Config
@@ -44,6 +51,7 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 	}
 	final := ""
 	finalPass := ""
+	paths := sessionRequest.Paths
 	for event := range chat.RunLoop(ctx, session, sessionRequest.Endpoints) {
 		if request.OnEvent != nil {
 			request.OnEvent(event)
@@ -54,17 +62,29 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 		if event.Type == chat.LoopEventDone {
 			final = finalPass
 			finalPass = ""
+			if cfg.Autosave.Enabled {
+				_ = checkpointSave(paths, cfg.Autosave.Name, &session.Doc)
+			}
 		}
 		if event.Type == chat.LoopEventToolFlushed {
 			finalPass = ""
+			if cfg.Autosave.Enabled {
+				_ = checkpointSave(paths, cfg.Autosave.Name, &session.Doc)
+			}
 		}
 		if event.Type == chat.LoopEventError {
+			if cfg.Autosave.Enabled {
+				_ = checkpointSave(paths, cfg.Autosave.Name, &session.Doc)
+			}
 			if event.Error != nil {
 				return Result{FinalText: final, Session: session}, event.Error
 			}
 			return Result{FinalText: final, Session: session}, fmt.Errorf("run failed")
 		}
 		if event.Type == chat.LoopEventNeedAuth {
+			if cfg.Autosave.Enabled {
+				_ = checkpointSave(paths, cfg.Autosave.Name, &session.Doc)
+			}
 			return Result{FinalText: final, Session: session}, fmt.Errorf("tool authorization required for %s", event.AuthRequest.ToolName)
 		}
 	}
@@ -74,7 +94,7 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 	}
 	result := Result{FinalText: final, Session: session}
 	if cfg.Autosave.Enabled {
-		if err := config.SaveSessionDoc(sessionRequest.Paths, cfg.Autosave.Name, session.Doc); err != nil {
+		if err := checkpointSave(paths, cfg.Autosave.Name, &session.Doc); err != nil {
 			return result, fmt.Errorf("autosave: %w", err)
 		}
 		result.SavedSessionName = cfg.Autosave.Name

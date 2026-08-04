@@ -108,32 +108,26 @@ func launchTUI(opts *TUIOptions) error {
 		if err != nil {
 			return err
 		}
-		// Validate agent save name matches explicit --session
-		if opts.SessionName != "" && definition.Save.Name != "" && definition.Save.Name != opts.SessionName {
-			return fmt.Errorf("--agent %q (save name: %q) conflicts with --session %q", opts.AgentName, definition.Save.Name, opts.SessionName)
+		// --agent and --session are mutually exclusive
+		if sessionName != "" {
+			return fmt.Errorf("--agent cannot be used with --session")
 		}
 	}
 
-	// Load session in priority order: explicit --session > agent save name > autoload last
 	if sessionName != "" {
 		doc, err := config.LoadSessionDoc(cfg.paths, sessionName)
 		if err != nil {
 			return fmt.Errorf("load session %q: %w", sessionName, err)
 		}
 		existing = &doc
-	} else if definition != nil && definition.Save.Name != "" {
-		if doc, err := config.LoadSessionDoc(cfg.paths, definition.Save.Name); err == nil {
-			existing = &doc
-			sessionName = definition.Save.Name
-		}
-	}
-	if existing == nil && cfg.settings.AutoLoadLastSession && cfg.settings.LastSessionName != "" {
+	} else if definition == nil && cfg.settings.AutoLoadLastSession && cfg.settings.LastSessionName != "" {
+		// Only autoload last session when no agent is specified
 		if doc, err := config.LoadSessionDoc(cfg.paths, cfg.settings.LastSessionName); err == nil {
 			existing, sessionName = &doc, cfg.settings.LastSessionName
 		}
 	}
 
-	// Reject bootstrap-changing flags when continuing any session (explicit, auto-discovered, or autoloaded)
+	// Reject bootstrap-changing flags when continuing a session
 	if existing != nil {
 		if opts.AgentSystem != "" {
 			return fmt.Errorf("--system cannot be used when continuing a session")

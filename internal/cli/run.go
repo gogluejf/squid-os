@@ -127,9 +127,9 @@ func executeRun(o *RunOptions) error {
 		if err != nil {
 			return err
 		}
-		// Validate agent save name matches explicit --session
-		if o.SessionName != "" && definition.Save.Name != "" && definition.Save.Name != o.SessionName {
-			return fmt.Errorf("--agent %q (save name: %q) conflicts with --session %q", o.AgentName, definition.Save.Name, o.SessionName)
+		// --agent and --session are mutually exclusive
+		if o.SessionName != "" {
+			return fmt.Errorf("--agent cannot be used with --session")
 		}
 	}
 	var existing *config.SessionDoc
@@ -139,14 +139,9 @@ func executeRun(o *RunOptions) error {
 			return err
 		}
 		existing = &doc
-	} else if definition != nil && definition.Save.Name != "" {
-		// Agent defines a save name — auto-load the existing session if it exists.
-		if doc, err := config.LoadSessionDoc(cfg.paths, definition.Save.Name); err == nil {
-			existing = &doc
-		}
 	}
 
-	// Reject bootstrap-changing flags when continuing any session
+	// Reject bootstrap-changing flags when continuing a session
 	if existing != nil {
 		if o.AgentSystem != "" {
 			return fmt.Errorf("--system cannot be used when continuing a session")

@@ -43,12 +43,20 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 		}
 	}
 	final := ""
+	finalPass := ""
 	for event := range chat.RunLoop(ctx, session, sessionRequest.Endpoints) {
 		if request.OnEvent != nil {
 			request.OnEvent(event)
 		}
 		if event.Type == chat.LoopEventText {
-			final += event.Text
+			finalPass += event.Text
+		}
+		if event.Type == chat.LoopEventDone {
+			final = finalPass
+			finalPass = ""
+		}
+		if event.Type == chat.LoopEventToolFlushed {
+			finalPass = ""
 		}
 		if event.Type == chat.LoopEventError {
 			if event.Error != nil {
@@ -59,6 +67,10 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 		if event.Type == chat.LoopEventNeedAuth {
 			return Result{FinalText: final, Session: session}, fmt.Errorf("tool authorization required for %s", event.AuthRequest.ToolName)
 		}
+	}
+	// If no turn completed (e.g., error before done), use whatever was accumulated
+	if final == "" {
+		final = finalPass
 	}
 	result := Result{FinalText: final, Session: session}
 	if cfg.Autosave.Enabled {

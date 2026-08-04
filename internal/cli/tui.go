@@ -15,6 +15,7 @@ import (
 
 type TUIOptions struct {
 	Prompt, SessionName, Model, WorkingDir, AgentName, AgentSystem, ActiveSkill, AutosaveName, AuthMode string
+	MemoryNamespace, MemoryInstructions                                                                string
 	Thinking, Autosave                                                                                  *bool
 	ToolNames, SkillNames, CallableAgentNames                                                           []string
 	Limits                                                                                              LimitOptions
@@ -45,6 +46,8 @@ func (tuiCmd) Flags(f *pflag.FlagSet) *TUIOptions {
 	f.StringVar(&o.ActiveSkill, "skill", "", "active skill")
 	f.StringVar(&o.AuthMode, "auth-mode", "", "authorization mode")
 	f.StringSliceVar(&o.CallableAgentNames, "agents", nil, "callable agent names")
+	f.StringVar(&o.MemoryNamespace, "memory-namespace", "", "memory namespace")
+	f.StringVar(&o.MemoryInstructions, "memory-instructions", "", "memory instructions")
 	f.BoolVar(&o.save, "save", false, "autosave TUI session")
 	f.StringVar(&o.AutosaveName, "save-name", "", "autosaved session name")
 	f.IntVar(&o.Limits.MaxSteps, "max-steps", 0, "maximum loop steps")
@@ -70,16 +73,6 @@ func (tuiCmd) Prepare(cmd *cobra.Command, o *TUIOptions, _ []string) error {
 	if err := validateTUIAuthMode(o.AuthMode); err != nil {
 		return err
 	}
-	if o.SessionName != "" && o.AgentName != "" {
-		// Validate in launchTUI instead — registry isn't initialized yet here.
-	}
-	if o.SessionName != "" {
-		for _, name := range []string{"system", "working-dir"} {
-			if cmd.Flags().Changed(name) {
-				return fmt.Errorf("--%s cannot be used with --session", name)
-			}
-		}
-	}
 	if o.Limits.MaxSteps < 0 || o.Limits.MaxTools < 0 || o.Limits.MaxToolResultTokens < 0 || o.Limits.MaxAgentDepth < 0 {
 		return fmt.Errorf("TUI limits cannot be negative")
 	}
@@ -96,6 +89,7 @@ func (tuiCmd) Completions() []Completion {
 		{Flag: "model", Provider: flagModels}, {Flag: "thinking", Values: []string{"true", "false"}},
 		{Flag: "save", Values: []string{"true", "false"}},
 		{Flag: "auth-mode", Values: []string{"auto", "ask-on-write", "ask-for-all"}},
+		{Flag: "memory-namespace", Values: []string{"workspace", "global", "agent"}},
 	}
 }
 
@@ -138,6 +132,22 @@ func launchTUI(opts *TUIOptions) error {
 			existing, sessionName = &doc, cfg.settings.LastSessionName
 		}
 	}
+
+	// Reject bootstrap-changing flags when continuing any session (explicit, auto-discovered, or autoloaded)
+	if existing != nil {
+		if opts.AgentSystem != "" {
+			return fmt.Errorf("--system cannot be used when continuing a session")
+		}
+		if opts.WorkingDir != "" {
+			return fmt.Errorf("--working-dir cannot be used when continuing a session")
+		}
+		if opts.MemoryNamespace != "" {
+			return fmt.Errorf("--memory-namespace cannot be used when continuing a session")
+		}
+		if opts.MemoryInstructions != "" {
+			return fmt.Errorf("--memory-instructions cannot be used when continuing a session")
+		}
+	}
 	authMode, err := parseOptionalAuthorization(opts.AuthMode)
 	if err != nil {
 		return err
@@ -150,6 +160,7 @@ func launchTUI(opts *TUIOptions) error {
 			WorkingDir: opts.WorkingDir, AgentSystem: opts.AgentSystem, ToolNames: opts.ToolNames,
 			SkillNames: opts.SkillNames, ActiveSkill: opts.ActiveSkill, CallableAgentNames: opts.CallableAgentNames,
 			Autosave: opts.Autosave, AutosaveName: opts.AutosaveName, AuthMode: authMode,
+			MemoryNamespace: opts.MemoryNamespace, MemoryInstructions: opts.MemoryInstructions,
 			MaxSteps: opts.Limits.MaxSteps, MaxTools: opts.Limits.MaxTools, MaxTime: opts.Limits.MaxTime,
 			MaxToolResultTokens: opts.Limits.MaxToolResultTokens, MaxAgentDepth: opts.Limits.MaxAgentDepth,
 			MaxAgentDepthSet: opts.Limits.MaxAgentDepthSet,

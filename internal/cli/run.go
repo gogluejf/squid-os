@@ -88,13 +88,6 @@ func (runCmd) Prepare(cmd *cobra.Command, o *RunOptions, args []string) error {
 	if err := validateRunAuthMode(o.AuthMode); err != nil {
 		return err
 	}
-	if o.SessionName != "" {
-		for _, name := range []string{"system", "working-dir", "memory-namespace", "memory-instructions"} {
-			if cmd.Flags().Changed(name) {
-				return fmt.Errorf("--%s cannot be used with --session", name)
-			}
-		}
-	}
 	if o.Limits.MaxSteps < 0 || o.Limits.MaxTools < 0 || o.Limits.MaxToolResultTokens < 0 || o.Limits.MaxAgentDepth < 0 {
 		return fmt.Errorf("run limits cannot be negative")
 	}
@@ -150,6 +143,22 @@ func executeRun(o *RunOptions) error {
 		// Agent defines a save name — auto-load the existing session if it exists.
 		if doc, err := config.LoadSessionDoc(cfg.paths, definition.Save.Name); err == nil {
 			existing = &doc
+		}
+	}
+
+	// Reject bootstrap-changing flags when continuing any session
+	if existing != nil {
+		if o.AgentSystem != "" {
+			return fmt.Errorf("--system cannot be used when continuing a session")
+		}
+		if o.WorkingDir != "" {
+			return fmt.Errorf("--working-dir cannot be used when continuing a session")
+		}
+		if o.MemoryNamespace != "" {
+			return fmt.Errorf("--memory-namespace cannot be used when continuing a session")
+		}
+		if o.MemoryInstructions != "" {
+			return fmt.Errorf("--memory-instructions cannot be used when continuing a session")
 		}
 	}
 	authMode, err := parseOptionalAuthorization(o.AuthMode)

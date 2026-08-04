@@ -14,7 +14,7 @@ import (
 )
 
 func (m *Model) loadUISession(doc config.SessionDoc, name string) {
-	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{Settings: m.settings, Paths: m.paths, ExistingSession: &doc, SessionName: name, Target: runtimeconfig.TargetTUI})
+	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{Settings: m.settings, Paths: m.paths, ExistingSession: &doc, SessionName: name, Target: runtimeconfig.TargetInteractive})
 	if err == nil {
 		runtimeconfig.ApplyToExistingSession(&doc, resolved)
 	}
@@ -58,7 +58,7 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 	sessionConfig, err := runtimeconfig.Resolve(runtimeconfig.Inputs{
 		Settings: m.settings,
 		Paths:    m.paths,
-		Target:   runtimeconfig.TargetTUI,
+		Target:   runtimeconfig.TargetInteractive,
 		CLI:      runtimeconfig.Overrides{WorkingDir: m.session.Doc.Config.WorkingDir},
 	})
 	if err != nil {

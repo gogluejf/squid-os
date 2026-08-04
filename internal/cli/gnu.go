@@ -70,7 +70,7 @@ func executeGNU(o *GNUOptions) error {
 		}
 	}
 	save := false
-	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{Settings: cfg.settings, Paths: cfg.paths, Target: runtimeconfig.TargetNonInteractive, CLI: runtimeconfig.Overrides{Model: o.Model, WorkingDir: workingDir, Autosave: &save}})
+	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{Settings: cfg.settings, Paths: cfg.paths, Target: runtimeconfig.TargetAutonomous, CLI: runtimeconfig.Overrides{Model: o.Model, WorkingDir: workingDir, Autosave: &save}})
 	if err != nil {
 		return err
 	}

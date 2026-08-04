@@ -161,7 +161,7 @@ func executeRun(o *RunOptions) error {
 		return err
 	}
 	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{
-		Settings: cfg.settings, Paths: cfg.paths, Agent: definition, ExistingSession: existing, SessionName: o.SessionName, Target: runtimeconfig.TargetNonInteractive,
+		Settings: cfg.settings, Paths: cfg.paths, Agent: definition, ExistingSession: existing, SessionName: o.SessionName, Target: runtimeconfig.TargetAutonomous,
 		CLI: runtimeconfig.Overrides{AgentName: o.AgentName, Model: o.Model, Thinking: o.Thinking, WorkingDir: o.WorkingDir, AgentSystem: o.AgentSystem,
 			ToolNames: o.ToolNames, SkillNames: o.SkillNames, ActiveSkill: o.ActiveSkill, CallableAgentNames: o.CallableAgentNames,
 			Autosave: o.Autosave, AutosaveName: o.AutosaveName, AuthMode: authMode, MemoryNamespace: o.MemoryNamespace, MemoryInstructions: o.MemoryInstructions,

@@ -148,7 +148,7 @@ func launchTUI(opts *TUIOptions) error {
 	}
 	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{
 		Settings: cfg.settings, Paths: cfg.paths, Agent: definition, ExistingSession: existing,
-		SessionName: sessionName, Target: runtimeconfig.TargetTUI,
+		SessionName: sessionName, Target: runtimeconfig.TargetInteractive,
 		CLI: runtimeconfig.Overrides{
 			AgentName: opts.AgentName, Model: opts.Model, Thinking: opts.Thinking,
 			WorkingDir: opts.WorkingDir, AgentSystem: opts.AgentSystem, ToolNames: opts.ToolNames,

@@ -19,8 +19,8 @@ const DefaultMaxAgentDepth = 5
 type Target string
 
 const (
-	TargetTUI            Target = "tui"
-	TargetNonInteractive Target = "non-interactive"
+	TargetInteractive  Target = "interactive"
+	TargetAutonomous   Target = "autonomous"
 )
 
 type Overrides struct {
@@ -80,7 +80,7 @@ func Resolve(in Inputs) (config.SessionConfig, error) {
 	// current interactive preferences; non-interactive continuation stays session-owned.
 	if in.ExistingSession != nil {
 		existing := config.CloneSessionConfig(in.ExistingSession.Config)
-		if in.Target == "" || in.Target == TargetTUI {
+		if in.Target == "" || in.Target == TargetInteractive {
 			existing.Inference = cfg.Inference
 			existing.Autosave.Enabled = cfg.Autosave.Enabled
 			existing.AuthMode = cfg.AuthMode
@@ -251,17 +251,17 @@ func ApplyToExistingSession(doc *config.SessionDoc, desired config.SessionConfig
 
 func normalizeAuthorization(mode config.AuthorizationMode, target Target) (config.AuthorizationMode, error) {
 	if target == "" {
-		target = TargetTUI
+		target = TargetInteractive
 	}
 	switch target {
-	case TargetTUI:
+	case TargetInteractive:
 		switch mode {
 		case config.AuthorizationAuto, config.AuthorizationAskOnWrite, config.AuthorizationAskForAll:
 			return mode, nil
 		default:
-			return "", fmt.Errorf("authorization mode %q is not valid for TUI", mode)
+			return "", fmt.Errorf("authorization mode %q is not valid for interactive mode", mode)
 		}
-	case TargetNonInteractive:
+	case TargetAutonomous:
 		switch mode {
 		case config.AuthorizationAuto:
 			return mode, nil
@@ -270,7 +270,7 @@ func normalizeAuthorization(mode config.AuthorizationMode, target Target) (confi
 		case config.AuthorizationAskForAll, config.AuthorizationEndOnAll:
 			return config.AuthorizationEndOnAll, nil
 		default:
-			return "", fmt.Errorf("authorization mode %q is not valid for non-interactive execution", mode)
+			return "", fmt.Errorf("authorization mode %q is not valid for autonomous mode", mode)
 		}
 	default:
 		return "", fmt.Errorf("unknown runtime target %q", target)

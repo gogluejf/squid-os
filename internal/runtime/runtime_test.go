@@ -39,11 +39,11 @@ func TestAuthorizationNormalizationByTarget(t *testing.T) {
 		want      config.AuthorizationMode
 		wantError bool
 	}{
-		{name: "TUI asks on write", mode: config.AuthorizationAskOnWrite, target: TargetTUI, want: config.AuthorizationAskOnWrite},
-		{name: "run ends on inherited write", mode: config.AuthorizationAskOnWrite, target: TargetNonInteractive, want: config.AuthorizationEndOnWrite},
-		{name: "run ends on inherited all", mode: config.AuthorizationAskForAll, target: TargetNonInteractive, want: config.AuthorizationEndOnAll},
-		{name: "run keeps explicit end", mode: config.AuthorizationEndOnWrite, target: TargetNonInteractive, want: config.AuthorizationEndOnWrite},
-		{name: "TUI rejects end", mode: config.AuthorizationEndOnAll, target: TargetTUI, wantError: true},
+		{name: "interactive asks on write", mode: config.AuthorizationAskOnWrite, target: TargetInteractive, want: config.AuthorizationAskOnWrite},
+		{name: "autonomous ends on inherited write", mode: config.AuthorizationAskOnWrite, target: TargetAutonomous, want: config.AuthorizationEndOnWrite},
+		{name: "autonomous ends on inherited all", mode: config.AuthorizationAskForAll, target: TargetAutonomous, want: config.AuthorizationEndOnAll},
+		{name: "autonomous keeps explicit end", mode: config.AuthorizationEndOnWrite, target: TargetAutonomous, want: config.AuthorizationEndOnWrite},
+		{name: "interactive rejects end", mode: config.AuthorizationEndOnAll, target: TargetInteractive, wantError: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -136,7 +136,7 @@ func TestExistingSessionUsesSettingsAsDesiredInference(t *testing.T) {
 	current := config.InferenceConfig{Provider: "vllm", Model: "qwen"}
 	cfg := config.SessionConfig{Inference: current}
 	doc := config.NewSessionDoc(cfg)
-	resolved, err := Resolve(Inputs{Settings: config.Settings{Provider: "openai", Model: "gpt", Authorization: "ask-on-write"}, Paths: config.Paths{MemoryDir: "/memory"}, ExistingSession: &doc, Target: TargetTUI})
+	resolved, err := Resolve(Inputs{Settings: config.Settings{Provider: "openai", Model: "gpt", Authorization: "ask-on-write"}, Paths: config.Paths{MemoryDir: "/memory"}, ExistingSession: &doc, Target: TargetInteractive})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestExistingRunPreservesSessionAndAppliesCLI(t *testing.T) {
 		Paths:           config.Paths{MemoryDir: "/memory"},
 		ExistingSession: &doc,
 		SessionName:     "session-name",
-		Target:          TargetNonInteractive,
+		Target:          TargetAutonomous,
 		CLI:             Overrides{Model: "cli/model"},
 	})
 	if err != nil {

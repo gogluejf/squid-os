@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -109,4 +110,13 @@ func FriendlyPath(path string) string {
 		return "~" + path[len(home):]
 	}
 	return path
+}
+
+// ExpandHome expands a leading ~/ to the user's home directory and cleans the path.
+func ExpandHome(p string) string {
+	if strings.HasPrefix(p, "~/") || p == "~" {
+		home, _ := os.UserHomeDir()
+		p = strings.Replace(p, "~", home, 1)
+	}
+	return filepath.Clean(p)
 }

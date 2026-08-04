@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"squid-os/internal/config"
 	"squid-os/internal/environment"
 	"squid-os/internal/style"
+	"squid-os/internal/util"
 )
 
 // projectDir is set by the app at startup via SetProjectDir.
@@ -21,10 +21,7 @@ func SetProjectDir(dir string) {
 
 // ResolvePath resolves a path against the provided session working directory.
 func ResolvePath(p, workingDir string) string {
-	if strings.HasPrefix(p, "~") {
-		home, _ := os.UserHomeDir()
-		p = strings.Replace(p, "~", home, 1)
-	}
+	p = util.ExpandHome(p)
 	if filepath.IsAbs(p) {
 		return p
 	}
@@ -55,6 +52,7 @@ var SetWorkingDirTool = Tool{
 		if !ok || path == "" {
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
+		path = util.ExpandHome(path)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("path does not exist: %s", path)}
 		}

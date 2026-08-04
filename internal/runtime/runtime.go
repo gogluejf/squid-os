@@ -92,7 +92,7 @@ func Resolve(in Inputs) (config.SessionConfig, error) {
 
 	// Agent definitions apply only when creating a new session.
 	if a := in.Agent; a != nil && in.ExistingSession == nil {
-		cfg.AgentName, cfg.AgentSystem, cfg.WorkingDir = a.Name, a.System, first(a.WorkingDirectory, cfg.WorkingDir)
+		cfg.AgentName, cfg.AgentSystem, cfg.WorkingDir = a.Name, a.System, util.ExpandHome(first(a.WorkingDirectory, cfg.WorkingDir))
 		cfg.Tools, cfg.Skills, cfg.Agents = clone(a.Tools), clone(a.Skills), clone(a.Agents)
 		if a.AuthMode != "" {
 			mode, err := config.ParseAuthorizationMode(a.AuthMode)
@@ -129,7 +129,7 @@ func Resolve(in Inputs) (config.SessionConfig, error) {
 		cfg.Inference.Thinking.Enabled = *c.Thinking
 	}
 	if c.WorkingDir != "" {
-		cfg.WorkingDir = c.WorkingDir
+		cfg.WorkingDir = util.ExpandHome(c.WorkingDir)
 	}
 	if c.AgentSystem != "" {
 		cfg.AgentSystem = c.AgentSystem

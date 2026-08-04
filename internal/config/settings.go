@@ -71,10 +71,9 @@ type Settings struct {
 	DebugEnabled        bool   `json:"debug_enabled"`
 	Authorization       string `json:"authorization"` // auto | ask-on-write | ask-for-all
 	// Domain directories — relative to home, resolved by Paths
-	ProjectDir   string `json:"project_dir"`   // default: "src"
-	MemoryDir    string `json:"memory_dir"`    // default: "memory"
-	TempFolder   string `json:"temp_folder"`   // default: "tmp"
-	DocumentsDir string `json:"documents_dir"` // default: "Documents/squid-os"
+	ProjectDir string `json:"project_dir"` // default: "src"
+	MemoryDir  string `json:"memory_dir"`  // default: "memory"
+	TempFolder string `json:"temp_folder"` // default: "tmp"
 }
 
 // LoadSettings loads settings.json from the given config directory.

@@ -36,11 +36,10 @@ func LoadEnvironment(paths config.Paths, sessionConfig config.SessionConfig) Env
 			LogsDir:       paths.Logs,
 			SysPromptsDir: paths.SysPrompts,
 			SessionsDir:   paths.Sessions,
-			ProjectDir:    projectDir,
-			MemoryDir:     paths.MemoryDir,
-			TempFolder:    paths.TempFolder,
-			DocumentsDir:  paths.DocumentsDir,
-			SettingsFile:  paths.SettingsFile(),
+			ProjectDir:   projectDir,
+			MemoryDir:    paths.MemoryDir,
+			TempFolder:   paths.TempFolder,
+			SettingsFile: paths.SettingsFile(),
 			EndpointsFile: paths.EndpointsFile(),
 			HistoryFile:   paths.HistoryFile(),
 			DebugEnabled:  debugEnabled,
@@ -51,7 +50,6 @@ func LoadEnvironment(paths config.Paths, sessionConfig config.SessionConfig) Env
 		env.Project = LoadProjectInfo(workingDir, projectDir)
 	}
 	env.Projects = FindProjects(projectDir)
-	env.Documents = FindDocuments(paths.DocumentsDir)
 	env.MemoryNamespace = sessionMemory.Namespace
 	env.MemoryPath = sessionMemory.Path
 	env.MemoryInstructions = sessionMemory.Instructions
@@ -110,7 +108,6 @@ func FormatEnvironment(env Environment) string {
 	b.WriteString("- project-dir: " + util.FriendlyPath(git.Decorate(env.SquidOS.ProjectDir)) + "\n")
 	b.WriteString("- memory: " + util.FriendlyPath(git.Decorate(env.SquidOS.MemoryDir)) + "\n")
 	b.WriteString("- temp: " + util.FriendlyPath(git.Decorate(env.SquidOS.TempFolder)) + "\n")
-	b.WriteString("- documents: " + util.FriendlyPath(git.Decorate(env.SquidOS.DocumentsDir)) + "\n")
 	b.WriteString("- settings: " + util.FriendlyPath(env.SquidOS.SettingsFile) + "\n")
 	b.WriteString("- endpoints: " + util.FriendlyPath(env.SquidOS.EndpointsFile) + "\n")
 	b.WriteString("- history: " + util.FriendlyPath(env.SquidOS.HistoryFile) + "\n")
@@ -142,14 +139,6 @@ func FormatEnvironment(env Environment) string {
 		b.WriteString("\n")
 	}
 
-	// [Documents] section
-	if len(env.Documents) > 0 {
-		b.WriteString("## [Documents]\n")
-		for _, d := range env.Documents {
-			b.WriteString(fmt.Sprintf("- %s: %s\n", d.Name, util.FriendlyPath(git.Decorate(d.Path))))
-		}
-		b.WriteString("\n")
-	}
 
 	// [Memory] section
 	if env.MemoryNamespace != "" || env.Memory != "" {

@@ -14,7 +14,6 @@ type Environment struct {
 	SquidOS            SquidOSInfo
 	Project            *ProjectInfo // nil if no working dir set
 	Projects           []FolderEntry
-	Documents          []FolderEntry
 	Memory             string // content of index.md from memory dir
 	MemoryNamespace    string
 	MemoryPath         string
@@ -50,11 +49,10 @@ type SquidOSInfo struct {
 	LogsDir       string
 	SysPromptsDir string
 	SessionsDir   string
-	ProjectDir    string
-	MemoryDir     string
-	TempFolder    string
-	DocumentsDir  string
-	SettingsFile  string
+	ProjectDir   string
+	MemoryDir    string
+	TempFolder   string
+	SettingsFile string
 	EndpointsFile string
 	HistoryFile   string
 	DebugEnabled  bool

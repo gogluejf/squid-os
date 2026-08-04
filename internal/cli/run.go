@@ -33,7 +33,7 @@ var _ Command[RunOptions] = runCmd{}
 
 func (runCmd) Spec() CommandSpec {
 	return CommandSpec{
-		Use: "run [agent]", Short: "Execute a non-interactive run", Args: cobra.MaximumNArgs(1), Runnable: true,
+		Use: "run [agent]", Short: "Execute an autonomous run", Args: cobra.MaximumNArgs(1), Runnable: true,
 		ValidArgs: func(_ *cobra.Command, _ []string, prefix string) ([]string, cobra.ShellCompDirective) {
 			return flagAgents(prefix), cobra.ShellCompDirectiveNoFileComp
 		},

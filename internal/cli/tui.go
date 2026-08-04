@@ -29,7 +29,15 @@ type tuiCmd struct {
 var _ Command[TUIOptions] = tuiCmd{}
 
 func (tuiCmd) Spec() CommandSpec {
-	return CommandSpec{Use: "tui", Short: "Start the interactive terminal interface", Args: cobra.NoArgs, Runnable: true}
+	return CommandSpec{
+		Use:   "tui [agent]",
+		Short: "Start interactive mode",
+		Args:  cobra.MaximumNArgs(1),
+		Runnable: true,
+		ValidArgs: func(_ *cobra.Command, _ []string, prefix string) ([]string, cobra.ShellCompDirective) {
+			return flagAgents(prefix), cobra.ShellCompDirectiveNoFileComp
+		},
+	}
 }
 
 func (tuiCmd) Flags(f *pflag.FlagSet) *TUIOptions {
@@ -58,7 +66,13 @@ func (tuiCmd) Flags(f *pflag.FlagSet) *TUIOptions {
 	return o
 }
 
-func (tuiCmd) Prepare(cmd *cobra.Command, o *TUIOptions, _ []string) error {
+func (tuiCmd) Prepare(cmd *cobra.Command, o *TUIOptions, args []string) error {
+	if len(args) == 1 {
+		if o.AgentName != "" && o.AgentName != args[0] {
+			return fmt.Errorf("positional agent %q conflicts with --agent %q", args[0], o.AgentName)
+		}
+		o.AgentName = args[0]
+	}
 	if cmd.Flags().Changed("thinking") {
 		o.Thinking = &o.thinking
 	}

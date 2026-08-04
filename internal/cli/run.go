@@ -89,9 +89,6 @@ func (runCmd) Prepare(cmd *cobra.Command, o *RunOptions, args []string) error {
 		return err
 	}
 	if o.SessionName != "" {
-		if o.AgentName != "" {
-			return fmt.Errorf("--agent cannot be used with --session")
-		}
 		for _, name := range []string{"system", "working-dir", "memory-namespace", "memory-instructions"} {
 			if cmd.Flags().Changed(name) {
 				return fmt.Errorf("--%s cannot be used with --session", name)
@@ -137,6 +134,10 @@ func executeRun(o *RunOptions) error {
 		if err != nil {
 			return err
 		}
+		// Validate agent save name matches explicit --session
+		if o.SessionName != "" && definition.Save.Name != "" && definition.Save.Name != o.SessionName {
+			return fmt.Errorf("--agent %q (save name: %q) conflicts with --session %q", o.AgentName, definition.Save.Name, o.SessionName)
+		}
 	}
 	var existing *config.SessionDoc
 	if o.SessionName != "" {
@@ -145,6 +146,11 @@ func executeRun(o *RunOptions) error {
 			return err
 		}
 		existing = &doc
+	} else if definition != nil && definition.Save.Name != "" {
+		// Agent defines a save name — auto-load the existing session if it exists.
+		if doc, err := config.LoadSessionDoc(cfg.paths, definition.Save.Name); err == nil {
+			existing = &doc
+		}
 	}
 	authMode, err := parseOptionalAuthorization(o.AuthMode)
 	if err != nil {

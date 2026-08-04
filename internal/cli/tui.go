@@ -70,8 +70,11 @@ func (tuiCmd) Prepare(cmd *cobra.Command, o *TUIOptions, _ []string) error {
 	if err := validateTUIAuthMode(o.AuthMode); err != nil {
 		return err
 	}
+	if o.SessionName != "" && o.AgentName != "" {
+		// Validate in launchTUI instead — registry isn't initialized yet here.
+	}
 	if o.SessionName != "" {
-		for _, name := range []string{"agent", "system", "working-dir"} {
+		for _, name := range []string{"system", "working-dir"} {
 			if cmd.Flags().Changed(name) {
 				return fmt.Errorf("--%s cannot be used with --session", name)
 			}
@@ -104,26 +107,35 @@ func launchTUI(opts *TUIOptions) error {
 
 	var existing *config.SessionDoc
 	sessionName := opts.SessionName
-	if sessionName != "" {
-		doc, err := config.LoadSessionDoc(cfg.paths, sessionName)
-		if err != nil {
-			return fmt.Errorf("load session %q: %w", sessionName, err)
-		}
-		existing = &doc
-	} else if cfg.settings.AutoLoadLastSession && cfg.settings.LastSessionName != "" {
-		if doc, err := config.LoadSessionDoc(cfg.paths, cfg.settings.LastSessionName); err == nil {
-			existing, sessionName = &doc, cfg.settings.LastSessionName
-		}
-	}
-	if existing != nil && (opts.AgentName != "" || opts.AgentSystem != "" || opts.WorkingDir != "") {
-		return fmt.Errorf("--agent, --system, and --working-dir cannot be used when continuing a session")
-	}
 
 	var definition *agent.Definition
 	if opts.AgentName != "" {
 		definition, err = agent.GetRegistry().Load(opts.AgentName)
 		if err != nil {
 			return err
+		}
+		// Validate agent save name matches explicit --session
+		if opts.SessionName != "" && definition.Save.Name != "" && definition.Save.Name != opts.SessionName {
+			return fmt.Errorf("--agent %q (save name: %q) conflicts with --session %q", opts.AgentName, definition.Save.Name, opts.SessionName)
+		}
+	}
+
+	// Load session in priority order: explicit --session > agent save name > autoload last
+	if sessionName != "" {
+		doc, err := config.LoadSessionDoc(cfg.paths, sessionName)
+		if err != nil {
+			return fmt.Errorf("load session %q: %w", sessionName, err)
+		}
+		existing = &doc
+	} else if definition != nil && definition.Save.Name != "" {
+		if doc, err := config.LoadSessionDoc(cfg.paths, definition.Save.Name); err == nil {
+			existing = &doc
+			sessionName = definition.Save.Name
+		}
+	}
+	if existing == nil && cfg.settings.AutoLoadLastSession && cfg.settings.LastSessionName != "" {
+		if doc, err := config.LoadSessionDoc(cfg.paths, cfg.settings.LastSessionName); err == nil {
+			existing, sessionName = &doc, cfg.settings.LastSessionName
 		}
 	}
 	authMode, err := parseOptionalAuthorization(opts.AuthMode)

@@ -37,7 +37,7 @@ var Bash = Tool{
 		},
 		"destructive": {
 			"type": "boolean",
-			"description": "Must be true if the command modifies files, deletes data, makes network calls, or changes system state (rm, mv, cp, mkdir, chmod, sed -i, apt-get, pip install, git commit, curl POST, wget, ssh, nc). Must be false for read-only commands (cat, ls, grep, find, git status, git diff, wc, head, tail, df, ps, curl GET). This field is required."
+			"description": "Must be true if the command modifies files, deletes data, makes network calls, or changes system state. This field is required."
 		}
 	},
 	"required": ["command", "destructive"]

@@ -164,7 +164,7 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 	if shouldAuthorize(s.Doc.Config.AuthMode, tool, args) {
 		entries[i].Execution.Error = ""
 		if tool.Preview != nil {
-			preview := tool.Preview(args, s.Doc.Config)
+			preview := tool.Preview(args, s.ToolContext())
 			if preview.Status == tools.ResultStatusError {
 				entries[i].Execution.Status = tools.ResultStatusError
 				entries[i].Execution.Error = preview.Error
@@ -215,7 +215,21 @@ doExecute:
 	maxToolResultTokens := s.Doc.Config.Limits.MaxToolResultTokens
 
 	resultStart := time.Now()
-	result := tool.Execute(args, s.Doc.Config)
+	result := tool.Execute(args, s.ToolContext())
+
+	// Apply session state changes before recording the final tool result so
+	// status, content, duration, and token accounting stay consistent.
+	if toolName == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
+		if pathVal, ok := args["path"].(string); ok {
+			pathVal = tools.ResolvePath(pathVal, s.Doc.Config.WorkingDir)
+			if err := s.SetWorkingDir(pathVal); err != nil {
+				result = tools.ToolResult{Status: tools.ResultStatusError, Error: err.Error()}
+			} else {
+				ApplyPendingCapabilities(s)
+			}
+		}
+	}
+
 	result = enforceToolResultTokenLimit(result, maxToolResultTokens)
 	entries[i].Execution.Status = result.Status
 	entries[i].Execution.Result = result.Result
@@ -234,11 +248,6 @@ doExecute:
 	tools.MergeEntries(result.Files, sessionState)
 
 	res := ToolExecResult{Action: nextToolAction(i, len(entries)), MsgIdx: msgIdx, ToolIndex: i, NextIndex: i + 1}
-	if toolName == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
-		if pathVal, ok := args["path"].(string); ok {
-			s.Doc.Config.WorkingDir = pathVal
-		}
-	}
 	if toolName == "skill_load" && result.Status == tools.ResultStatusSuccess {
 		if name, ok := args["name"].(string); ok {
 			res.LoadedSkill = name

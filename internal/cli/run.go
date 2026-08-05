@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"squid-os/internal/agent"
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
 	runservice "squid-os/internal/run"
@@ -121,17 +120,10 @@ func executeRun(o *RunOptions) error {
 	if err != nil {
 		return err
 	}
-	var definition *agent.Definition
-	if o.AgentName != "" {
-		definition, err = agent.GetRegistry().Load(o.AgentName)
-		if err != nil {
-			return err
-		}
-		// --agent and --session are mutually exclusive
-		if o.SessionName != "" {
-			return fmt.Errorf("--agent cannot be used with --session")
-		}
+	if o.AgentName != "" && o.SessionName != "" {
+		return fmt.Errorf("--agent cannot be used with --session")
 	}
+
 	var existing *config.SessionDoc
 	if o.SessionName != "" {
 		doc, err := config.LoadSessionDoc(cfg.paths, o.SessionName)
@@ -161,7 +153,7 @@ func executeRun(o *RunOptions) error {
 		return err
 	}
 	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{
-		Settings: cfg.settings, Paths: cfg.paths, Agent: definition, ExistingSession: existing, SessionName: o.SessionName, Target: runtimeconfig.TargetAutonomous,
+		Settings: cfg.settings, Paths: cfg.paths, AgentName: o.AgentName, ExistingSession: existing, SessionName: o.SessionName, Target: runtimeconfig.TargetAutonomous,
 		CLI: runtimeconfig.Overrides{AgentName: o.AgentName, Model: o.Model, Thinking: o.Thinking, WorkingDir: o.WorkingDir, AgentSystem: o.AgentSystem,
 			ToolNames: o.ToolNames, SkillNames: o.SkillNames, ActiveSkill: o.ActiveSkill, CallableAgentNames: o.CallableAgentNames,
 			Autosave: o.Autosave, AutosaveName: o.AutosaveName, AuthMode: authMode, MemoryNamespace: o.MemoryNamespace, MemoryInstructions: o.MemoryInstructions,
@@ -171,15 +163,15 @@ func executeRun(o *RunOptions) error {
 	if err != nil {
 		return err
 	}
-	if resolved.Inference.Model == "" {
+	if resolved.Config.Inference.Model == "" {
 		return fmt.Errorf("no model configured")
 	}
-	runtimeconfig.ApplyToExistingSession(existing, resolved)
-	request := runservice.Request{Session: runtimeconfig.SessionRequest{Paths: cfg.paths, Endpoints: cfg.endpoints, Config: resolved, ExistingSession: existing, SessionName: o.SessionName, Prompt: o.Prompt}}
+	runtimeconfig.ApplyToExistingSession(existing, resolved.Config)
+	request := runservice.Request{Session: runtimeconfig.SessionRequest{Paths: cfg.paths, Endpoints: cfg.endpoints, Config: resolved.Config, Catalog: resolved.Catalog, ExistingSession: existing, SessionName: o.SessionName, Prompt: o.Prompt}}
 	if runservice.OutputMode(o.Mode) == runservice.OutputStream {
 		stream := runservice.NewStreamWriter(os.Stdout)
-		saved := resolved.Autosave.Enabled
-		if err := stream.Write(runservice.StreamEnvelope{Event: "session_start", Saved: &saved, SessionName: resolved.Autosave.Name}); err != nil {
+		saved := resolved.Config.Autosave.Enabled
+		if err := stream.Write(runservice.StreamEnvelope{Event: "session_start", Saved: &saved, SessionName: resolved.Config.Autosave.Name}); err != nil {
 			return err
 		}
 		request.OnEvent = func(event chat.LoopEvent) { _ = stream.WriteLoopEvent(event) }

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+
+	"squid-os/internal/config"
 )
 
 // Skill represents a loaded skill with its metadata and instructions.
@@ -36,6 +38,7 @@ type Frontmatter struct {
 
 // SkillEntry is the lightweight registry entry (frontmatter only)
 type SkillEntry struct {
+	Scope       config.CapabilityScope
 	Name        string
 	Description string
 	Path        string

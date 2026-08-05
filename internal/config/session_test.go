@@ -5,16 +5,16 @@ import "testing"
 func TestNewSessionDocKeepsInitialConfigIndependent(t *testing.T) {
 	cfg := SessionConfig{
 		Tools:  []string{"read"},
-		Skills: []string{"review"},
-		Agents: []string{"researcher"},
+		Skills: []CapabilityRef{{Scope: "global", Name: "review"}},
+		Agents: []CapabilityRef{{Scope: "global", Name: "researcher"}},
 	}
 	doc := NewSessionDoc(cfg)
 
 	doc.Config.Tools[0] = "bash"
-	doc.Config.Skills[0] = "plan"
-	doc.Config.Agents[0] = "coder"
+	doc.Config.Skills[0] = CapabilityRef{Scope: "global", Name: "plan"}
+	doc.Config.Agents[0] = CapabilityRef{Scope: "global", Name: "coder"}
 
-	if doc.Initial.Tools[0] != "read" || doc.Initial.Skills[0] != "review" || doc.Initial.Agents[0] != "researcher" {
+	if doc.Initial.Tools[0] != "read" || doc.Initial.Skills[0].Name != "review" || doc.Initial.Agents[0].Name != "researcher" {
 		t.Fatalf("initial config mutated with current config: %+v", doc.Initial)
 	}
 }

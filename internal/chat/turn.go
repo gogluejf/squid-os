@@ -3,10 +3,10 @@ package chat
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"squid-os/internal/config"
-	"squid-os/internal/skills"
 )
 
 // PrepareTurn applies pending changes to the session.
@@ -46,16 +46,7 @@ func PrepareTurn(s *Session) error {
 	}
 
 	// Handle skill
-	if pending.ActiveSkill != nil {
-		oldSkill := s.CurrentSkill()
-		desiredSkill := *pending.ActiveSkill
-		if desiredSkill != oldSkill {
-			s.SetCurrentSkill(desiredSkill)
-			message := BuildSkillChangeMsg(oldSkill, desiredSkill)
-			message.ID = fmt.Sprintf("msg_%d", len(s.Doc.Messages)+1)
-			s.Append(message)
-		}
-	}
+	applyPendingActiveSkill(s, pending)
 
 	// Handle tools
 	if pending.Tools != nil && !reflect.DeepEqual(*pending.Tools, s.Doc.Config.Tools) {
@@ -63,24 +54,61 @@ func PrepareTurn(s *Session) error {
 		s.Append(transition("Tools Available Changed", nil))
 	}
 
-	// Handle skills
-	if pending.Skills != nil && !reflect.DeepEqual(*pending.Skills, s.Doc.Config.Skills) {
-		s.SetSkills(*pending.Skills)
-		s.Append(transition("Skills Available Changed", nil))
-	}
-
-	// Handle agents
-	if pending.Agents != nil && !reflect.DeepEqual(*pending.Agents, s.Doc.Config.Agents) {
-		s.Doc.Config.Agents = append([]string(nil), *pending.Agents...)
-		s.Append(transition("Agents Available Changed", nil))
-	}
+	// Handle skills and agents.
+	applyPendingCapabilities(s, pending)
 
 	// Commit: clear pending
 	s.Doc.Pending = nil
 	return nil
 }
 
-func BuildSkillChangeMsg(oldSkill, nextSkill string) config.Message {
+// ApplyPendingCapabilities commits workspace-driven capability changes before
+// an immediate same-turn model restart after set_working_dir.
+func ApplyPendingCapabilities(s *Session) {
+	pending := s.Doc.Pending
+	if pending == nil {
+		return
+	}
+	applyPendingActiveSkill(s, pending)
+	applyPendingCapabilities(s, pending)
+	if pending.Target == nil && pending.Inference == nil && pending.ActiveSkill == nil && pending.Tools == nil && pending.Skills == nil && pending.Agents == nil {
+		s.Doc.Pending = nil
+	}
+}
+
+func applyPendingActiveSkill(s *Session, pending *config.PendingConfig) {
+	if pending.ActiveSkill == nil {
+		return
+	}
+	oldSkill := s.CurrentSkill()
+	desiredSkill := *pending.ActiveSkill
+	if desiredSkill != oldSkill {
+		s.SetCurrentSkill(desiredSkill)
+		message := s.BuildSkillChangeMsg(oldSkill, desiredSkill)
+		message.ID = fmt.Sprintf("msg_%d", len(s.Doc.Messages)+1)
+		s.Append(message)
+	}
+	pending.ActiveSkill = nil
+}
+
+func applyPendingCapabilities(s *Session, pending *config.PendingConfig) {
+	if pending.Skills != nil && (!reflect.DeepEqual(*pending.Skills, s.Doc.Config.Skills) || len(pending.SkillsMissing) > 0) {
+		old := s.GetSkills()
+		s.SetSkills(*pending.Skills)
+		s.Append(BuildCapabilitiesChangedMsg("skills", old, *pending.Skills, pending.SkillsMissing))
+	}
+	if pending.Agents != nil && (!reflect.DeepEqual(*pending.Agents, s.Doc.Config.Agents) || len(pending.AgentsMissing) > 0) {
+		old := s.GetAgents()
+		s.SetAgents(*pending.Agents)
+		s.Append(BuildCapabilitiesChangedMsg("agents", old, *pending.Agents, pending.AgentsMissing))
+	}
+	pending.Skills = nil
+	pending.Agents = nil
+	pending.SkillsMissing = nil
+	pending.AgentsMissing = nil
+}
+
+func (s *Session) BuildSkillChangeMsg(oldSkill, nextSkill string) config.Message {
 	var text string
 	var label string
 	var params map[string]string
@@ -89,20 +117,20 @@ func BuildSkillChangeMsg(oldSkill, nextSkill string) config.Message {
 		label = "skill_unload"
 	} else if oldSkill == "" {
 		text = fmt.Sprintf("Skill %q has been loaded by the user.\n\n", nextSkill)
-		text += skillText(nextSkill)
+		text += s.skillText(nextSkill)
 		label = "skill_load"
 		params = map[string]string{"name": nextSkill}
 	} else {
 		text = fmt.Sprintf("Skill changed from %q to %q by the user. Stop using the previous skill and use the new one instead.\n\n", oldSkill, nextSkill)
-		text += skillText(nextSkill)
+		text += s.skillText(nextSkill)
 		label = "skill_load"
 		params = map[string]string{"name": nextSkill}
 	}
 	return config.Message{Role: config.RoleSynthetic, CreatedAt: time.Now(), Text: text, Label: label, Params: params, InputTokens: CountTokensApproxString(text)}
 }
 
-func skillText(name string) string {
-	registry := skills.GetRegistry()
+func (s *Session) skillText(name string) string {
+	registry := s.Catalog.Skills
 	if registry == nil {
 		return fmt.Sprintf("Loaded skill: %s", name)
 	}
@@ -115,6 +143,65 @@ func skillText(name string) string {
 		text += skill.Body
 	}
 	return text
+}
+
+func BuildCapabilitiesChangedMsg(kind string, old, next []config.CapabilityRef, missing []string) config.Message {
+	added, removed := capabilityDiff(old, next)
+	available := formatCapabilityRefs(next)
+	text := fmt.Sprintf("Available %s changed. Use only this effective list: %s.", kind, available)
+	if len(added) > 0 {
+		text += "\nAdded: " + formatCapabilityRefs(added) + "."
+	}
+	if len(removed) > 0 {
+		text += "\nRemoved: " + formatCapabilityRefs(removed) + "."
+	}
+	if len(missing) > 0 {
+		text += "\nRequested but unavailable: " + strings.Join(missing, ", ") + "."
+	}
+	params := map[string]string{kind: available}
+	if len(missing) > 0 {
+		params["missing"] = strings.Join(missing, ", ")
+	}
+	label := strings.ToUpper(kind[:1]) + kind[1:] + " Available Changed"
+	return config.Message{
+		Role:        config.RoleSynthetic,
+		CreatedAt:   time.Now(),
+		Text:        text,
+		Label:       label,
+		Params:      params,
+		InputTokens: CountTokensApproxString(text),
+	}
+}
+
+func capabilityDiff(old, next []config.CapabilityRef) (added, removed []config.CapabilityRef) {
+	oldSet := make(map[config.CapabilityRef]bool, len(old))
+	nextSet := make(map[config.CapabilityRef]bool, len(next))
+	for _, ref := range old {
+		oldSet[ref] = true
+	}
+	for _, ref := range next {
+		nextSet[ref] = true
+		if !oldSet[ref] {
+			added = append(added, ref)
+		}
+	}
+	for _, ref := range old {
+		if !nextSet[ref] {
+			removed = append(removed, ref)
+		}
+	}
+	return added, removed
+}
+
+func formatCapabilityRefs(refs []config.CapabilityRef) string {
+	if len(refs) == 0 {
+		return "none"
+	}
+	values := make([]string, len(refs))
+	for i, ref := range refs {
+		values[i] = fmt.Sprintf("%s [%s]", ref.Name, ref.Scope)
+	}
+	return strings.Join(values, ", ")
 }
 
 func transition(label string, params map[string]string) config.Message {

@@ -8,8 +8,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"squid-os/internal/agent"
-	"squid-os/internal/config"
 	"squid-os/internal/style"
 )
 
@@ -123,48 +121,57 @@ var InlineAgent = Tool{
 	Execute: executeInlineAgent,
 }
 
-func executeListAgents(_ map[string]interface{}, cfg config.SessionConfig) ToolResult {
-	registry := agent.GetRegistry()
-	if registry == nil {
-		return failure("agent registry not initialized")
-	}
-	allowed := make(map[string]bool, len(cfg.Agents))
-	for _, name := range cfg.Agents {
-		allowed[name] = true
-	}
-	var lines []string
-	for _, entry := range registry.List() {
-		if allowed[entry.Name] {
-			lines = append(lines, fmt.Sprintf("- %s: %s", entry.Name, entry.Description))
-		}
-	}
-	if len(lines) == 0 {
+func executeListAgents(_ map[string]interface{}, ctx RuntimeContext) ToolResult {
+	cfg := ctx.Config
+	if len(cfg.Agents) == 0 {
 		return success("No callable agents.")
+	}
+	registry := ctx.Agents
+	var lines []string
+	for _, ref := range cfg.Agents {
+		description := "(unavailable)"
+		if registry != nil {
+			entry, ok := registry.Resolve(ref.Name)
+			if ok && entry.Scope == ref.Scope {
+				description = entry.Description
+			}
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %s [%s]", ref.Name, description, ref.Scope))
 	}
 	return success(strings.Join(lines, "\n"))
 }
 
-func executeCallAgent(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
+func executeCallAgent(args map[string]interface{}, ctx RuntimeContext) ToolResult {
+	cfg := ctx.Config
 	name, _ := args["agent"].(string)
 	prompt, _ := args["prompt"].(string)
 	if name == "" || prompt == "" {
 		return failure("agent and prompt are required")
 	}
-	if !contains(cfg.Agents, name) {
+	ref, ok := findCapability(cfg.Agents, name)
+	if !ok {
 		return failure(fmt.Sprintf("agent %q is not callable. Run list_agents to see available agents.", name))
 	}
-	return executeAgentCLI(name, prompt, args, cfg, nil)
+	registry := ctx.Agents
+	if registry == nil {
+		return failure("agent registry not initialized")
+	}
+	if _, err := registry.LoadScoped(ref.Scope, ref.Name); err != nil {
+		return failure(err.Error())
+	}
+	return executeAgentCLI(name, prompt, args, ctx, nil)
 }
 
-func executeInlineAgent(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
+func executeInlineAgent(args map[string]interface{}, ctx RuntimeContext) ToolResult {
 	prompt, _ := args["prompt"].(string)
 	if prompt == "" {
 		return failure("prompt is required")
 	}
-	return executeAgentCLI("", prompt, args, cfg, args)
+	return executeAgentCLI("", prompt, args, ctx, args)
 }
 
-func executeAgentCLI(name, prompt string, values map[string]interface{}, cfg config.SessionConfig, inline map[string]interface{}) ToolResult {
+func executeAgentCLI(name, prompt string, values map[string]interface{}, ctx RuntimeContext, inline map[string]interface{}) ToolResult {
+	cfg := ctx.Config
 	if cfg.Limits.MaxAgentDepth <= 0 {
 		return failure("agent call depth exceeded")
 	}
@@ -213,13 +220,5 @@ func executeAgentCLI(name, prompt string, values map[string]interface{}, cfg con
 	return success(strings.TrimSpace(stdout.String()))
 }
 
-func contains(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
-}
 func success(value string) ToolResult { return ToolResult{Status: ResultStatusSuccess, Result: value} }
 func failure(value string) ToolResult { return ToolResult{Status: ResultStatusError, Error: value} }

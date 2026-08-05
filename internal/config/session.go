@@ -11,7 +11,32 @@ import (
 	"github.com/google/uuid"
 )
 
+// CapabilityScope identifies where an effective capability was discovered.
+type CapabilityScope string
+
+const (
+	CapabilityScopeGlobal    CapabilityScope = "global"
+	CapabilityScopeWorkspace CapabilityScope = "workspace"
+)
+
+// CapabilityRef identifies one effective capability. Name is unique within a catalog.
+type CapabilityRef struct {
+	Scope CapabilityScope `json:"scope"`
+	Name  string          `json:"name"`
+}
+
+// CapabilityPolicy is the persistent rule used to resolve an effective list.
+type CapabilityPolicy struct {
+	Mode      string   `json:"mode"` // "all" or "allowlist"
+	Requested []string `json:"requested,omitempty"`
+}
+
 // Role constants — used for message filtering in buildAPI and rendering
+const (
+	PolicyModeAll       = "all"
+	PolicyModeAllowlist = "allowlist"
+)
+
 const (
 	RoleUser      = "user"      // user context (chat)
 	RoleAssistant = "assistant" // model output
@@ -53,8 +78,10 @@ type SessionConfig struct {
 	AuthMode         AuthorizationMode `json:"auth_mode,omitempty"`
 	WorkingDir       string            `json:"working_dir,omitempty"`
 	Tools            []string          `json:"tools,omitempty"`
-	Skills           []string          `json:"skills,omitempty"`
-	Agents           []string          `json:"agents,omitempty"`
+	Skills           []CapabilityRef   `json:"skills,omitempty"`
+	Agents           []CapabilityRef   `json:"agents,omitempty"`
+	SkillPolicy      CapabilityPolicy  `json:"skill_policy"`
+	AgentPolicy      CapabilityPolicy  `json:"agent_policy"`
 	Memory           SessionMemory     `json:"memory,omitempty"`
 	Autosave         SessionAutosave   `json:"autosave,omitempty"`
 	Limits           SessionLimits     `json:"limits,omitempty"`
@@ -63,12 +90,14 @@ type SessionConfig struct {
 
 // PendingConfig holds desired next-state changes. Non-nil fields are pending.
 type PendingConfig struct {
-	Target      *string          `json:"target,omitempty"`
-	Inference   *InferenceConfig `json:"inference,omitempty"`
-	ActiveSkill *string          `json:"active_skill,omitempty"`
-	Tools       *[]string        `json:"tools,omitempty"`
-	Skills      *[]string        `json:"skills,omitempty"`
-	Agents      *[]string        `json:"agents,omitempty"`
+	Target        *string          `json:"target,omitempty"`
+	Inference     *InferenceConfig `json:"inference,omitempty"`
+	ActiveSkill   *string          `json:"active_skill,omitempty"`
+	Tools         *[]string        `json:"tools,omitempty"`
+	Skills        *[]CapabilityRef `json:"skills,omitempty"`
+	Agents        *[]CapabilityRef `json:"agents,omitempty"`
+	SkillsMissing []string         `json:"skills_missing,omitempty"`
+	AgentsMissing []string         `json:"agents_missing,omitempty"`
 }
 
 type InferenceConfig struct {
@@ -222,8 +251,10 @@ func NewSessionDoc(cfg SessionConfig) SessionDoc {
 
 func CloneSessionConfig(cfg SessionConfig) SessionConfig {
 	cfg.Tools = append([]string(nil), cfg.Tools...)
-	cfg.Skills = append([]string(nil), cfg.Skills...)
-	cfg.Agents = append([]string(nil), cfg.Agents...)
+	cfg.Skills = append([]CapabilityRef(nil), cfg.Skills...)
+	cfg.Agents = append([]CapabilityRef(nil), cfg.Agents...)
+	cfg.SkillPolicy.Requested = append([]string(nil), cfg.SkillPolicy.Requested...)
+	cfg.AgentPolicy.Requested = append([]string(nil), cfg.AgentPolicy.Requested...)
 	return cfg
 }
 

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"squid-os/internal/config"
 	"squid-os/internal/style"
 )
 
@@ -42,7 +41,7 @@ var Bash = Tool{
 	},
 	"required": ["command", "destructive"]
 }`),
-	Execute: func(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
+	Execute: func(args map[string]interface{}, rt RuntimeContext) ToolResult {
 		cmdStr, ok := args["command"].(string)
 		if !ok || cmdStr == "" {
 			return ToolResult{Status: ResultStatusError, Error: "command is required and must be a string"}
@@ -85,7 +84,7 @@ var Bash = Tool{
 		defer cancel()
 
 		// Execute relative to the session's working directory.
-		runDir := cfg.WorkingDir
+		runDir := rt.Config.WorkingDir
 		cmd := exec.CommandContext(ctx, "bash", "-c", cmdStr)
 		if runDir != "" {
 			cmd.Dir = runDir

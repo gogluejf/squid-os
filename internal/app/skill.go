@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"squid-os/internal/skills"
+	"squid-os/internal/config"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
 )
@@ -28,18 +28,19 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 		Meta:  []string{"No skill active"},
 		Value: "(none)",
 	})
-	if reg := skills.GetRegistry(); reg != nil {
-		allowed := make(map[string]bool, len(m.session.Doc.Config.Skills))
-		for _, name := range m.session.Doc.Config.Skills {
-			allowed[name] = true
+	if reg := m.session.Catalog.Skills; reg != nil {
+		allowed := make(map[config.CapabilityRef]bool, len(m.session.Doc.Config.Skills))
+		for _, ref := range m.session.Doc.Config.Skills {
+			allowed[ref] = true
 		}
 		for _, e := range reg.List() {
-			if !allowed[e.Name] {
+			ref := config.CapabilityRef{Scope: e.Scope, Name: e.Name}
+			if !allowed[ref] {
 				continue
 			}
 			items = append(items, component.PickerItem{
 				Label: e.Name,
-				Meta:  []string{e.Description},
+				Meta:  []string{e.Description, string(e.Scope)},
 				Value: e.Name,
 			})
 		}

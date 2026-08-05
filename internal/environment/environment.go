@@ -14,6 +14,9 @@ type Environment struct {
 	SquidOS            SquidOSInfo
 	Project            *ProjectInfo // nil if no working dir set
 	Projects           []FolderEntry
+	WorkspaceMemory    string // workspace-local memory path
+	WorkspaceSkills    string // workspace-local skills path
+	WorkspaceAgents    string // workspace-local agents path
 	Memory             string // content of index.md from memory dir
 	MemoryNamespace    string
 	MemoryPath         string
@@ -34,11 +37,13 @@ type OSInfo struct {
 type SkillInfo struct {
 	Name        string
 	Description string
+	Scope       string
 }
 
 type AgentInfo struct {
 	Name        string
 	Description string
+	Scope       string
 }
 
 // SquidOSInfo holds Squid-OS directory paths and flags.

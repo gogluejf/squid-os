@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"squid-os/internal/config"
-	"squid-os/internal/skills"
 	"squid-os/internal/style"
 )
 
@@ -25,21 +24,22 @@ var SkillLoad = Tool{
 	},
 	"required": ["name"]
 }`),
-	Execute: func(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
+	Execute: func(args map[string]interface{}, rt RuntimeContext) ToolResult {
 		name, ok := args["name"].(string)
 		if !ok || name == "" {
 			return ToolResult{Status: ResultStatusError, Error: "name is required and must be a string"}
 		}
-		if !contains(cfg.Skills, name) {
+		ref, ok := findCapability(rt.Config.Skills, name)
+		if !ok {
 			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("skill %q is not available. Run skill_list to see available skills.", name)}
 		}
-		reg := skills.GetRegistry()
+		reg := rt.Skills
 		if reg == nil {
 			return ToolResult{Status: ResultStatusError, Error: "skill registry not initialized"}
 		}
-		sk, err := reg.Load(name)
+		sk, err := reg.LoadScoped(ref.Scope, ref.Name)
 		if err != nil {
-			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("skill %q not found", name)}
+			return ToolResult{Status: ResultStatusError, Error: err.Error()}
 		}
 		var b strings.Builder
 		b.WriteString(fmt.Sprintf("═══ SKILL: %s ═══\n", sk.Name))
@@ -69,29 +69,32 @@ var SkillList = Tool{
 	DisplayParam: "",
 	Style:        style.SkillStyle(),
 	Schema:       []byte(`{"type": "object", "properties": {}}`),
-	Execute: func(_ map[string]interface{}, cfg config.SessionConfig) ToolResult {
-		reg := skills.GetRegistry()
-		if reg == nil {
-			return ToolResult{Status: ResultStatusError, Error: "skill registry not initialized"}
-		}
-		allowed := make(map[string]bool, len(cfg.Skills))
-		for _, name := range cfg.Skills {
-			allowed[name] = true
-		}
-		var entries []skills.SkillEntry
-		for _, entry := range reg.List() {
-			if allowed[entry.Name] {
-				entries = append(entries, entry)
-			}
-		}
-		if len(entries) == 0 {
+	Execute: func(_ map[string]interface{}, rt RuntimeContext) ToolResult {
+		if len(rt.Config.Skills) == 0 {
 			return ToolResult{Status: ResultStatusSuccess, Result: "No skills available in this session."}
 		}
+		reg := rt.Skills
 		var b strings.Builder
-		b.WriteString(fmt.Sprintf("Available skills (%d):\n", len(entries)))
-		for _, e := range entries {
-			b.WriteString(fmt.Sprintf("  - %s: %s\n", e.Name, e.Description))
+		b.WriteString(fmt.Sprintf("Available skills (%d):\n", len(rt.Config.Skills)))
+		for _, ref := range rt.Config.Skills {
+			if reg != nil {
+				entry, ok := reg.Resolve(ref.Name)
+				if ok && entry.Scope == ref.Scope {
+					b.WriteString(fmt.Sprintf("  - %s: %s [%s]\n", ref.Name, entry.Description, ref.Scope))
+					continue
+				}
+			}
+			b.WriteString(fmt.Sprintf("  - %s: (unavailable) [%s]\n", ref.Name, ref.Scope))
 		}
 		return ToolResult{Status: ResultStatusSuccess, Result: b.String()}
 	},
+}
+
+func findCapability(refs []config.CapabilityRef, name string) (config.CapabilityRef, bool) {
+	for _, ref := range refs {
+		if ref.Name == name {
+			return ref, true
+		}
+	}
+	return config.CapabilityRef{}, false
 }

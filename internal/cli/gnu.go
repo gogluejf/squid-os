@@ -75,8 +75,8 @@ func executeGNU(o *GNUOptions) error {
 		return err
 	}
 	presenter := gnu.Presenter{Writer: o.streams.Err, Color: terminalFile(o.streams.Err) && noColorUnset()}
-	presenter.Waiting(resolved.Inference.Provider + "/" + resolved.Inference.Model)
-	result, err := runservice.Execute(context.Background(), runservice.Request{Session: runtimeconfig.SessionRequest{Paths: cfg.paths, Endpoints: cfg.endpoints, Config: resolved, Prompt: gnu.BuildPrompt(o.Prompt, gnu.DetectPlatform(workingDir))}})
+	presenter.Waiting(resolved.Config.Inference.Provider + "/" + resolved.Config.Inference.Model)
+	result, err := runservice.Execute(context.Background(), runservice.Request{Session: runtimeconfig.SessionRequest{Paths: cfg.paths, Endpoints: cfg.endpoints, Config: resolved.Config, Catalog: resolved.Catalog, Prompt: gnu.BuildPrompt(o.Prompt, gnu.DetectPlatform(workingDir))}})
 	if err != nil {
 		return err
 	}

@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"squid-os/internal/agent"
 	"squid-os/internal/app"
 	"squid-os/internal/config"
 	runtimeconfig "squid-os/internal/runtime"
@@ -15,7 +14,7 @@ import (
 
 type TUIOptions struct {
 	Prompt, SessionName, Model, WorkingDir, AgentName, AgentSystem, ActiveSkill, AutosaveName, AuthMode string
-	MemoryNamespace, MemoryInstructions                                                                string
+	MemoryNamespace, MemoryInstructions                                                                 string
 	Thinking, Autosave                                                                                  *bool
 	ToolNames, SkillNames, CallableAgentNames                                                           []string
 	Limits                                                                                              LimitOptions
@@ -30,9 +29,9 @@ var _ Command[TUIOptions] = tuiCmd{}
 
 func (tuiCmd) Spec() CommandSpec {
 	return CommandSpec{
-		Use:   "tui [agent]",
-		Short: "Start interactive mode",
-		Args:  cobra.MaximumNArgs(1),
+		Use:      "tui [agent]",
+		Short:    "Start interactive mode",
+		Args:     cobra.MaximumNArgs(1),
 		Runnable: true,
 		ValidArgs: func(_ *cobra.Command, _ []string, prefix string) ([]string, cobra.ShellCompDirective) {
 			return flagAgents(prefix), cobra.ShellCompDirectiveNoFileComp
@@ -116,16 +115,8 @@ func launchTUI(opts *TUIOptions) error {
 	var existing *config.SessionDoc
 	sessionName := opts.SessionName
 
-	var definition *agent.Definition
-	if opts.AgentName != "" {
-		definition, err = agent.GetRegistry().Load(opts.AgentName)
-		if err != nil {
-			return err
-		}
-		// --agent and --session are mutually exclusive
-		if sessionName != "" {
-			return fmt.Errorf("--agent cannot be used with --session")
-		}
+	if opts.AgentName != "" && sessionName != "" {
+		return fmt.Errorf("--agent cannot be used with --session")
 	}
 
 	if sessionName != "" {
@@ -134,7 +125,7 @@ func launchTUI(opts *TUIOptions) error {
 			return fmt.Errorf("load session %q: %w", sessionName, err)
 		}
 		existing = &doc
-	} else if definition == nil && cfg.settings.AutoLoadLastSession && cfg.settings.LastSessionName != "" {
+	} else if opts.AgentName == "" && cfg.settings.AutoLoadLastSession && cfg.settings.LastSessionName != "" {
 		// Only autoload last session when no agent is specified
 		if doc, err := config.LoadSessionDoc(cfg.paths, cfg.settings.LastSessionName); err == nil {
 			existing, sessionName = &doc, cfg.settings.LastSessionName
@@ -161,7 +152,7 @@ func launchTUI(opts *TUIOptions) error {
 		return err
 	}
 	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{
-		Settings: cfg.settings, Paths: cfg.paths, Agent: definition, ExistingSession: existing,
+		Settings: cfg.settings, Paths: cfg.paths, AgentName: opts.AgentName, ExistingSession: existing,
 		SessionName: sessionName, Target: runtimeconfig.TargetInteractive,
 		CLI: runtimeconfig.Overrides{
 			AgentName: opts.AgentName, Model: opts.Model, Thinking: opts.Thinking,
@@ -177,8 +168,8 @@ func launchTUI(opts *TUIOptions) error {
 	if err != nil {
 		return err
 	}
-	runtimeconfig.ApplyToExistingSession(existing, resolved)
-	request := runtimeconfig.SessionRequest{Paths: cfg.paths, Endpoints: cfg.endpoints, Config: resolved, ExistingSession: existing, SessionName: sessionName, Prompt: opts.Prompt}
+	runtimeconfig.ApplyToExistingSession(existing, resolved.Config)
+	request := runtimeconfig.SessionRequest{Paths: cfg.paths, Endpoints: cfg.endpoints, Config: resolved.Config, Catalog: resolved.Catalog, ExistingSession: existing, SessionName: sessionName, Prompt: opts.Prompt}
 	if sessionName != "" {
 		cfg.settings.LastSessionName = sessionName
 	}

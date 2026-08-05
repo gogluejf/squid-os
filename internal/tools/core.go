@@ -29,12 +29,12 @@ var ReadFile = Tool{
 	},
 	"required": ["path"]
 }`),
-	Execute: func(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
+	Execute: func(args map[string]interface{}, rt RuntimeContext) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
-		path = ResolvePath(path, cfg.WorkingDir)
+		path = ResolvePath(path, rt.Config.WorkingDir)
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to read file %s: %v", path, err)}
@@ -103,12 +103,12 @@ var WriteFile = Tool{
 	},
 	"required": ["path", "content"]
 }`),
-	Execute: func(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
+	Execute: func(args map[string]interface{}, rt RuntimeContext) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
-		path = ResolvePath(path, cfg.WorkingDir)
+		path = ResolvePath(path, rt.Config.WorkingDir)
 		content, ok := args["content"].(string)
 		if !ok {
 			return ToolResult{Status: ResultStatusError, Error: "content is required and must be a string"}
@@ -119,12 +119,12 @@ var WriteFile = Tool{
 		}
 		return res
 	},
-	Preview: func(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
+	Preview: func(args map[string]interface{}, rt RuntimeContext) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
-		path = ResolvePath(path, cfg.WorkingDir)
+		path = ResolvePath(path, rt.Config.WorkingDir)
 		content, ok := args["content"].(string)
 		if !ok {
 			return ToolResult{Status: ResultStatusError, Error: "content is required and must be a string"}
@@ -212,12 +212,12 @@ var EditFile = Tool{
 	},
 	"required": ["path", "old_string", "new_string"]
 }`),
-	Execute: func(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
+	Execute: func(args map[string]interface{}, rt RuntimeContext) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
-		path = ResolvePath(path, cfg.WorkingDir)
+		path = ResolvePath(path, rt.Config.WorkingDir)
 		oldStr, ok := args["old_string"].(string)
 		if !ok {
 			return ToolResult{Status: ResultStatusError, Error: "old_string is required and must be a string"}
@@ -234,12 +234,12 @@ var EditFile = Tool{
 		}
 		return res
 	},
-	Preview: func(args map[string]interface{}, cfg config.SessionConfig) ToolResult {
+	Preview: func(args map[string]interface{}, rt RuntimeContext) ToolResult {
 		path, ok := args["path"].(string)
 		if !ok || path == "" {
 			return ToolResult{Status: ResultStatusError, Error: "path is required and must be a string"}
 		}
-		path = ResolvePath(path, cfg.WorkingDir)
+		path = ResolvePath(path, rt.Config.WorkingDir)
 		oldStr, ok := args["old_string"].(string)
 		if !ok {
 			return ToolResult{Status: ResultStatusError, Error: "old_string is required and must be a string"}

@@ -1,5 +1,7 @@
 package agent
 
+import "squid-os/internal/config"
+
 // Definition is a reusable installed runtime preset.
 type Definition struct {
 	Name             string       `yaml:"name"`
@@ -47,5 +49,8 @@ type LimitsConfig struct {
 }
 
 type Entry struct {
-	Name, Description, Path string
+	Scope       config.CapabilityScope
+	Name        string
+	Description string
+	Path        string
 }

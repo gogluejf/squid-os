@@ -13,12 +13,14 @@ import (
 	"squid-os/internal/util"
 )
 
-func (m *Model) loadUISession(doc config.SessionDoc, name string) {
+func (m *Model) loadUISession(doc config.SessionDoc, name string) bool {
 	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{Settings: m.settings, Paths: m.paths, ExistingSession: &doc, SessionName: name, Target: runtimeconfig.TargetInteractive})
-	if err == nil {
-		runtimeconfig.ApplyToExistingSession(&doc, resolved)
+	if err != nil {
+		return false
 	}
-	m.session = NewUISessionFromDoc(doc, name)
+	runtimeconfig.ApplyToExistingSession(&doc, resolved.Config)
+	m.session = NewUISessionFromDoc(doc, name, m.paths, resolved.Catalog)
+	return true
 }
 
 // openSaveSessionPrompt opens a prompt so the user can confirm or edit the session name.
@@ -65,7 +67,7 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 		(&m).setNotification(ui.NotificationError, err.Error())
 		return m, nil
 	}
-	m.session = NewUISession(sessionConfig, m.paths)
+	m.session = NewUISession(sessionConfig.Config, m.paths, sessionConfig.Catalog)
 	m.settings.LastSessionName = ""
 	_ = config.SaveSettings(m.paths, m.settings)
 	if m.settings.AutoSave {

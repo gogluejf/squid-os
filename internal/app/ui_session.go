@@ -3,6 +3,7 @@ package app
 import (
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
+	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/tools"
 )
 
@@ -15,12 +16,12 @@ type UISession struct {
 	undoStack        [][]config.Message
 }
 
-func NewUISession(cfg config.SessionConfig, paths config.Paths) *UISession {
-	return &UISession{Session: chat.NewSession(cfg, paths)}
+func NewUISession(cfg config.SessionConfig, paths config.Paths, catalog runtimeconfig.Catalog) *UISession {
+	return &UISession{Session: chat.NewSession(cfg, paths, catalog)}
 }
 
-func NewUISessionFromDoc(sd config.SessionDoc, name string) *UISession {
-	return &UISession{Session: chat.LoadSession(sd, name)}
+func NewUISessionFromDoc(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) *UISession {
+	return &UISession{Session: chat.LoadSession(sd, name, paths, catalog)}
 }
 
 func (u *UISession) destroyLastSequence() (userText, userImage string) {

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"squid-os/internal/agent"
 	"squid-os/internal/config"
+	"squid-os/internal/skills"
 	"squid-os/internal/style"
 )
 
@@ -23,18 +25,21 @@ type ToolResult struct {
 	Files  []config.FileEntry // files touched by this tool
 }
 
+type RuntimeContext struct {
+	Config config.SessionConfig
+	Skills *skills.Registry
+	Agents *agent.Registry
+}
+
 // Tool defines the contract for a callable tool.
-// Every execution receives the current session config, which owns scopes and policy.
 type Tool struct {
 	Name         string
 	Description  string
 	DisplayParam string
 	Style        style.StyleLabel
 	Schema       []byte
-	Execute      func(args map[string]interface{}, cfg config.SessionConfig) ToolResult
-	// Preview is optional. If present, it returns the expected ToolResult (Files, Diff)
-	// without performing side-effects (writes). Used for authorization checks.
-	Preview func(args map[string]interface{}, cfg config.SessionConfig) ToolResult
+	Execute      func(args map[string]interface{}, ctx RuntimeContext) ToolResult
+	Preview      func(args map[string]interface{}, ctx RuntimeContext) ToolResult
 	// IsDestructive is optional. If present, it returns true if the tool call modifies
 	// disk state, makes network calls, or otherwise has security implications.
 	// nil means the tool is never destructive. Used by the authorization

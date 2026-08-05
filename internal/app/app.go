@@ -14,7 +14,6 @@ import (
 	"squid-os/internal/config"
 	"squid-os/internal/modelcache"
 	runtimeconfig "squid-os/internal/runtime"
-	"squid-os/internal/skills"
 	"squid-os/internal/tools"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
@@ -82,11 +81,6 @@ func New(options StartupOptions) Model {
 	initialSession := options.Session.ExistingSession
 	runtimeConfig := options.Session.Config
 
-	// Initialize skill registry early so LoadEnvironment() picks up skills.
-	if err := skills.InitRegistry(paths.Skills); err != nil {
-		// Non-fatal: log but don't crash
-	}
-
 	ta := textarea.New()
 
 	ta.ShowLineNumbers = false
@@ -111,14 +105,14 @@ func New(options StartupOptions) Model {
 	var sess *UISession
 	var notification ui.Notification
 	if initialSession != nil {
-		sess = NewUISessionFromDoc(*initialSession, options.Session.SessionName)
+		sess = NewUISessionFromDoc(*initialSession, options.Session.SessionName, paths, options.Session.Catalog)
 		// Show friendly notification for auto-load
 		notification = ui.Notification{
 			Level:   ui.NotificationInfo,
 			Message: fmt.Sprintf("Auto-load on, last session loaded: %s", config.SessionPath(paths, options.Session.SessionName)),
 		}
 	} else {
-		sess = NewUISession(runtimeConfig, paths)
+		sess = NewUISession(runtimeConfig, paths, options.Session.Catalog)
 		// Fresh session — clear LastSessionName so auto-save doesn't overwrite the previous session
 		if settings.LastSessionName != "" {
 			settings.LastSessionName = ""

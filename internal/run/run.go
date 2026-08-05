@@ -32,11 +32,11 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 	cfg := sessionRequest.Config
 	var session *chat.Session
 	if sessionRequest.ExistingSession != nil {
-		session = chat.LoadSession(*sessionRequest.ExistingSession, sessionRequest.SessionName)
+		session = chat.LoadSession(*sessionRequest.ExistingSession, sessionRequest.SessionName, sessionRequest.Paths, sessionRequest.Catalog)
 		cfg = session.Doc.Config
 	} else {
 		cfg.Memory = config.SessionMemory{Namespace: string(cfg.Memory.Namespace), Path: cfg.Memory.Path, Instructions: cfg.Memory.Instructions}
-		session = chat.NewSession(cfg, sessionRequest.Paths)
+		session = chat.NewSession(cfg, sessionRequest.Paths, sessionRequest.Catalog)
 	}
 	session.Append(chat.NewUserMessage(fmt.Sprintf("msg_%d", len(session.Doc.Messages)+1), sessionRequest.Prompt, ""))
 	if err := chat.PrepareTurn(session); err != nil {

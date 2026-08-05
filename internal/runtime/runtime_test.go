@@ -1,25 +1,28 @@
 package runtime
 
 import (
-	"squid-os/internal/agent"
+	"os"
+	"path/filepath"
 	"squid-os/internal/config"
 	"testing"
 )
 
 func TestResolvePrecedence(t *testing.T) {
 	off := false
-	got, err := Resolve(Inputs{Settings: config.Settings{Provider: "base", Model: "m"}, Paths: config.Paths{MemoryDir: "/memory", Agents: "/agents"}, Agent: &agent.Definition{Name: "review", Model: "agent/a", Tools: []string{"read"}}, CLI: Overrides{Model: "cli/c", Thinking: &off, ToolNames: []string{"bash"}}})
+	globalSkills, globalAgents, workspace := t.TempDir(), t.TempDir(), t.TempDir()
+	writeRuntimeAgent(t, globalAgents, "review", "agent/a")
+	got, err := Resolve(Inputs{Settings: config.Settings{Provider: "base", Model: "m"}, Paths: config.Paths{Skills: globalSkills, MemoryDir: t.TempDir(), Agents: globalAgents}, AgentName: "review", CLI: Overrides{WorkingDir: workspace, Model: "cli/c", Thinking: &off, ToolNames: []string{"bash"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Inference.Provider != "cli" || got.Inference.Model != "c" || len(got.Tools) != 1 || got.Tools[0] != "bash" || got.Limits.MaxAgentDepth != 5 {
+	if got.Config.Inference.Provider != "cli" || got.Config.Inference.Model != "c" || len(got.Config.Tools) != 1 || got.Config.Tools[0] != "bash" || got.Config.Limits.MaxAgentDepth != 5 {
 		t.Fatalf("unexpected: %+v", got)
 	}
 }
 
 func TestExplicitZeroAgentDepth(t *testing.T) {
-	got, err := Resolve(Inputs{Settings: config.Settings{Provider: "p", Model: "m"}, Paths: config.Paths{MemoryDir: "/m", Agents: "/a"}, CLI: Overrides{MaxAgentDepthSet: true}})
-	if err != nil || got.Limits.MaxAgentDepth != 0 {
+	got, err := Resolve(Inputs{Settings: config.Settings{Provider: "p", Model: "m"}, Paths: config.Paths{Skills: t.TempDir(), MemoryDir: t.TempDir(), Agents: t.TempDir()}, CLI: Overrides{MaxAgentDepthSet: true}})
+	if err != nil || got.Config.Limits.MaxAgentDepth != 0 {
 		t.Fatalf("%+v %v", got, err)
 	}
 }
@@ -96,8 +99,8 @@ func TestApplyToExistingSessionSeparatesPendingAndDirectFields(t *testing.T) {
 		Inference:   config.InferenceConfig{Provider: "old", Model: "model"},
 		ActiveSkill: "old-skill",
 		Tools:       []string{"read"},
-		Skills:      []string{"review"},
-		Agents:      []string{"researcher"},
+		Skills:      []config.CapabilityRef{{Scope: "global", Name: "review"}},
+		Agents:      []config.CapabilityRef{{Scope: "global", Name: "researcher"}},
 		AuthMode:    config.AuthorizationAuto,
 		WorkingDir:  "/old",
 		Limits:      config.SessionLimits{MaxSteps: 1, MaxAgentDepth: 2},
@@ -107,8 +110,8 @@ func TestApplyToExistingSessionSeparatesPendingAndDirectFields(t *testing.T) {
 		Inference:    config.InferenceConfig{Provider: "new", Model: "model"},
 		ActiveSkill:  "new-skill",
 		Tools:        []string{"bash"},
-		Skills:       []string{"plan"},
-		Agents:       []string{"coder"},
+		Skills:       []config.CapabilityRef{{Scope: "global", Name: "plan"}},
+		Agents:       []config.CapabilityRef{{Scope: "global", Name: "coder"}},
 		AuthMode:     config.AuthorizationEndOnWrite,
 		WorkingDir:   "/new",
 		Autosave:     config.SessionAutosave{Enabled: true, Name: "saved"},
@@ -121,7 +124,7 @@ func TestApplyToExistingSessionSeparatesPendingAndDirectFields(t *testing.T) {
 	if doc.Config.Inference != current.Inference || doc.Config.ActiveSkill != current.ActiveSkill {
 		t.Fatalf("pending fields changed before PrepareTurn: %+v", doc.Config)
 	}
-	if doc.Config.Tools[0] != "read" || doc.Config.Skills[0] != "review" || doc.Config.Agents[0] != "researcher" {
+	if doc.Config.Tools[0] != "read" || doc.Config.Skills[0].Name != "review" || doc.Config.Agents[0].Name != "researcher" {
 		t.Fatalf("pending scopes changed before PrepareTurn: %+v", doc.Config)
 	}
 	if doc.Pending == nil || doc.Pending.Inference == nil || doc.Pending.ActiveSkill == nil || doc.Pending.Tools == nil || doc.Pending.Skills == nil || doc.Pending.Agents == nil {
@@ -140,7 +143,7 @@ func TestExistingSessionUsesSettingsAsDesiredInference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolved.Inference.Provider != "openai" || resolved.Inference.Model != "gpt" {
+	if resolved.Config.Inference.Provider != "openai" || resolved.Config.Inference.Model != "gpt" {
 		t.Fatalf("settings should be desired inference: %+v", resolved)
 	}
 }
@@ -162,10 +165,10 @@ func TestExistingRunPreservesSessionAndAppliesCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resolved.Inference.Provider != "cli" || resolved.Inference.Model != "model" {
-		t.Fatalf("CLI model should override preserved session inference: %+v", resolved.Inference)
+	if resolved.Config.Inference.Provider != "cli" || resolved.Config.Inference.Model != "model" {
+		t.Fatalf("CLI model should override preserved session inference: %+v", resolved.Config.Inference)
 	}
-	if resolved.AuthMode != config.AuthorizationAuto || !resolved.Autosave.Enabled || resolved.Autosave.Name != "session-name" {
+	if resolved.Config.AuthMode != config.AuthorizationAuto || !resolved.Config.Autosave.Enabled || resolved.Config.Autosave.Name != "session-name" {
 		t.Fatalf("run continuation should preserve session policy: %+v", resolved)
 	}
 }
@@ -194,13 +197,73 @@ func TestResolveAutosaveNamePrecedence(t *testing.T) {
 				t.Fatal(err)
 			}
 			if test.want == "" {
-				if resolved.Autosave.Name == "" {
+				if resolved.Config.Autosave.Name == "" {
 					t.Fatal("expected generated autosave name")
 				}
-			} else if resolved.Autosave.Name != test.want {
-				t.Fatalf("got %q, want %q", resolved.Autosave.Name, test.want)
+			} else if resolved.Config.Autosave.Name != test.want {
+				t.Fatalf("got %q, want %q", resolved.Config.Autosave.Name, test.want)
 			}
 		})
+	}
+}
+
+func TestResolveCapabilityPolicyAndWorkspaceShadowing(t *testing.T) {
+	globalSkills, globalAgents, workspace := t.TempDir(), t.TempDir(), t.TempDir()
+	writeRuntimeSkill(t, globalSkills, "review", "global")
+	writeRuntimeSkill(t, filepath.Join(workspace, ".squid-os", "skills"), "review", "workspace")
+
+	paths := config.Paths{Skills: globalSkills, Agents: globalAgents, MemoryDir: t.TempDir()}
+	resolved, err := Resolve(Inputs{
+		Settings: config.Settings{Provider: "p", Model: "m"},
+		Paths:    paths,
+		CLI:      Overrides{WorkingDir: workspace, SkillNames: []string{"review"}},
+		Target:   TargetInteractive,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Config.SkillPolicy.Mode != config.PolicyModeAllowlist || len(resolved.Config.SkillPolicy.Requested) != 1 {
+		t.Fatalf("policy not preserved: %+v", resolved.Config.SkillPolicy)
+	}
+	if len(resolved.Config.Skills) != 1 || resolved.Config.Skills[0].Scope != config.CapabilityScopeWorkspace {
+		t.Fatalf("effective list not workspace-resolved: %+v", resolved.Config.Skills)
+	}
+}
+
+func TestResolveRejectsMissingInitialAllowlist(t *testing.T) {
+	paths := config.Paths{Skills: t.TempDir(), Agents: t.TempDir(), MemoryDir: t.TempDir()}
+	_, err := Resolve(Inputs{
+		Settings: config.Settings{Provider: "p", Model: "m"},
+		Paths:    paths,
+		CLI:      Overrides{WorkingDir: t.TempDir(), SkillNames: []string{"missing"}},
+		Target:   TargetInteractive,
+	})
+	if err == nil {
+		t.Fatal("expected missing allowlist error")
+	}
+}
+
+func writeRuntimeSkill(t *testing.T, root, name, description string) {
+	t.Helper()
+	dir := filepath.Join(root, name)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	body := "---\nname: " + name + "\ndescription: " + description + "\n---\nInstructions.\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeRuntimeAgent(t *testing.T, root, name, model string) {
+	t.Helper()
+	dir := filepath.Join(root, name)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	body := "name: " + name + "\nmodel: " + model + "\ntools: [read]\n"
+	if err := os.WriteFile(filepath.Join(dir, "agent.yaml"), []byte(body), 0644); err != nil {
+		t.Fatal(err)
 	}
 }
 

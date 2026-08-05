@@ -19,17 +19,27 @@ import (
 var sectionRe = regexp.MustCompile(`##\s+\[([^\]]+)\]`)
 
 // LoadEnvironment assembles environment sections using resolved session scopes.
-func LoadEnvironment(paths config.Paths, sessionConfig config.SessionConfig) Environment {
+func LoadEnvironment(paths config.Paths, sessionConfig config.SessionConfig, skillRegistry *skills.Registry, agentRegistry *agent.Registry) Environment {
 	workingDir := sessionConfig.WorkingDir
 	debugEnabled := sessionConfig.DebugEnabled
 	target := sessionConfig.Target
 	sessionMemory := sessionConfig.Memory
 	projectDir := paths.ProjectDir
 
+	workspaceMemory := ""
+	workspaceSkills := ""
+	workspaceAgents := ""
+	if workingDir != "" {
+		workspaceRoot := filepath.Join(workingDir, ".squid-os")
+		workspaceMemory = filepath.Join(workspaceRoot, "memory")
+		workspaceSkills = filepath.Join(workspaceRoot, "skills")
+		workspaceAgents = filepath.Join(workspaceRoot, "agents")
+	}
+
 	env := Environment{
 		OS:     CollectOSInfo(workingDir),
-		Skills: loadSkillEntries(sessionConfig.Skills),
-		Agents: loadAgentEntries(sessionConfig.Agents),
+		Skills: loadSkillEntries(skillRegistry, sessionConfig.Skills),
+		Agents: loadAgentEntries(agentRegistry, sessionConfig.Agents),
 		SquidOS: SquidOSInfo{
 			Version:       version.Full(),
 			SkillsDir:     paths.Skills,
@@ -37,15 +47,18 @@ func LoadEnvironment(paths config.Paths, sessionConfig config.SessionConfig) Env
 			LogsDir:       paths.Logs,
 			SysPromptsDir: paths.SysPrompts,
 			SessionsDir:   paths.Sessions,
-			ProjectDir:   projectDir,
-			MemoryDir:    paths.MemoryDir,
-			TempFolder:   paths.TempFolder,
-			SettingsFile: paths.SettingsFile(),
+			ProjectDir:    projectDir,
+			MemoryDir:     paths.MemoryDir,
+			TempFolder:    paths.TempFolder,
+			SettingsFile:  paths.SettingsFile(),
 			EndpointsFile: paths.EndpointsFile(),
 			HistoryFile:   paths.HistoryFile(),
 			DebugEnabled:  debugEnabled,
 			Target:        target,
 		},
+		WorkspaceMemory: workspaceMemory,
+		WorkspaceSkills: workspaceSkills,
+		WorkspaceAgents: workspaceAgents,
 	}
 
 	if workingDir != "" {
@@ -78,35 +91,58 @@ func FormatEnvironment(env Environment) string {
 	b.WriteString("- tree: " + installedOrNot(env.OS.TreeInstalled) + "\n")
 	b.WriteString("\n")
 
-	// [Skills] section
+	// Effective capability lists for this session.
 	b.WriteString("## [Skills]\n")
 	if len(env.Skills) == 0 {
-		b.WriteString("- none: \n")
+		b.WriteString("- none\n")
 	} else {
-		for _, s := range env.Skills {
-			b.WriteString(fmt.Sprintf("- %s: %s\n", s.Name, s.Description))
+		for _, skill := range env.Skills {
+			b.WriteString(fmt.Sprintf("- %s: %s [%s]\n", skill.Name, skill.Description, skill.Scope))
 		}
 	}
 	b.WriteString("\n")
 
 	b.WriteString("## [Agents]\n")
 	if len(env.Agents) == 0 {
-		b.WriteString("- none: \n")
+		b.WriteString("- none\n")
 	} else {
-		for _, a := range env.Agents {
-			b.WriteString(fmt.Sprintf("- %s: %s\n", a.Name, a.Description))
+		for _, agent := range env.Agents {
+			b.WriteString(fmt.Sprintf("- %s: %s [%s]\n", agent.Name, agent.Description, agent.Scope))
 		}
 	}
 	b.WriteString("\n")
 
-	// [Squid-OS] section
+	// [Working Directory] section — project context
+	if env.Project != nil {
+		b.WriteString("## [Working Directory]\n")
+		b.WriteString(fmt.Sprintf("- working-dir: %s\n", util.FriendlyPath(git.Decorate(env.Project.Path))))
+		b.WriteString(fmt.Sprintf("- under-project-dir: %s\n", boolOrNot(env.Project.IsUnderProjectDir)))
+		if env.WorkspaceMemory != "" {
+			b.WriteString("- workspace-memory: " + util.FriendlyPath(env.WorkspaceMemory) + "\n")
+		}
+		if env.WorkspaceSkills != "" {
+			b.WriteString("- workspace-skills: " + util.FriendlyPath(env.WorkspaceSkills) + "\n")
+		}
+		if env.WorkspaceAgents != "" {
+			b.WriteString("- workspace-agents: " + util.FriendlyPath(env.WorkspaceAgents) + "\n")
+		}
+		if env.Project.FileTree != "" {
+			b.WriteString("- file-tree:\n")
+			b.WriteString("```\n")
+			b.WriteString(env.Project.FileTree)
+			b.WriteString("```\n")
+		}
+		b.WriteString("\n")
+	}
+
+	// [Squid-OS] section — global installation context
 	b.WriteString("## [Squid-OS]\n")
 	b.WriteString("- version: " + env.SquidOS.Version + "\n")
 	if env.SquidOS.Target != "" {
 		b.WriteString("- session-mode: " + env.SquidOS.Target + "\n")
 	}
-	b.WriteString("- skills: " + util.FriendlyPath(git.Decorate(env.SquidOS.SkillsDir)) + "\n")
-	b.WriteString("- agents: " + util.FriendlyPath(git.Decorate(env.SquidOS.AgentsDir)) + "\n")
+	b.WriteString("- global-skills: " + util.FriendlyPath(git.Decorate(env.SquidOS.SkillsDir)) + "\n")
+	b.WriteString("- global-agents: " + util.FriendlyPath(git.Decorate(env.SquidOS.AgentsDir)) + "\n")
 	b.WriteString("- logs: " + util.FriendlyPath(git.Decorate(env.SquidOS.LogsDir)) + "\n")
 	b.WriteString("- sys-prompts: " + util.FriendlyPath(git.Decorate(env.SquidOS.SysPromptsDir)) + "\n")
 	b.WriteString("- sessions: " + util.FriendlyPath(git.Decorate(env.SquidOS.SessionsDir)) + "\n")
@@ -121,20 +157,6 @@ func FormatEnvironment(env Environment) string {
 	}
 	b.WriteString("\n")
 
-	// [Working Directory] section
-	if env.Project != nil {
-		b.WriteString("## [Working Directory]\n")
-		b.WriteString(fmt.Sprintf("- working-dir: %s\n", util.FriendlyPath(git.Decorate(env.Project.Path))))
-		b.WriteString(fmt.Sprintf("- under-project-dir: %s\n", boolOrNot(env.Project.IsUnderProjectDir)))
-		if env.Project.FileTree != "" {
-			b.WriteString("- file-tree:\n")
-			b.WriteString("```\n")
-			b.WriteString(env.Project.FileTree)
-			b.WriteString("```\n")
-		}
-		b.WriteString("\n")
-	}
-
 	// [Projects] section
 	if len(env.Projects) > 0 {
 		b.WriteString("## [Projects]\n")
@@ -143,7 +165,6 @@ func FormatEnvironment(env Environment) string {
 		}
 		b.WriteString("\n")
 	}
-
 
 	// [Memory] section
 	if env.MemoryNamespace != "" || env.Memory != "" {
@@ -195,37 +216,37 @@ func loadMemoryIndex(memoryDir string) string {
 	return content
 }
 
-func loadSkillEntries(allowedNames []string) []SkillInfo {
-	registry := skills.GetRegistry()
+func loadSkillEntries(registry *skills.Registry, allowed []config.CapabilityRef) []SkillInfo {
 	if registry == nil {
 		return nil
 	}
-	allowed := make(map[string]bool, len(allowedNames))
-	for _, name := range allowedNames {
-		allowed[name] = true
+	allowedSet := make(map[config.CapabilityRef]bool, len(allowed))
+	for _, ref := range allowed {
+		allowedSet[ref] = true
 	}
 	var entries []SkillInfo
 	for _, entry := range registry.List() {
-		if allowed[entry.Name] {
-			entries = append(entries, SkillInfo{Name: entry.Name, Description: entry.Description})
+		ref := config.CapabilityRef{Scope: entry.Scope, Name: entry.Name}
+		if allowedSet[ref] {
+			entries = append(entries, SkillInfo{Name: entry.Name, Description: entry.Description, Scope: string(entry.Scope)})
 		}
 	}
 	return entries
 }
 
-func loadAgentEntries(allowedNames []string) []AgentInfo {
-	registry := agent.GetRegistry()
+func loadAgentEntries(registry *agent.Registry, allowed []config.CapabilityRef) []AgentInfo {
 	if registry == nil {
 		return nil
 	}
-	allowed := make(map[string]bool, len(allowedNames))
-	for _, name := range allowedNames {
-		allowed[name] = true
+	allowedSet := make(map[config.CapabilityRef]bool, len(allowed))
+	for _, ref := range allowed {
+		allowedSet[ref] = true
 	}
 	var entries []AgentInfo
 	for _, entry := range registry.List() {
-		if allowed[entry.Name] {
-			entries = append(entries, AgentInfo{Name: entry.Name, Description: entry.Description})
+		ref := config.CapabilityRef{Scope: entry.Scope, Name: entry.Name}
+		if allowedSet[ref] {
+			entries = append(entries, AgentInfo{Name: entry.Name, Description: entry.Description, Scope: string(entry.Scope)})
 		}
 	}
 	return entries

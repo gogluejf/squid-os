@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"squid-os/internal/config"
+	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/skills"
 )
 
@@ -74,12 +75,13 @@ func TestPrepareTurnSkillChangeIncludesBodyIDAndTokens(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := skills.InitRegistry(root); err != nil {
+	registry, err := skills.LoadRegistry(root, "")
+	if err != nil {
 		t.Fatal(err)
 	}
 
 	cfg := config.SessionConfig{Inference: config.InferenceConfig{Provider: "p", Model: "m"}}
-	s := &Session{Doc: config.NewSessionDoc(cfg)}
+	s := &Session{Doc: config.NewSessionDoc(cfg), Catalog: runtimeconfig.Catalog{Skills: registry}}
 	s.Append(NewUserMessage("msg_1", "hello", ""))
 	s.SetPendingSkill("review")
 	if err := PrepareTurn(s); err != nil {
@@ -98,6 +100,28 @@ func TestPrepareTurnSkillChangeIncludesBodyIDAndTokens(t *testing.T) {
 	}
 	if s.TotalInputTokens() != s.Doc.Messages[0].InputTokens+msg.InputTokens {
 		t.Fatalf("session input tokens not accumulated: %d", s.TotalInputTokens())
+	}
+}
+
+func TestPrepareTurnCapabilityChangeIsSyntheticAndVisible(t *testing.T) {
+	old := []config.CapabilityRef{{Scope: config.CapabilityScopeGlobal, Name: "review"}}
+	next := []config.CapabilityRef{{Scope: config.CapabilityScopeWorkspace, Name: "review"}}
+	s := &Session{Doc: config.NewSessionDoc(config.SessionConfig{Skills: old})}
+	s.Doc.Pending = &config.PendingConfig{Skills: &next, SkillsMissing: []string{"build"}}
+	s.Append(NewUserMessage("u", "hello", ""))
+
+	if err := PrepareTurn(s); err != nil {
+		t.Fatal(err)
+	}
+	message := s.Doc.Messages[1]
+	if message.Role != config.RoleSynthetic || message.Label != "Skills Available Changed" {
+		t.Fatalf("capability transition is not synthetic: %+v", message)
+	}
+	if !strings.Contains(message.Text, "review [workspace]") || !strings.Contains(message.Text, "Requested but unavailable: build") {
+		t.Fatalf("effective list or missing names absent: %q", message.Text)
+	}
+	if len(s.BuildMessages()) != 2 {
+		t.Fatal("synthetic capability transition not visible to model")
 	}
 }
 

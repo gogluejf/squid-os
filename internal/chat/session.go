@@ -2,6 +2,7 @@ package chat
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -9,20 +10,23 @@ import (
 
 	"squid-os/internal/config"
 	"squid-os/internal/environment"
+	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/tools"
 )
 
 // Session is the pure runtime session: persisted document + pure stream state.
 type Session struct {
-	Doc    config.SessionDoc
-	Stream StreamState
-	Info   config.SessionInfo
+	Doc     config.SessionDoc
+	Stream  StreamState
+	Info    config.SessionInfo
+	Paths   config.Paths
+	Catalog runtimeconfig.Catalog
 }
 
 // NewSession creates a pure session with initial system/environment/config/tool messages.
-func NewSession(cfg config.SessionConfig, paths config.Paths) *Session {
+func NewSession(cfg config.SessionConfig, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
 	doc := config.NewSessionDoc(cfg)
-	s := &Session{Doc: doc}
+	s := &Session{Doc: doc, Paths: paths, Catalog: catalog}
 
 	sysContent := config.LoadSystemPrompt(paths, cfg.SystemPromptFile)
 	s.Append(config.Message{
@@ -34,7 +38,7 @@ func NewSession(cfg config.SessionConfig, paths config.Paths) *Session {
 		InputTokens: CountTokensApproxString(sysContent),
 	})
 
-	env := environment.LoadEnvironment(paths, cfg)
+	env := environment.LoadEnvironment(paths, cfg, catalog.Skills, catalog.Agents)
 	envContent := environment.FormatEnvironment(env)
 	envSections := environment.ExtractSectionNames(envContent)
 	s.Append(config.Message{
@@ -67,14 +71,14 @@ func NewSession(cfg config.SessionConfig, paths config.Paths) *Session {
 }
 
 // LoadSession wraps an existing session document.
-func LoadSession(sd config.SessionDoc, name string) *Session {
+func LoadSession(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
 	info := config.SessionInfo{Name: name}
 	if sd.Meta.UpdatedAt != "" {
 		if t, err := time.Parse(time.RFC3339, sd.Meta.UpdatedAt); err == nil {
 			info.ModTime = t
 		}
 	}
-	return &Session{Doc: sd, Info: info}
+	return &Session{Doc: sd, Info: info, Paths: paths, Catalog: catalog}
 }
 
 func (s *Session) Append(msg config.Message) { s.Doc.Messages = append(s.Doc.Messages, msg) }
@@ -150,6 +154,10 @@ func (s *Session) Messages() []config.Message { return s.Doc.Messages }
 
 func (s *Session) BuildMessages() []goai_provider.Message { return BuildAPIMessages(s.Doc.Messages) }
 
+func (s *Session) ToolContext() tools.RuntimeContext {
+	return tools.RuntimeContext{Config: s.Doc.Config, Skills: s.Catalog.Skills, Agents: s.Catalog.Agents}
+}
+
 func (s *Session) GetTools() []tools.Tool {
 	allowed := make(map[string]bool, len(s.Doc.Config.Tools))
 	for _, name := range s.Doc.Config.Tools {
@@ -178,10 +186,66 @@ func (s *Session) SetTools(names []string) {
 	s.Doc.Config.Tools = append([]string(nil), names...)
 }
 
-func (s *Session) GetSkills() []string { return append([]string(nil), s.Doc.Config.Skills...) }
+func (s *Session) GetSkills() []config.CapabilityRef {
+	return append([]config.CapabilityRef(nil), s.Doc.Config.Skills...)
+}
 
-func (s *Session) SetSkills(names []string) {
-	s.Doc.Config.Skills = append([]string(nil), names...)
+func (s *Session) SetSkills(refs []config.CapabilityRef) {
+	s.Doc.Config.Skills = append([]config.CapabilityRef(nil), refs...)
+}
+
+func (s *Session) GetAgents() []config.CapabilityRef {
+	return append([]config.CapabilityRef(nil), s.Doc.Config.Agents...)
+}
+
+func (s *Session) SetAgents(refs []config.CapabilityRef) {
+	s.Doc.Config.Agents = append([]config.CapabilityRef(nil), refs...)
+}
+
+// SetWorkingDir switches workspace, rebuilds effective capability lists, and
+// stages capability changes for PrepareTurn.
+func (s *Session) SetWorkingDir(path string) error {
+	catalog, err := runtimeconfig.LoadCatalog(s.Paths, path)
+	if err != nil {
+		return err
+	}
+	skillsRefs, agentRefs, skillsMissing, agentsMissing := catalog.Resolve(
+		s.Doc.Config.SkillPolicy,
+		s.Doc.Config.AgentPolicy,
+	)
+	s.Catalog = catalog
+	s.Doc.Config.WorkingDir = path
+	if s.Doc.Pending == nil {
+		s.Doc.Pending = &config.PendingConfig{}
+	}
+	if !reflect.DeepEqual(skillsRefs, s.Doc.Config.Skills) || len(skillsMissing) > 0 {
+		value := append([]config.CapabilityRef(nil), skillsRefs...)
+		s.Doc.Pending.Skills = &value
+	}
+	if !reflect.DeepEqual(agentRefs, s.Doc.Config.Agents) || len(agentsMissing) > 0 {
+		value := append([]config.CapabilityRef(nil), agentRefs...)
+		s.Doc.Pending.Agents = &value
+	}
+	s.Doc.Pending.SkillsMissing = append([]string(nil), skillsMissing...)
+	s.Doc.Pending.AgentsMissing = append([]string(nil), agentsMissing...)
+	if active := s.Doc.Config.ActiveSkill; active != "" {
+		oldRef, oldOK := findCapabilityRef(s.Doc.Config.Skills, active)
+		newRef, newOK := findCapabilityRef(skillsRefs, active)
+		if !oldOK || !newOK || oldRef != newRef {
+			empty := ""
+			s.Doc.Pending.ActiveSkill = &empty
+		}
+	}
+	return nil
+}
+
+func findCapabilityRef(refs []config.CapabilityRef, name string) (config.CapabilityRef, bool) {
+	for _, ref := range refs {
+		if ref.Name == name {
+			return ref, true
+		}
+	}
+	return config.CapabilityRef{}, false
 }
 
 func (s *Session) CurrentSkill() string { return s.Doc.Config.ActiveSkill }

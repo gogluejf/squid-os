@@ -81,9 +81,9 @@ func flagSessions(prefix string) []string {
 
 func flagSkills(prefix string) []string {
 	paths := getCompletionPaths()
-	_ = skills.InitRegistry(paths.Skills)
-	registry := skills.GetRegistry()
-	if registry == nil {
+	workingDir, _ := os.Getwd()
+	registry, err := skills.LoadRegistry(paths.Skills, filepath.Join(workingDir, ".squid-os", "skills"))
+	if err != nil {
 		return nil
 	}
 	var names []string
@@ -97,7 +97,8 @@ func flagSkills(prefix string) []string {
 
 func flagAgents(prefix string) []string {
 	paths := getCompletionPaths()
-	registry, err := agent.InitRegistry(paths.Agents)
+	workingDir, _ := os.Getwd()
+	registry, err := agent.LoadRegistry(paths.Agents, filepath.Join(workingDir, ".squid-os", "agents"))
 	if err != nil {
 		return nil
 	}

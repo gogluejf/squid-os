@@ -5,10 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"squid-os/internal/agent"
 	"squid-os/internal/config"
 	"squid-os/internal/log"
-	"squid-os/internal/skills"
 )
 
 // LimitOptions is shared by all interactive and run commands.
@@ -42,12 +40,6 @@ func loadApplicationConfig() (applicationConfig, error) {
 	}
 	log.Init(paths)
 	log.SetEnabled(settings.DebugEnabled)
-	if _, err := agent.InitRegistry(paths.Agents); err != nil {
-		return applicationConfig{}, fmt.Errorf("initialize agents: %w", err)
-	}
-	if err := skills.InitRegistry(paths.Skills); err != nil {
-		return applicationConfig{}, fmt.Errorf("initialize skills: %w", err)
-	}
 
 	return applicationConfig{
 		paths:     paths,
@@ -63,7 +55,6 @@ func parseOptionalAuthorization(value string) (config.AuthorizationMode, error) 
 	}
 	return config.ParseAuthorizationMode(value)
 }
-
 
 func validateTUIAuthMode(value string) error {
 	if value == "" {

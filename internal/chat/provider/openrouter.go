@@ -33,9 +33,11 @@ func newOpenRouterProvider(settings *config.ProviderSettings) *OpenRouterProvide
 
 // --- Provider interface ---
 
-func (o *OpenRouterProvider) Name() string                  { return config.ProviderOpenRouter }
-func (o *OpenRouterProvider) Dialect() config.Dialect       { return config.DialectOpenAICompatible }
-func (o *OpenRouterProvider) SupportedAuth() []config.AuthMethod { return []config.AuthMethod{config.AuthAPIKey} }
+func (o *OpenRouterProvider) Name() string            { return config.ProviderOpenRouter }
+func (o *OpenRouterProvider) Dialect() config.Dialect { return config.DialectOpenAICompatible }
+func (o *OpenRouterProvider) SupportedAuth() []config.AuthMethod {
+	return []config.AuthMethod{config.AuthAPIKey}
+}
 func (o *OpenRouterProvider) StaticModels() []ModelEntry {
 	return []ModelEntry{
 		{ID: "anthropic/claude-sonnet-4-20250514", ContextLength: 200_000},
@@ -158,13 +160,21 @@ func (o *OpenRouterProvider) ModelDetails(ctx context.Context, modelID string) *
 
 // --- Auth stubs ---
 
-func (o *OpenRouterProvider) StartDeviceAuth() (string, string, error)    { return "", "", fmt.Errorf("openrouter: device auth not supported") }
-func (o *OpenRouterProvider) PollDeviceAuth() error                       { return fmt.Errorf("openrouter: device auth not supported") }
-func (o *OpenRouterProvider) StartOAuth(redirectURI string) (string, error) { return "", fmt.Errorf("openrouter: OAuth not supported") }
-func (o *OpenRouterProvider) FinishOAuth(code, redirectURI string) error    { return fmt.Errorf("openrouter: OAuth not supported") }
-func (o *OpenRouterProvider) GetCredentials() *config.ProviderCreds          { return o.creds() }
-func (o *OpenRouterProvider) GetDeviceAuthID() string                        { return "" }
-func (o *OpenRouterProvider) SetDeviceState(id, code string)                 {}
+func (o *OpenRouterProvider) StartDeviceAuth() (string, string, error) {
+	return "", "", fmt.Errorf("openrouter: device auth not supported")
+}
+func (o *OpenRouterProvider) PollDeviceAuth() error {
+	return fmt.Errorf("openrouter: device auth not supported")
+}
+func (o *OpenRouterProvider) StartOAuth(redirectURI string) (string, error) {
+	return "", fmt.Errorf("openrouter: OAuth not supported")
+}
+func (o *OpenRouterProvider) FinishOAuth(code, redirectURI string) error {
+	return fmt.Errorf("openrouter: OAuth not supported")
+}
+func (o *OpenRouterProvider) GetCredentials() *config.ProviderCreds { return o.creds() }
+func (o *OpenRouterProvider) GetDeviceAuthID() string               { return "" }
+func (o *OpenRouterProvider) SetDeviceState(id, code string)        {}
 
 func (o *OpenRouterProvider) creds() *config.ProviderCreds {
 	if o.settings == nil || o.settings.Credentials == nil {

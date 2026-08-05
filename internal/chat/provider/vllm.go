@@ -36,8 +36,8 @@ func (v *VLLMProvider) SupportedAuth() []config.AuthMethod {
 	return []config.AuthMethod{config.AuthNone, config.AuthAPIKey}
 }
 func (v *VLLMProvider) StaticModels() []ModelEntry { return nil }
-func (v *VLLMProvider) DefaultBaseURL() string { return "http://localhost:8000" }
-func (v *VLLMProvider) RequiresBaseURL() bool  { return true }
+func (v *VLLMProvider) DefaultBaseURL() string     { return "http://localhost:8000" }
+func (v *VLLMProvider) RequiresBaseURL() bool      { return true }
 func (v *VLLMProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
 	return map[string]any{
 		"chat_template_kwargs": map[string]any{

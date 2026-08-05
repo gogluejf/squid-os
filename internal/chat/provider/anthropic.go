@@ -33,9 +33,11 @@ func newAnthropicProvider(settings *config.ProviderSettings) *AnthropicProvider 
 
 // --- Provider interface ---
 
-func (a *AnthropicProvider) Name() string                     { return config.ProviderAnthropic }
-func (a *AnthropicProvider) Dialect() config.Dialect          { return config.DialectAnthropic }
-func (a *AnthropicProvider) SupportedAuth() []config.AuthMethod { return []config.AuthMethod{config.AuthAPIKey} }
+func (a *AnthropicProvider) Name() string            { return config.ProviderAnthropic }
+func (a *AnthropicProvider) Dialect() config.Dialect { return config.DialectAnthropic }
+func (a *AnthropicProvider) SupportedAuth() []config.AuthMethod {
+	return []config.AuthMethod{config.AuthAPIKey}
+}
 func (a *AnthropicProvider) StaticModels() []ModelEntry {
 	return []ModelEntry{
 		{ID: "claude-opus-4-6", ContextLength: 200_000},
@@ -156,13 +158,21 @@ func (a *AnthropicProvider) ModelDetails(ctx context.Context, modelID string) *M
 
 // --- Auth stubs ---
 
-func (a *AnthropicProvider) StartDeviceAuth() (string, string, error)    { return "", "", fmt.Errorf("anthropic: device auth not supported") }
-func (a *AnthropicProvider) PollDeviceAuth() error                       { return fmt.Errorf("anthropic: device auth not supported") }
-func (a *AnthropicProvider) StartOAuth(redirectURI string) (string, error) { return "", fmt.Errorf("anthropic: OAuth not supported") }
-func (a *AnthropicProvider) FinishOAuth(code, redirectURI string) error    { return fmt.Errorf("anthropic: OAuth not supported") }
-func (a *AnthropicProvider) GetCredentials() *config.ProviderCreds          { return a.creds() }
-func (a *AnthropicProvider) GetDeviceAuthID() string                        { return "" }
-func (a *AnthropicProvider) SetDeviceState(id, code string)                 {}
+func (a *AnthropicProvider) StartDeviceAuth() (string, string, error) {
+	return "", "", fmt.Errorf("anthropic: device auth not supported")
+}
+func (a *AnthropicProvider) PollDeviceAuth() error {
+	return fmt.Errorf("anthropic: device auth not supported")
+}
+func (a *AnthropicProvider) StartOAuth(redirectURI string) (string, error) {
+	return "", fmt.Errorf("anthropic: OAuth not supported")
+}
+func (a *AnthropicProvider) FinishOAuth(code, redirectURI string) error {
+	return fmt.Errorf("anthropic: OAuth not supported")
+}
+func (a *AnthropicProvider) GetCredentials() *config.ProviderCreds { return a.creds() }
+func (a *AnthropicProvider) GetDeviceAuthID() string               { return "" }
+func (a *AnthropicProvider) SetDeviceState(id, code string)        {}
 
 func (a *AnthropicProvider) creds() *config.ProviderCreds {
 	if a.settings == nil || a.settings.Credentials == nil {

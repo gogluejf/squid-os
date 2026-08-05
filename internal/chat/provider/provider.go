@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"squid-os/internal/config"
 	goai_provider "github.com/zendev-sh/goai/provider"
+	"squid-os/internal/config"
 )
 
 // Provider is the unified interface for a provider.

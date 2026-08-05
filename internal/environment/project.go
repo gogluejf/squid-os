@@ -66,5 +66,3 @@ func FindProjects(projectDir string) []FolderEntry {
 
 	return entries
 }
-
-

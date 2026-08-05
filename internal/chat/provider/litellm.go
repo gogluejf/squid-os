@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"squid-os/internal/config"
 	goai_provider "github.com/zendev-sh/goai/provider"
 	"github.com/zendev-sh/goai/provider/compat"
+	"squid-os/internal/config"
 )
 
 func init() {
@@ -29,12 +29,14 @@ func newLiteLLMProvider(settings *config.ProviderSettings) *LiteLLMProvider {
 	return &LiteLLMProvider{settings: settings}
 }
 
-func (l *LiteLLMProvider) Name() string                         { return config.ProviderLiteLLM }
-func (l *LiteLLMProvider) Dialect() config.Dialect              { return config.DialectOpenAICompatible }
-func (l *LiteLLMProvider) SupportedAuth() []config.AuthMethod   { return []config.AuthMethod{config.AuthNone, config.AuthAPIKey} }
-func (l *LiteLLMProvider) StaticModels() []ModelEntry               { return nil }
-func (l *LiteLLMProvider) DefaultBaseURL() string               { return "http://localhost:4000" }
-func (l *LiteLLMProvider) RequiresBaseURL() bool                { return true }
+func (l *LiteLLMProvider) Name() string            { return config.ProviderLiteLLM }
+func (l *LiteLLMProvider) Dialect() config.Dialect { return config.DialectOpenAICompatible }
+func (l *LiteLLMProvider) SupportedAuth() []config.AuthMethod {
+	return []config.AuthMethod{config.AuthNone, config.AuthAPIKey}
+}
+func (l *LiteLLMProvider) StaticModels() []ModelEntry { return nil }
+func (l *LiteLLMProvider) DefaultBaseURL() string     { return "http://localhost:4000" }
+func (l *LiteLLMProvider) RequiresBaseURL() bool      { return true }
 func (l *LiteLLMProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
 	return map[string]any{
 		"chat_template_kwargs": map[string]any{
@@ -43,13 +45,21 @@ func (l *LiteLLMProvider) RequestProviderOptions(model string, thinking bool) ma
 	}
 }
 
-func (l *LiteLLMProvider) StartDeviceAuth() (string, string, error)    { return "", "", fmt.Errorf("litellm: device auth not supported") }
-func (l *LiteLLMProvider) PollDeviceAuth() error                       { return fmt.Errorf("litellm: device auth not supported") }
-func (l *LiteLLMProvider) StartOAuth(redirectURI string) (string, error) { return "", fmt.Errorf("litellm: OAuth not supported") }
-func (l *LiteLLMProvider) FinishOAuth(code, redirectURI string) error    { return fmt.Errorf("litellm: OAuth not supported") }
-func (l *LiteLLMProvider) GetCredentials() *config.ProviderCreds          { return l.settings.Credentials }
-func (l *LiteLLMProvider) GetDeviceAuthID() string                        { return "" }
-func (l *LiteLLMProvider) SetDeviceState(id, code string)                 {}
+func (l *LiteLLMProvider) StartDeviceAuth() (string, string, error) {
+	return "", "", fmt.Errorf("litellm: device auth not supported")
+}
+func (l *LiteLLMProvider) PollDeviceAuth() error {
+	return fmt.Errorf("litellm: device auth not supported")
+}
+func (l *LiteLLMProvider) StartOAuth(redirectURI string) (string, error) {
+	return "", fmt.Errorf("litellm: OAuth not supported")
+}
+func (l *LiteLLMProvider) FinishOAuth(code, redirectURI string) error {
+	return fmt.Errorf("litellm: OAuth not supported")
+}
+func (l *LiteLLMProvider) GetCredentials() *config.ProviderCreds { return l.settings.Credentials }
+func (l *LiteLLMProvider) GetDeviceAuthID() string               { return "" }
+func (l *LiteLLMProvider) SetDeviceState(id, code string)        {}
 
 func (l *LiteLLMProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {
 	if model == "" {

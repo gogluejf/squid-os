@@ -34,9 +34,11 @@ func newFireworksProvider(settings *config.ProviderSettings) *FireworksProvider 
 
 // --- Provider interface ---
 
-func (f *FireworksProvider) Name() string                     { return config.ProviderFireworks }
-func (f *FireworksProvider) Dialect() config.Dialect          { return config.DialectOpenAICompatible }
-func (f *FireworksProvider) SupportedAuth() []config.AuthMethod { return []config.AuthMethod{config.AuthAPIKey} }
+func (f *FireworksProvider) Name() string            { return config.ProviderFireworks }
+func (f *FireworksProvider) Dialect() config.Dialect { return config.DialectOpenAICompatible }
+func (f *FireworksProvider) SupportedAuth() []config.AuthMethod {
+	return []config.AuthMethod{config.AuthAPIKey}
+}
 func (f *FireworksProvider) StaticModels() []ModelEntry {
 	return []ModelEntry{
 		{ID: "accounts/fireworks/models/llama-v3p1-405b-instruct", ContextLength: 131_072},
@@ -97,11 +99,11 @@ func (f *FireworksProvider) ListModels(ctx context.Context) ([]ModelEntry, error
 
 	var result struct {
 		Data []struct {
-			ID            string `json:"id"`
-			Object        string `json:"object"`
-			Created       int64  `json:"created"`
-			OwnedBy       string `json:"owned_by"`
-			MaxTokens     int    `json:"max_tokens,omitempty"`
+			ID        string `json:"id"`
+			Object    string `json:"object"`
+			Created   int64  `json:"created"`
+			OwnedBy   string `json:"owned_by"`
+			MaxTokens int    `json:"max_tokens,omitempty"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -182,13 +184,21 @@ func isChatModel(id string) bool {
 
 // --- Auth stubs ---
 
-func (f *FireworksProvider) StartDeviceAuth() (string, string, error)    { return "", "", fmt.Errorf("fireworks: device auth not supported") }
-func (f *FireworksProvider) PollDeviceAuth() error                       { return fmt.Errorf("fireworks: device auth not supported") }
-func (f *FireworksProvider) StartOAuth(redirectURI string) (string, error) { return "", fmt.Errorf("fireworks: OAuth not supported") }
-func (f *FireworksProvider) FinishOAuth(code, redirectURI string) error    { return fmt.Errorf("fireworks: OAuth not supported") }
-func (f *FireworksProvider) GetCredentials() *config.ProviderCreds          { return f.creds() }
-func (f *FireworksProvider) GetDeviceAuthID() string                        { return "" }
-func (f *FireworksProvider) SetDeviceState(id, code string)                 {}
+func (f *FireworksProvider) StartDeviceAuth() (string, string, error) {
+	return "", "", fmt.Errorf("fireworks: device auth not supported")
+}
+func (f *FireworksProvider) PollDeviceAuth() error {
+	return fmt.Errorf("fireworks: device auth not supported")
+}
+func (f *FireworksProvider) StartOAuth(redirectURI string) (string, error) {
+	return "", fmt.Errorf("fireworks: OAuth not supported")
+}
+func (f *FireworksProvider) FinishOAuth(code, redirectURI string) error {
+	return fmt.Errorf("fireworks: OAuth not supported")
+}
+func (f *FireworksProvider) GetCredentials() *config.ProviderCreds { return f.creds() }
+func (f *FireworksProvider) GetDeviceAuthID() string               { return "" }
+func (f *FireworksProvider) SetDeviceState(id, code string)        {}
 
 func (f *FireworksProvider) creds() *config.ProviderCreds {
 	if f.settings == nil || f.settings.Credentials == nil {

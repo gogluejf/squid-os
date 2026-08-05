@@ -34,9 +34,11 @@ func newGeminiProvider(settings *config.ProviderSettings) *GeminiProvider {
 
 // --- Provider interface ---
 
-func (g *GeminiProvider) Name() string                { return config.ProviderGemini }
-func (g *GeminiProvider) Dialect() config.Dialect     { return config.DialectGemini }
-func (g *GeminiProvider) SupportedAuth() []config.AuthMethod { return []config.AuthMethod{config.AuthAPIKey} }
+func (g *GeminiProvider) Name() string            { return config.ProviderGemini }
+func (g *GeminiProvider) Dialect() config.Dialect { return config.DialectGemini }
+func (g *GeminiProvider) SupportedAuth() []config.AuthMethod {
+	return []config.AuthMethod{config.AuthAPIKey}
+}
 func (g *GeminiProvider) StaticModels() []ModelEntry {
 	return []ModelEntry{
 		{ID: "gemini-2.5-pro", ContextLength: 1_048_576},
@@ -100,11 +102,11 @@ func (g *GeminiProvider) ListModels(ctx context.Context) ([]ModelEntry, error) {
 
 	var result struct {
 		Models []struct {
-			Name              string `json:"name"`
-			BaseModelID       string `json:"baseModelId"`
-			InputTokenLimit   int    `json:"inputTokenLimit"`
-			OutputTokenLimit  int    `json:"outputTokenLimit"`
-			SupportedMethods  []string `json:"supportedMethods"`
+			Name             string   `json:"name"`
+			BaseModelID      string   `json:"baseModelId"`
+			InputTokenLimit  int      `json:"inputTokenLimit"`
+			OutputTokenLimit int      `json:"outputTokenLimit"`
+			SupportedMethods []string `json:"supportedMethods"`
 		} `json:"models"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -172,13 +174,21 @@ func (g *GeminiProvider) ModelDetails(ctx context.Context, modelID string) *Mode
 
 // --- Auth stubs ---
 
-func (g *GeminiProvider) StartDeviceAuth() (string, string, error)    { return "", "", fmt.Errorf("gemini: device auth not supported") }
-func (g *GeminiProvider) PollDeviceAuth() error                       { return fmt.Errorf("gemini: device auth not supported") }
-func (g *GeminiProvider) StartOAuth(redirectURI string) (string, error) { return "", fmt.Errorf("gemini: OAuth not supported") }
-func (g *GeminiProvider) FinishOAuth(code, redirectURI string) error    { return fmt.Errorf("gemini: OAuth not supported") }
-func (g *GeminiProvider) GetCredentials() *config.ProviderCreds          { return g.creds() }
-func (g *GeminiProvider) GetDeviceAuthID() string                        { return "" }
-func (g *GeminiProvider) SetDeviceState(id, code string)                 {}
+func (g *GeminiProvider) StartDeviceAuth() (string, string, error) {
+	return "", "", fmt.Errorf("gemini: device auth not supported")
+}
+func (g *GeminiProvider) PollDeviceAuth() error {
+	return fmt.Errorf("gemini: device auth not supported")
+}
+func (g *GeminiProvider) StartOAuth(redirectURI string) (string, error) {
+	return "", fmt.Errorf("gemini: OAuth not supported")
+}
+func (g *GeminiProvider) FinishOAuth(code, redirectURI string) error {
+	return fmt.Errorf("gemini: OAuth not supported")
+}
+func (g *GeminiProvider) GetCredentials() *config.ProviderCreds { return g.creds() }
+func (g *GeminiProvider) GetDeviceAuthID() string               { return "" }
+func (g *GeminiProvider) SetDeviceState(id, code string)        {}
 
 func (g *GeminiProvider) creds() *config.ProviderCreds {
 	if g.settings == nil || g.settings.Credentials == nil {

@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"squid-os/internal/config"
 	goai_provider "github.com/zendev-sh/goai/provider"
 	"github.com/zendev-sh/goai/provider/ollama"
+	"squid-os/internal/config"
 )
 
 func init() {
@@ -30,24 +30,34 @@ func newOllamaProvider(settings *config.ProviderSettings) *OllamaProvider {
 	return &OllamaProvider{settings: settings}
 }
 
-func (o *OllamaProvider) Name() string                     { return config.ProviderOllama }
-func (o *OllamaProvider) Dialect() config.Dialect          { return config.DialectOpenAICompatible }
-func (o *OllamaProvider) SupportedAuth() []config.AuthMethod { return []config.AuthMethod{config.AuthNone} }
-func (o *OllamaProvider) StaticModels() []ModelEntry           { return nil }
-func (o *OllamaProvider) DefaultBaseURL() string           { return "http://localhost:11434" }
-func (o *OllamaProvider) RequiresBaseURL() bool            { return true }
+func (o *OllamaProvider) Name() string            { return config.ProviderOllama }
+func (o *OllamaProvider) Dialect() config.Dialect { return config.DialectOpenAICompatible }
+func (o *OllamaProvider) SupportedAuth() []config.AuthMethod {
+	return []config.AuthMethod{config.AuthNone}
+}
+func (o *OllamaProvider) StaticModels() []ModelEntry { return nil }
+func (o *OllamaProvider) DefaultBaseURL() string     { return "http://localhost:11434" }
+func (o *OllamaProvider) RequiresBaseURL() bool      { return true }
 func (o *OllamaProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
 	// GoAI Ollama expects the native "think" request field to always be present.
 	return map[string]any{"think": thinking}
 }
 
-func (o *OllamaProvider) StartDeviceAuth() (string, string, error)    { return "", "", fmt.Errorf("ollama: device auth not supported") }
-func (o *OllamaProvider) PollDeviceAuth() error                       { return fmt.Errorf("ollama: device auth not supported") }
-func (o *OllamaProvider) StartOAuth(redirectURI string) (string, error) { return "", fmt.Errorf("ollama: OAuth not supported") }
-func (o *OllamaProvider) FinishOAuth(code, redirectURI string) error    { return fmt.Errorf("ollama: OAuth not supported") }
-func (o *OllamaProvider) GetCredentials() *config.ProviderCreds          { return o.creds() }
-func (o *OllamaProvider) GetDeviceAuthID() string                        { return "" }
-func (o *OllamaProvider) SetDeviceState(id, code string)                 {}
+func (o *OllamaProvider) StartDeviceAuth() (string, string, error) {
+	return "", "", fmt.Errorf("ollama: device auth not supported")
+}
+func (o *OllamaProvider) PollDeviceAuth() error {
+	return fmt.Errorf("ollama: device auth not supported")
+}
+func (o *OllamaProvider) StartOAuth(redirectURI string) (string, error) {
+	return "", fmt.Errorf("ollama: OAuth not supported")
+}
+func (o *OllamaProvider) FinishOAuth(code, redirectURI string) error {
+	return fmt.Errorf("ollama: OAuth not supported")
+}
+func (o *OllamaProvider) GetCredentials() *config.ProviderCreds { return o.creds() }
+func (o *OllamaProvider) GetDeviceAuthID() string               { return "" }
+func (o *OllamaProvider) SetDeviceState(id, code string)        {}
 
 func (o *OllamaProvider) creds() *config.ProviderCreds {
 	if o.settings == nil || o.settings.Credentials == nil {

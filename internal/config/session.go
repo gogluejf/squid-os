@@ -46,6 +46,7 @@ type SessionMeta struct {
 type SessionConfig struct {
 	Inference        InferenceConfig   `json:"inference"`
 	SystemPromptFile string            `json:"system_prompt_file,omitempty"`
+	Target           string            `json:"target,omitempty"` // "interactive" or "autonomous"
 	AgentName        string            `json:"agent_name,omitempty"`
 	AgentSystem      string            `json:"agent_system,omitempty"`
 	ActiveSkill      string            `json:"active_skill,omitempty"`
@@ -62,6 +63,7 @@ type SessionConfig struct {
 
 // PendingConfig holds desired next-state changes. Non-nil fields are pending.
 type PendingConfig struct {
+	Target      *string          `json:"target,omitempty"`
 	Inference   *InferenceConfig `json:"inference,omitempty"`
 	ActiveSkill *string          `json:"active_skill,omitempty"`
 	Tools       *[]string        `json:"tools,omitempty"`

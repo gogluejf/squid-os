@@ -58,7 +58,7 @@ func NewSession(cfg config.SessionConfig, paths config.Paths) *Session {
 		})
 	}
 
-	s.Append(BuildConfigMsg(cfg.Inference))
+	s.Append(BuildConfigMsg(cfg.Inference, cfg.Target))
 	if toolsMsg := BuildToolsEnabledMsg(s.GetTools()); toolsMsg.ID != "" {
 		s.Append(toolsMsg)
 	}
@@ -186,6 +186,8 @@ func (s *Session) SetSkills(names []string) {
 
 func (s *Session) CurrentSkill() string { return s.Doc.Config.ActiveSkill }
 
+func (s *Session) CurrentTarget() string { return s.Doc.Config.Target }
+
 func (s *Session) EffectiveSkill() string {
 	if s.Doc.Pending != nil && s.Doc.Pending.ActiveSkill != nil {
 		return *s.Doc.Pending.ActiveSkill
@@ -267,7 +269,7 @@ func (s *Session) PushConfigChange(cfg config.InferenceConfig) bool {
 
 	for i := range s.Doc.Messages {
 		if s.Doc.Messages[i].ID == "config0" {
-			s.Doc.Messages[i] = BuildConfigMsg(cfg)
+			s.Doc.Messages[i] = BuildConfigMsg(cfg, s.Doc.Config.Target)
 			s.Doc.Initial.Inference = cfg
 			s.Doc.Config.Inference = cfg
 			return true
@@ -326,16 +328,20 @@ func (s *Session) Save(p config.Paths, name string) error {
 	return config.SaveSessionDoc(p, name, s.Doc)
 }
 
-func BuildConfigMsg(inf config.InferenceConfig) config.Message {
+func BuildConfigMsg(inf config.InferenceConfig, target string) config.Message {
 	thinkStr := "off"
 	if inf.Thinking.Enabled {
 		thinkStr = "on"
+	}
+	params := map[string]string{"provider": inf.Provider, "model": inf.Model, "thinking": thinkStr}
+	if target != "" {
+		params["session-mode"] = target
 	}
 	return config.Message{
 		ID:     "config0",
 		Role:   config.RoleInternal,
 		Label:  "Init Config",
-		Params: map[string]string{"provider": inf.Provider, "model": inf.Model, "thinking": thinkStr},
+		Params: params,
 	}
 }
 

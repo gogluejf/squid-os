@@ -49,13 +49,14 @@ type SquidOSInfo struct {
 	LogsDir       string
 	SysPromptsDir string
 	SessionsDir   string
-	ProjectDir   string
-	MemoryDir    string
-	TempFolder   string
-	SettingsFile string
+	ProjectDir    string
+	MemoryDir     string
+	TempFolder    string
+	SettingsFile  string
 	EndpointsFile string
 	HistoryFile   string
 	DebugEnabled  bool
+	Target        string // "interactive" or "autonomous"
 }
 
 // ProjectInfo holds project-level context for the working directory.

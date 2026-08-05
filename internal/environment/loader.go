@@ -22,6 +22,7 @@ var sectionRe = regexp.MustCompile(`##\s+\[([^\]]+)\]`)
 func LoadEnvironment(paths config.Paths, sessionConfig config.SessionConfig) Environment {
 	workingDir := sessionConfig.WorkingDir
 	debugEnabled := sessionConfig.DebugEnabled
+	target := sessionConfig.Target
 	sessionMemory := sessionConfig.Memory
 	projectDir := paths.ProjectDir
 
@@ -43,6 +44,7 @@ func LoadEnvironment(paths config.Paths, sessionConfig config.SessionConfig) Env
 			EndpointsFile: paths.EndpointsFile(),
 			HistoryFile:   paths.HistoryFile(),
 			DebugEnabled:  debugEnabled,
+			Target:        target,
 		},
 	}
 
@@ -100,6 +102,9 @@ func FormatEnvironment(env Environment) string {
 	// [Squid-OS] section
 	b.WriteString("## [Squid-OS]\n")
 	b.WriteString("- version: " + env.SquidOS.Version + "\n")
+	if env.SquidOS.Target != "" {
+		b.WriteString("- session-mode: " + env.SquidOS.Target + "\n")
+	}
 	b.WriteString("- skills: " + util.FriendlyPath(git.Decorate(env.SquidOS.SkillsDir)) + "\n")
 	b.WriteString("- agents: " + util.FriendlyPath(git.Decorate(env.SquidOS.AgentsDir)) + "\n")
 	b.WriteString("- logs: " + util.FriendlyPath(git.Decorate(env.SquidOS.LogsDir)) + "\n")

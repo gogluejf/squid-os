@@ -19,8 +19,8 @@ const DefaultMaxAgentDepth = 5
 type Target string
 
 const (
-	TargetInteractive  Target = "interactive"
-	TargetAutonomous   Target = "autonomous"
+	TargetInteractive Target = "interactive"
+	TargetAutonomous  Target = "autonomous"
 )
 
 type Overrides struct {
@@ -61,6 +61,7 @@ func Resolve(in Inputs) (config.SessionConfig, error) {
 		return config.SessionConfig{}, fmt.Errorf("current working directory: %w", err)
 	}
 	cfg := config.SessionConfig{
+		Target:           string(in.Target),
 		Inference:        config.InferenceConfig{Provider: in.Settings.Provider, Model: in.Settings.Model, Thinking: in.Settings.Thinking},
 		SystemPromptFile: in.Settings.SystemPromptFile,
 		WorkingDir:       workingDir,
@@ -212,6 +213,10 @@ func ApplyToExistingSession(doc *config.SessionDoc, desired config.SessionConfig
 	current := config.CloneSessionConfig(doc.Config)
 	pending := &config.PendingConfig{}
 
+	if desired.Target != current.Target {
+		value := desired.Target
+		pending.Target = &value
+	}
 	if desired.Inference != current.Inference {
 		value := desired.Inference
 		pending.Inference = &value
@@ -236,13 +241,14 @@ func ApplyToExistingSession(doc *config.SessionDoc, desired config.SessionConfig
 	// Apply the complete resolved config, then retain current transcript-sensitive
 	// fields until PrepareTurn commits their pending transitions.
 	doc.Config = config.CloneSessionConfig(desired)
+	doc.Config.Target = current.Target
 	doc.Config.Inference = current.Inference
 	doc.Config.ActiveSkill = current.ActiveSkill
 	doc.Config.Tools = clone(current.Tools)
 	doc.Config.Skills = clone(current.Skills)
 	doc.Config.Agents = clone(current.Agents)
 
-	if pending.Inference == nil && pending.ActiveSkill == nil && pending.Tools == nil && pending.Skills == nil && pending.Agents == nil {
+	if pending.Target == nil && pending.Inference == nil && pending.ActiveSkill == nil && pending.Tools == nil && pending.Skills == nil && pending.Agents == nil {
 		doc.Pending = nil
 	} else {
 		doc.Pending = pending

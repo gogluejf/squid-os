@@ -37,6 +37,7 @@ When continuing a session (via `--session` or autoload), these flags are rejecte
 
 | Property | New session | Continue session |
 |---|---|---|
+| `Target` | `C` | `C` |
 | `Inference.Provider` | `S → A → C` | TUI: `E → S → C` · Run: `E → C` |
 | `Inference.Model` | `S → A → C` | TUI: `E → S → C` · Run: `E → C` |
 | `Inference.Thinking.Enabled` | `S → A → C` | TUI: `E → S → C` · Run: `E → C` |
@@ -72,6 +73,7 @@ When continuing a session (via `--session` or autoload), these flags are rejecte
 
 | Property | Application mode |
 |---|---|
+| `Target` | Pending |
 | `Inference` | Pending |
 | `ActiveSkill` | Pending |
 | `Tools` | Pending |

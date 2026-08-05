@@ -35,6 +35,16 @@ func PrepareTurn(s *Session) error {
 		s.SetInference(desired)
 	}
 
+	// Handle target mode
+	if pending.Target != nil {
+		oldTarget := s.Doc.Config.Target
+		desiredTarget := *pending.Target
+		if desiredTarget != oldTarget {
+			s.Doc.Config.Target = desiredTarget
+			s.Append(BuildModeSwitchMsg(oldTarget, desiredTarget))
+		}
+	}
+
 	// Handle skill
 	if pending.ActiveSkill != nil {
 		oldSkill := s.CurrentSkill()
@@ -109,4 +119,16 @@ func skillText(name string) string {
 
 func transition(label string, params map[string]string) config.Message {
 	return config.Message{Role: config.RoleInternal, Label: label, Params: params}
+}
+
+func BuildModeSwitchMsg(oldTarget, newTarget string) config.Message {
+	text := fmt.Sprintf("Session mode switched from %q to %q. Adjust your behavior for the new session mode.", oldTarget, newTarget)
+	return config.Message{
+		Role:        config.RoleSynthetic,
+		CreatedAt:   time.Now(),
+		Text:        text,
+		Label:       "session_mode_switch",
+		Params:      map[string]string{"from": oldTarget, "to": newTarget},
+		InputTokens: CountTokensApproxString(text),
+	}
 }

@@ -79,11 +79,11 @@ var SkillList = Tool{
 			if catalog != nil {
 				entry, ok := catalog.ResolveSkill(ref.Name)
 				if ok && entry.Scope == ref.Scope {
-					b.WriteString(fmt.Sprintf("  - %s: %s [%s]\n", ref.Name, entry.Description, ref.Scope))
+					b.WriteString(fmt.Sprintf("  - %s: [%s] %s\n", ref.Name, ref.Scope, entry.Description))
 					continue
 				}
 			}
-			b.WriteString(fmt.Sprintf("  - %s: (unavailable) [%s]\n", ref.Name, ref.Scope))
+			b.WriteString(fmt.Sprintf("  - %s: [%s] (unavailable)\n", ref.Name, ref.Scope))
 		}
 		return ToolResult{Status: ResultStatusSuccess, Result: b.String()}
 	},

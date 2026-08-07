@@ -78,7 +78,15 @@ func rebuildList(r *Registry) {
 	for _, entry := range r.index {
 		r.entries = append(r.entries, entry)
 	}
-	sort.Slice(r.entries, func(i, j int) bool { return r.entries[i].Name < r.entries[j].Name })
+	sort.Slice(r.entries, func(i, j int) bool {
+		si := r.entries[i].Scope
+		sj := r.entries[j].Scope
+		// workspace sorts before global
+		if si != sj {
+			return si == config.CapabilityScopeWorkspace
+		}
+		return r.entries[i].Name < r.entries[j].Name
+	})
 }
 
 func (r *Registry) Resolve(name string) (SkillEntry, bool) {
@@ -128,7 +136,7 @@ func FormatSkillRegistry(entries []SkillEntry) string {
 	var b strings.Builder
 	b.WriteString("Available skills (use skill_load to activate):\n")
 	for _, entry := range entries {
-		b.WriteString(fmt.Sprintf("  - %s: %s [%s]\n", entry.Name, entry.Description, entry.Scope))
+		b.WriteString(fmt.Sprintf("  - %s: [%s] %s\n", entry.Name, entry.Scope, entry.Description))
 	}
 	return b.String()
 }

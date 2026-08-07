@@ -24,7 +24,7 @@ func TestCatalogFormatsAvailableAndMissingCapabilities(t *testing.T) {
 	cfg.Skills, cfg.Agents = resolved.Skills, resolved.Agents
 
 	skillText := catalog.FormatSkills(cfg)
-	if !strings.Contains(skillText, "### Available Skills\n- browser: Browse sites [global]") || !strings.Contains(skillText, "### Missing Skills\n- build") {
+	if !strings.Contains(skillText, "### Available Skills\n  - browser: [global] Browse sites") || !strings.Contains(skillText, "### Missing Skills\n- build") {
 		t.Fatalf("unexpected skill state: %q", skillText)
 	}
 	agentText := catalog.FormatAgents(cfg)

@@ -117,7 +117,7 @@ func (catalog Catalog) FormatSkills(cfg config.SessionConfig) string {
 		b.WriteString("- none\n")
 	} else {
 		for _, entry := range entries {
-			b.WriteString(fmt.Sprintf("- %s: %s [%s]\n", entry.Name, entry.Description, entry.Scope))
+			b.WriteString(fmt.Sprintf("  - %s: [%s] %s\n", entry.Name, entry.Scope, entry.Description))
 		}
 	}
 	b.WriteString("\n### Missing Skills\n")
@@ -133,7 +133,7 @@ func (catalog Catalog) FormatAgents(cfg config.SessionConfig) string {
 		b.WriteString("- none\n")
 	} else {
 		for _, entry := range entries {
-			b.WriteString(fmt.Sprintf("- %s: %s [%s]\n", entry.Name, entry.Description, entry.Scope))
+			b.WriteString(fmt.Sprintf("  - %s: [%s] %s\n", entry.Name, entry.Scope, entry.Description))
 		}
 	}
 	b.WriteString("\n### Missing Agents\n")

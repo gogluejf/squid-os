@@ -25,7 +25,7 @@ func TestEnvironmentFormatsCatalogAvailableAndMissingSections(t *testing.T) {
 	cfg.Skills, cfg.Agents = resolved.Skills, resolved.Agents
 
 	formatted := FormatEnvironment(LoadEnvironment(config.Paths{}, cfg, catalog))
-	if !strings.Contains(formatted, "### Available Skills\n- review: Reviews code [global]") || !strings.Contains(formatted, "### Missing Skills\n- build") {
+	if !strings.Contains(formatted, "### Available Skills\n  - review: [global] Reviews code") || !strings.Contains(formatted, "### Missing Skills\n- build") {
 		t.Fatalf("environment capability sections missing: %q", formatted)
 	}
 }

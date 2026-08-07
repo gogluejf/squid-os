@@ -136,7 +136,7 @@ func executeListAgents(_ map[string]interface{}, ctx RuntimeContext) ToolResult 
 				description = entry.Description
 			}
 		}
-		lines = append(lines, fmt.Sprintf("- %s: %s [%s]", ref.Name, description, ref.Scope))
+		lines = append(lines, fmt.Sprintf("- %s: [%s] %s", ref.Name, ref.Scope, description))
 	}
 	return success(strings.Join(lines, "\n"))
 }

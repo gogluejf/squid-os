@@ -25,7 +25,7 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 	items := make([]component.PickerItem, 0, 16)
 	items = append(items, component.PickerItem{
 		Label: "(none)",
-		Meta:  []string{"No skill active"},
+		Meta:  []string{"", "No skill active"},
 		Value: "(none)",
 	})
 	if reg := m.session.Catalog.Skills; reg != nil {
@@ -40,7 +40,7 @@ func (m Model) openSkillPicker() (Model, tea.Cmd) {
 			}
 			items = append(items, component.PickerItem{
 				Label: e.Name,
-				Meta:  []string{e.Description, string(e.Scope)},
+				Meta:  []string{string(e.Scope), e.Description},
 				Value: e.Name,
 			})
 		}

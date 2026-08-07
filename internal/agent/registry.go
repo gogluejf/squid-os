@@ -76,7 +76,14 @@ func rebuildList(r *Registry) {
 	for _, entry := range r.index {
 		r.entries = append(r.entries, entry)
 	}
-	sort.Slice(r.entries, func(i, j int) bool { return r.entries[i].Name < r.entries[j].Name })
+	sort.Slice(r.entries, func(i, j int) bool {
+		si := r.entries[i].Scope
+		sj := r.entries[j].Scope
+		if si != sj {
+			return si == config.CapabilityScopeWorkspace
+		}
+		return r.entries[i].Name < r.entries[j].Name
+	})
 }
 
 func (r *Registry) List() []Entry {

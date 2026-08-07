@@ -215,18 +215,15 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.completionSelectKey != "" {
 			m.clearCapabilitySelection()
 		}
-		oldLines := m.textarea.LineCount()
 		var cmd tea.Cmd
 		m.textarea, cmd = m.textarea.Update(msg)
+		// Soft wrapping can change visual height without changing logical lines.
+		m.autoSizeTextarea()
 		// Editing or moving away naturally re-evaluates a dismissed suggestion.
 		if m.completionDismissed != "" {
 			if completion, ok := m.capabilityCompletionAtCursor(); !ok || completion.key() != m.completionDismissed {
 				m.completionDismissed = ""
 			}
-		}
-		// Resize if line count changed (e.g., backspace removing a line, Alt+Enter adding one)
-		if m.textarea.LineCount() != oldLines {
-			m.autoSizeTextarea()
 		}
 		// Reset history navigation when user starts typing (not cursor movement)
 		if m.historyIdx != -1 && !key.Matches(msg, keys.Left) && !key.Matches(msg, keys.Right) {

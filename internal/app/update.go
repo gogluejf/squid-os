@@ -1,8 +1,6 @@
 package app
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/chat"
@@ -81,9 +79,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // It syncs the textarea's cached Height with its actual content so multi-line
 // input (Alt+Enter) and restored text grow/shrink the textarea naturally.
 func (m *Model) recalcLayout() {
-	// Sync textarea height to actual content (bubbles doesn't auto-shrink after Reset)
-	actualLines := countLines(m.textarea.Value())
-	m.textarea.SetHeight(actualLines)
+	// Set width first because visual row count depends on the content width.
+	m.textarea.SetWidth(m.width)
+	actualRows := textareaVisualRows(m.textarea.Value(), m.textarea.Width())
+	if actualRows < 2 {
+		actualRows = 2
+	}
+	if actualRows > m.textarea.MaxHeight {
+		actualRows = m.textarea.MaxHeight
+	}
+	m.textarea.SetHeight(actualRows)
 
 	inputHeight := 2 + m.textarea.Height() // textarea itself + padding/border around it
 	const headerHeight = 1
@@ -111,17 +116,4 @@ func (m *Model) recalcLayout() {
 	}
 	m.viewport.Width = m.width
 	m.viewport.Height = vpHeight
-	m.textarea.SetWidth(m.width)
-}
-
-// countLines returns the number of logical lines in a string (at least 1).
-func countLines(s string) int {
-	n := 1 + strings.Count(s, "\n")
-	if n < 2 { // minimum 2 lines
-		n = 2
-	}
-	if n > 20 { // matches MaxHeight
-		n = 20
-	}
-	return n
 }

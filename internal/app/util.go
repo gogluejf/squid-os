@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/chat/provider"
@@ -105,19 +106,40 @@ func countTokensApprox(s string) int {
 	return n
 }
 
-// autoSizeTextarea adjusts the textarea height to match its content line count,
-// capped at MaxHeight (20). Call after SetValue when the content might have grown
-// or when restoring a block of text. Also recalculates layout so the viewport
-// adjusts and scrolls to bottom.
-func (m *Model) autoSizeTextarea() {
-	lines := m.textarea.LineCount()
-	if lines < 2 {
-		m.textarea.SetHeight(2)
-	} else if lines < m.textarea.MaxHeight {
-		m.textarea.SetHeight(lines)
-	} else {
-		m.textarea.SetHeight(m.textarea.MaxHeight)
+// textareaVisualRows counts hard lines plus Bubbles' own soft-wrap height at
+// the textarea's current content width. A temporary model avoids duplicating
+// Bubbles' wrapping algorithm while keeping the dependency untouched.
+func textareaVisualRows(value string, width int) int {
+	if width < 1 {
+		width = 1
 	}
+	probe := textarea.New()
+	probe.ShowLineNumbers = false
+	probe.SetWidth(width)
+
+	rows := 0
+	for _, line := range strings.Split(value, "\n") {
+		probe.SetValue(line)
+		height := probe.LineInfo().Height
+		if height < 1 {
+			height = 1
+		}
+		rows += height
+	}
+	return rows
+}
+
+// autoSizeTextarea adjusts the textarea height to its visual row count,
+// including both hard newlines and soft wrapping, capped at MaxHeight (20).
+func (m *Model) autoSizeTextarea() {
+	rows := textareaVisualRows(m.textarea.Value(), m.textarea.Width())
+	if rows < 2 {
+		rows = 2
+	}
+	if rows > m.textarea.MaxHeight {
+		rows = m.textarea.MaxHeight
+	}
+	m.textarea.SetHeight(rows)
 	m.recalcLayout()
 	m.updateViewportContent()
 }

@@ -25,10 +25,16 @@ type ToolResult struct {
 	Files  []config.FileEntry // files touched by this tool
 }
 
+type Catalog interface {
+	ResolveSkill(string) (skills.SkillEntry, bool)
+	ResolveAgent(string) (agent.Entry, bool)
+	LoadSkill(config.CapabilityScope, string) (*skills.Skill, error)
+	LoadAgent(config.CapabilityScope, string) (*agent.Definition, error)
+}
+
 type RuntimeContext struct {
-	Config config.SessionConfig
-	Skills *skills.Registry
-	Agents *agent.Registry
+	Config  config.SessionConfig
+	Catalog Catalog
 }
 
 // Tool defines the contract for a callable tool.

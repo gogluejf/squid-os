@@ -106,8 +106,13 @@ func TestPrepareTurnSkillChangeIncludesBodyIDAndTokens(t *testing.T) {
 func TestPrepareTurnCapabilityChangeIsSyntheticAndVisible(t *testing.T) {
 	old := []config.CapabilityRef{{Scope: config.CapabilityScopeGlobal, Name: "review"}}
 	next := []config.CapabilityRef{{Scope: config.CapabilityScopeWorkspace, Name: "review"}}
-	s := &Session{Doc: config.NewSessionDoc(config.SessionConfig{Skills: old})}
-	s.Doc.Pending = &config.PendingConfig{Skills: &next, SkillsMissing: []string{"build"}}
+	cfg := config.SessionConfig{Skills: old, SkillPolicy: config.CapabilityPolicy{Mode: config.PolicyModeAllowlist, Requested: []string{"review", "build"}}}
+	registry, err := skills.LoadRegistry(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Session{Doc: config.NewSessionDoc(cfg), Catalog: runtimeconfig.Catalog{Skills: registry}}
+	s.Doc.Pending = &config.PendingConfig{Skills: &next}
 	s.Append(NewUserMessage("u", "hello", ""))
 
 	if err := PrepareTurn(s); err != nil {
@@ -117,7 +122,7 @@ func TestPrepareTurnCapabilityChangeIsSyntheticAndVisible(t *testing.T) {
 	if message.Role != config.RoleSynthetic || message.Label != "Skills Available Changed" {
 		t.Fatalf("capability transition is not synthetic: %+v", message)
 	}
-	if !strings.Contains(message.Text, "review [workspace]") || !strings.Contains(message.Text, "Requested but unavailable: build") {
+	if !strings.Contains(message.Text, "### Available Skills") || !strings.Contains(message.Text, "### Missing Skills") || !strings.Contains(message.Text, "- build") {
 		t.Fatalf("effective list or missing names absent: %q", message.Text)
 	}
 	if len(s.BuildMessages()) != 2 {

@@ -6,9 +6,23 @@ import (
 	"strings"
 	"testing"
 
+	"squid-os/internal/agent"
 	"squid-os/internal/config"
 	"squid-os/internal/skills"
 )
+
+type skillCatalog struct{ registry *skills.Registry }
+
+func (c skillCatalog) ResolveSkill(name string) (skills.SkillEntry, bool) {
+	return c.registry.Resolve(name)
+}
+func (c skillCatalog) ResolveAgent(string) (agent.Entry, bool) { return agent.Entry{}, false }
+func (c skillCatalog) LoadSkill(scope config.CapabilityScope, name string) (*skills.Skill, error) {
+	return c.registry.LoadScoped(scope, name)
+}
+func (c skillCatalog) LoadAgent(config.CapabilityScope, string) (*agent.Definition, error) {
+	return nil, nil
+}
 
 func TestSkillLoadUsesSessionScope(t *testing.T) {
 	global, workspace := t.TempDir(), t.TempDir()
@@ -20,12 +34,12 @@ func TestSkillLoadUsesSessionScope(t *testing.T) {
 	}
 
 	globalConfig := config.SessionConfig{Skills: []config.CapabilityRef{{Scope: config.CapabilityScopeGlobal, Name: "review"}}}
-	if result := SkillLoad.Execute(map[string]interface{}{"name": "review"}, RuntimeContext{Config: globalConfig, Skills: registry}); result.Status != ResultStatusError {
+	if result := SkillLoad.Execute(map[string]interface{}{"name": "review"}, RuntimeContext{Config: globalConfig, Catalog: skillCatalog{registry}}); result.Status != ResultStatusError {
 		t.Fatalf("stale global scope should fail: %+v", result)
 	}
 
 	workspaceConfig := config.SessionConfig{Skills: []config.CapabilityRef{{Scope: config.CapabilityScopeWorkspace, Name: "review"}}}
-	result := SkillLoad.Execute(map[string]interface{}{"name": "review"}, RuntimeContext{Config: workspaceConfig, Skills: registry})
+	result := SkillLoad.Execute(map[string]interface{}{"name": "review"}, RuntimeContext{Config: workspaceConfig, Catalog: skillCatalog{registry}})
 	if result.Status != ResultStatusSuccess || !strings.Contains(result.Result, "workspace body") {
 		t.Fatalf("workspace scope was not loaded: %+v", result)
 	}

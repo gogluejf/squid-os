@@ -9,8 +9,8 @@ type FolderEntry struct {
 // Environment holds all sections of the sys1 environment message.
 type Environment struct {
 	OS                 OSInfo
-	Skills             []SkillInfo
-	Agents             []AgentInfo
+	Skills             string
+	Agents             string
 	SquidOS            SquidOSInfo
 	Project            *ProjectInfo // nil if no working dir set
 	Projects           []FolderEntry
@@ -31,19 +31,6 @@ type OSInfo struct {
 	WorkingDir    string
 	GitInstalled  bool
 	TreeInstalled bool
-}
-
-// SkillInfo is a lightweight skill registry entry.
-type SkillInfo struct {
-	Name        string
-	Description string
-	Scope       string
-}
-
-type AgentInfo struct {
-	Name        string
-	Description string
-	Scope       string
 }
 
 // SquidOSInfo holds Squid-OS directory paths and flags.

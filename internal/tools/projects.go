@@ -5,18 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"squid-os/internal/environment"
 	"squid-os/internal/style"
 	"squid-os/internal/util"
 )
-
-// projectDir is set by the app at startup via SetProjectDir.
-var projectDir string
-
-// SetProjectDir sets the project directory used for project metadata.
-func SetProjectDir(dir string) {
-	projectDir = dir
-}
 
 // ResolvePath resolves a path against the provided session working directory.
 func ResolvePath(p, workingDir string) string {
@@ -30,7 +21,6 @@ func ResolvePath(p, workingDir string) string {
 	return p
 }
 
-// SetWorkingDirTool is the tool that sets the working directory and returns project info.
 var SetWorkingDirTool = Tool{
 	Name:         "set_working_dir",
 	Description:  "Set the working directory. Tool calls will use this as the base for relative paths. Use when user requests or to switch context to another project.",
@@ -62,12 +52,6 @@ var SetWorkingDirTool = Tool{
 		if !stat.IsDir() {
 			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("working directory is not a directory: %s", path)}
 		}
-		info := environment.LoadProjectInfo(path, projectDir)
-		result := environment.FormatProjectInfo(info)
-		workspaceRoot := filepath.Join(path, ".squid-os")
-		result += fmt.Sprintf("- workspace-memory: %s\n", filepath.Join(workspaceRoot, "memory"))
-		result += fmt.Sprintf("- workspace-skills: %s\n", filepath.Join(workspaceRoot, "skills"))
-		result += fmt.Sprintf("- workspace-agents: %s\n", filepath.Join(workspaceRoot, "agents"))
-		return ToolResult{Status: ResultStatusSuccess, Result: result}
+		return ToolResult{Status: ResultStatusSuccess, Result: "working directory validated: " + path}
 	},
 }

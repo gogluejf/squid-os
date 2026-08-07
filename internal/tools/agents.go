@@ -126,12 +126,12 @@ func executeListAgents(_ map[string]interface{}, ctx RuntimeContext) ToolResult 
 	if len(cfg.Agents) == 0 {
 		return success("No callable agents.")
 	}
-	registry := ctx.Agents
+	catalog := ctx.Catalog
 	var lines []string
 	for _, ref := range cfg.Agents {
 		description := "(unavailable)"
-		if registry != nil {
-			entry, ok := registry.Resolve(ref.Name)
+		if catalog != nil {
+			entry, ok := catalog.ResolveAgent(ref.Name)
 			if ok && entry.Scope == ref.Scope {
 				description = entry.Description
 			}
@@ -152,11 +152,11 @@ func executeCallAgent(args map[string]interface{}, ctx RuntimeContext) ToolResul
 	if !ok {
 		return failure(fmt.Sprintf("agent %q is not callable. Run list_agents to see available agents.", name))
 	}
-	registry := ctx.Agents
-	if registry == nil {
-		return failure("agent registry not initialized")
+	catalog := ctx.Catalog
+	if catalog == nil {
+		return failure("agent catalog not initialized")
 	}
-	if _, err := registry.LoadScoped(ref.Scope, ref.Name); err != nil {
+	if _, err := catalog.LoadAgent(ref.Scope, ref.Name); err != nil {
 		return failure(err.Error())
 	}
 	return executeAgentCLI(name, prompt, args, ctx, nil)

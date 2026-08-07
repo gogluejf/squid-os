@@ -3,14 +3,11 @@ package runtime
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"squid-os/internal/agent"
 	"squid-os/internal/config"
 	"squid-os/internal/memory"
-	"squid-os/internal/skills"
 	"squid-os/internal/tools"
 	"squid-os/internal/util"
 )
@@ -45,12 +42,6 @@ type Inputs struct {
 	Target          Target
 }
 
-type Catalog struct {
-	WorkingDir string
-	Skills     *skills.Registry
-	Agents     *agent.Registry
-}
-
 type Resolved struct {
 	Config  config.SessionConfig
 	Catalog Catalog
@@ -78,7 +69,7 @@ func Resolve(in Inputs) (Resolved, error) {
 	}
 
 	catalogDir := workingDir
-	catalog, err := loadCatalog(in.Paths, catalogDir)
+	catalog, err := LoadCatalog(in.Paths, catalogDir)
 	if err != nil {
 		return Resolved{}, err
 	}
@@ -111,7 +102,7 @@ func Resolve(in Inputs) (Resolved, error) {
 		}
 		cfg = existing
 		if cfg.WorkingDir != catalogDir {
-			catalog, err = loadCatalog(in.Paths, cfg.WorkingDir)
+			catalog, err = LoadCatalog(in.Paths, cfg.WorkingDir)
 			catalogDir = cfg.WorkingDir
 		}
 		if err != nil {
@@ -209,7 +200,7 @@ func Resolve(in Inputs) (Resolved, error) {
 	}
 
 	if cfg.WorkingDir != catalogDir {
-		catalog, err = loadCatalog(in.Paths, cfg.WorkingDir)
+		catalog, err = LoadCatalog(in.Paths, cfg.WorkingDir)
 		if err != nil {
 			return Resolved{}, err
 		}
@@ -391,16 +382,6 @@ func equalStringSlices(a, b []string) bool {
 	return true
 }
 
-func LoadCatalog(paths config.Paths, workingDir string) (Catalog, error) {
-	return loadCatalog(paths, workingDir)
-}
-
-func (catalog Catalog) Resolve(skillPolicy, agentPolicy config.CapabilityPolicy) (skillsRefs, agentRefs []config.CapabilityRef, skillsMissing, agentsMissing []string) {
-	skillsRefs, skillsMissing = resolveSkills(catalog.Skills, skillPolicy)
-	agentRefs, agentsMissing = resolveAgents(catalog.Agents, agentPolicy)
-	return skillsRefs, agentRefs, skillsMissing, agentsMissing
-}
-
 func allPolicy() config.CapabilityPolicy {
 	return config.CapabilityPolicy{Mode: config.PolicyModeAll}
 }
@@ -411,79 +392,6 @@ func policyFor(requested []string) config.CapabilityPolicy {
 		return allPolicy()
 	}
 	return config.CapabilityPolicy{Mode: config.PolicyModeAllowlist, Requested: clone(requested)}
-}
-
-func loadCatalog(paths config.Paths, workingDir string) (Catalog, error) {
-	workspaceRoot := filepath.Join(workingDir, ".squid-os")
-	skillRegistry, err := skills.LoadRegistry(paths.Skills, filepath.Join(workspaceRoot, "skills"))
-	if err != nil {
-		return Catalog{}, fmt.Errorf("load skill catalog: %w", err)
-	}
-	agentRegistry, err := agent.LoadRegistry(paths.Agents, filepath.Join(workspaceRoot, "agents"))
-	if err != nil {
-		return Catalog{}, fmt.Errorf("load agent catalog: %w", err)
-	}
-	return Catalog{WorkingDir: workingDir, Skills: skillRegistry, Agents: agentRegistry}, nil
-}
-
-func resolveCatalog(catalog Catalog, skillPolicy, agentPolicy config.CapabilityPolicy, rejectMissing bool) ([]config.CapabilityRef, []config.CapabilityRef, error) {
-	skillRefs, agentRefs, skillMissing, agentMissing := catalog.Resolve(skillPolicy, agentPolicy)
-	if rejectMissing && len(skillMissing) > 0 {
-		return nil, nil, fmt.Errorf("skills not found: %s", strings.Join(skillMissing, ", "))
-	}
-	if rejectMissing && len(agentMissing) > 0 {
-		return nil, nil, fmt.Errorf("agents not found: %s", strings.Join(agentMissing, ", "))
-	}
-	return skillRefs, agentRefs, nil
-}
-
-func resolveSkills(registry *skills.Registry, policy config.CapabilityPolicy) ([]config.CapabilityRef, []string) {
-	if policy.Mode == config.PolicyModeAll {
-		entries := registry.List()
-		refs := make([]config.CapabilityRef, 0, len(entries))
-		for _, entry := range entries {
-			refs = append(refs, config.CapabilityRef{Scope: entry.Scope, Name: entry.Name})
-		}
-		return refs, nil
-	}
-	return resolveRequested(policy.Requested, func(name string) (config.CapabilityRef, bool) {
-		entry, ok := registry.Resolve(name)
-		return config.CapabilityRef{Scope: entry.Scope, Name: entry.Name}, ok
-	})
-}
-
-func resolveAgents(registry *agent.Registry, policy config.CapabilityPolicy) ([]config.CapabilityRef, []string) {
-	if policy.Mode == config.PolicyModeAll {
-		entries := registry.List()
-		refs := make([]config.CapabilityRef, 0, len(entries))
-		for _, entry := range entries {
-			refs = append(refs, config.CapabilityRef{Scope: entry.Scope, Name: entry.Name})
-		}
-		return refs, nil
-	}
-	return resolveRequested(policy.Requested, func(name string) (config.CapabilityRef, bool) {
-		entry, ok := registry.Resolve(name)
-		return config.CapabilityRef{Scope: entry.Scope, Name: entry.Name}, ok
-	})
-}
-
-func resolveRequested(names []string, resolve func(string) (config.CapabilityRef, bool)) ([]config.CapabilityRef, []string) {
-	refs := make([]config.CapabilityRef, 0, len(names))
-	var missing []string
-	seen := make(map[string]bool, len(names))
-	for _, name := range names {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		ref, ok := resolve(name)
-		if !ok {
-			missing = append(missing, name)
-			continue
-		}
-		refs = append(refs, ref)
-	}
-	return refs, missing
 }
 
 func availableToolNames() []string {

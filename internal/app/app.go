@@ -14,7 +14,6 @@ import (
 	"squid-os/internal/config"
 	"squid-os/internal/modelcache"
 	runtimeconfig "squid-os/internal/runtime"
-	"squid-os/internal/tools"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
 )
@@ -154,9 +153,6 @@ func (m *Model) setComponent(c component.Component) {
 // Init starts the cursor blink command and refreshes the context window.
 func (m Model) Init() tea.Cmd {
 	chatMode := (&m).setChatMode()
-
-	// Wire tool callbacks
-	tools.SetProjectDir(m.paths.ProjectDir)
 
 	var resumePending tea.Cmd
 	if msgIdx, ok := m.session.lastPendingToolMsgIdx(); ok {

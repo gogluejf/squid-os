@@ -222,10 +222,11 @@ doExecute:
 	if toolName == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
 		if pathVal, ok := args["path"].(string); ok {
 			pathVal = tools.ResolvePath(pathVal, s.Doc.Config.WorkingDir)
-			if err := s.SetWorkingDir(pathVal); err != nil {
+			capabilitySummary, err := s.SetWorkingDir(pathVal)
+			if err != nil {
 				result = tools.ToolResult{Status: tools.ResultStatusError, Error: err.Error()}
 			} else {
-				ApplyPendingCapabilities(s)
+				result.Result = capabilitySummary
 			}
 		}
 	}

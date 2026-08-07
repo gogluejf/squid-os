@@ -3,27 +3,30 @@ package environment
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"squid-os/internal/config"
-	"squid-os/internal/skills"
+	runtimeconfig "squid-os/internal/runtime"
 )
 
-func TestLoadSkillEntriesMatchesScopeAndName(t *testing.T) {
-	global, workspace := t.TempDir(), t.TempDir()
-	writeEnvironmentSkill(t, global, "review", "global")
-	writeEnvironmentSkill(t, workspace, "review", "workspace")
-	registry, err := skills.LoadRegistry(global, workspace)
+func TestEnvironmentFormatsCatalogAvailableAndMissingSections(t *testing.T) {
+	globalSkills, globalAgents, workspace := t.TempDir(), t.TempDir(), t.TempDir()
+	writeEnvironmentSkill(t, globalSkills, "review", "Reviews code")
+	catalog, err := runtimeconfig.LoadCatalog(config.Paths{Skills: globalSkills, Agents: globalAgents}, workspace)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if entries := loadSkillEntries(registry, []config.CapabilityRef{{Scope: config.CapabilityScopeGlobal, Name: "review"}}); len(entries) != 0 {
-		t.Fatalf("stale global tuple should not match workspace catalog: %+v", entries)
+	cfg := config.SessionConfig{
+		SkillPolicy: config.CapabilityPolicy{Mode: config.PolicyModeAllowlist, Requested: []string{"review", "build"}},
+		AgentPolicy: config.CapabilityPolicy{Mode: config.PolicyModeAll},
 	}
-	entries := loadSkillEntries(registry, []config.CapabilityRef{{Scope: config.CapabilityScopeWorkspace, Name: "review"}})
-	if len(entries) != 1 || entries[0].Scope != string(config.CapabilityScopeWorkspace) {
-		t.Fatalf("workspace tuple not matched: %+v", entries)
+	resolved := catalog.Resolve(cfg.SkillPolicy, cfg.AgentPolicy)
+	cfg.Skills, cfg.Agents = resolved.Skills, resolved.Agents
+
+	formatted := FormatEnvironment(LoadEnvironment(config.Paths{}, cfg, catalog))
+	if !strings.Contains(formatted, "### Available Skills\n- review: Reviews code [global]") || !strings.Contains(formatted, "### Missing Skills\n- build") {
+		t.Fatalf("environment capability sections missing: %q", formatted)
 	}
 }
 

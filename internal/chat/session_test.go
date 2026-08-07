@@ -3,6 +3,7 @@ package chat
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"squid-os/internal/config"
@@ -123,14 +124,15 @@ func TestSetWorkingDirReappliesCapabilityPolicy(t *testing.T) {
 	}
 	session := NewSession(cfg, paths, catalogs)
 
-	if err := session.SetWorkingDir(workspaceB); err != nil {
+	summary, err := session.SetWorkingDir(workspaceB)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if session.Doc.Config.WorkingDir != workspaceB || session.Doc.Pending == nil || session.Doc.Pending.Skills == nil {
-		t.Fatalf("workspace transition not staged: %+v", session.Doc)
+	if session.Doc.Config.WorkingDir != workspaceB || len(session.Doc.Config.Skills) != 0 {
+		t.Fatalf("workspace state not applied immediately: %+v", session.Doc.Config)
 	}
-	if len(*session.Doc.Pending.Skills) != 0 || len(session.Doc.Pending.SkillsMissing) != 1 || session.Doc.Pending.SkillsMissing[0] != "build" {
-		t.Fatalf("policy not reapplied: %+v", session.Doc.Pending)
+	if !strings.Contains(summary, "### Available Skills\n- none") || !strings.Contains(summary, "### Missing Skills\n- build") {
+		t.Fatalf("workspace summary missing current state: %q", summary)
 	}
 }
 

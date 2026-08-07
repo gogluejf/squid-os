@@ -90,14 +90,12 @@ type SessionConfig struct {
 
 // PendingConfig holds desired next-state changes. Non-nil fields are pending.
 type PendingConfig struct {
-	Target        *string          `json:"target,omitempty"`
-	Inference     *InferenceConfig `json:"inference,omitempty"`
-	ActiveSkill   *string          `json:"active_skill,omitempty"`
-	Tools         *[]string        `json:"tools,omitempty"`
-	Skills        *[]CapabilityRef `json:"skills,omitempty"`
-	Agents        *[]CapabilityRef `json:"agents,omitempty"`
-	SkillsMissing []string         `json:"skills_missing,omitempty"`
-	AgentsMissing []string         `json:"agents_missing,omitempty"`
+	Target      *string          `json:"target,omitempty"`
+	Inference   *InferenceConfig `json:"inference,omitempty"`
+	ActiveSkill *string          `json:"active_skill,omitempty"`
+	Tools       *[]string        `json:"tools,omitempty"`
+	Skills      *[]CapabilityRef `json:"skills,omitempty"`
+	Agents      *[]CapabilityRef `json:"agents,omitempty"`
 }
 
 type InferenceConfig struct {

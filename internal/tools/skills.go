@@ -33,11 +33,10 @@ var SkillLoad = Tool{
 		if !ok {
 			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("skill %q is not available. Run skill_list to see available skills.", name)}
 		}
-		reg := rt.Skills
-		if reg == nil {
-			return ToolResult{Status: ResultStatusError, Error: "skill registry not initialized"}
+		if rt.Catalog == nil {
+			return ToolResult{Status: ResultStatusError, Error: "skill catalog not initialized"}
 		}
-		sk, err := reg.LoadScoped(ref.Scope, ref.Name)
+		sk, err := rt.Catalog.LoadSkill(ref.Scope, ref.Name)
 		if err != nil {
 			return ToolResult{Status: ResultStatusError, Error: err.Error()}
 		}
@@ -73,12 +72,12 @@ var SkillList = Tool{
 		if len(rt.Config.Skills) == 0 {
 			return ToolResult{Status: ResultStatusSuccess, Result: "No skills available in this session."}
 		}
-		reg := rt.Skills
+		catalog := rt.Catalog
 		var b strings.Builder
 		b.WriteString(fmt.Sprintf("Available skills (%d):\n", len(rt.Config.Skills)))
 		for _, ref := range rt.Config.Skills {
-			if reg != nil {
-				entry, ok := reg.Resolve(ref.Name)
+			if catalog != nil {
+				entry, ok := catalog.ResolveSkill(ref.Name)
 				if ok && entry.Scope == ref.Scope {
 					b.WriteString(fmt.Sprintf("  - %s: %s [%s]\n", ref.Name, entry.Description, ref.Scope))
 					continue

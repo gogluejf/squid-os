@@ -2,7 +2,7 @@ package chat
 
 import (
 	"fmt"
-	"reflect"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -38,7 +38,7 @@ func NewSession(cfg config.SessionConfig, paths config.Paths, catalog runtimecon
 		InputTokens: CountTokensApproxString(sysContent),
 	})
 
-	env := environment.LoadEnvironment(paths, cfg, catalog.Skills, catalog.Agents)
+	env := environment.LoadEnvironment(paths, cfg, catalog)
 	envContent := environment.FormatEnvironment(env)
 	envSections := environment.ExtractSectionNames(envContent)
 	s.Append(config.Message{
@@ -155,7 +155,7 @@ func (s *Session) Messages() []config.Message { return s.Doc.Messages }
 func (s *Session) BuildMessages() []goai_provider.Message { return BuildAPIMessages(s.Doc.Messages) }
 
 func (s *Session) ToolContext() tools.RuntimeContext {
-	return tools.RuntimeContext{Config: s.Doc.Config, Skills: s.Catalog.Skills, Agents: s.Catalog.Agents}
+	return tools.RuntimeContext{Config: s.Doc.Config, Catalog: s.Catalog}
 }
 
 func (s *Session) GetTools() []tools.Tool {
@@ -202,41 +202,39 @@ func (s *Session) SetAgents(refs []config.CapabilityRef) {
 	s.Doc.Config.Agents = append([]config.CapabilityRef(nil), refs...)
 }
 
-// SetWorkingDir switches workspace, rebuilds effective capability lists, and
-// stages capability changes for PrepareTurn.
-func (s *Session) SetWorkingDir(path string) error {
+// SetWorkingDir atomically swaps workspace catalog and effective capability state.
+func (s *Session) SetWorkingDir(path string) (string, error) {
 	catalog, err := runtimeconfig.LoadCatalog(s.Paths, path)
 	if err != nil {
-		return err
+		return "", err
 	}
-	skillsRefs, agentRefs, skillsMissing, agentsMissing := catalog.Resolve(
-		s.Doc.Config.SkillPolicy,
-		s.Doc.Config.AgentPolicy,
-	)
+	resolved := catalog.Resolve(s.Doc.Config.SkillPolicy, s.Doc.Config.AgentPolicy)
+
+	active := s.Doc.Config.ActiveSkill
+	oldActive, oldOK := findCapabilityRef(s.Doc.Config.Skills, active)
+	newActive, newOK := findCapabilityRef(resolved.Skills, active)
+
 	s.Catalog = catalog
 	s.Doc.Config.WorkingDir = path
-	if s.Doc.Pending == nil {
-		s.Doc.Pending = &config.PendingConfig{}
+	s.SetSkills(resolved.Skills)
+	s.SetAgents(resolved.Agents)
+	if active != "" && (!oldOK || !newOK || oldActive != newActive) {
+		s.Doc.Config.ActiveSkill = ""
 	}
-	if !reflect.DeepEqual(skillsRefs, s.Doc.Config.Skills) || len(skillsMissing) > 0 {
-		value := append([]config.CapabilityRef(nil), skillsRefs...)
-		s.Doc.Pending.Skills = &value
-	}
-	if !reflect.DeepEqual(agentRefs, s.Doc.Config.Agents) || len(agentsMissing) > 0 {
-		value := append([]config.CapabilityRef(nil), agentRefs...)
-		s.Doc.Pending.Agents = &value
-	}
-	s.Doc.Pending.SkillsMissing = append([]string(nil), skillsMissing...)
-	s.Doc.Pending.AgentsMissing = append([]string(nil), agentsMissing...)
-	if active := s.Doc.Config.ActiveSkill; active != "" {
-		oldRef, oldOK := findCapabilityRef(s.Doc.Config.Skills, active)
-		newRef, newOK := findCapabilityRef(skillsRefs, active)
-		if !oldOK || !newOK || oldRef != newRef {
-			empty := ""
-			s.Doc.Pending.ActiveSkill = &empty
-		}
-	}
-	return nil
+	return formatWorkspaceState(s.Paths, path, catalog.FormatCapabilities(s.Doc.Config)), nil
+}
+
+func formatWorkspaceState(paths config.Paths, workingDir, capabilities string) string {
+	info := environment.LoadProjectInfo(workingDir, paths.ProjectDir)
+	var b strings.Builder
+	b.WriteString("## [Project]\n")
+	b.WriteString(environment.FormatProjectInfo(info))
+	workspaceRoot := filepath.Join(workingDir, ".squid-os")
+	b.WriteString("- workspace-memory: " + filepath.Join(workspaceRoot, "memory") + "\n")
+	b.WriteString("- workspace-skills: " + filepath.Join(workspaceRoot, "skills") + "\n")
+	b.WriteString("- workspace-agents: " + filepath.Join(workspaceRoot, "agents") + "\n\n")
+	b.WriteString(capabilities)
+	return b.String()
 }
 
 func findCapabilityRef(refs []config.CapabilityRef, name string) (config.CapabilityRef, bool) {

@@ -3,6 +3,7 @@ package chat
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,5 +44,9 @@ func TestSetWorkingDirToolSwapsSessionCatalog(t *testing.T) {
 	}
 	if len(session.Doc.Config.Skills) != 1 || session.Doc.Config.Skills[0].Name != "build-b" {
 		t.Fatalf("effective list not applied: %+v", session.Doc.Config.Skills)
+	}
+	toolResult := session.Doc.Messages[result.MsgIdx].ToolCalls[result.ToolIndex].Execution.Result
+	if !strings.Contains(toolResult, "### Available Skills") || !strings.Contains(toolResult, "build-b: project build [workspace]") || !strings.Contains(toolResult, "### Missing Skills") {
+		t.Fatalf("workspace tool result missing capability state: %q", toolResult)
 	}
 }

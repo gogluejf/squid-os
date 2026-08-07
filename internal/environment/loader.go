@@ -7,10 +7,9 @@ import (
 	"regexp"
 	"strings"
 
-	"squid-os/internal/agent"
 	"squid-os/internal/config"
 	"squid-os/internal/git"
-	"squid-os/internal/skills"
+	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/util"
 	"squid-os/internal/version"
 )
@@ -19,7 +18,7 @@ import (
 var sectionRe = regexp.MustCompile(`##\s+\[([^\]]+)\]`)
 
 // LoadEnvironment assembles environment sections using resolved session scopes.
-func LoadEnvironment(paths config.Paths, sessionConfig config.SessionConfig, skillRegistry *skills.Registry, agentRegistry *agent.Registry) Environment {
+func LoadEnvironment(paths config.Paths, sessionConfig config.SessionConfig, catalog runtimeconfig.Catalog) Environment {
 	workingDir := sessionConfig.WorkingDir
 	debugEnabled := sessionConfig.DebugEnabled
 	target := sessionConfig.Target
@@ -38,8 +37,8 @@ func LoadEnvironment(paths config.Paths, sessionConfig config.SessionConfig, ski
 
 	env := Environment{
 		OS:     CollectOSInfo(workingDir),
-		Skills: loadSkillEntries(skillRegistry, sessionConfig.Skills),
-		Agents: loadAgentEntries(agentRegistry, sessionConfig.Agents),
+		Skills: catalog.FormatSkills(sessionConfig),
+		Agents: catalog.FormatAgents(sessionConfig),
 		SquidOS: SquidOSInfo{
 			Version:       version.Full(),
 			SkillsDir:     paths.Skills,
@@ -93,23 +92,9 @@ func FormatEnvironment(env Environment) string {
 
 	// Effective capability lists for this session.
 	b.WriteString("## [Skills]\n")
-	if len(env.Skills) == 0 {
-		b.WriteString("- none\n")
-	} else {
-		for _, skill := range env.Skills {
-			b.WriteString(fmt.Sprintf("- %s: %s [%s]\n", skill.Name, skill.Description, skill.Scope))
-		}
-	}
-	b.WriteString("\n")
-
-	b.WriteString("## [Agents]\n")
-	if len(env.Agents) == 0 {
-		b.WriteString("- none\n")
-	} else {
-		for _, agent := range env.Agents {
-			b.WriteString(fmt.Sprintf("- %s: %s [%s]\n", agent.Name, agent.Description, agent.Scope))
-		}
-	}
+	b.WriteString(env.Skills)
+	b.WriteString("\n## [Agents]\n")
+	b.WriteString(env.Agents)
 	b.WriteString("\n")
 
 	// [Working Directory] section — project context
@@ -214,42 +199,6 @@ func loadMemoryIndex(memoryDir string) string {
 		content = content[:1500] + "\n... (truncated)"
 	}
 	return content
-}
-
-func loadSkillEntries(registry *skills.Registry, allowed []config.CapabilityRef) []SkillInfo {
-	if registry == nil {
-		return nil
-	}
-	allowedSet := make(map[config.CapabilityRef]bool, len(allowed))
-	for _, ref := range allowed {
-		allowedSet[ref] = true
-	}
-	var entries []SkillInfo
-	for _, entry := range registry.List() {
-		ref := config.CapabilityRef{Scope: entry.Scope, Name: entry.Name}
-		if allowedSet[ref] {
-			entries = append(entries, SkillInfo{Name: entry.Name, Description: entry.Description, Scope: string(entry.Scope)})
-		}
-	}
-	return entries
-}
-
-func loadAgentEntries(registry *agent.Registry, allowed []config.CapabilityRef) []AgentInfo {
-	if registry == nil {
-		return nil
-	}
-	allowedSet := make(map[config.CapabilityRef]bool, len(allowed))
-	for _, ref := range allowed {
-		allowedSet[ref] = true
-	}
-	var entries []AgentInfo
-	for _, entry := range registry.List() {
-		ref := config.CapabilityRef{Scope: entry.Scope, Name: entry.Name}
-		if allowedSet[ref] {
-			entries = append(entries, AgentInfo{Name: entry.Name, Description: entry.Description, Scope: string(entry.Scope)})
-		}
-	}
-	return entries
 }
 
 func boolOrNot(v bool) string {

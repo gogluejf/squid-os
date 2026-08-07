@@ -1,0 +1,265 @@
+{
+    "plan_name": "file-context-compaction",
+    "title": "Dynamic File Context Compaction",
+    "problem": "Squid-OS sends superseded file-tool arguments and results back to the LLM, and its footer reports lifetime tokens rather than the exact next-request context. Full-file reads are also inefficient for focused inspection, encouraging unstructured sed usage.",
+    "goal": "Add settings-controlled ranged reads and deterministic file compaction, build and measure the exact next LLM request, show its compacted size in the footer, and keep Chat Analytics aligned with the same rules.",
+    "milestones": [
+        {
+            "number": "1",
+            "name": "Session Compaction Setting",
+            "pattern": [
+                "Settings snapshot into session configuration"
+            ],
+            "objective": "Resolve one global context_compaction switch into new sessions and preserve it in saved sessions without CLI or agent overrides.",
+            "success": "Settings and session JSON expose the switch, runtime resolution follows the documented precedence, and tests cover new and continued sessions.",
+            "diagram": "flowchart LR\n    S[settings context_compaction] --> R[runtime Resolve]\n    R --> N[new SessionConfig]\n    E[saved SessionConfig] --> C[continued session]\n    C --> X[no CLI or agent override]",
+            "tasks": [
+                {
+                    "number": "1.1",
+                    "name": "Resolve compaction from settings into session state",
+                    "type": "feature",
+                    "what": "Add the context compaction boolean to Settings and SessionConfig, resolve it from settings for new sessions, and preserve the saved value for existing sessions.",
+                    "why": "Makes compaction a single settings-controlled behavior while keeping each session deterministic after creation.",
+                    "files": [
+                        "~ defaultconfig/settings.json",
+                        "~ internal/config/settings.go",
+                        "~ internal/config/session.go",
+                        "~ internal/runtime/runtime.go",
+                        "~ internal/runtime/runtime_test.go",
+                        "~ .squid-os/plans/session-config-resolution.md"
+                    ],
+                    "snippet": [
+                        "type Settings struct {\n    ContextCompaction bool `json:\"context_compaction\"`\n}\n\ntype SessionConfig struct {\n    ContextCompaction bool `json:\"context_compaction\"`\n}",
+                        "// New session: Settings -> SessionConfig\n// Existing session: persisted SessionConfig\n// No CLI or agent override."
+                    ],
+                    "acceptance": [
+                        "The default settings file defines context_compaction.",
+                        "New sessions copy the settings value into initial and config.",
+                        "Existing interactive and autonomous sessions preserve their persisted value.",
+                        "No CLI option, runtime Overrides field, or agent field controls compaction.",
+                        "session-config-resolution.md documents settings-only resolution and immediate application."
+                    ],
+                    "verify": [
+                        "go test ./internal/config ./internal/runtime"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "2",
+            "name": "Ranged File Reads",
+            "pattern": [
+                "Structured partial observation with full-file freshness"
+            ],
+            "objective": "Let read_file return focused line ranges while retaining canonical file paths and full-file checksums for stale-file protection.",
+            "success": "Full and ranged reads share the existing FileEntry/file_state flow, range reads return bounded content, and later compaction can distinguish partial reads from instruction arguments.",
+            "diagram": "flowchart LR\n    A[read_file arguments] --> Q{range present}\n    Q -->|no| F[return full content]\n    Q -->|yes| P[return selected lines]\n    F --> C[full-file checksum and FileEntry]\n    P --> C\n    C --> S[file_state freshness]\n    P --> O[partial observation not checkpoint]\n    F --> K[full checkpoint]",
+            "tasks": [
+                {
+                    "number": "2.1",
+                    "name": "Support checksum-safe ranged read_file calls",
+                    "type": "feature",
+                    "what": "Add optional start_line and end_line arguments to read_file, returning only the selected lines while computing and storing the normal full-file checksum.",
+                    "why": "Provides the focused inspection efficiency currently obtained through sed without introducing a range registry or weakening stale-file detection.",
+                    "files": [
+                        "~ internal/tools/core.go",
+                        "~ internal/tools/core_test.go",
+                        "~ internal/chat/tool_exec.go",
+                        "~ internal/chat/tool_exec_test.go"
+                    ],
+                    "snippet": [
+                        "// read_file input contract\n{\n  \"path\": \"string\",\n  \"start_line\": \"optional positive integer\",\n  \"end_line\": \"optional positive integer\"\n}\n\n// Persisted distinction:\n// range present in ToolCallEntry.Instruction.Arguments => partial read\n// no range fields => full read\n// FileEntry.Path remains canonical and FileEntry.Checksum remains full-file."
+                    ],
+                    "acceptance": [
+                        "Omitting both range arguments returns the complete file with unchanged behavior.",
+                        "A valid inclusive range returns only the requested lines with stable line-bound semantics.",
+                        "Invalid, reversed, zero, and out-of-bounds ranges return clear errors without updating file state.",
+                        "A successful ranged read computes FileEntry.Checksum from the complete file bytes and merges it through the existing file_state path.",
+                        "Multiple ranged reads of the same tracked file version succeed and do not invalidate one another.",
+                        "If a ranged read detects that a previously tracked file changed externally, it is rejected without replacing the tracked checksum and asks for a full read.",
+                        "A full read after an external change refreshes the tracked checksum through existing read behavior.",
+                        "No range registry, coverage model, or FileStateEntry schema expansion is introduced."
+                    ],
+                    "verify": [
+                        "go test ./internal/tools ./internal/chat -run 'ReadFile|FileState|FileChange'"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "3",
+            "name": "File Compaction Rules",
+            "pattern": [
+                "Pure deterministic planner"
+            ],
+            "objective": "Derive one immutable compaction plan from persisted file-tool history using full-checkpoint rules and partial-read observations.",
+            "success": "The planner distinguishes full reads from ranged reads using persisted arguments, compacts only events superseded by a later full checkpoint, and reports combined instruction/result savings without mutating history.",
+            "diagram": "flowchart LR\n    H[complete tool history] --> E[extract file events]\n    E --> G[group by FileEntry path]\n    G --> Q{full checkpoint}\n    Q -->|full read write create| K[latest checkpoint]\n    Q -->|ranged read or edit| O[observation or delta]\n    K --> C[compact earlier successful events]\n    K --> R[retain checkpoint and later events]\n    O --> R\n    C --> P[CompactionPlan]\n    R --> P",
+            "tasks": [
+                {
+                    "number": "3.1",
+                    "name": "Plan deterministic full-checkpoint compaction",
+                    "type": "feature",
+                    "what": "Add a pure planner that classifies persisted file events, identifies full checkpoints, and produces per-tool-call compaction decisions with token summaries.",
+                    "why": "Centralizes safe file rules for request construction, footer accounting, Analytics parity, and later tool-specific extensions.",
+                    "files": [
+                        "+ internal/chat/compaction.go",
+                        "+ internal/chat/compaction_test.go",
+                        "+ internal/chat/compaction_benchmark_test.go"
+                    ],
+                    "snippet": [
+                        "type CompactionDecision struct {\n    ToolCallID string\n    Path string\n    Trace string\n    CompactArguments bool\n    CompactResult bool\n    SupersededBy string\n}\n\ntype CompactionTokens struct {\n    RawInstruction int\n    RawExecution int\n    Raw int\n    RetainedInstruction int\n    RetainedExecution int\n    Retained int\n    SavedInstruction int\n    SavedExecution int\n    Saved int\n}\n\ntype CompactionPlan struct {\n    Decisions map[string]CompactionDecision\n    Tokens CompactionTokens\n}\n\nfunc BuildCompactionPlan(messages []config.Message) CompactionPlan",
+                        "// Checkpoint classification contract:\n// read_file without start_line/end_line => full checkpoint\n// read_file with either range argument => partial observation\n// write_file trace write/create => full checkpoint\n// edit_file => delta, including no-op read traces"
+                    ],
+                    "acceptance": [
+                        "The planner uses canonical FileEntry.path to group events and persisted read_file arguments to distinguish full from partial reads.",
+                        "Successful full reads and write/create events are full checkpoints.",
+                        "Ranged reads never supersede earlier reads, ranges, or edits.",
+                        "A later full read, write, or create compacts all earlier successful events for that path, including ranged reads.",
+                        "The latest checkpoint and all later partial reads and edits remain retained.",
+                        "No-op edit_file calls that emit read are not checkpoints.",
+                        "Failed and incomplete operations remain retained.",
+                        "Raw, retained, and saved instruction/execution totals match persisted metrics.",
+                        "Planning is deterministic and does not mutate messages.",
+                        "The planner scans persisted history once, groups events by canonical path with maps, and performs direct decision lookup by tool-call ID.",
+                        "The implementation avoids repeated whole-history scans per event and scales linearly with messages, tool calls, and file events.",
+                        "Benchmarks report planner ns/op, B/op, and allocs/op for a large synthetic session."
+                    ],
+                    "verify": [
+                        "go test ./internal/chat -run Compaction",
+                        "go test -bench 'BuildCompactionPlan' -benchmem ./internal/chat"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "4",
+            "name": "Compacted Request Context",
+            "pattern": [
+                "Single request snapshot"
+            ],
+            "objective": "Build, transform, and measure one exact provider-message snapshot for the next LLM request.",
+            "success": "Enabled sessions send compacted file history with valid tool pairing; disabled sessions remain unchanged; reported compacted tokens describe the exact request.",
+            "diagram": "sequenceDiagram\n    participant Session\n    participant Builder as BuildContext\n    participant Planner\n    participant Engine\n    Session->>Builder: messages and enabled flag\n    Builder->>Planner: BuildCompactionPlan\n    Planner-->>Builder: decisions\n    Builder->>Builder: transform and count exact messages\n    Builder-->>Session: Context\n    Session->>Engine: same Context messages",
+            "tasks": [
+                {
+                    "number": "4.1",
+                    "name": "Build and send the exact compacted request",
+                    "type": "feature",
+                    "what": "Add BuildContext to apply compaction decisions, count the resulting next-request provider messages, and make the stream path send that exact snapshot.",
+                    "why": "Prevents request construction and token reporting from drifting while preserving complete persisted history.",
+                    "files": [
+                        "+ internal/chat/context.go",
+                        "+ internal/chat/context_test.go",
+                        "~ internal/chat/engine.go",
+                        "~ internal/chat/session.go",
+                        "~ internal/chat/loop.go",
+                        "+ internal/chat/context_benchmark_test.go"
+                    ],
+                    "snippet": [
+                        "type ContextTokens struct {\n    Raw int\n    Compacted int\n    Saved int\n}\n\ntype Context struct {\n    Messages []provider.Message\n    Compaction CompactionPlan\n    Tokens ContextTokens\n}\n\nfunc BuildContext(messages []config.Message, enabled bool) Context\nfunc (s *Session) BuildContext() Context"
+                    ],
+                    "acceptance": [
+                        "Disabled compaction produces the existing provider messages and zero savings.",
+                        "Enabled compaction preserves tool-call IDs, names, chronology, valid JSON arguments, and matching results.",
+                        "Superseded read results are replaced while path and optional range arguments remain valid.",
+                        "Superseded edit old_string/new_string and result content are replaced with fixed internal text.",
+                        "Superseded write/create content and result content are replaced with fixed internal text.",
+                        "Persisted messages are unchanged after BuildContext.",
+                        "Compacted token count includes replacement overhead and describes Context.Messages exactly.",
+                        "StartStreamWithContext sends Context.Messages without an independent rebuild.",
+                        "Context transformation uses direct plan lookup, reuses unchanged strings where practical, and does not deep-copy the complete session history.",
+                        "Benchmarks report request-building ns/op, B/op, and allocs/op for a large synthetic session."
+                    ],
+                    "verify": [
+                        "go test ./internal/chat -run Context",
+                        "go test -bench 'BuildContext' -benchmem ./internal/chat"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "5",
+            "name": "Live Context Visibility",
+            "pattern": [
+                "Revision-cached derived state"
+            ],
+            "objective": "Expose compacted next-request size in the footer without rescanning history on every render.",
+            "success": "The footer context bar uses compacted next-request tokens, shows savings, preserves lifetime input/output counters, and refreshes after request-content mutations.",
+            "diagram": "flowchart LR\n    M[message or tool mutation] --> I[invalidate Context cache]\n    F[footer render] --> Q{cache current}\n    Q -->|yes| U[use token totals]\n    Q -->|no| B[BuildContext once]\n    B --> U\n    U --> V[compacted over context window]\n    U --> L[lifetime input output separate]",
+            "tasks": [
+                {
+                    "number": "5.1",
+                    "name": "Show cached compacted context in the footer",
+                    "type": "feature",
+                    "what": "Cache the derived Context on Session mutations and update footer contracts to show compacted next-request usage and savings separately from lifetime input/output totals.",
+                    "why": "Makes context-window pressure accurate without expensive recomputation on every TUI frame.",
+                    "files": [
+                        "~ internal/chat/session.go",
+                        "~ internal/chat/tool_exec.go",
+                        "~ internal/app/render.go",
+                        "~ internal/ui/footer.go",
+                        "~ internal/ui/footer_test.go"
+                    ],
+                    "snippet": [
+                        "type FooterData struct {\n    LifetimeInputTokens int\n    LifetimeOutputTokens int\n    RawContextTokens int\n    CompactedContextTokens int\n    SavedContextTokens int\n    ContextWindow int\n}\n\nfunc (s *Session) BuildContext() Context\nfunc (s *Session) InvalidateContext()"
+                    ],
+                    "acceptance": [
+                        "Session caches one Context and invalidates it whenever persisted request content changes.",
+                        "Repeated footer renders without mutation reuse the cache.",
+                        "The context fraction and bar use CompactedContextTokens divided by ContextWindow.",
+                        "Savings are shown when compaction is enabled and nonzero.",
+                        "Lifetime input/output remain separate and never drive context-window usage.",
+                        "During streaming the footer reflects the sent snapshot; after persistence it refreshes for the next request.",
+                        "Footer tests cover enabled, disabled, zero-window, over-window, narrow, and wide layouts."
+                    ],
+                    "verify": [
+                        "go test ./internal/chat ./internal/app ./internal/ui"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "6",
+            "name": "Compaction Observability",
+            "pattern": [
+                "Cross-implementation contract fixtures"
+            ],
+            "objective": "Keep Chat Analytics and Squid-OS aligned on the current next-request file compaction calculation.",
+            "success": "Analytics displays the same raw, compacted, and saved values as Go for full and ranged read sequences, with no persisted per-turn metrics or actual/forecast modes.",
+            "diagram": "flowchart LR\n    H[complete session history] --> G[Go rules]\n    H --> P[Python Analytics rules]\n    X[shared fixtures] --> G\n    X --> P\n    G --> A[raw compacted saved]\n    P --> A\n    S[future structured search] -. separate plan .-> G",
+            "tasks": [
+                {
+                    "number": "6.1",
+                    "name": "Align Analytics with full and ranged read rules",
+                    "type": "test",
+                    "what": "Document and test one current next-request calculation across Go and Chat Analytics, including ranged-read classification and combined instruction/result totals.",
+                    "why": "Prevents dashboard drift without persisting compaction decisions, request metrics, or historical turn records.",
+                    "files": [
+                        "+ internal/chat/testdata/file_compaction_cases.json",
+                        "~ internal/chat/compaction_test.go",
+                        "~ .squid-os/plans/context-compression/README.md",
+                        "~ /home/goglue/.config/squid-os/skills/chat-analytics/scripts/server.py",
+                        "~ /home/goglue/.config/squid-os/skills/chat-analytics/scripts/test_file_compaction.py",
+                        "~ /home/goglue/.config/squid-os/skills/chat-analytics/assets/index.html"
+                    ],
+                    "snippet": [
+                        "{\n  \"name\": \"partial partial full\",\n  \"events\": [\"read range\", \"read range\", \"read full\"],\n  \"expected\": {\n    \"compacted_events\": 2,\n    \"retained_events\": 1\n  }\n}"
+                    ],
+                    "acceptance": [
+                        "The one-page README states settings-only control, dynamic non-destructive compaction, and fixed internal replacement text.",
+                        "The README defines ranged reads as observations and full reads/write/create as checkpoints.",
+                        "Go and Python fixtures cover repeated full reads, multiple ranges, range-edit-range, ranges followed by full read, write/read checkpoints, no-op edits, failures, and interleaved paths.",
+                        "Analytics always presents the current next-request calculation regardless of whether the session switch is enabled.",
+                        "Analytics combines instruction and execution tokens and includes replacement overhead once runtime transformation lands.",
+                        "No context metrics are persisted on assistant messages and no historical per-turn records are added.",
+                        "Bash, sed parsing, and structured search remain explicitly out of scope for this plan."
+                    ],
+                    "verify": [
+                        "go test ./internal/chat && python3 -m unittest discover -s /home/goglue/.config/squid-os/skills/chat-analytics/scripts -p 'test_*.py' -v"
+                    ]
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>file-context-compaction</title>
+<style>:root { 
+    --bg: #1e1e1e; --nav: #252526; --card: #2d2d2d; --border: #3e3e42; 
+    --text: #d4d4d4; --accent: #569cd6; --success: #4ec9b0; 
+    --warn: #ce9178; --code-bg: #202020; 
+}
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); margin:0; line-height:1.6; }
+nav { background:var(--nav); padding:15px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:center; align-items:center; position:sticky; top:0; z-index:100; flex-wrap:wrap; }
+.nav-item { color:var(--text); text-decoration:none; margin-right:10px; font-size:13px; padding:6px 12px; border-radius:4px; }
+.nav-item:hover { background:var(--border); color:var(--accent); }
+.nav-item.home { font-weight:bold; color:var(--accent); }
+.container { max-width:1000px; margin:0 auto; padding:40px 20px; }
+
+/* Epic */
+.epic-header { margin-bottom:60px; }
+.epic-header h1 { color:var(--accent); margin:0 0 15px 0; font-size:28px; }
+.epic-meta { display:flex; gap:20px; margin-bottom:25px; }
+.meta-box { background:var(--nav); padding:15px; border-radius:6px; flex:1; border:1px solid var(--border); }
+.meta-label { display:block; color:var(--warn); font-size:11px; text-transform:uppercase; font-weight:bold; margin-bottom:5px; }
+.meta-value { color:#ddd; font-size:14px; }
+.milestone-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:15px; }
+.milestone-card-link { text-decoration:none; color:inherit; display:flex; flex-direction:column; height:100%; }
+.milestone-card { background:var(--card); border:1px solid var(--border); padding:15px; border-radius:8px; transition:border 0.2s; display:flex; flex-direction:column; flex:1 0 auto; }
+.milestone-card:hover { border-color:var(--accent); }
+.ms-header { display:flex; align-items:baseline; margin-bottom:5px; }
+.ms-num { color:var(--accent); font-weight:bold; margin-right:8px; }
+.ms-name { color:#fff; font-weight:bold; font-size:16px; }
+.pattern-tag { font-size:11px; color:var(--success); text-transform:uppercase; margin-right: 8px; }
+.ms-count { color:var(--warn); font-size:12px; margin:5px 0; }
+.ms-preview { color:#aaa; font-size:13px; margin:0; }
+.ms-task-list { padding-left: 18px; margin: 0; font-size: 12px; color: #999; line-height: 1.6; }
+.ms-task-list li { margin-bottom: 2px; }
+
+/* Milestone Section */
+.milestone-section { margin-top:60px; scroll-margin-top:80px; }
+.section-header { display:flex; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:10px; }
+.section-num { background:var(--accent); color:#1e1e1e; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:bold; font-size:14px; margin-right:15px; flex-shrink:0; }
+.section-header h2 { margin:0; color:var(--success); font-size:22px; flex:1; }
+.pattern-badge { background:#4e4e52; color:#fff; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold; margin-left:10px; text-transform:uppercase; }
+.ms-overview-box { background:#333; padding:15px; border-left:4px solid var(--accent); border-radius:4px; margin-bottom:15px; }
+.ms-success-box { background:#333; padding:15px; border-left:4px solid var(--success); border-radius:4px; margin-bottom:15px; }
+.cell-label.success { color:var(--success); }
+.cell-label { display:block; color:var(--accent); font-size:11px; text-transform:uppercase; font-weight:bold; margin-bottom:5px; }
+.cell-value { color:#ddd; }
+
+/* Diagram */
+.diagram-canvas { background:var(--card); border:1px solid var(--border); padding:15px; border-radius:8px; margin-bottom:30px; font-family:Consolas,monospace; }
+.diagram-header { display:flex; align-items:center; gap:10px; margin-bottom:10px; color:var(--warn); font-size:12px; font-weight:bold; text-transform:uppercase; }
+.diagram-content { 
+    color:#ddd; 
+    white-space:pre-wrap; 
+    background:#202020; 
+    padding:15px; 
+    border-radius:4px; 
+}
+.flow-diagram { 
+    display:flex; 
+    flex-wrap:wrap; 
+    align-items:center; 
+    gap:10px; 
+    margin-top:0; 
+    padding: 15px; 
+    background: #202020;
+    border-radius: 4px;
+}
+.flow-step { 
+    background:#252526; 
+    border:1px solid #555; 
+    padding:8px 12px; 
+    border-radius:6px; 
+    color:#ddd; 
+    font-family:Consolas,monospace; 
+    font-size:13px; 
+    line-height: 1.4; 
+    white-space:pre-wrap; 
+}
+.flow-arrow { color:#888; font-weight:bold; font-size:16px; margin: 0 5px; }
+
+/* Mermaid diagrams */
+.mermaid {
+    background: #202020;
+    padding: 15px;
+    border-radius: 4px;
+    margin: 0;
+}
+.mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Snippet Override */
+.snippet-block { 
+    background: #202020 !important; 
+    padding: 15px !important; 
+    border-radius: 6px !important; 
+    border: 1px solid var(--border) !important; 
+    margin-top: 5px; 
+    overflow: hidden; 
+}
+.snippet-block pre { 
+    margin: 0 !important; 
+    background: transparent !important; 
+    padding: 0 !important; 
+    color: #d4d4d4 !important;
+}
+.snippet-block code { 
+    background: transparent !important; 
+    color: #d4d4d4 !important; 
+    font-family: Consolas, monospace !important; 
+    font-size: 13px !important; 
+    line-height: 1.5 !important; 
+    white-space: pre-wrap !important; 
+}
+.snippet-block code .token.keyword, .snippet-block code .token.selector, .snippet-block code .token.number, .snippet-block code .token.boolean, .snippet-block code .token.constant { color: #569cd6 !important; }
+.snippet-block code .token.string, .snippet-block code .token.char, .snippet-block code .token.attr-value { color: #ce9178 !important; }
+.snippet-block code .token.comment, .snippet-block code .token.prolog { color: #6a9955 !important; font-style: italic; }
+.snippet-block code .token.function, .snippet-block code .token.deleted { color: #dcdcaa !important; }
+.snippet-block code .token.class-name, .snippet-block code .token.builtin, .snippet-block code .token.constant { color: #4ec9b0 !important; }
+.snippet-block code .token.operator, .snippet-block code .token.punctuation { color: #d4d4d4 !important; }
+
+/* Tasks */
+.task-card { background:var(--card); border:1px solid var(--border); border-radius:8px; margin-bottom:20px; overflow:hidden; }
+.task-header { background:#333; padding:12px 15px; border-bottom:1px solid var(--border); }
+.task-title-row { display:flex; align-items:center; gap:10px; flex-wrap: wrap; }
+.task-num { color:var(--accent); font-weight:bold; font-family:monospace; }
+.task-name { font-weight:bold; color:#fff; font-size:15px; }
+.task-footer { background: var(--nav); padding: 10px 15px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+.layer-badge { color: #1e1e1e; font-weight: bold; font-size: 11px; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; margin-left: auto; }
+.task-verify { color:var(--success); font-size:11px; font-family:monospace; background: rgba(78, 201, 176, 0.1); padding: 2px 6px; border-radius: 3px; }
+.task-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px; padding:15px; }
+.task-cell.full-width { grid-column:span 2; }
+.files-list { padding-left: 0; margin: 5px 0; list-style-type: none; }
+.action-sym { font-weight: bold; margin-right: 5px; }
+.file-add { color: var(--success); font-family: monospace; font-size: 13px; margin-bottom: 4px; }
+.file-mod { color: var(--warn); font-family: monospace; font-size: 13px; margin-bottom: 4px; }
+.file-rm { color: #f44747; font-family: monospace; font-size: 13px; margin-bottom: 4px; }
+.file-plain { color: #dcdcaa; font-family: monospace; font-size: 13px; margin-bottom: 4px; }
+.snippet-block { background:#000; padding:15px; border-radius:6px; border:1px solid var(--border); margin-top: 5px; }
+pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size:13px; white-space:pre-wrap; padding: 10px; background: #202020; }
+.acceptance-list { padding-left: 20px; margin: 5px 0; }
+.acceptance-list li { color: #ddd; margin-bottom: 4px; }
+
+/* Hamburger */
+.hamburger {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px 10px;
+    margin-left: auto;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+}
+.hamburger span {
+    display: block;
+    width: 20px;
+    height: 2px;
+    background: var(--text);
+    border-radius: 2px;
+    transition: 0.3s;
+}
+.nav-items {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.nav-item.home.always-visible { }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .container { padding: 20px 12px; padding-top: 76px; }
+    nav { padding: 10px 12px; flex-wrap: nowrap; justify-content: flex-start; min-height: 56px; position: fixed; top: 0; left: 0; right: 0; }
+    .hamburger { display: flex; margin-left: auto; }
+    .nav-items {
+        display: none;
+        position: fixed;
+        top: 56px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--nav);
+        flex-direction: column;
+        padding: 40px 20px;
+        z-index: 200;
+        overflow-y: auto;
+    }
+    .nav-items.open { display: flex; }
+    .nav-item { margin: 0; width: 100%; text-align: left; padding: 14px 15px; box-sizing: border-box; }
+    .epic-header h1 { font-size: 22px; }
+    .epic-meta { flex-direction: column; gap: 10px; }
+    .meta-box { width: 100%; box-sizing: border-box; }
+    .milestone-grid { grid-template-columns: 1fr; }
+    .section-header { flex-wrap: wrap; gap: 8px; }
+    .section-header h2 { font-size: 18px; }
+    .pattern-badge { margin-left: 0; margin-top: 5px; }
+    .task-grid { grid-template-columns: 1fr; }
+    .task-cell.full-width { grid-column: span 1; }
+    .task-footer { flex-direction: column; gap: 5px; }
+    .layer-badge { margin-left: 0; }
+    .flow-diagram { flex-direction: column; align-items: stretch; }
+    .flow-arrow { transform: rotate(90deg); text-align: center; margin: 5px 0; }
+    .ms-header { flex-wrap: wrap; }
+}
+</style>
+<style>code[class*=language-],pre[class*=language-]{color:#ccc;background:0 0;font-family:Consolas,Monaco,'Andale Mono','Ubuntu Mono',monospace;font-size:1em;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.5;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}pre[class*=language-]{padding:1em;margin:.5em 0;overflow:auto}:not(pre)>code[class*=language-],pre[class*=language-]{background:#2d2d2d}:not(pre)>code[class*=language-]{padding:.1em;border-radius:.3em;white-space:normal}.token.block-comment,.token.cdata,.token.comment,.token.doctype,.token.prolog{color:#999}.token.punctuation{color:#ccc}.token.attr-name,.token.deleted,.token.namespace,.token.tag{color:#e2777a}.token.function-name{color:#6196cc}.token.boolean,.token.function,.token.number{color:#f08d49}.token.class-name,.token.constant,.token.property,.token.symbol{color:#f8c555}.token.atrule,.token.builtin,.token.important,.token.keyword,.token.selector{color:#cc99cd}.token.attr-value,.token.char,.token.regex,.token.string,.token.variable{color:#7ec699}.token.entity,.token.operator,.token.url{color:#67cdcc}.token.bold,.token.important{font-weight:700}.token.italic{font-style:italic}.token.entity{cursor:help}.token.inserted{color:green}</style>
+</head><body>
+    <nav><a href="#epic-overview" class="nav-item home always-visible">🏠 Epic</a><div class="nav-items" id="nav-items"><a href="#session-compaction-setting" class="nav-item">Session Compaction Setting</a><a href="#ranged-file-reads" class="nav-item">Ranged File Reads</a><a href="#file-compaction-rules" class="nav-item">File Compaction Rules</a><a href="#compacted-request-context" class="nav-item">Compacted Request Context</a><a href="#live-context-visibility" class="nav-item">Live Context Visibility</a><a href="#compaction-observability" class="nav-item">Compaction Observability</a></div><button class="hamburger" id="hamburger" aria-label="Toggle menu"><span></span><span></span><span></span></button></nav>
+    <div class="container">
+        
+    <section id="epic-overview" class="epic-header">
+        <h1>Dynamic File Context Compaction</h1>
+        <div class="epic-meta">
+            <div class="meta-box">
+                <span class="meta-label">Problem</span>
+                <div class="meta-value">Squid-OS sends superseded file-tool arguments and results back to the LLM, and its footer reports lifetime tokens rather than the exact next-request context. Full-file reads are also inefficient for focused inspection, encouraging unstructured sed usage.</div>
+            </div>
+            <div class="meta-box">
+                <span class="meta-label">Goal</span>
+                <div class="meta-value">Add settings-controlled ranged reads and deterministic file compaction, build and measure the exact next LLM request, show its compacted size in the footer, and keep Chat Analytics aligned with the same rules.</div>
+            </div>
+        </div>
+        <div class="milestone-grid">
+            
+        <a href="#session-compaction-setting" class="milestone-card-link">
+            <div class="milestone-card">
+                <div class="ms-header">
+                    <span class="ms-num">1</span>
+                    <span class="ms-name">Session Compaction Setting</span>
+                </div>
+                <span class="pattern-tag">Settings snapshot into session configuration</span> 
+                <p class="ms-count">1 Task(s)</p>
+                <ul class="ms-task-list"><li>1.1 - Resolve compaction from settings into session state</li></ul>
+            </div>
+        </a>
+        <a href="#ranged-file-reads" class="milestone-card-link">
+            <div class="milestone-card">
+                <div class="ms-header">
+                    <span class="ms-num">2</span>
+                    <span class="ms-name">Ranged File Reads</span>
+                </div>
+                <span class="pattern-tag">Structured partial observation with full-file freshness</span> 
+                <p class="ms-count">1 Task(s)</p>
+                <ul class="ms-task-list"><li>2.1 - Support checksum-safe ranged read_file calls</li></ul>
+            </div>
+        </a>
+        <a href="#file-compaction-rules" class="milestone-card-link">
+            <div class="milestone-card">
+                <div class="ms-header">
+                    <span class="ms-num">3</span>
+                    <span class="ms-name">File Compaction Rules</span>
+                </div>
+                <span class="pattern-tag">Pure deterministic planner</span> 
+                <p class="ms-count">1 Task(s)</p>
+                <ul class="ms-task-list"><li>3.1 - Plan deterministic full-checkpoint compaction</li></ul>
+            </div>
+        </a>
+        <a href="#compacted-request-context" class="milestone-card-link">
+            <div class="milestone-card">
+                <div class="ms-header">
+                    <span class="ms-num">4</span>
+                    <span class="ms-name">Compacted Request Context</span>
+                </div>
+                <span class="pattern-tag">Single request snapshot</span> 
+                <p class="ms-count">1 Task(s)</p>
+                <ul class="ms-task-list"><li>4.1 - Build and send the exact compacted request</li></ul>
+            </div>
+        </a>
+        <a href="#live-context-visibility" class="milestone-card-link">
+            <div class="milestone-card">
+                <div class="ms-header">
+                    <span class="ms-num">5</span>
+                    <span class="ms-name">Live Context Visibility</span>
+                </div>
+                <span class="pattern-tag">Revision-cached derived state</span> 
+                <p class="ms-count">1 Task(s)</p>
+                <ul class="ms-task-list"><li>5.1 - Show cached compacted context in the footer</li></ul>
+            </div>
+        </a>
+        <a href="#compaction-observability" class="milestone-card-link">
+            <div class="milestone-card">
+                <div class="ms-header">
+                    <span class="ms-num">6</span>
+                    <span class="ms-name">Compaction Observability</span>
+                </div>
+                <span class="pattern-tag">Cross-implementation contract fixtures</span> 
+                <p class="ms-count">1 Task(s)</p>
+                <ul class="ms-task-list"><li>6.1 - Align Analytics with full and ranged read rules</li></ul>
+            </div>
+        </a>
+        </div>
+    </section>
+    
+        
+        <section id="session-compaction-setting" class="milestone-section">
+            <div class="section-header">
+                <span class="section-num">1</span>
+                <h2>Session Compaction Setting</h2>
+                <span class="pattern-badge">Settings snapshot into session configuration</span> 
+            </div>
+            
+            <div class="ms-overview-box">
+                <span class="cell-label">Objective</span>
+                <div class="cell-value">Resolve one global context_compaction switch into new sessions and preserve it in saved sessions without CLI or agent overrides.</div>
+            </div>
+            
+            <div class="ms-success-box">
+                <span class="cell-label success">Success Criteria</span>
+                <div class="cell-value">Settings and session JSON expose the switch, runtime resolution follows the documented precedence, and tests cover new and continued sessions.</div>
+            </div>
+            
+            <div class="diagram-canvas">
+                <div class="diagram-header">
+                    <span class="icon">📐</span>
+                    <span class="label">Architecture & Flow</span>
+                </div>
+                <pre class="mermaid">flowchart LR
+    S[settings context_compaction] --> R[runtime Resolve]
+    R --> N[new SessionConfig]
+    E[saved SessionConfig] --> C[continued session]
+    C --> X[no CLI or agent override]</pre>
+            </div>
+            <div class="task-list">
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 1.1</span>
+                        <span class="task-name">Resolve compaction from settings into session state</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Add the context compaction boolean to Settings and SessionConfig, resolve it from settings for new sessions, and preserve the saved value for existing sessions.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Makes compaction a single settings-controlled behavior while keeping each session deterministic after creation.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  defaultconfig/settings.json</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/settings.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/runtime/runtime.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/runtime/runtime_test.go</li><li class="file-mod"><span class="action-sym">~</span>  .squid-os/plans/session-config-resolution.md</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-json">type Settings struct {
+    ContextCompaction bool `json:&quot;context_compaction&quot;`
+}
+
+type SessionConfig struct {
+    ContextCompaction bool `json:&quot;context_compaction&quot;`
+}</code></pre>
+                </div>
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-json">// New session: Settings -&gt; SessionConfig
+// Existing session: persisted SessionConfig
+// No CLI or agent override.</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>The default settings file defines context_compaction.</li><li>New sessions copy the settings value into initial and config.</li><li>Existing interactive and autonomous sessions preserve their persisted value.</li><li>No CLI option, runtime Overrides field, or agent field controls compaction.</li><li>session-config-resolution.md documents settings-only resolution and immediate application.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/config ./internal/runtime</span> </div>
+            </div></div>
+        </section>
+        <section id="ranged-file-reads" class="milestone-section">
+            <div class="section-header">
+                <span class="section-num">2</span>
+                <h2>Ranged File Reads</h2>
+                <span class="pattern-badge">Structured partial observation with full-file freshness</span> 
+            </div>
+            
+            <div class="ms-overview-box">
+                <span class="cell-label">Objective</span>
+                <div class="cell-value">Let read_file return focused line ranges while retaining canonical file paths and full-file checksums for stale-file protection.</div>
+            </div>
+            
+            <div class="ms-success-box">
+                <span class="cell-label success">Success Criteria</span>
+                <div class="cell-value">Full and ranged reads share the existing FileEntry/file_state flow, range reads return bounded content, and later compaction can distinguish partial reads from instruction arguments.</div>
+            </div>
+            
+            <div class="diagram-canvas">
+                <div class="diagram-header">
+                    <span class="icon">📐</span>
+                    <span class="label">Architecture & Flow</span>
+                </div>
+                <pre class="mermaid">flowchart LR
+    A[read_file arguments] --> Q{range present}
+    Q -->|no| F[return full content]
+    Q -->|yes| P[return selected lines]
+    F --> C[full-file checksum and FileEntry]
+    P --> C
+    C --> S[file_state freshness]
+    P --> O[partial observation not checkpoint]
+    F --> K[full checkpoint]</pre>
+            </div>
+            <div class="task-list">
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 2.1</span>
+                        <span class="task-name">Support checksum-safe ranged read_file calls</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Add optional start_line and end_line arguments to read_file, returning only the selected lines while computing and storing the normal full-file checksum.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Provides the focused inspection efficiency currently obtained through sed without introducing a range registry or weakening stale-file detection.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/tools/core.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/tools/core_test.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/tool_exec.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/tool_exec_test.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">// read_file input contract
+{
+  &quot;path&quot;: &quot;string&quot;,
+  &quot;start_line&quot;: &quot;optional positive integer&quot;,
+  &quot;end_line&quot;: &quot;optional positive integer&quot;
+}
+
+// Persisted distinction:
+// range present in ToolCallEntry.Instruction.Arguments =&gt; partial read
+// no range fields =&gt; full read
+// FileEntry.Path remains canonical and FileEntry.Checksum remains full-file.</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>Omitting both range arguments returns the complete file with unchanged behavior.</li><li>A valid inclusive range returns only the requested lines with stable line-bound semantics.</li><li>Invalid, reversed, zero, and out-of-bounds ranges return clear errors without updating file state.</li><li>A successful ranged read computes FileEntry.Checksum from the complete file bytes and merges it through the existing file_state path.</li><li>Multiple ranged reads of the same tracked file version succeed and do not invalidate one another.</li><li>If a ranged read detects that a previously tracked file changed externally, it is rejected without replacing the tracked checksum and asks for a full read.</li><li>A full read after an external change refreshes the tracked checksum through existing read behavior.</li><li>No range registry, coverage model, or FileStateEntry schema expansion is introduced.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/tools ./internal/chat -run &#x27;ReadFile|FileState|FileChange&#x27;</span> </div>
+            </div></div>
+        </section>
+        <section id="file-compaction-rules" class="milestone-section">
+            <div class="section-header">
+                <span class="section-num">3</span>
+                <h2>File Compaction Rules</h2>
+                <span class="pattern-badge">Pure deterministic planner</span> 
+            </div>
+            
+            <div class="ms-overview-box">
+                <span class="cell-label">Objective</span>
+                <div class="cell-value">Derive one immutable compaction plan from persisted file-tool history using full-checkpoint rules and partial-read observations.</div>
+            </div>
+            
+            <div class="ms-success-box">
+                <span class="cell-label success">Success Criteria</span>
+                <div class="cell-value">The planner distinguishes full reads from ranged reads using persisted arguments, compacts only events superseded by a later full checkpoint, and reports combined instruction/result savings without mutating history.</div>
+            </div>
+            
+            <div class="diagram-canvas">
+                <div class="diagram-header">
+                    <span class="icon">📐</span>
+                    <span class="label">Architecture & Flow</span>
+                </div>
+                <pre class="mermaid">flowchart LR
+    H[complete tool history] --> E[extract file events]
+    E --> G[group by FileEntry path]
+    G --> Q{full checkpoint}
+    Q -->|full read write create| K[latest checkpoint]
+    Q -->|ranged read or edit| O[observation or delta]
+    K --> C[compact earlier successful events]
+    K --> R[retain checkpoint and later events]
+    O --> R
+    C --> P[CompactionPlan]
+    R --> P</pre>
+            </div>
+            <div class="task-list">
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 3.1</span>
+                        <span class="task-name">Plan deterministic full-checkpoint compaction</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Add a pure planner that classifies persisted file events, identifies full checkpoints, and produces per-tool-call compaction decisions with token summaries.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Centralizes safe file rules for request construction, footer accounting, Analytics parity, and later tool-specific extensions.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/compaction.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/compaction_test.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/compaction_benchmark_test.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type CompactionDecision struct {
+    ToolCallID string
+    Path string
+    Trace string
+    CompactArguments bool
+    CompactResult bool
+    SupersededBy string
+}
+
+type CompactionTokens struct {
+    RawInstruction int
+    RawExecution int
+    Raw int
+    RetainedInstruction int
+    RetainedExecution int
+    Retained int
+    SavedInstruction int
+    SavedExecution int
+    Saved int
+}
+
+type CompactionPlan struct {
+    Decisions map[string]CompactionDecision
+    Tokens CompactionTokens
+}
+
+func BuildCompactionPlan(messages []config.Message) CompactionPlan</code></pre>
+                </div>
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">// Checkpoint classification contract:
+// read_file without start_line/end_line =&gt; full checkpoint
+// read_file with either range argument =&gt; partial observation
+// write_file trace write/create =&gt; full checkpoint
+// edit_file =&gt; delta, including no-op read traces</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>The planner uses canonical FileEntry.path to group events and persisted read_file arguments to distinguish full from partial reads.</li><li>Successful full reads and write/create events are full checkpoints.</li><li>Ranged reads never supersede earlier reads, ranges, or edits.</li><li>A later full read, write, or create compacts all earlier successful events for that path, including ranged reads.</li><li>The latest checkpoint and all later partial reads and edits remain retained.</li><li>No-op edit_file calls that emit read are not checkpoints.</li><li>Failed and incomplete operations remain retained.</li><li>Raw, retained, and saved instruction/execution totals match persisted metrics.</li><li>Planning is deterministic and does not mutate messages.</li><li>The planner scans persisted history once, groups events by canonical path with maps, and performs direct decision lookup by tool-call ID.</li><li>The implementation avoids repeated whole-history scans per event and scales linearly with messages, tool calls, and file events.</li><li>Benchmarks report planner ns/op, B/op, and allocs/op for a large synthetic session.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/chat -run Compaction</span> <span class="task-verify">✔ go test -bench &#x27;BuildCompactionPlan&#x27; -benchmem ./internal/chat</span> </div>
+            </div></div>
+        </section>
+        <section id="compacted-request-context" class="milestone-section">
+            <div class="section-header">
+                <span class="section-num">4</span>
+                <h2>Compacted Request Context</h2>
+                <span class="pattern-badge">Single request snapshot</span> 
+            </div>
+            
+            <div class="ms-overview-box">
+                <span class="cell-label">Objective</span>
+                <div class="cell-value">Build, transform, and measure one exact provider-message snapshot for the next LLM request.</div>
+            </div>
+            
+            <div class="ms-success-box">
+                <span class="cell-label success">Success Criteria</span>
+                <div class="cell-value">Enabled sessions send compacted file history with valid tool pairing; disabled sessions remain unchanged; reported compacted tokens describe the exact request.</div>
+            </div>
+            
+            <div class="diagram-canvas">
+                <div class="diagram-header">
+                    <span class="icon">📐</span>
+                    <span class="label">Architecture & Flow</span>
+                </div>
+                <pre class="mermaid">sequenceDiagram
+    participant Session
+    participant Builder as BuildContext
+    participant Planner
+    participant Engine
+    Session->>Builder: messages and enabled flag
+    Builder->>Planner: BuildCompactionPlan
+    Planner-->>Builder: decisions
+    Builder->>Builder: transform and count exact messages
+    Builder-->>Session: Context
+    Session->>Engine: same Context messages</pre>
+            </div>
+            <div class="task-list">
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 4.1</span>
+                        <span class="task-name">Build and send the exact compacted request</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Add BuildContext to apply compaction decisions, count the resulting next-request provider messages, and make the stream path send that exact snapshot.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Prevents request construction and token reporting from drifting while preserving complete persisted history.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/context.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/context_test.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/engine.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/loop.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/context_benchmark_test.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type ContextTokens struct {
+    Raw int
+    Compacted int
+    Saved int
+}
+
+type Context struct {
+    Messages []provider.Message
+    Compaction CompactionPlan
+    Tokens ContextTokens
+}
+
+func BuildContext(messages []config.Message, enabled bool) Context
+func (s *Session) BuildContext() Context</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>Disabled compaction produces the existing provider messages and zero savings.</li><li>Enabled compaction preserves tool-call IDs, names, chronology, valid JSON arguments, and matching results.</li><li>Superseded read results are replaced while path and optional range arguments remain valid.</li><li>Superseded edit old_string/new_string and result content are replaced with fixed internal text.</li><li>Superseded write/create content and result content are replaced with fixed internal text.</li><li>Persisted messages are unchanged after BuildContext.</li><li>Compacted token count includes replacement overhead and describes Context.Messages exactly.</li><li>StartStreamWithContext sends Context.Messages without an independent rebuild.</li><li>Context transformation uses direct plan lookup, reuses unchanged strings where practical, and does not deep-copy the complete session history.</li><li>Benchmarks report request-building ns/op, B/op, and allocs/op for a large synthetic session.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/chat -run Context</span> <span class="task-verify">✔ go test -bench &#x27;BuildContext&#x27; -benchmem ./internal/chat</span> </div>
+            </div></div>
+        </section>
+        <section id="live-context-visibility" class="milestone-section">
+            <div class="section-header">
+                <span class="section-num">5</span>
+                <h2>Live Context Visibility</h2>
+                <span class="pattern-badge">Revision-cached derived state</span> 
+            </div>
+            
+            <div class="ms-overview-box">
+                <span class="cell-label">Objective</span>
+                <div class="cell-value">Expose compacted next-request size in the footer without rescanning history on every render.</div>
+            </div>
+            
+            <div class="ms-success-box">
+                <span class="cell-label success">Success Criteria</span>
+                <div class="cell-value">The footer context bar uses compacted next-request tokens, shows savings, preserves lifetime input/output counters, and refreshes after request-content mutations.</div>
+            </div>
+            
+            <div class="diagram-canvas">
+                <div class="diagram-header">
+                    <span class="icon">📐</span>
+                    <span class="label">Architecture & Flow</span>
+                </div>
+                <pre class="mermaid">flowchart LR
+    M[message or tool mutation] --> I[invalidate Context cache]
+    F[footer render] --> Q{cache current}
+    Q -->|yes| U[use token totals]
+    Q -->|no| B[BuildContext once]
+    B --> U
+    U --> V[compacted over context window]
+    U --> L[lifetime input output separate]</pre>
+            </div>
+            <div class="task-list">
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 5.1</span>
+                        <span class="task-name">Show cached compacted context in the footer</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Cache the derived Context on Session mutations and update footer contracts to show compacted next-request usage and savings separately from lifetime input/output totals.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Makes context-window pressure accurate without expensive recomputation on every TUI frame.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/tool_exec.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/render.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/ui/footer.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/ui/footer_test.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type FooterData struct {
+    LifetimeInputTokens int
+    LifetimeOutputTokens int
+    RawContextTokens int
+    CompactedContextTokens int
+    SavedContextTokens int
+    ContextWindow int
+}
+
+func (s *Session) BuildContext() Context
+func (s *Session) InvalidateContext()</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>Session caches one Context and invalidates it whenever persisted request content changes.</li><li>Repeated footer renders without mutation reuse the cache.</li><li>The context fraction and bar use CompactedContextTokens divided by ContextWindow.</li><li>Savings are shown when compaction is enabled and nonzero.</li><li>Lifetime input/output remain separate and never drive context-window usage.</li><li>During streaming the footer reflects the sent snapshot; after persistence it refreshes for the next request.</li><li>Footer tests cover enabled, disabled, zero-window, over-window, narrow, and wide layouts.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/chat ./internal/app ./internal/ui</span> </div>
+            </div></div>
+        </section>
+        <section id="compaction-observability" class="milestone-section">
+            <div class="section-header">
+                <span class="section-num">6</span>
+                <h2>Compaction Observability</h2>
+                <span class="pattern-badge">Cross-implementation contract fixtures</span> 
+            </div>
+            
+            <div class="ms-overview-box">
+                <span class="cell-label">Objective</span>
+                <div class="cell-value">Keep Chat Analytics and Squid-OS aligned on the current next-request file compaction calculation.</div>
+            </div>
+            
+            <div class="ms-success-box">
+                <span class="cell-label success">Success Criteria</span>
+                <div class="cell-value">Analytics displays the same raw, compacted, and saved values as Go for full and ranged read sequences, with no persisted per-turn metrics or actual/forecast modes.</div>
+            </div>
+            
+            <div class="diagram-canvas">
+                <div class="diagram-header">
+                    <span class="icon">📐</span>
+                    <span class="label">Architecture & Flow</span>
+                </div>
+                <pre class="mermaid">flowchart LR
+    H[complete session history] --> G[Go rules]
+    H --> P[Python Analytics rules]
+    X[shared fixtures] --> G
+    X --> P
+    G --> A[raw compacted saved]
+    P --> A
+    S[future structured search] -. separate plan .-> G</pre>
+            </div>
+            <div class="task-list">
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 6.1</span>
+                        <span class="task-name">Align Analytics with full and ranged read rules</span>
+                        <span class="layer-badge" style="background:#4ec9b0">test</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Document and test one current next-request calculation across Go and Chat Analytics, including ranged-read classification and combined instruction/result totals.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Prevents dashboard drift without persisting compaction decisions, request metrics, or historical turn records.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/testdata/file_compaction_cases.json</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/compaction_test.go</li><li class="file-mod"><span class="action-sym">~</span>  .squid-os/plans/context-compression/README.md</li><li class="file-mod"><span class="action-sym">~</span>  /home/goglue/.config/squid-os/skills/chat-analytics/scripts/server.py</li><li class="file-mod"><span class="action-sym">~</span>  /home/goglue/.config/squid-os/skills/chat-analytics/scripts/test_file_compaction.py</li><li class="file-mod"><span class="action-sym">~</span>  /home/goglue/.config/squid-os/skills/chat-analytics/assets/index.html</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-json">{
+  &quot;name&quot;: &quot;partial partial full&quot;,
+  &quot;events&quot;: [&quot;read range&quot;, &quot;read range&quot;, &quot;read full&quot;],
+  &quot;expected&quot;: {
+    &quot;compacted_events&quot;: 2,
+    &quot;retained_events&quot;: 1
+  }
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>The one-page README states settings-only control, dynamic non-destructive compaction, and fixed internal replacement text.</li><li>The README defines ranged reads as observations and full reads/write/create as checkpoints.</li><li>Go and Python fixtures cover repeated full reads, multiple ranges, range-edit-range, ranges followed by full read, write/read checkpoints, no-op edits, failures, and interleaved paths.</li><li>Analytics always presents the current next-request calculation regardless of whether the session switch is enabled.</li><li>Analytics combines instruction and execution tokens and includes replacement overhead once runtime transformation lands.</li><li>No context metrics are persisted on assistant messages and no historical per-turn records are added.</li><li>Bash, sed parsing, and structured search remain explicitly out of scope for this plan.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/chat &amp;&amp; python3 -m unittest discover -s /home/goglue/.config/squid-os/skills/chat-analytics/scripts -p &#x27;test_*.py&#x27; -v</span> </div>
+            </div></div>
+        </section>
+    </div>
+<script>var _self="undefined"!=typeof window?window:"undefined"!=typeof WorkerGlobalScope&&self instanceof WorkerGlobalScope?self:{},Prism=function(l){var n=/(?:^|\s)lang(?:uage)?-([\w-]+)(?=\s|$)/i,t=0,e={},j={manual:l.Prism&&l.Prism.manual,disableWorkerMessageHandler:l.Prism&&l.Prism.disableWorkerMessageHandler,util:{encode:function e(t){return t instanceof C?new C(t.type,e(t.content),t.alias):Array.isArray(t)?t.map(e):t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\u00a0/g," ")},type:function(e){return Object.prototype.toString.call(e).slice(8,-1)},objId:function(e){return e.__id||Object.defineProperty(e,"__id",{value:++t}),e.__id},clone:function n(e,a){var r,t;switch(a=a||{},j.util.type(e)){case"Object":if(t=j.util.objId(e),a[t])return a[t];for(var s in r={},a[t]=r,e)e.hasOwnProperty(s)&&(r[s]=n(e[s],a));return r;case"Array":return(t=j.util.objId(e),a[t])?a[t]:(r=[],a[t]=r,e.forEach(function(e,t){r[t]=n(e,a)}),r);default:return e}},getLanguage:function(e){for(;e;){var t=n.exec(e.className);if(t)return t[1].toLowerCase();e=e.parentElement}return"none"},setLanguage:function(e,t){e.className=e.className.replace(RegExp(n,"gi"),""),e.classList.add("language-"+t)},currentScript:function(){if("undefined"==typeof document)return null;if("currentScript"in document)return document.currentScript;try{throw new Error}catch(e){var t=(/at [^(\r\n]*\((.*):[^:]+:[^:]+\)$/i.exec(e.stack)||[])[1];if(t){var n,a=document.getElementsByTagName("script");for(n in a)if(a[n].src==t)return a[n]}return null}},isActive:function(e,t,n){for(var a="no-"+t;e;){var r=e.classList;if(r.contains(t))return!0;if(r.contains(a))return!1;e=e.parentElement}return!!n}},languages:{plain:e,plaintext:e,text:e,txt:e,extend:function(e,t){var n,a=j.util.clone(j.languages[e]);for(n in t)a[n]=t[n];return a},insertBefore:function(n,e,t,a){var r,s=(a=a||j.languages)[n],i={};for(r in s)if(s.hasOwnProperty(r)){if(r==e)for(var o in t)t.hasOwnProperty(o)&&(i[o]=t[o]);t.hasOwnProperty(r)||(i[r]=s[r])}var l=a[n];return a[n]=i,j.languages.DFS(j.languages,function(e,t){t===l&&e!=n&&(this[e]=i)}),i},DFS:function e(t,n,a,r){r=r||{};var s,i,o,l=j.util.objId;for(s in t)t.hasOwnProperty(s)&&(n.call(t,s,t[s],a||s),i=t[s],"Object"!==(o=j.util.type(i))||r[l(i)]?"Array"!==o||r[l(i)]||(r[l(i)]=!0,e(i,n,s,r)):(r[l(i)]=!0,e(i,n,null,r)))}},plugins:{},highlightAll:function(e,t){j.highlightAllUnder(document,e,t)},highlightAllUnder:function(e,t,n){var a={callback:n,container:e,selector:'code[class*="language-"], [class*="language-"] code, code[class*="lang-"], [class*="lang-"] code'};j.hooks.run("before-highlightall",a),a.elements=Array.prototype.slice.apply(a.container.querySelectorAll(a.selector)),j.hooks.run("before-all-elements-highlight",a);for(var r,s=0;r=a.elements[s++];)j.highlightElement(r,!0===t,a.callback)},highlightElement:function(e,t,n){var a=j.util.getLanguage(e),r=j.languages[a],s=(j.util.setLanguage(e,a),e.parentElement);s&&"pre"===s.nodeName.toLowerCase()&&j.util.setLanguage(s,a);var i={element:e,language:a,grammar:r,code:e.textContent};function o(e){i.highlightedCode=e,j.hooks.run("before-insert",i),i.element.innerHTML=i.highlightedCode,j.hooks.run("after-highlight",i),j.hooks.run("complete",i),n&&n.call(i.element)}if(j.hooks.run("before-sanity-check",i),(s=i.element.parentElement)&&"pre"===s.nodeName.toLowerCase()&&!s.hasAttribute("tabindex")&&s.setAttribute("tabindex","0"),!i.code)return j.hooks.run("complete",i),void(n&&n.call(i.element));j.hooks.run("before-highlight",i),i.grammar?t&&l.Worker?((a=new Worker(j.filename)).onmessage=function(e){o(e.data)},a.postMessage(JSON.stringify({language:i.language,code:i.code,immediateClose:!0}))):o(j.highlight(i.code,i.grammar,i.language)):o(j.util.encode(i.code))},highlight:function(e,t,n){e={code:e,grammar:t,language:n};if(j.hooks.run("before-tokenize",e),e.grammar)return e.tokens=j.tokenize(e.code,e.grammar),j.hooks.run("after-tokenize",e),C.stringify(j.util.encode(e.tokens),e.language);throw new Error('The language "'+e.language+'" has no grammar.')},tokenize:function(e,t){var n=t.rest;if(n){for(var a in n)t[a]=n[a];delete t.rest}for(var r=new u,s=(z(r,r.head,e),!function e(t,n,a,r,s,i){for(var o in a)if(a.hasOwnProperty(o)&&a[o]){var l=a[o];l=Array.isArray(l)?l:[l];for(var u=0;u<l.length;++u){if(i&&i.cause==o+","+u)return;for(var g,c=l[u],d=c.inside,p=!!c.lookbehind,m=!!c.greedy,h=c.alias,f=(m&&!c.pattern.global&&(g=c.pattern.toString().match(/[imsuy]*$/)[0],c.pattern=RegExp(c.pattern.source,g+"g")),c.pattern||c),b=r.next,y=s;b!==n.tail&&!(i&&y>=i.reach);y+=b.value.length,b=b.next){var v=b.value;if(n.length>t.length)return;if(!(v instanceof C)){var F,x=1;if(m){if(!(F=L(f,y,t,p))||F.index>=t.length)break;var k=F.index,w=F.index+F[0].length,A=y;for(A+=b.value.length;A<=k;)b=b.next,A+=b.value.length;if(A-=b.value.length,y=A,b.value instanceof C)continue;for(var P=b;P!==n.tail&&(A<w||"string"==typeof P.value);P=P.next)x++,A+=P.value.length;x--,v=t.slice(y,A),F.index-=y}else if(!(F=L(f,0,v,p)))continue;var k=F.index,$=F[0],S=v.slice(0,k),E=v.slice(k+$.length),v=y+v.length,_=(i&&v>i.reach&&(i.reach=v),b.prev),S=(S&&(_=z(n,_,S),y+=S.length),O(n,_,x),new C(o,d?j.tokenize($,d):$,h,$));b=z(n,_,S),E&&z(n,b,E),1<x&&($={cause:o+","+u,reach:v},e(t,n,a,b.prev,y,$),i&&$.reach>i.reach&&(i.reach=$.reach))}}}}}(e,r,t,r.head,0),r),i=[],o=s.head.next;o!==s.tail;)i.push(o.value),o=o.next;return i},hooks:{all:{},add:function(e,t){var n=j.hooks.all;n[e]=n[e]||[],n[e].push(t)},run:function(e,t){var n=j.hooks.all[e];if(n&&n.length)for(var a,r=0;a=n[r++];)a(t)}},Token:C};function C(e,t,n,a){this.type=e,this.content=t,this.alias=n,this.length=0|(a||"").length}function L(e,t,n,a){e.lastIndex=t;t=e.exec(n);return t&&a&&t[1]&&(e=t[1].length,t.index+=e,t[0]=t[0].slice(e)),t}function u(){var e={value:null,prev:null,next:null},t={value:null,prev:e,next:null};e.next=t,this.head=e,this.tail=t,this.length=0}function z(e,t,n){var a=t.next,n={value:n,prev:t,next:a};return t.next=n,a.prev=n,e.length++,n}function O(e,t,n){for(var a=t.next,r=0;r<n&&a!==e.tail;r++)a=a.next;(t.next=a).prev=t,e.length-=r}if(l.Prism=j,C.stringify=function t(e,n){if("string"==typeof e)return e;var a;if(Array.isArray(e))return a="",e.forEach(function(e){a+=t(e,n)}),a;var r,s={type:e.type,content:t(e.content,n),tag:"span",classes:["token",e.type],attributes:{},language:n},e=e.alias,i=(e&&(Array.isArray(e)?Array.prototype.push.apply(s.classes,e):s.classes.push(e)),j.hooks.run("wrap",s),"");for(r in s.attributes)i+=" "+r+'="'+(s.attributes[r]||"").replace(/"/g,"&quot;")+'"';return"<"+s.tag+' class="'+s.classes.join(" ")+'"'+i+">"+s.content+"</"+s.tag+">"},!l.document)return l.addEventListener&&(j.disableWorkerMessageHandler||l.addEventListener("message",function(e){var e=JSON.parse(e.data),t=e.language,n=e.code,e=e.immediateClose;l.postMessage(j.highlight(n,j.languages[t],t)),e&&l.close()},!1)),j;var a,e=j.util.currentScript();function r(){j.manual||j.highlightAll()}return e&&(j.filename=e.src,e.hasAttribute("data-manual")&&(j.manual=!0)),j.manual||("loading"===(a=document.readyState)||"interactive"===a&&e&&e.defer?document.addEventListener("DOMContentLoaded",r):window.requestAnimationFrame?window.requestAnimationFrame(r):window.setTimeout(r,16)),j}(_self);"undefined"!=typeof module&&module.exports&&(module.exports=Prism),"undefined"!=typeof global&&(global.Prism=Prism),Prism.languages.markup={comment:{pattern:/<!--(?:(?!<!--)[\s\S])*?-->/,greedy:!0},prolog:{pattern:/<\?[\s\S]+?\?>/,greedy:!0},doctype:{pattern:/<!DOCTYPE(?:[^>"'[\]]|"[^"]*"|'[^']*')+(?:\[(?:[^<"'\]]|"[^"]*"|'[^']*'|<(?!!--)|<!--(?:[^-]|-(?!->))*-->)*\]\s*)?>/i,greedy:!0,inside:{"internal-subset":{pattern:/(^[^\[]*\[)[\s\S]+(?=\]>$)/,lookbehind:!0,greedy:!0,inside:null},string:{pattern:/"[^"]*"|'[^']*'/,greedy:!0},punctuation:/^<!|>$|[[\]]/,"doctype-tag":/^DOCTYPE/i,name:/[^\s<>'"]+/}},cdata:{pattern:/<!\[CDATA\[[\s\S]*?\]\]>/i,greedy:!0},tag:{pattern:/<\/?(?!\d)[^\s>\/=$<%]+(?:\s(?:\s*[^\s>\/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s'">=]+(?=[\s>]))|(?=[\s/>])))+)?\s*\/?>/,greedy:!0,inside:{tag:{pattern:/^<\/?[^\s>\/]+/,inside:{punctuation:/^<\/?/,namespace:/^[^\s>\/:]+:/}},"special-attr":[],"attr-value":{pattern:/=\s*(?:"[^"]*"|'[^']*'|[^\s'">=]+)/,inside:{punctuation:[{pattern:/^=/,alias:"attr-equals"},{pattern:/^(\s*)["']|["']$/,lookbehind:!0}]}},punctuation:/\/?>/,"attr-name":{pattern:/[^\s>\/]+/,inside:{namespace:/^[^\s>\/:]+:/}}}},entity:[{pattern:/&[\da-z]{1,8};/i,alias:"named-entity"},/&#x?[\da-f]{1,8};/i]},Prism.languages.markup.tag.inside["attr-value"].inside.entity=Prism.languages.markup.entity,Prism.languages.markup.doctype.inside["internal-subset"].inside=Prism.languages.markup,Prism.hooks.add("wrap",function(e){"entity"===e.type&&(e.attributes.title=e.content.replace(/&amp;/,"&"))}),Object.defineProperty(Prism.languages.markup.tag,"addInlined",{value:function(e,t){var n={},n=(n["language-"+t]={pattern:/(^<!\[CDATA\[)[\s\S]+?(?=\]\]>$)/i,lookbehind:!0,inside:Prism.languages[t]},n.cdata=/^<!\[CDATA\[|\]\]>$/i,{"included-cdata":{pattern:/<!\[CDATA\[[\s\S]*?\]\]>/i,inside:n}}),t=(n["language-"+t]={pattern:/[\s\S]+/,inside:Prism.languages[t]},{});t[e]={pattern:RegExp(/(<__[^>]*>)(?:<!\[CDATA\[(?:[^\]]|\](?!\]>))*\]\]>|(?!<!\[CDATA\[)[\s\S])*?(?=<\/__>)/.source.replace(/__/g,function(){return e}),"i"),lookbehind:!0,greedy:!0,inside:n},Prism.languages.insertBefore("markup","cdata",t)}}),Object.defineProperty(Prism.languages.markup.tag,"addAttribute",{value:function(e,t){Prism.languages.markup.tag.inside["special-attr"].push({pattern:RegExp(/(^|["'\s])/.source+"(?:"+e+")"+/\s*=\s*(?:"[^"]*"|'[^']*'|[^\s'">=]+(?=[\s>]))/.source,"i"),lookbehind:!0,inside:{"attr-name":/^[^\s=]+/,"attr-value":{pattern:/=[\s\S]+/,inside:{value:{pattern:/(^=\s*(["']|(?!["'])))\S[\s\S]*(?=\2$)/,lookbehind:!0,alias:[t,"language-"+t],inside:Prism.languages[t]},punctuation:[{pattern:/^=/,alias:"attr-equals"},/"|'/]}}}})}}),Prism.languages.html=Prism.languages.markup,Prism.languages.mathml=Prism.languages.markup,Prism.languages.svg=Prism.languages.markup,Prism.languages.xml=Prism.languages.extend("markup",{}),Prism.languages.ssml=Prism.languages.xml,Prism.languages.atom=Prism.languages.xml,Prism.languages.rss=Prism.languages.xml,function(e){var t=/(?:"(?:\\(?:\r\n|[\s\S])|[^"\\\r\n])*"|'(?:\\(?:\r\n|[\s\S])|[^'\\\r\n])*')/,t=(e.languages.css={comment:/\/\*[\s\S]*?\*\//,atrule:{pattern:RegExp("@[\\w-](?:"+/[^;{\s"']|\s+(?!\s)/.source+"|"+t.source+")*?"+/(?:;|(?=\s*\{))/.source),inside:{rule:/^@[\w-]+/,"selector-function-argument":{pattern:/(\bselector\s*\(\s*(?![\s)]))(?:[^()\s]|\s+(?![\s)])|\((?:[^()]|\([^()]*\))*\))+(?=\s*\))/,lookbehind:!0,alias:"selector"},keyword:{pattern:/(^|[^\w-])(?:and|not|only|or)(?![\w-])/,lookbehind:!0}}},url:{pattern:RegExp("\\burl\\((?:"+t.source+"|"+/(?:[^\\\r\n()"']|\\[\s\S])*/.source+")\\)","i"),greedy:!0,inside:{function:/^url/i,punctuation:/^\(|\)$/,string:{pattern:RegExp("^"+t.source+"$"),alias:"url"}}},selector:{pattern:RegExp("(^|[{}\\s])[^{}\\s](?:[^{};\"'\\s]|\\s+(?![\\s{])|"+t.source+")*(?=\\s*\\{)"),lookbehind:!0},string:{pattern:t,greedy:!0},property:{pattern:/(^|[^-\w\xA0-\uFFFF])(?!\s)[-_a-z\xA0-\uFFFF](?:(?!\s)[-\w\xA0-\uFFFF])*(?=\s*:)/i,lookbehind:!0},important:/!important\b/i,function:{pattern:/(^|[^-a-z0-9])[-a-z0-9]+(?=\()/i,lookbehind:!0},punctuation:/[(){};:,]/},e.languages.css.atrule.inside.rest=e.languages.css,e.languages.markup);t&&(t.tag.addInlined("style","css"),t.tag.addAttribute("style","css"))}(Prism),Prism.languages.clike={comment:[{pattern:/(^|[^\\])\/\*[\s\S]*?(?:\*\/|$)/,lookbehind:!0,greedy:!0},{pattern:/(^|[^\\:])\/\/.*/,lookbehind:!0,greedy:!0}],string:{pattern:/(["'])(?:\\(?:\r\n|[\s\S])|(?!\1)[^\\\r\n])*\1/,greedy:!0},"class-name":{pattern:/(\b(?:class|extends|implements|instanceof|interface|new|trait)\s+|\bcatch\s+\()[\w.\\]+/i,lookbehind:!0,inside:{punctuation:/[.\\]/}},keyword:/\b(?:break|catch|continue|do|else|finally|for|function|if|in|instanceof|new|null|return|throw|try|while)\b/,boolean:/\b(?:false|true)\b/,function:/\b\w+(?=\()/,number:/\b0x[\da-f]+\b|(?:\b\d+(?:\.\d*)?|\B\.\d+)(?:e[+-]?\d+)?/i,operator:/[<>]=?|[!=]=?=?|--?|\+\+?|&&?|\|\|?|[?*/~^%]/,punctuation:/[{}[\];(),.:]/},Prism.languages.javascript=Prism.languages.extend("clike",{"class-name":[Prism.languages.clike["class-name"],{pattern:/(^|[^$\w\xA0-\uFFFF])(?!\s)[_$A-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\.(?:constructor|prototype))/,lookbehind:!0}],keyword:[{pattern:/((?:^|\})\s*)catch\b/,lookbehind:!0},{pattern:/(^|[^.]|\.\.\.\s*)\b(?:as|assert(?=\s*\{)|async(?=\s*(?:function\b|\(|[$\w\xA0-\uFFFF]|$))|await|break|case|class|const|continue|debugger|default|delete|do|else|enum|export|extends|finally(?=\s*(?:\{|$))|for|from(?=\s*(?:['"]|$))|function|(?:get|set)(?=\s*(?:[#\[$\w\xA0-\uFFFF]|$))|if|implements|import|in|instanceof|interface|let|new|null|of|package|private|protected|public|return|static|super|switch|this|throw|try|typeof|undefined|var|void|while|with|yield)\b/,lookbehind:!0}],function:/#?(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*(?:\.\s*(?:apply|bind|call)\s*)?\()/,number:{pattern:RegExp(/(^|[^\w$])/.source+"(?:"+/NaN|Infinity/.source+"|"+/0[bB][01]+(?:_[01]+)*n?/.source+"|"+/0[oO][0-7]+(?:_[0-7]+)*n?/.source+"|"+/0[xX][\dA-Fa-f]+(?:_[\dA-Fa-f]+)*n?/.source+"|"+/\d+(?:_\d+)*n/.source+"|"+/(?:\d+(?:_\d+)*(?:\.(?:\d+(?:_\d+)*)?)?|\.\d+(?:_\d+)*)(?:[Ee][+-]?\d+(?:_\d+)*)?/.source+")"+/(?![\w$])/.source),lookbehind:!0},operator:/--|\+\+|\*\*=?|=>|&&=?|\|\|=?|[!=]==|<<=?|>>>?=?|[-+*/%&|^!=<>]=?|\.{3}|\?\?=?|\?\.?|[~:]/}),Prism.languages.javascript["class-name"][0].pattern=/(\b(?:class|extends|implements|instanceof|interface|new)\s+)[\w.\\]+/,Prism.languages.insertBefore("javascript","keyword",{regex:{pattern:RegExp(/((?:^|[^$\w\xA0-\uFFFF."'\])\s]|\b(?:return|yield))\s*)/.source+/\//.source+"(?:"+/(?:\[(?:[^\]\\\r\n]|\\.)*\]|\\.|[^/\\\[\r\n])+\/[dgimyus]{0,7}/.source+"|"+/(?:\[(?:[^[\]\\\r\n]|\\.|\[(?:[^[\]\\\r\n]|\\.|\[(?:[^[\]\\\r\n]|\\.)*\])*\])*\]|\\.|[^/\\\[\r\n])+\/[dgimyus]{0,7}v[dgimyus]{0,7}/.source+")"+/(?=(?:\s|\/\*(?:[^*]|\*(?!\/))*\*\/)*(?:$|[\r\n,.;:})\]]|\/\/))/.source),lookbehind:!0,greedy:!0,inside:{"regex-source":{pattern:/^(\/)[\s\S]+(?=\/[a-z]*$)/,lookbehind:!0,alias:"language-regex",inside:Prism.languages.regex},"regex-delimiter":/^\/|\/$/,"regex-flags":/^[a-z]+$/}},"function-variable":{pattern:/#?(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*[=:]\s*(?:async\s*)?(?:\bfunction\b|(?:\((?:[^()]|\([^()]*\))*\)|(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*)\s*=>))/,alias:"function"},parameter:[{pattern:/(function(?:\s+(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*)?\s*\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\))/,lookbehind:!0,inside:Prism.languages.javascript},{pattern:/(^|[^$\w\xA0-\uFFFF])(?!\s)[_$a-z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*=>)/i,lookbehind:!0,inside:Prism.languages.javascript},{pattern:/(\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\)\s*=>)/,lookbehind:!0,inside:Prism.languages.javascript},{pattern:/((?:\b|\s|^)(?!(?:as|async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|enum|export|extends|finally|for|from|function|get|if|implements|import|in|instanceof|interface|let|new|null|of|package|private|protected|public|return|set|static|super|switch|this|throw|try|typeof|undefined|var|void|while|with|yield)(?![$\w\xA0-\uFFFF]))(?:(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*\s*)\(\s*|\]\s*\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\)\s*\{)/,lookbehind:!0,inside:Prism.languages.javascript}],constant:/\b[A-Z](?:[A-Z_]|\dx?)*\b/}),Prism.languages.insertBefore("javascript","string",{hashbang:{pattern:/^#!.*/,greedy:!0,alias:"comment"},"template-string":{pattern:/`(?:\\[\s\S]|\$\{(?:[^{}]|\{(?:[^{}]|\{[^}]*\})*\})+\}|(?!\$\{)[^\\`])*`/,greedy:!0,inside:{"template-punctuation":{pattern:/^`|`$/,alias:"string"},interpolation:{pattern:/((?:^|[^\\])(?:\\{2})*)\$\{(?:[^{}]|\{(?:[^{}]|\{[^}]*\})*\})+\}/,lookbehind:!0,inside:{"interpolation-punctuation":{pattern:/^\$\{|\}$/,alias:"punctuation"},rest:Prism.languages.javascript}},string:/[\s\S]+/}},"string-property":{pattern:/((?:^|[,{])[ \t]*)(["'])(?:\\(?:\r\n|[\s\S])|(?!\2)[^\\\r\n])*\2(?=\s*:)/m,lookbehind:!0,greedy:!0,alias:"property"}}),Prism.languages.insertBefore("javascript","operator",{"literal-property":{pattern:/((?:^|[,{])[ \t]*)(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*:)/m,lookbehind:!0,alias:"property"}}),Prism.languages.markup&&(Prism.languages.markup.tag.addInlined("script","javascript"),Prism.languages.markup.tag.addAttribute(/on(?:abort|blur|change|click|composition(?:end|start|update)|dblclick|error|focus(?:in|out)?|key(?:down|up)|load|mouse(?:down|enter|leave|move|out|over|up)|reset|resize|scroll|select|slotchange|submit|unload|wheel)/.source,"javascript")),Prism.languages.js=Prism.languages.javascript,function(){var l,u,g,c,e;void 0!==Prism&&"undefined"!=typeof document&&(Element.prototype.matches||(Element.prototype.matches=Element.prototype.msMatchesSelector||Element.prototype.webkitMatchesSelector),l={js:"javascript",py:"python",rb:"ruby",ps1:"powershell",psm1:"powershell",sh:"bash",bat:"batch",h:"c",tex:"latex"},c="pre[data-src]:not(["+(u="data-src-status")+'="loaded"]):not(['+u+'="'+(g="loading")+'"])',Prism.hooks.add("before-highlightall",function(e){e.selector+=", "+c}),Prism.hooks.add("before-sanity-check",function(e){var r,t,n,a,s,i,o=e.element;o.matches(c)&&(e.code="",o.setAttribute(u,g),(r=o.appendChild(document.createElement("CODE"))).textContent="Loading…",t=o.getAttribute("data-src"),"none"===(e=e.language)&&(n=(/\.(\w+)$/.exec(t)||[,"none"])[1],e=l[n]||n),Prism.util.setLanguage(r,e),Prism.util.setLanguage(o,e),(n=Prism.plugins.autoloader)&&n.loadLanguages(e),n=t,a=function(e){o.setAttribute(u,"loaded");var t,n,a=function(e){var t,n;if(e=/^\s*(\d+)\s*(?:(,)\s*(?:(\d+)\s*)?)?$/.exec(e||""))return t=Number(e[1]),n=e[2],e=e[3],n?e?[t,Number(e)]:[t,void 0]:[t,t]}(o.getAttribute("data-range"));a&&(t=e.split(/\r\n?|\n/g),n=a[0],a=null==a[1]?t.length:a[1],n<0&&(n+=t.length),n=Math.max(0,Math.min(n-1,t.length)),a<0&&(a+=t.length),a=Math.max(0,Math.min(a,t.length)),e=t.slice(n,a).join("\n"),o.hasAttribute("data-start")||o.setAttribute("data-start",String(n+1))),r.textContent=e,Prism.highlightElement(r)},s=function(e){o.setAttribute(u,"failed"),r.textContent=e},(i=new XMLHttpRequest).open("GET",n,!0),i.onreadystatechange=function(){4==i.readyState&&(i.status<400&&i.responseText?a(i.responseText):400<=i.status?s("✖ Error "+i.status+" while fetching file: "+i.statusText):s("✖ Error: File does not exist or is empty"))},i.send(null))}),e=!(Prism.plugins.fileHighlight={highlight:function(e){for(var t,n=(e||document).querySelectorAll(c),a=0;t=n[a++];)Prism.highlightElement(t)}}),Prism.fileHighlight=function(){e||(console.warn("Prism.fileHighlight is deprecated. Use `Prism.plugins.fileHighlight.highlight` instead."),e=!0),Prism.plugins.fileHighlight.highlight.apply(this,arguments)})}();</script>
+<script>Prism.languages.go=Prism.languages.extend("clike",{string:{pattern:/(^|[^\\])"(?:\\.|[^"\\\r\n])*"|`[^`]*`/,lookbehind:!0,greedy:!0},keyword:/\b(?:break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go(?:to)?|if|import|interface|map|package|range|return|select|struct|switch|type|var)\b/,boolean:/\b(?:_|false|iota|nil|true)\b/,number:[/\b0(?:b[01_]+|o[0-7_]+)i?\b/i,/\b0x(?:[a-f\d_]+(?:\.[a-f\d_]*)?|\.[a-f\d_]+)(?:p[+-]?\d+(?:_\d+)*)?i?(?!\w)/i,/(?:\b\d[\d_]*(?:\.[\d_]*)?|\B\.\d[\d_]*)(?:e[+-]?[\d_]+)?i?(?!\w)/i],operator:/[*\/%^!=]=?|\+[=+]?|-[=-]?|\|[=|]?|&(?:=|&|\^=?)?|>(?:>=?|=)?|<(?:<=?|=|-)?|:=|\.\.\./,builtin:/\b(?:append|bool|byte|cap|close|complex|complex(?:64|128)|copy|delete|error|float(?:32|64)|u?int(?:8|16|32|64)?|imag|len|make|new|panic|print(?:ln)?|real|recover|rune|string|uintptr)\b/}),Prism.languages.insertBefore("go","string",{char:{pattern:/'(?:\\.|[^'\\\r\n]){0,10}'/,greedy:!0}}),delete Prism.languages.go["class-name"];</script>
+<script>Prism.languages.javascript=Prism.languages.extend("clike",{"class-name":[Prism.languages.clike["class-name"],{pattern:/(^|[^$\w\xA0-\uFFFF])(?!\s)[_$A-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\.(?:constructor|prototype))/,lookbehind:!0}],keyword:[{pattern:/((?:^|\})\s*)catch\b/,lookbehind:!0},{pattern:/(^|[^.]|\.\.\.\s*)\b(?:as|assert(?=\s*\{)|async(?=\s*(?:function\b|\(|[$\w\xA0-\uFFFF]|$))|await|break|case|class|const|continue|debugger|default|delete|do|else|enum|export|extends|finally(?=\s*(?:\{|$))|for|from(?=\s*(?:['"]|$))|function|(?:get|set)(?=\s*(?:[#\[$\w\xA0-\uFFFF]|$))|if|implements|import|in|instanceof|interface|let|new|null|of|package|private|protected|public|return|static|super|switch|this|throw|try|typeof|undefined|var|void|while|with|yield)\b/,lookbehind:!0}],function:/#?(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*(?:\.\s*(?:apply|bind|call)\s*)?\()/,number:{pattern:RegExp("(^|[^\\w$])(?:NaN|Infinity|0[bB][01]+(?:_[01]+)*n?|0[oO][0-7]+(?:_[0-7]+)*n?|0[xX][\\dA-Fa-f]+(?:_[\\dA-Fa-f]+)*n?|\\d+(?:_\\d+)*n|(?:\\d+(?:_\\d+)*(?:\\.(?:\\d+(?:_\\d+)*)?)?|\\.\\d+(?:_\\d+)*)(?:[Ee][+-]?\\d+(?:_\\d+)*)?)(?![\\w$])"),lookbehind:!0},operator:/--|\+\+|\*\*=?|=>|&&=?|\|\|=?|[!=]==|<<=?|>>>?=?|[-+*/%&|^!=<>]=?|\.{3}|\?\?=?|\?\.?|[~:]/}),Prism.languages.javascript["class-name"][0].pattern=/(\b(?:class|extends|implements|instanceof|interface|new)\s+)[\w.\\]+/,Prism.languages.insertBefore("javascript","keyword",{regex:{pattern:RegExp("((?:^|[^$\\w\\xA0-\\uFFFF.\"'\\])\\s]|\\b(?:return|yield))\\s*)/(?:(?:\\[(?:[^\\]\\\\\r\n]|\\\\.)*\\]|\\\\.|[^/\\\\\\[\r\n])+/[dgimyus]{0,7}|(?:\\[(?:[^[\\]\\\\\r\n]|\\\\.|\\[(?:[^[\\]\\\\\r\n]|\\\\.|\\[(?:[^[\\]\\\\\r\n]|\\\\.)*\\])*\\])*\\]|\\\\.|[^/\\\\\\[\r\n])+/[dgimyus]{0,7}v[dgimyus]{0,7})(?=(?:\\s|/\\*(?:[^*]|\\*(?!/))*\\*/)*(?:$|[\r\n,.;:})\\]]|//))"),lookbehind:!0,greedy:!0,inside:{"regex-source":{pattern:/^(\/)[\s\S]+(?=\/[a-z]*$)/,lookbehind:!0,alias:"language-regex",inside:Prism.languages.regex},"regex-delimiter":/^\/|\/$/,"regex-flags":/^[a-z]+$/}},"function-variable":{pattern:/#?(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*[=:]\s*(?:async\s*)?(?:\bfunction\b|(?:\((?:[^()]|\([^()]*\))*\)|(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*)\s*=>))/,alias:"function"},parameter:[{pattern:/(function(?:\s+(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*)?\s*\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\))/,lookbehind:!0,inside:Prism.languages.javascript},{pattern:/(^|[^$\w\xA0-\uFFFF])(?!\s)[_$a-z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*=>)/i,lookbehind:!0,inside:Prism.languages.javascript},{pattern:/(\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\)\s*=>)/,lookbehind:!0,inside:Prism.languages.javascript},{pattern:/((?:\b|\s|^)(?!(?:as|async|await|break|case|catch|class|const|continue|debugger|default|delete|do|else|enum|export|extends|finally|for|from|function|get|if|implements|import|in|instanceof|interface|let|new|null|of|package|private|protected|public|return|set|static|super|switch|this|throw|try|typeof|undefined|var|void|while|with|yield)(?![$\w\xA0-\uFFFF]))(?:(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*\s*)\(\s*|\]\s*\(\s*)(?!\s)(?:[^()\s]|\s+(?![\s)])|\([^()]*\))+(?=\s*\)\s*\{)/,lookbehind:!0,inside:Prism.languages.javascript}],constant:/\b[A-Z](?:[A-Z_]|\dx?)*\b/}),Prism.languages.insertBefore("javascript","string",{hashbang:{pattern:/^#!.*/,greedy:!0,alias:"comment"},"template-string":{pattern:/`(?:\\[\s\S]|\$\{(?:[^{}]|\{(?:[^{}]|\{[^}]*\})*\})+\}|(?!\$\{)[^\\`])*`/,greedy:!0,inside:{"template-punctuation":{pattern:/^`|`$/,alias:"string"},interpolation:{pattern:/((?:^|[^\\])(?:\\{2})*)\$\{(?:[^{}]|\{(?:[^{}]|\{[^}]*\})*\})+\}/,lookbehind:!0,inside:{"interpolation-punctuation":{pattern:/^\$\{|\}$/,alias:"punctuation"},rest:Prism.languages.javascript}},string:/[\s\S]+/}},"string-property":{pattern:/((?:^|[,{])[ \t]*)(["'])(?:\\(?:\r\n|[\s\S])|(?!\2)[^\\\r\n])*\2(?=\s*:)/m,lookbehind:!0,greedy:!0,alias:"property"}}),Prism.languages.insertBefore("javascript","operator",{"literal-property":{pattern:/((?:^|[,{])[ \t]*)(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?=\s*:)/m,lookbehind:!0,alias:"property"}}),Prism.languages.markup&&(Prism.languages.markup.tag.addInlined("script","javascript"),Prism.languages.markup.tag.addAttribute("on(?:abort|blur|change|click|composition(?:end|start|update)|dblclick|error|focus(?:in|out)?|key(?:down|up)|load|mouse(?:down|enter|leave|move|out|over|up)|reset|resize|scroll|select|slotchange|submit|unload|wheel)","javascript")),Prism.languages.js=Prism.languages.javascript;</script>
+<script>!function(e){var t="\\b(?:BASH|BASHOPTS|BASH_ALIASES|BASH_ARGC|BASH_ARGV|BASH_CMDS|BASH_COMPLETION_COMPAT_DIR|BASH_LINENO|BASH_REMATCH|BASH_SOURCE|BASH_VERSINFO|BASH_VERSION|COLORTERM|COLUMNS|COMP_WORDBREAKS|DBUS_SESSION_BUS_ADDRESS|DEFAULTS_PATH|DESKTOP_SESSION|DIRSTACK|DISPLAY|EUID|GDMSESSION|GDM_LANG|GNOME_KEYRING_CONTROL|GNOME_KEYRING_PID|GPG_AGENT_INFO|GROUPS|HISTCONTROL|HISTFILE|HISTFILESIZE|HISTSIZE|HOME|HOSTNAME|HOSTTYPE|IFS|INSTANCE|JOB|LANG|LANGUAGE|LC_ADDRESS|LC_ALL|LC_IDENTIFICATION|LC_MEASUREMENT|LC_MONETARY|LC_NAME|LC_NUMERIC|LC_PAPER|LC_TELEPHONE|LC_TIME|LESSCLOSE|LESSOPEN|LINES|LOGNAME|LS_COLORS|MACHTYPE|MAILCHECK|MANDATORY_PATH|NO_AT_BRIDGE|OLDPWD|OPTERR|OPTIND|ORBIT_SOCKETDIR|OSTYPE|PAPERSIZE|PATH|PIPESTATUS|PPID|PS1|PS2|PS3|PS4|PWD|RANDOM|REPLY|SECONDS|SELINUX_INIT|SESSION|SESSIONTYPE|SESSION_MANAGER|SHELL|SHELLOPTS|SHLVL|SSH_AUTH_SOCK|TERM|UID|UPSTART_EVENTS|UPSTART_INSTANCE|UPSTART_JOB|UPSTART_SESSION|USER|WINDOWID|XAUTHORITY|XDG_CONFIG_DIRS|XDG_CURRENT_DESKTOP|XDG_DATA_DIRS|XDG_GREETER_DATA_DIR|XDG_MENU_PREFIX|XDG_RUNTIME_DIR|XDG_SEAT|XDG_SEAT_PATH|XDG_SESSION_DESKTOP|XDG_SESSION_ID|XDG_SESSION_PATH|XDG_SESSION_TYPE|XDG_VTNR|XMODIFIERS)\\b",a={pattern:/(^(["']?)\w+\2)[ \t]+\S.*/,lookbehind:!0,alias:"punctuation",inside:null},n={bash:a,environment:{pattern:RegExp("\\$"+t),alias:"constant"},variable:[{pattern:/\$?\(\([\s\S]+?\)\)/,greedy:!0,inside:{variable:[{pattern:/(^\$\(\([\s\S]+)\)\)/,lookbehind:!0},/^\$\(\(/],number:/\b0x[\dA-Fa-f]+\b|(?:\b\d+(?:\.\d*)?|\B\.\d+)(?:[Ee]-?\d+)?/,operator:/--|\+\+|\*\*=?|<<=?|>>=?|&&|\|\||[=!+\-*/%<>^&|]=?|[?~:]/,punctuation:/\(\(?|\)\)?|,|;/}},{pattern:/\$\((?:\([^)]+\)|[^()])+\)|`[^`]+`/,greedy:!0,inside:{variable:/^\$\(|^`|\)$|`$/}},{pattern:/\$\{[^}]+\}/,greedy:!0,inside:{operator:/:[-=?+]?|[!\/]|##?|%%?|\^\^?|,,?/,punctuation:/[\[\]]/,environment:{pattern:RegExp("(\\{)"+t),lookbehind:!0,alias:"constant"}}},/\$(?:\w+|[#?*!@$])/],entity:/\\(?:[abceEfnrtv\\"]|O?[0-7]{1,3}|U[0-9a-fA-F]{8}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{1,2})/};e.languages.bash={shebang:{pattern:/^#!\s*\/.*/,alias:"important"},comment:{pattern:/(^|[^"{\\$])#.*/,lookbehind:!0},"function-name":[{pattern:/(\bfunction\s+)[\w-]+(?=(?:\s*\(?:\s*\))?\s*\{)/,lookbehind:!0,alias:"function"},{pattern:/\b[\w-]+(?=\s*\(\s*\)\s*\{)/,alias:"function"}],"for-or-select":{pattern:/(\b(?:for|select)\s+)\w+(?=\s+in\s)/,alias:"variable",lookbehind:!0},"assign-left":{pattern:/(^|[\s;|&]|[<>]\()\w+(?:\.\w+)*(?=\+?=)/,inside:{environment:{pattern:RegExp("(^|[\\s;|&]|[<>]\\()"+t),lookbehind:!0,alias:"constant"}},alias:"variable",lookbehind:!0},parameter:{pattern:/(^|\s)-{1,2}(?:\w+:[+-]?)?\w+(?:\.\w+)*(?=[=\s]|$)/,alias:"variable",lookbehind:!0},string:[{pattern:/((?:^|[^<])<<-?\s*)(\w+)\s[\s\S]*?(?:\r?\n|\r)\2/,lookbehind:!0,greedy:!0,inside:n},{pattern:/((?:^|[^<])<<-?\s*)(["'])(\w+)\2\s[\s\S]*?(?:\r?\n|\r)\3/,lookbehind:!0,greedy:!0,inside:{bash:a}},{pattern:/(^|[^\\](?:\\\\)*)"(?:\\[\s\S]|\$\([^)]+\)|\$(?!\()|`[^`]+`|[^"\\`$])*"/,lookbehind:!0,greedy:!0,inside:n},{pattern:/(^|[^$\\])'[^']*'/,lookbehind:!0,greedy:!0},{pattern:/\$'(?:[^'\\]|\\[\s\S])*'/,greedy:!0,inside:{entity:n.entity}}],environment:{pattern:RegExp("\\$?"+t),alias:"constant"},variable:n.variable,function:{pattern:/(^|[\s;|&]|[<>]\()(?:add|apropos|apt|apt-cache|apt-get|aptitude|aspell|automysqlbackup|awk|basename|bash|bc|bconsole|bg|bzip2|cal|cargo|cat|cfdisk|chgrp|chkconfig|chmod|chown|chroot|cksum|clear|cmp|column|comm|composer|cp|cron|crontab|csplit|curl|cut|date|dc|dd|ddrescue|debootstrap|df|diff|diff3|dig|dir|dircolors|dirname|dirs|dmesg|docker|docker-compose|du|egrep|eject|env|ethtool|expand|expect|expr|fdformat|fdisk|fg|fgrep|file|find|fmt|fold|format|free|fsck|ftp|fuser|gawk|git|gparted|grep|groupadd|groupdel|groupmod|groups|grub-mkconfig|gzip|halt|head|hg|history|host|hostname|htop|iconv|id|ifconfig|ifdown|ifup|import|install|ip|java|jobs|join|kill|killall|less|link|ln|locate|logname|logrotate|look|lpc|lpr|lprint|lprintd|lprintq|lprm|ls|lsof|lynx|make|man|mc|mdadm|mkconfig|mkdir|mke2fs|mkfifo|mkfs|mkisofs|mknod|mkswap|mmv|more|most|mount|mtools|mtr|mutt|mv|nano|nc|netstat|nice|nl|node|nohup|notify-send|npm|nslookup|op|open|parted|passwd|paste|pathchk|ping|pkill|pnpm|podman|podman-compose|popd|pr|printcap|printenv|ps|pushd|pv|quota|quotacheck|quotactl|ram|rar|rcp|reboot|remsync|rename|renice|rev|rm|rmdir|rpm|rsync|scp|screen|sdiff|sed|sendmail|seq|service|sftp|sh|shellcheck|shuf|shutdown|sleep|slocate|sort|split|ssh|stat|strace|su|sudo|sum|suspend|swapon|sync|sysctl|tac|tail|tar|tee|time|timeout|top|touch|tr|traceroute|tsort|tty|umount|uname|unexpand|uniq|units|unrar|unshar|unzip|update-grub|uptime|useradd|userdel|usermod|users|uudecode|uuencode|v|vcpkg|vdir|vi|vim|virsh|vmstat|wait|watch|wc|wget|whereis|which|who|whoami|write|xargs|xdg-open|yarn|yes|zenity|zip|zsh|zypper)(?=$|[)\s;|&])/,lookbehind:!0},keyword:{pattern:/(^|[\s;|&]|[<>]\()(?:case|do|done|elif|else|esac|fi|for|function|if|in|select|then|until|while)(?=$|[)\s;|&])/,lookbehind:!0},builtin:{pattern:/(^|[\s;|&]|[<>]\()(?:\.|:|alias|bind|break|builtin|caller|cd|command|continue|declare|echo|enable|eval|exec|exit|export|getopts|hash|help|let|local|logout|mapfile|printf|pwd|read|readarray|readonly|return|set|shift|shopt|source|test|times|trap|type|typeset|ulimit|umask|unalias|unset)(?=$|[)\s;|&])/,lookbehind:!0,alias:"class-name"},boolean:{pattern:/(^|[\s;|&]|[<>]\()(?:false|true)(?=$|[)\s;|&])/,lookbehind:!0},"file-descriptor":{pattern:/\B&\d\b/,alias:"important"},operator:{pattern:/\d?<>|>\||\+=|=[=~]?|!=?|<<[<-]?|[&\d]?>>|\d[<>]&?|[<>][&=]?|&[>&]?|\|[&|]?/,inside:{"file-descriptor":{pattern:/^\d/,alias:"important"}}},punctuation:/\$?\(\(?|\)\)?|\.\.|[{}[\];\\]/,number:{pattern:/(^|\s)(?:[1-9]\d*|0)(?:[.,]\d+)?\b/,lookbehind:!0}},a.inside=e.languages.bash;for(var s=["comment","function-name","for-or-select","assign-left","parameter","string","environment","function","keyword","builtin","boolean","file-descriptor","operator","punctuation","number"],o=n.variable[1].inside,i=0;i<s.length;i++)o[s[i]]=e.languages.bash[s[i]];e.languages.sh=e.languages.bash,e.languages.shell=e.languages.bash}(Prism);</script>
+<script>Prism.languages.python={comment:{pattern:/(^|[^\\])#.*/,lookbehind:!0,greedy:!0},"string-interpolation":{pattern:/(?:f|fr|rf)(?:("""|''')[\s\S]*?\1|("|')(?:\\.|(?!\2)[^\\\r\n])*\2)/i,greedy:!0,inside:{interpolation:{pattern:/((?:^|[^{])(?:\{\{)*)\{(?!\{)(?:[^{}]|\{(?!\{)(?:[^{}]|\{(?!\{)(?:[^{}])+\})+\})+\}/,lookbehind:!0,inside:{"format-spec":{pattern:/(:)[^:(){}]+(?=\}$)/,lookbehind:!0},"conversion-option":{pattern:/![sra](?=[:}]$)/,alias:"punctuation"},rest:null}},string:/[\s\S]+/}},"triple-quoted-string":{pattern:/(?:[rub]|br|rb)?("""|''')[\s\S]*?\1/i,greedy:!0,alias:"string"},string:{pattern:/(?:[rub]|br|rb)?("|')(?:\\.|(?!\1)[^\\\r\n])*\1/i,greedy:!0},function:{pattern:/((?:^|\s)def[ \t]+)[a-zA-Z_]\w*(?=\s*\()/g,lookbehind:!0},"class-name":{pattern:/(\bclass\s+)\w+/i,lookbehind:!0},decorator:{pattern:/(^[\t ]*)@\w+(?:\.\w+)*/m,lookbehind:!0,alias:["annotation","punctuation"],inside:{punctuation:/\./}},keyword:/\b(?:_(?=\s*:)|and|as|assert|async|await|break|case|class|continue|def|del|elif|else|except|exec|finally|for|from|global|if|import|in|is|lambda|match|nonlocal|not|or|pass|print|raise|return|try|while|with|yield)\b/,builtin:/\b(?:__import__|abs|all|any|apply|ascii|basestring|bin|bool|buffer|bytearray|bytes|callable|chr|classmethod|cmp|coerce|compile|complex|delattr|dict|dir|divmod|enumerate|eval|execfile|file|filter|float|format|frozenset|getattr|globals|hasattr|hash|help|hex|id|input|int|intern|isinstance|issubclass|iter|len|list|locals|long|map|max|memoryview|min|next|object|oct|open|ord|pow|property|range|raw_input|reduce|reload|repr|reversed|round|set|setattr|slice|sorted|staticmethod|str|sum|super|tuple|type|unichr|unicode|vars|xrange|zip)\b/,boolean:/\b(?:False|None|True)\b/,number:/\b0(?:b(?:_?[01])+|o(?:_?[0-7])+|x(?:_?[a-f0-9])+)\b|(?:\b\d+(?:_\d+)*(?:\.(?:\d+(?:_\d+)*)?)?|\B\.\d+(?:_\d+)*)(?:e[+-]?\d+(?:_\d+)*)?j?(?!\w)/i,operator:/[-+%=]=?|!=|:=|\*\*?=?|\/\/?=?|<[<=>]?|>[=>]?|[&|^~]/,punctuation:/[{}[\];(),.:]/},Prism.languages.python["string-interpolation"].inside.interpolation.inside.rest=Prism.languages.python,Prism.languages.py=Prism.languages.python;</script>
+<script>!function(e){e.languages.typescript=e.languages.extend("javascript",{"class-name":{pattern:/(\b(?:class|extends|implements|instanceof|interface|new|type)\s+)(?!keyof\b)(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*(?:\s*<(?:[^<>]|<(?:[^<>]|<[^<>]*>)*>)*>)?/,lookbehind:!0,greedy:!0,inside:null},builtin:/\b(?:Array|Function|Promise|any|boolean|console|never|number|string|symbol|unknown)\b/}),e.languages.typescript.keyword.push(/\b(?:abstract|declare|is|keyof|readonly|require)\b/,/\b(?:asserts|infer|interface|module|namespace|type)\b(?=\s*(?:[{_$a-zA-Z\xA0-\uFFFF]|$))/,/\btype\b(?=\s*(?:[\{*]|$))/),delete e.languages.typescript.parameter,delete e.languages.typescript["literal-property"];var s=e.languages.extend("typescript",{});delete s["class-name"],e.languages.typescript["class-name"].inside=s,e.languages.insertBefore("typescript","function",{decorator:{pattern:/@[$\w\xA0-\uFFFF]+/,inside:{at:{pattern:/^@/,alias:"operator"},function:/^[\s\S]+/}},"generic-function":{pattern:/#?(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*\s*<(?:[^<>]|<(?:[^<>]|<[^<>]*>)*>)*>(?=\s*\()/,greedy:!0,inside:{function:/^#?(?!\s)[_$a-zA-Z\xA0-\uFFFF](?:(?!\s)[$\w\xA0-\uFFFF])*/,generic:{pattern:/<[\s\S]+/,alias:"class-name",inside:s}}}}),e.languages.ts=e.languages.typescript}(Prism);</script>
+<script>!function(e){var n=/[*&][^\s[\]{},]+/,r=/!(?:<[\w\-%#;/?:@&=+$,.!~*'()[\]]+>|(?:[a-zA-Z\d-]*!)?[\w\-%#;/?:@&=+$.~*'()]+)?/,t="(?:"+r.source+"(?:[ \t]+"+n.source+")?|"+n.source+"(?:[ \t]+"+r.source+")?)",a="(?:[^\\s\\x00-\\x08\\x0e-\\x1f!\"#%&'*,\\-:>?@[\\]`{|}\\x7f-\\x84\\x86-\\x9f\\ud800-\\udfff\\ufffe\\uffff]|[?:-]<PLAIN>)(?:[ \t]*(?:(?![#:])<PLAIN>|:<PLAIN>))*".replace(/<PLAIN>/g,(function(){return"[^\\s\\x00-\\x08\\x0e-\\x1f,[\\]{}\\x7f-\\x84\\x86-\\x9f\\ud800-\\udfff\\ufffe\\uffff]"})),d="\"(?:[^\"\\\\\r\n]|\\\\.)*\"|'(?:[^'\\\\\r\n]|\\\\.)*'";function o(e,n){n=(n||"").replace(/m/g,"")+"m";var r="([:\\-,[{]\\s*(?:\\s<<prop>>[ \t]+)?)(?:<<value>>)(?=[ \t]*(?:$|,|\\]|\\}|(?:[\r\n]\\s*)?#))".replace(/<<prop>>/g,(function(){return t})).replace(/<<value>>/g,(function(){return e}));return RegExp(r,n)}e.languages.yaml={scalar:{pattern:RegExp("([\\-:]\\s*(?:\\s<<prop>>[ \t]+)?[|>])[ \t]*(?:((?:\r?\n|\r)[ \t]+)\\S[^\r\n]*(?:\\2[^\r\n]+)*)".replace(/<<prop>>/g,(function(){return t}))),lookbehind:!0,alias:"string"},comment:/#.*/,key:{pattern:RegExp("((?:^|[:\\-,[{\r\n?])[ \t]*(?:<<prop>>[ \t]+)?)<<key>>(?=\\s*:\\s)".replace(/<<prop>>/g,(function(){return t})).replace(/<<key>>/g,(function(){return"(?:"+a+"|"+d+")"}))),lookbehind:!0,greedy:!0,alias:"atrule"},directive:{pattern:/(^[ \t]*)%.+/m,lookbehind:!0,alias:"important"},datetime:{pattern:o("\\d{4}-\\d\\d?-\\d\\d?(?:[tT]|[ \t]+)\\d\\d?:\\d{2}:\\d{2}(?:\\.\\d*)?(?:[ \t]*(?:Z|[-+]\\d\\d?(?::\\d{2})?))?|\\d{4}-\\d{2}-\\d{2}|\\d\\d?:\\d{2}(?::\\d{2}(?:\\.\\d*)?)?"),lookbehind:!0,alias:"number"},boolean:{pattern:o("false|true","i"),lookbehind:!0,alias:"important"},null:{pattern:o("null|~","i"),lookbehind:!0,alias:"important"},string:{pattern:o(d),lookbehind:!0,greedy:!0},number:{pattern:o("[+-]?(?:0x[\\da-f]+|0o[0-7]+|(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[+-]?\\d+)?|\\.inf|\\.nan)","i"),lookbehind:!0},tag:r,important:n,punctuation:/---|[:[\]{}\-,|>?]|\.\.\./},e.languages.yml=e.languages.yaml}(Prism);</script>
+<script>Prism.languages.sql={comment:{pattern:/(^|[^\\])(?:\/\*[\s\S]*?\*\/|(?:--|\/\/|#).*)/,lookbehind:!0},variable:[{pattern:/@(["'`])(?:\\[\s\S]|(?!\1)[^\\])+\1/,greedy:!0},/@[\w.$]+/],string:{pattern:/(^|[^@\\])("|')(?:\\[\s\S]|(?!\2)[^\\]|\2\2)*\2/,greedy:!0,lookbehind:!0},identifier:{pattern:/(^|[^@\\])`(?:\\[\s\S]|[^`\\]|``)*`/,greedy:!0,lookbehind:!0,inside:{punctuation:/^`|`$/}},function:/\b(?:AVG|COUNT|FIRST|FORMAT|LAST|LCASE|LEN|MAX|MID|MIN|MOD|NOW|ROUND|SUM|UCASE)(?=\s*\()/i,keyword:/\b(?:ACTION|ADD|AFTER|ALGORITHM|ALL|ALTER|ANALYZE|ANY|APPLY|AS|ASC|AUTHORIZATION|AUTO_INCREMENT|BACKUP|BDB|BEGIN|BERKELEYDB|BIGINT|BINARY|BIT|BLOB|BOOL|BOOLEAN|BREAK|BROWSE|BTREE|BULK|BY|CALL|CASCADED?|CASE|CHAIN|CHAR(?:ACTER|SET)?|CHECK(?:POINT)?|CLOSE|CLUSTERED|COALESCE|COLLATE|COLUMNS?|COMMENT|COMMIT(?:TED)?|COMPUTE|CONNECT|CONSISTENT|CONSTRAINT|CONTAINS(?:TABLE)?|CONTINUE|CONVERT|CREATE|CROSS|CURRENT(?:_DATE|_TIME|_TIMESTAMP|_USER)?|CURSOR|CYCLE|DATA(?:BASES?)?|DATE(?:TIME)?|DAY|DBCC|DEALLOCATE|DEC|DECIMAL|DECLARE|DEFAULT|DEFINER|DELAYED|DELETE|DELIMITERS?|DENY|DESC|DESCRIBE|DETERMINISTIC|DISABLE|DISCARD|DISK|DISTINCT|DISTINCTROW|DISTRIBUTED|DO|DOUBLE|DROP|DUMMY|DUMP(?:FILE)?|DUPLICATE|ELSE(?:IF)?|ENABLE|ENCLOSED|END|ENGINE|ENUM|ERRLVL|ERRORS|ESCAPED?|EXCEPT|EXEC(?:UTE)?|EXISTS|EXIT|EXPLAIN|EXTENDED|FETCH|FIELDS|FILE|FILLFACTOR|FIRST|FIXED|FLOAT|FOLLOWING|FOR(?: EACH ROW)?|FORCE|FOREIGN|FREETEXT(?:TABLE)?|FROM|FULL|FUNCTION|GEOMETRY(?:COLLECTION)?|GLOBAL|GOTO|GRANT|GROUP|HANDLER|HASH|HAVING|HOLDLOCK|HOUR|IDENTITY(?:COL|_INSERT)?|IF|IGNORE|IMPORT|INDEX|INFILE|INNER|INNODB|INOUT|INSERT|INT|INTEGER|INTERSECT|INTERVAL|INTO|INVOKER|ISOLATION|ITERATE|JOIN|KEYS?|KILL|LANGUAGE|LAST|LEAVE|LEFT|LEVEL|LIMIT|LINENO|LINES|LINESTRING|LOAD|LOCAL|LOCK|LONG(?:BLOB|TEXT)|LOOP|MATCH(?:ED)?|MEDIUM(?:BLOB|INT|TEXT)|MERGE|MIDDLEINT|MINUTE|MODE|MODIFIES|MODIFY|MONTH|MULTI(?:LINESTRING|POINT|POLYGON)|NATIONAL|NATURAL|NCHAR|NEXT|NO|NONCLUSTERED|NULLIF|NUMERIC|OFF?|OFFSETS?|ON|OPEN(?:DATASOURCE|QUERY|ROWSET)?|OPTIMIZE|OPTION(?:ALLY)?|ORDER|OUT(?:ER|FILE)?|OVER|PARTIAL|PARTITION|PERCENT|PIVOT|PLAN|POINT|POLYGON|PRECEDING|PRECISION|PREPARE|PREV|PRIMARY|PRINT|PRIVILEGES|PROC(?:EDURE)?|PUBLIC|PURGE|QUICK|RAISERROR|READS?|REAL|RECONFIGURE|REFERENCES|RELEASE|RENAME|REPEAT(?:ABLE)?|REPLACE|REPLICATION|REQUIRE|RESIGNAL|RESTORE|RESTRICT|RETURN(?:ING|S)?|REVOKE|RIGHT|ROLLBACK|ROUTINE|ROW(?:COUNT|GUIDCOL|S)?|RTREE|RULE|SAVE(?:POINT)?|SCHEMA|SECOND|SELECT|SERIAL(?:IZABLE)?|SESSION(?:_USER)?|SET(?:USER)?|SHARE|SHOW|SHUTDOWN|SIMPLE|SMALLINT|SNAPSHOT|SOME|SONAME|SQL|START(?:ING)?|STATISTICS|STATUS|STRIPED|SYSTEM_USER|TABLES?|TABLESPACE|TEMP(?:ORARY|TABLE)?|TERMINATED|TEXT(?:SIZE)?|THEN|TIME(?:STAMP)?|TINY(?:BLOB|INT|TEXT)|TOP?|TRAN(?:SACTIONS?)?|TRIGGER|TRUNCATE|TSEQUAL|TYPES?|UNBOUNDED|UNCOMMITTED|UNDEFINED|UNION|UNIQUE|UNLOCK|UNPIVOT|UNSIGNED|UPDATE(?:TEXT)?|USAGE|USE|USER|USING|VALUES?|VAR(?:BINARY|CHAR|CHARACTER|YING)|VIEW|WAITFOR|WARNINGS|WHEN|WHERE|WHILE|WITH(?: ROLLUP|IN)?|WORK|WRITE(?:TEXT)?|YEAR)\b/i,boolean:/\b(?:FALSE|NULL|TRUE)\b/i,number:/\b0x[\da-f]+\b|\b\d+(?:\.\d*)?|\B\.\d+\b/i,operator:/[-+*\/=%^~]|&&?|\|\|?|!=?|<(?:=>?|<|>)?|>[>=]?|\b(?:AND|BETWEEN|DIV|ILIKE|IN|IS|LIKE|NOT|OR|REGEXP|RLIKE|SOUNDS LIKE|XOR)\b/i,punctuation:/[;[\]()`,.]/};</script>
+<script>Prism.languages.markup={comment:{pattern:/<!--(?:(?!<!--)[\s\S])*?-->/,greedy:!0},prolog:{pattern:/<\?[\s\S]+?\?>/,greedy:!0},doctype:{pattern:/<!DOCTYPE(?:[^>"'[\]]|"[^"]*"|'[^']*')+(?:\[(?:[^<"'\]]|"[^"]*"|'[^']*'|<(?!!--)|<!--(?:[^-]|-(?!->))*-->)*\]\s*)?>/i,greedy:!0,inside:{"internal-subset":{pattern:/(^[^\[]*\[)[\s\S]+(?=\]>$)/,lookbehind:!0,greedy:!0,inside:null},string:{pattern:/"[^"]*"|'[^']*'/,greedy:!0},punctuation:/^<!|>$|[[\]]/,"doctype-tag":/^DOCTYPE/i,name:/[^\s<>'"]+/}},cdata:{pattern:/<!\[CDATA\[[\s\S]*?\]\]>/i,greedy:!0},tag:{pattern:/<\/?(?!\d)[^\s>\/=$<%]+(?:\s(?:\s*[^\s>\/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s'">=]+(?=[\s>]))|(?=[\s/>])))+)?\s*\/?>/,greedy:!0,inside:{tag:{pattern:/^<\/?[^\s>\/]+/,inside:{punctuation:/^<\/?/,namespace:/^[^\s>\/:]+:/}},"special-attr":[],"attr-value":{pattern:/=\s*(?:"[^"]*"|'[^']*'|[^\s'">=]+)/,inside:{punctuation:[{pattern:/^=/,alias:"attr-equals"},{pattern:/^(\s*)["']|["']$/,lookbehind:!0}]}},punctuation:/\/?>/,"attr-name":{pattern:/[^\s>\/]+/,inside:{namespace:/^[^\s>\/:]+:/}}}},entity:[{pattern:/&[\da-z]{1,8};/i,alias:"named-entity"},/&#x?[\da-f]{1,8};/i]},Prism.languages.markup.tag.inside["attr-value"].inside.entity=Prism.languages.markup.entity,Prism.languages.markup.doctype.inside["internal-subset"].inside=Prism.languages.markup,Prism.hooks.add("wrap",(function(a){"entity"===a.type&&(a.attributes.title=a.content.replace(/&amp;/,"&"))})),Object.defineProperty(Prism.languages.markup.tag,"addInlined",{value:function(a,e){var s={};s["language-"+e]={pattern:/(^<!\[CDATA\[)[\s\S]+?(?=\]\]>$)/i,lookbehind:!0,inside:Prism.languages[e]},s.cdata=/^<!\[CDATA\[|\]\]>$/i;var t={"included-cdata":{pattern:/<!\[CDATA\[[\s\S]*?\]\]>/i,inside:s}};t["language-"+e]={pattern:/[\s\S]+/,inside:Prism.languages[e]};var n={};n[a]={pattern:RegExp("(<__[^>]*>)(?:<!\\[CDATA\\[(?:[^\\]]|\\](?!\\]>))*\\]\\]>|(?!<!\\[CDATA\\[)[^])*?(?=</__>)".replace(/__/g,(function(){return a})),"i"),lookbehind:!0,greedy:!0,inside:t},Prism.languages.insertBefore("markup","cdata",n)}}),Object.defineProperty(Prism.languages.markup.tag,"addAttribute",{value:function(a,e){Prism.languages.markup.tag.inside["special-attr"].push({pattern:RegExp("(^|[\"'\\s])(?:"+a+")\\s*=\\s*(?:\"[^\"]*\"|'[^']*'|[^\\s'\">=]+(?=[\\s>]))","i"),lookbehind:!0,inside:{"attr-name":/^[^\s=]+/,"attr-value":{pattern:/=[\s\S]+/,inside:{value:{pattern:/(^=\s*(["']|(?!["'])))\S[\s\S]*(?=\2$)/,lookbehind:!0,alias:[e,"language-"+e],inside:Prism.languages[e]},punctuation:[{pattern:/^=/,alias:"attr-equals"},/"|'/]}}}})}}),Prism.languages.html=Prism.languages.markup,Prism.languages.mathml=Prism.languages.markup,Prism.languages.svg=Prism.languages.markup,Prism.languages.xml=Prism.languages.extend("markup",{}),Prism.languages.ssml=Prism.languages.xml,Prism.languages.atom=Prism.languages.xml,Prism.languages.rss=Prism.languages.xml;</script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,securityLevel:'loose',theme:'dark'})</script>
+<script>document.getElementById("hamburger").addEventListener("click",function(){document.getElementById("nav-items").classList.toggle("open")});document.querySelectorAll("#nav-items .nav-item").forEach(function(a){a.addEventListener("click",function(){document.getElementById("nav-items").classList.remove("open")})});</script>
+</body></html>

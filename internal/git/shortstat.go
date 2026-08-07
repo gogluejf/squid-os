@@ -1,8 +1,12 @@
 package git
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -18,13 +22,18 @@ var shortstatRe = regexp.MustCompile(`(\d+)\s+insertion|(\d+)\s+deletion`)
 
 // gitCmd runs a git command in the given directory and returns stdout.
 func gitCmd(dir string, args ...string) string {
+	return strings.TrimSpace(string(gitCmdBytes(dir, args...)))
+}
+
+// gitCmdBytes runs a git command and preserves raw output, including NULs.
+func gitCmdBytes(dir string, args ...string) []byte {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
-		return ""
+		return nil
 	}
-	return strings.TrimSpace(string(out))
+	return out
 }
 
 // parseShortstat extracts insertions and deletions from git --shortstat output.
@@ -42,6 +51,40 @@ func parseShortstat(output string) (int, int) {
 		}
 	}
 	return insertions, deletions
+}
+
+const maxUntrackedTextBytes = 8 << 20
+
+// untrackedStats returns added text lines and the number of untracked files.
+// Porcelain -z keeps filenames unquoted and NUL-delimited. Binary, oversized,
+// unreadable, and empty files still contribute to the file count but not lines.
+func untrackedStats(dir string) (lines, files int) {
+	output := gitCmdBytes(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	for _, entry := range bytes.Split(output, []byte{0}) {
+		if len(entry) < 4 || entry[0] != '?' || entry[1] != '?' || entry[2] != ' ' {
+			continue
+		}
+		files++
+		path := filepath.Join(dir, string(entry[3:]))
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Size() == 0 || info.Size() > maxUntrackedTextBytes {
+			continue
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		data, readErr := io.ReadAll(io.LimitReader(file, maxUntrackedTextBytes+1))
+		closeErr := file.Close()
+		if readErr != nil || closeErr != nil || len(data) > maxUntrackedTextBytes || bytes.IndexByte(data, 0) >= 0 {
+			continue
+		}
+		lines += bytes.Count(data, []byte{'\n'})
+		if data[len(data)-1] != '\n' {
+			lines++
+		}
+	}
+	return lines, files
 }
 
 // ShortStat returns a color-coded git status string for the given directory.
@@ -74,6 +117,8 @@ func ShortStat(dir string, showLabels ...bool) string {
 		insertions += i
 		deletions += d
 	}
+	untrackedLines, untrackedFiles := untrackedStats(dir)
+	insertions += untrackedLines
 
 	bg := lipgloss.Color(style.P.BgFooter)
 	dimStyle := lipgloss.NewStyle().
@@ -89,7 +134,7 @@ func ShortStat(dir string, showLabels ...bool) string {
 	}
 	label := dimStyle.Render(prefix) + orangeStyle.Render(hash)
 
-	if insertions > 0 || deletions > 0 {
+	if insertions > 0 || deletions > 0 || untrackedFiles > 0 {
 		parts := []string{label}
 
 		if insertions > 0 {
@@ -104,6 +149,10 @@ func ShortStat(dir string, showLabels ...bool) string {
 				Background(bg).
 				Foreground(lipgloss.Color("203"))
 			parts = append(parts, delStyle.Render(fmt.Sprintf(" -%d", deletions)))
+		}
+
+		if untrackedFiles > 0 {
+			parts = append(parts, dimStyle.Render(fmt.Sprintf(" ?%d", untrackedFiles)))
 		}
 
 		return dir + " " + strings.Join(parts, "") + dimStyle.Render("]")

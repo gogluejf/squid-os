@@ -7,7 +7,61 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 )
 
-func TestListifySplitsAtLogicalCursorAcrossSoftWrap(t *testing.T) {
+func TestListifyStartsBelowPlainText(t *testing.T) {
+	ta := newListifyTextarea("intro paragraph", 80, len("intro paragraph"))
+	got := listify(ta)
+	if got.Value() != "intro paragraph\n1> " {
+		t.Fatalf("value = %q", got.Value())
+	}
+	assertListifyCursor(t, got, 1, len("1> "))
+}
+
+func TestListifyStartsAtEmptyCurrentLine(t *testing.T) {
+	ta := newListifyTextarea("intro paragraph\n", 80, 0)
+	ta.CursorDown()
+	got := listify(ta)
+	if got.Value() != "intro paragraph\n1> " {
+		t.Fatalf("value = %q", got.Value())
+	}
+	assertListifyCursor(t, got, 1, len("1> "))
+}
+
+func TestListifyContinuesBlockFromBlankLineAfterNumberedItem(t *testing.T) {
+	ta := newListifyTextarea("1> first\n", 80, 0)
+	got := listify(ta)
+	if got.Value() != "1> first\n2> " {
+		t.Fatalf("value = %q", got.Value())
+	}
+	assertListifyCursor(t, got, 1, len("2> "))
+}
+
+func TestListifyCreatesIndependentLocalBlocks(t *testing.T) {
+	value := "intro\n1> first\n2> second\noutro\nafter"
+	ta := newListifyTextarea(value, 80, len("after"))
+	for ta.Line() < 4 {
+		ta.CursorDown()
+	}
+	got := listify(ta)
+	want := value + "\n1> "
+	if got.Value() != want {
+		t.Fatalf("value = %q, want %q", got.Value(), want)
+	}
+}
+
+func TestListifyContinuesOnlyContiguousNumberedBlock(t *testing.T) {
+	value := "intro\n1> first\n2> second\noutro\n1> another"
+	ta := newListifyTextarea(value, 80, len("1> another"))
+	for ta.Line() < 4 {
+		ta.CursorDown()
+	}
+	got := listify(ta)
+	want := value + "\n2> "
+	if got.Value() != want {
+		t.Fatalf("value = %q, want %q", got.Value(), want)
+	}
+}
+
+func TestListifySplitsNumberedLineAtLogicalCursorAcrossSoftWrap(t *testing.T) {
 	const text = "asdf sadfsadf sdf sadf sadf asdf dsf dsaf eee sadf sadf sadf sadf sadf d asdf sadf asdf sadfsdf sadfdf zzzze adsf asdf sadfsdf ee111122eee"
 	const marker = "zzzz"
 	cursor := strings.Index(text, marker)
@@ -15,7 +69,7 @@ func TestListifySplitsAtLogicalCursorAcrossSoftWrap(t *testing.T) {
 		t.Fatal("test marker missing")
 	}
 
-	ta := newListifyTextarea(text, 32, cursor)
+	ta := newListifyTextarea("1> "+text, 32, len("1> ")+cursor)
 	if info := ta.LineInfo(); info.StartColumn == 0 {
 		t.Fatal("test cursor must be on a soft-wrapped visual row")
 	}
@@ -25,27 +79,27 @@ func TestListifySplitsAtLogicalCursorAcrossSoftWrap(t *testing.T) {
 	if got.Value() != want {
 		t.Fatalf("listify split at wrong position\ngot:  %q\nwant: %q", got.Value(), want)
 	}
-	if got.Line() != 1 || logicalCursorColumn(got) != len([]rune("2> ")) {
-		t.Fatalf("cursor after split: line=%d col=%d", got.Line(), logicalCursorColumn(got))
+	assertListifyCursor(t, got, 1, len("2> "))
+}
+
+func TestListifyRenumbersOnlyCurrentBlock(t *testing.T) {
+	value := "1> first\n8> second\nprose\n9> other"
+	ta := newListifyTextarea(value, 80, 0)
+	for ta.Line() > 1 {
+		ta.CursorUp()
+	}
+	ta.SetCursor(len("8> second"))
+	got := listify(ta)
+	want := "1> first\n2> second\n3> \nprose\n9> other"
+	if got.Value() != want {
+		t.Fatalf("value = %q, want %q", got.Value(), want)
 	}
 }
 
-func TestRenumberInPlacePreservesLogicalCursorAcrossSoftWrap(t *testing.T) {
-	const content = "this is a long broken numbered line that wraps several times before its cursor marker"
-	value := "9> " + content
-	cursor := len([]rune("9> this is a long broken numbered line that wraps"))
-
-	ta := newListifyTextarea(value, 24, cursor)
-	if !isNumberingBroken(ta) {
-		t.Fatal("test input should have broken numbering")
-	}
-	got := renumberInPlace(ta)
-	if got.Value() != "1> "+content {
-		t.Fatalf("renumbered value = %q", got.Value())
-	}
-	// Prefix width is unchanged ("9> " -> "1> "), so logical cursor is exact.
-	if logicalCursorColumn(got) != cursor {
-		t.Fatalf("cursor moved from %d to %d", cursor, logicalCursorColumn(got))
+func assertListifyCursor(t *testing.T, ta textarea.Model, line, col int) {
+	t.Helper()
+	if ta.Line() != line || logicalCursorColumn(ta) != col {
+		t.Fatalf("cursor line=%d col=%d, want line=%d col=%d", ta.Line(), logicalCursorColumn(ta), line, col)
 	}
 }
 

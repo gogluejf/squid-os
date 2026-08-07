@@ -9,7 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// numberRegex matches lines starting with "N>" followed by optional space
+// numberRegex matches lines starting with "N>" followed by optional space.
 var numberRegex = regexp.MustCompile(`^(\d+)>\s?`)
 
 // getPrefixLen returns the rune length of the number prefix on a line.
@@ -26,157 +26,131 @@ func logicalCursorColumn(ta textarea.Model) int {
 	return info.StartColumn + info.ColumnOffset
 }
 
-// listify applies sequential numbering to the textarea content.
+// listify starts or continues a local numbered block.
 //
-// Behavior depends on cursor position:
+// Plain text never becomes part of a list implicitly:
+//   - On a non-empty plain line, Tab inserts "1> " on the following line.
+//   - On an empty plain line, Tab turns that line into "1> ".
 //
-//   - Cursor on empty line (or line with only whitespace):
-//     If it's the last line → append a new numbered item below.
-//     Otherwise → insert a numbered line here, renumber everything below.
-//
-//   - Cursor on a line with content:
-//     If cursor is at column 0 → insert new numbered line before this one, push content down.
-//     If cursor is at end of line → keep this line numbered, append new numbered line below.
-//     If cursor is mid-line → split at cursor, prefix stays on current number,
-//     suffix moves to next number.
-//
-//   - All lines are renumbered sequentially 1>, 2>, 3> regardless of prior state.
-//
-//   - If a line lost its number prefix (user deleted it), it gets a new one in sequence.
-//
-// Returns the new textarea model with updated value and cursor position.
+// On a numbered line, Tab keeps the existing split/append behavior and
+// renumbers only the contiguous numbered block containing that line. Separate
+// lists therefore restart at 1 and prose between lists remains untouched.
 func listify(ta textarea.Model) textarea.Model {
 	value := ta.Value()
-	cursorLine := ta.Line()
-	rawCursorCol := logicalCursorColumn(ta) // raw logical column including prefix
-
 	lines := splitLines(value)
-	totalLines := len(lines)
+	cursorLine := clampLine(ta.Line(), len(lines))
+	cursorCol := logicalCursorColumn(ta)
 
-	// Clamp cursor line
-	if cursorLine < 0 {
-		cursorLine = 0
+	if !numberRegex.MatchString(lines[cursorLine]) {
+		return startLocalList(ta, lines, cursorLine)
 	}
-	if cursorLine >= totalLines {
-		cursorLine = totalLines - 1
+	return continueLocalList(ta, lines, cursorLine, cursorCol)
+}
+
+func startLocalList(ta textarea.Model, lines []string, cursorLine int) textarea.Model {
+	if strings.TrimSpace(lines[cursorLine]) == "" {
+		if cursorLine > 0 && numberRegex.MatchString(lines[cursorLine-1]) {
+			blockStart, _ := numberedBlock(lines, cursorLine-1)
+			for i := blockStart; i < cursorLine; i++ {
+				lines[i] = fmtNumbered(i-blockStart+1, stripNumber(lines[i]))
+			}
+			lines[cursorLine] = fmtNumbered(cursorLine-blockStart+1, "")
+		} else {
+			lines[cursorLine] = fmtNumbered(1, "")
+		}
+		return setTextareaValueAndCursor(ta, lines, cursorLine, getPrefixLen(lines[cursorLine]))
 	}
 
-	// Convert raw cursor column to content-relative column by subtracting prefix length
-	cursorText := lines[cursorLine]
-	prefixLen := getPrefixLen(cursorText)
-	cursorContent := stripNumber(cursorText)
-	contentLen := len([]rune(cursorContent))
+	insertAt := cursorLine + 1
+	lines = insertLine(lines, insertAt, fmtNumbered(1, ""))
+	return setTextareaValueAndCursor(ta, lines, insertAt, getPrefixLen(lines[insertAt]))
+}
 
+func continueLocalList(ta textarea.Model, lines []string, cursorLine, rawCursorCol int) textarea.Model {
+	blockStart, blockEnd := numberedBlock(lines, cursorLine)
+	line := lines[cursorLine]
+	prefixLen := getPrefixLen(line)
+	content := stripNumber(line)
+	contentRunes := []rune(content)
 	cursorCol := rawCursorCol - prefixLen
-	// Clamp column to content length
 	if cursorCol < 0 {
 		cursorCol = 0
 	}
-	if cursorCol > contentLen {
-		cursorCol = contentLen
+	if cursorCol > len(contentRunes) {
+		cursorCol = len(contentRunes)
 	}
 
-	var result []string
-	nextNum := 1
-	newCursorLine := cursorLine // default: cursor stays on same line
-	newCursorCol := 0           // cursor column within the new target line (content-relative)
-
-	for i, line := range lines {
-		content := stripNumber(line)
-
-		if i == cursorLine {
-			if cursorCol == 0 {
-				// Cursor at beginning of line content
-				if strings.TrimSpace(content) == "" {
-					// Empty line: if the textarea was completely empty (single line,
-					// no content anywhere), just produce one numbered line.
-					// Otherwise, keep this line and append a new numbered line below.
-					if totalLines == 1 && strings.TrimSpace(value) == "" {
-						result = append(result, fmtNumbered(nextNum, ""))
-						nextNum++
-						newCursorLine = i
-						newCursorCol = 0
-					} else {
-						result = append(result, fmtNumbered(nextNum, ""))
-						nextNum++
-						result = append(result, fmtNumbered(nextNum, ""))
-						nextNum++
-						newCursorLine = i + 1
-						newCursorCol = 0
-					}
-				} else {
-					// Content exists: insert empty numbered line BEFORE this content
-					result = append(result, fmtNumbered(nextNum, ""))
-					nextNum++
-					// Original content becomes next line
-					result = append(result, fmtNumbered(nextNum, content))
-					nextNum++
-					newCursorLine = i // cursor on the empty line we just inserted
-					newCursorCol = 0
-				}
-			} else if cursorCol >= contentLen {
-				// Cursor at end of line content
-				result = append(result, fmtNumbered(nextNum, content))
-				nextNum++
-				// Append new empty numbered line below
-				result = append(result, fmtNumbered(nextNum, ""))
-				nextNum++
-				newCursorLine = i + 1
-				newCursorCol = 0
-			} else {
-				// Mid-line split: cursor moves to beginning of the "after" part on next line
-				runes := []rune(content)
-				before := string(runes[:cursorCol])
-				after := string(runes[cursorCol:])
-
-				result = append(result, fmtNumbered(nextNum, before))
-				nextNum++
-
-				if after != "" {
-					result = append(result, fmtNumbered(nextNum, after))
-				} else {
-					result = append(result, fmtNumbered(nextNum, ""))
-				}
-				nextNum++
-				newCursorLine = i + 1 // cursor on the new "after" line
-				newCursorCol = 0      // at the beginning of the content
-			}
-		} else {
-			// Renumber every other line sequentially
-			result = append(result, fmtNumbered(nextNum, content))
-			nextNum++
-		}
+	// Normalize the existing block to raw content before inserting. This avoids
+	// confusing literal item content such as "2> example" with another prefix.
+	for i := blockStart; i <= blockEnd; i++ {
+		lines[i] = stripNumber(lines[i])
 	}
 
-	// Build new value
-	newValue := strings.Join(result, "\n")
-
-	// Apply to textarea
-	ta.SetValue(newValue)
-
-	// Move cursor to the target line
-	// After SetValue, the textarea resets to row 0, col 0.
-	if newCursorLine < 0 {
-		newCursorLine = 0
+	insertAt := cursorLine + 1
+	if cursorCol == 0 && strings.TrimSpace(content) != "" {
+		// At the content start, insert a blank item before this item.
+		insertAt = cursorLine
+		lines = insertLine(lines, insertAt, "")
+		blockEnd++
+	} else if cursorCol < len(contentRunes) {
+		// In the middle, keep the prefix on this item and move the suffix to
+		// the next item.
+		lines[cursorLine] = string(contentRunes[:cursorCol])
+		lines = insertLine(lines, insertAt, string(contentRunes[cursorCol:]))
+		blockEnd++
+	} else {
+		// At the end (including an empty item), append a blank item.
+		lines[cursorLine] = content
+		lines = insertLine(lines, insertAt, "")
+		blockEnd++
 	}
-	if newCursorLine >= len(result) {
-		newCursorLine = len(result) - 1
+
+	// Renumber only this contiguous block.
+	for i := blockStart; i <= blockEnd; i++ {
+		lines[i] = fmtNumbered(i-blockStart+1, lines[i])
 	}
 
-	// Move to target line by calling CursorDown/Up
-	for ta.Line() < newCursorLine {
+	return setTextareaValueAndCursor(ta, lines, insertAt, getPrefixLen(lines[insertAt]))
+}
+
+func numberedBlock(lines []string, at int) (start, end int) {
+	start, end = at, at
+	for start > 0 && numberRegex.MatchString(lines[start-1]) {
+		start--
+	}
+	for end+1 < len(lines) && numberRegex.MatchString(lines[end+1]) {
+		end++
+	}
+	return start, end
+}
+
+func insertLine(lines []string, at int, line string) []string {
+	lines = append(lines, "")
+	copy(lines[at+1:], lines[at:])
+	lines[at] = line
+	return lines
+}
+
+func setTextareaValueAndCursor(ta textarea.Model, lines []string, line, col int) textarea.Model {
+	ta.SetValue(strings.Join(lines, "\n"))
+	for ta.Line() < line {
 		ta.CursorDown()
 	}
-	for ta.Line() > newCursorLine {
+	for ta.Line() > line {
 		ta.CursorUp()
 	}
-
-	// Set cursor column: prefix length + content-relative offset
-	targetLine := result[newCursorLine]
-	targetPrefixLen := getPrefixLen(targetLine)
-	ta.SetCursor(targetPrefixLen + newCursorCol)
-
+	ta.SetCursor(col)
 	return ta
+}
+
+func clampLine(line, count int) int {
+	if line < 0 {
+		return 0
+	}
+	if line >= count {
+		return count - 1
+	}
+	return line
 }
 
 // stripNumber removes the "N> " prefix from a line, returning the content after it.
@@ -188,149 +162,23 @@ func stripNumber(line string) string {
 	return line
 }
 
-// fmtNumbered formats a line with "N> content" prefix.
+// fmtNumbered formats a line with an "N> " prefix.
 func fmtNumbered(num int, content string) string {
 	return strconv.Itoa(num) + "> " + content
 }
 
-// isNumberingBroken checks if the textarea has a broken numbering sequence —
-// meaning some lines have number prefixes and some don't, or the sequence is
-// out of order (e.g. 1>, 3>, or a line with its prefix deleted).
-//
-// Returns false (not broken) when:
-//   - No lines have any number prefix at all (plain text, normal listify applies).
-//   - All lines are already correctly numbered sequentially.
-//
-// Returns true (broken) when:
-//   - At least one line has a prefix and at least one doesn't (mixed).
-//   - The prefixes exist but are out of sequence.
-func isNumberingBroken(ta textarea.Model) bool {
-	value := ta.Value()
-	if value == "" {
-		return false
-	}
-	lines := splitLines(value)
-
-	hasPrefix := 0
-	noPrefix := 0
-	outOfOrder := false
-
-	for i, line := range lines {
-		if numberRegex.MatchString(line) {
-			hasPrefix++
-			content := stripNumber(line)
-			reconstructed := fmtNumbered(i+1, content)
-			if line != reconstructed {
-				outOfOrder = true
-			}
-		} else {
-			noPrefix++
-		}
-	}
-
-	// All lines lack prefixes → not broken, just plain text.
-	if hasPrefix == 0 {
-		return false
-	}
-
-	// All lines have correct sequential prefixes → not broken.
-	if noPrefix == 0 && !outOfOrder {
-		return false
-	}
-
-	// Mixed: some have prefixes, some don't → broken.
-	// Or out of order → broken.
-	return true
-}
-
-// renumberInPlace renumbers all lines sequentially without adding or removing lines,
-// and preserves the cursor position exactly.
-func renumberInPlace(ta textarea.Model) textarea.Model {
-	value := ta.Value()
-	cursorLine := ta.Line()
-	rawCursorCol := logicalCursorColumn(ta)
-
-	lines := splitLines(value)
-
-	// Clamp cursor
-	if cursorLine < 0 {
-		cursorLine = 0
-	}
-	if cursorLine >= len(lines) {
-		cursorLine = len(lines) - 1
-	}
-
-	// Convert raw cursor column to content-relative
-	cursorPrefixLen := getPrefixLen(lines[cursorLine])
-	cursorCol := rawCursorCol - cursorPrefixLen
-	cursorContent := stripNumber(lines[cursorLine])
-	contentLen := len([]rune(cursorContent))
-	if cursorCol < 0 {
-		cursorCol = 0
-	}
-	if cursorCol > contentLen {
-		cursorCol = contentLen
-	}
-
-	// Renumber every line in place
-	var result []string
-	for i, line := range lines {
-		content := stripNumber(line)
-		result = append(result, fmtNumbered(i+1, content))
-	}
-
-	newValue := strings.Join(result, "\n")
-	ta.SetValue(newValue)
-
-	// Restore cursor to the same line
-	if cursorLine >= len(result) {
-		cursorLine = len(result) - 1
-	}
-
-	for ta.Line() < cursorLine {
-		ta.CursorDown()
-	}
-	for ta.Line() > cursorLine {
-		ta.CursorUp()
-	}
-
-	// Set cursor: new prefix length + content-relative offset
-	targetPrefixLen := getPrefixLen(result[cursorLine])
-	ta.SetCursor(targetPrefixLen + cursorCol)
-
-	return ta
-}
-
-// applyListify applies listify to the model's textarea.
-// If numbering is broken (out of order or missing prefixes), Tab simply
-// fixes the numbering in place — no new lines, no cursor movement.
-// On the next Tab press, numbering will be correct and normal behavior resumes.
-// Otherwise, it runs full listify for normal insert/split behavior.
+// applyListify applies local list behavior to the model's textarea.
 func (m *Model) applyListify() (tea.Model, tea.Cmd) {
-	ta := m.textarea
-
-	if isNumberingBroken(ta) {
-		// Just fix the numbering in place, preserve cursor exactly
-		ta = renumberInPlace(ta)
-	} else {
-		ta = listify(ta)
-	}
-
-	m.textarea = ta
+	m.textarea = listify(m.textarea)
 	m.autoSizeTextarea()
 	m.recalcLayout()
 	return m, nil
 }
 
-// splitLines splits a string into lines without a trailing empty element.
+// splitLines preserves all logical lines, including a trailing empty line.
 func splitLines(s string) []string {
 	if s == "" {
 		return []string{""}
 	}
-	lines := strings.Split(s, "\n")
-	// Remove trailing empty element from a trailing newline
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	return lines
+	return strings.Split(s, "\n")
 }

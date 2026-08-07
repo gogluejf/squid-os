@@ -325,7 +325,7 @@ func TestTabFallsBackToListifyWithoutCompletion(t *testing.T) {
 	m.textarea.SetValue("plain text")
 	updated, _ := m.handleChatKey(tea.KeyMsg{Type: tea.KeyTab})
 	got := updated.(*Model).textarea.Value()
-	if got != "1> plain text\n2> " {
+	if got != "plain text\n1> " {
 		t.Fatalf("Tab fallback = %q", got)
 	}
 }

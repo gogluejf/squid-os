@@ -56,8 +56,11 @@ type Model struct {
 	draft      string
 
 	// Capability autocomplete. Escape dismisses the current token's suggestion
-	// until its text changes.
+	// until its text changes. Selection is transient and tied to one completion.
 	completionDismissed string
+	completionSelected  int
+	completionSelectKey string
+	completionWindow    int
 
 	// Misc
 	attachedImage string

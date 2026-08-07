@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/rivo/uniseg"
 	"squid-os/internal/style"
 )
 
@@ -175,12 +176,15 @@ func longestCandidateNamePrefix(values []capabilityCandidate) string {
 	return string(prefix)
 }
 
-// applyCapabilityCompletion qualifies a unique candidate. For multiple
-// candidates it only extends their certain common prefix; if it cannot extend,
-// Tab is deliberately non-destructive and leaves the suggestion visible.
+// applyCapabilityCompletion qualifies a selected or unique candidate. For
+// multiple unselected candidates it only extends their certain common prefix;
+// if it cannot extend, Tab is deliberately non-destructive.
 func (m *Model) applyCapabilityCompletion(c capabilityCompletion) (tea.Model, tea.Cmd) {
 	target := ""
-	if len(c.candidates) == 1 {
+	selected, hasSelection := m.selectedCapabilityCandidate(c)
+	if hasSelection {
+		target = selected.qualified()
+	} else if len(c.candidates) == 1 {
 		target = c.candidates[0].qualified()
 	} else {
 		target = longestCandidateNamePrefix(c.candidates)
@@ -192,7 +196,7 @@ func (m *Model) applyCapabilityCompletion(c capabilityCompletion) (tea.Model, te
 	lines := strings.Split(m.textarea.Value(), "\n")
 	line := []rune(lines[c.line])
 	suffix := line[c.end:]
-	if len(c.candidates) == 1 {
+	if len(c.candidates) == 1 || hasSelection {
 		// A qualified completion is a complete reference. Insert one trailing
 		// space so the user can continue typing without manually terminating it.
 		// Reuse an existing whitespace delimiter rather than duplicating it.
@@ -212,8 +216,58 @@ func (m *Model) applyCapabilityCompletion(c capabilityCompletion) (tea.Model, te
 	}
 	m.textarea.SetCursor(c.start + 1 + len([]rune(target)))
 	m.completionDismissed = ""
+	m.clearCapabilitySelection()
 	m.autoSizeTextarea()
 	return m, nil
+}
+
+func (m *Model) clearCapabilitySelection() {
+	m.completionSelected = 0
+	m.completionSelectKey = ""
+	m.completionWindow = 0
+}
+
+// moveCapabilitySelection enters selection mode on the first item, then moves
+// left/right without wrapping. It returns false when no completion is active.
+func (m *Model) moveCapabilitySelection(delta int) bool {
+	completion, ok := m.activeCapabilityCompletion()
+	if !ok {
+		m.clearCapabilitySelection()
+		return false
+	}
+	key := completion.key()
+	if m.completionSelectKey != key {
+		m.completionSelectKey = key
+		m.completionSelected = 0
+		m.completionWindow = 0
+		return true
+	}
+	m.completionSelected += delta
+	if m.completionSelected < 0 {
+		m.completionSelected = 0
+	}
+	if last := len(completion.candidates) - 1; m.completionSelected > last {
+		m.completionSelected = last
+	}
+	m.ensureCapabilitySelectionVisible(completion)
+	return true
+}
+
+func (m *Model) ensureCapabilitySelectionVisible(completion capabilityCompletion) {
+	available := capabilitySuggestionAvailable(m.width)
+	if m.completionSelected < m.completionWindow {
+		m.completionWindow = m.completionSelected
+	}
+	for m.completionSelected >= capabilityVisibleEnd(completion.candidates, m.completionWindow, available) {
+		m.completionWindow++
+	}
+}
+
+func (m Model) selectedCapabilityCandidate(c capabilityCompletion) (capabilityCandidate, bool) {
+	if m.completionSelectKey != c.key() || m.completionSelected < 0 || m.completionSelected >= len(c.candidates) {
+		return capabilityCandidate{}, false
+	}
+	return c.candidates[m.completionSelected], true
 }
 
 func capabilityCandidateStyle(kind string) lipgloss.Style {
@@ -227,29 +281,98 @@ func capabilityCandidateStyle(kind string) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
 }
 
-func (m Model) renderCapabilitySuggestion() string {
+const (
+	capabilitySuggestionPrefix = "complete  "
+	capabilitySuggestionHelp   = "  [←/→, tab/enter, esc]"
+	capabilitySuggestionGap    = 2
+	capabilityOverflowWidth    = 5 // "‹ " before and "  ›" after candidates.
+)
+
+func capabilitySuggestionAvailable(width int) int {
+	// Reserve both possible overflow markers so fitting remains stable while
+	// navigating. Measure terminal cells rather than bytes or rune count.
+	chrome := uniseg.StringWidth(capabilitySuggestionPrefix) +
+		uniseg.StringWidth(capabilitySuggestionHelp) + capabilityOverflowWidth
+	available := width - chrome
+	if available < 1 {
+		return 1
+	}
+	return available
+}
+
+func capabilityVisibleEnd(candidates []capabilityCandidate, start, available int) int {
+	used := 0
+	end := start
+	for end < len(candidates) {
+		width := uniseg.StringWidth(candidates[end].qualified())
+		if end > start {
+			width += capabilitySuggestionGap
+		}
+		if used+width > available {
+			break
+		}
+		used += width
+		end++
+	}
+	// On very narrow terminals, always expose one complete selectable item.
+	if end == start && start < len(candidates) {
+		end++
+	}
+	return end
+}
+
+func (m *Model) capabilityVisibleRange(completion capabilityCompletion) (int, int) {
+	const chromeWidth = 38 // "complete", navigation help, and breathing room.
+	available := m.width - chromeWidth
+	if available < 1 {
+		available = 1
+	}
+	start := m.completionWindow
+	if start < 0 || start >= len(completion.candidates) {
+		start = 0
+	}
+	if m.completionSelectKey == completion.key() {
+		if m.completionSelected < start {
+			start = m.completionSelected
+		}
+		for {
+			end := capabilityVisibleEnd(completion.candidates, start, available)
+			if m.completionSelected < end || start >= m.completionSelected {
+				break
+			}
+			start++
+		}
+	}
+	m.completionWindow = start
+	return start, capabilityVisibleEnd(completion.candidates, start, available)
+}
+
+func (m *Model) renderCapabilitySuggestion() string {
 	completion, ok := m.activeCapabilityCompletion()
 	if !ok {
 		return ""
 	}
 
-	const maxShown = 5
-	shown := completion.candidates
-	remaining := 0
-	if len(shown) > maxShown {
-		remaining = len(shown) - maxShown
-		shown = shown[:maxShown]
-	}
+	start, end := m.capabilityVisibleRange(completion)
+	shown := completion.candidates[start:end]
 
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(style.P.TextDim))
+	arrow := lipgloss.NewStyle().Foreground(lipgloss.Color(style.P.TextPrimary))
 	items := make([]string, len(shown))
 	for i, candidate := range shown {
-		items[i] = capabilityCandidateStyle(candidate.kind).Render(candidate.qualified())
+		candidateStyle := capabilityCandidateStyle(candidate.kind)
+		if m.completionSelectKey == completion.key() && start+i == m.completionSelected {
+			candidateStyle = candidateStyle.Background(lipgloss.Color(style.P.BgSelected)).Bold(true)
+		}
+		items[i] = candidateStyle.Render(candidate.qualified())
 	}
-	text := dim.Render("complete  ") + strings.Join(items, "  ")
-	if remaining > 0 {
-		text += dim.Render("  +" + strconv.Itoa(remaining))
+	text := dim.Render(capabilitySuggestionPrefix) + strings.Join(items, "  ")
+	if start > 0 {
+		text = dim.Render(capabilitySuggestionPrefix) + arrow.Render("‹ ") + strings.Join(items, "  ")
 	}
-	text += dim.Render("  ·  tab complete  ·  esc cancel")
+	if end < len(completion.candidates) {
+		text += arrow.Render("  ›")
+	}
+	text += dim.Render(capabilitySuggestionHelp)
 	return lipgloss.NewStyle().Width(m.width).Render(text)
 }

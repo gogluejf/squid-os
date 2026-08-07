@@ -129,6 +129,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Escape):
 		if completion, ok := m.activeCapabilityCompletion(); ok {
 			m.completionDismissed = completion.key()
+			m.clearCapabilitySelection()
 			m.recalcLayout()
 			return m, nil
 		}
@@ -147,9 +148,12 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.startHistorySearch()
 
 	case key.Matches(msg, keys.Send):
-		if completion, ok := m.activeCapabilityCompletion(); ok && len(completion.candidates) == 1 {
-			updated, _ := (&m).applyCapabilityCompletion(completion)
-			m = *updated.(*Model)
+		if completion, ok := m.activeCapabilityCompletion(); ok {
+			_, selected := m.selectedCapabilityCandidate(completion)
+			if selected || len(completion.candidates) == 1 {
+				updated, _ := (&m).applyCapabilityCompletion(completion)
+				m = *updated.(*Model)
+			}
 		}
 		return m.sendMessage()
 
@@ -169,6 +173,22 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return (&m).applyCapabilityCompletion(completion)
 		}
 		return m.applyListify()
+
+	case key.Matches(msg, keys.Left):
+		if (&m).moveCapabilitySelection(-1) {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.textarea, cmd = m.textarea.Update(msg)
+		return m, cmd
+
+	case key.Matches(msg, keys.Right):
+		if (&m).moveCapabilitySelection(1) {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.textarea, cmd = m.textarea.Update(msg)
+		return m, cmd
 
 	case key.Matches(msg, keys.Up):
 		// Only browse history if cursor is on the first line of the textarea
@@ -192,6 +212,9 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	default:
 		_, hadCapabilitySuggestion := m.activeCapabilityCompletion()
+		if m.completionSelectKey != "" {
+			m.clearCapabilitySelection()
+		}
 		oldLines := m.textarea.LineCount()
 		var cmd tea.Cmd
 		m.textarea, cmd = m.textarea.Update(msg)

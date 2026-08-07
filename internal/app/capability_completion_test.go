@@ -241,6 +241,85 @@ func TestEnterDoesNotGuessAmbiguousCompletion(t *testing.T) {
 	}
 }
 
+func TestArrowSelectionAndTabAccept(t *testing.T) {
+	m := newCompletionTestModel(t, []string{"alpha", "beta"}, []string{"gamma"})
+	m.textarea.SetValue("use @")
+
+	updated, _ := m.handleChatKey(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+	if m.completionSelectKey == "" || m.completionSelected != 0 {
+		t.Fatalf("first arrow selection = key %q index %d", m.completionSelectKey, m.completionSelected)
+	}
+	updated, _ = m.handleChatKey(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+	if m.completionSelected != 1 {
+		t.Fatalf("second right index = %d", m.completionSelected)
+	}
+	updated, _ = m.handleChatKey(tea.KeyMsg{Type: tea.KeyTab})
+	if got := updated.(*Model).textarea.Value(); got != "use @skill/beta " {
+		t.Fatalf("selected Tab = %q", got)
+	}
+}
+
+func TestArrowSelectionClampsAndTypingClears(t *testing.T) {
+	m := newCompletionTestModel(t, []string{"alpha", "beta"}, nil)
+	m.textarea.SetValue("use @")
+
+	for range 5 {
+		updated, _ := m.handleChatKey(tea.KeyMsg{Type: tea.KeyRight})
+		m = updated.(Model)
+	}
+	if m.completionSelected != 1 {
+		t.Fatalf("right should clamp at last item, got %d", m.completionSelected)
+	}
+	updated, _ := m.handleChatKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	m = updated.(Model)
+	if m.completionSelectKey != "" {
+		t.Fatal("typing should leave selection mode")
+	}
+}
+
+func TestSuggestionNeverExceedsTerminalWidth(t *testing.T) {
+	m := newCompletionTestModel(t, []string{"very-long-skill-name", "another-long-skill-name"}, []string{"very-long-agent-name"})
+	m.session.Doc.Config.Tools = []string{"set_working_dir", "write_file"}
+	m.textarea.SetValue("use @")
+
+	for _, width := range []int{40, 58, 80, 120} {
+		m.width = width
+		m.completionWindow = 0
+		rendered := m.renderCapabilitySuggestion()
+		if got := lipgloss.Width(rendered); got > width {
+			t.Fatalf("width %d rendered %d cells", width, got)
+		}
+	}
+}
+
+func TestSelectionWindowShiftsByWidth(t *testing.T) {
+	m := newCompletionTestModel(t, []string{"aaaaaaaa", "bbbbbbbb", "cccccccc", "dddddddd"}, nil)
+	m.width = 58
+	m.textarea.SetValue("use @")
+
+	updated, _ := m.handleChatKey(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+	updated, _ = m.handleChatKey(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+	if m.completionSelected != 1 || m.completionWindow != 1 {
+		t.Fatalf("narrow window selection=%d start=%d", m.completionSelected, m.completionWindow)
+	}
+}
+
+func TestSelectedEnterAcceptsAmbiguousCandidate(t *testing.T) {
+	m := newCompletionTestModel(t, []string{"alpha", "beta"}, nil)
+	m.textarea.SetValue("use @")
+	updated, _ := m.handleChatKey(tea.KeyMsg{Type: tea.KeyRight})
+	m = updated.(Model)
+
+	updated, _ = m.handleChatKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := updated.(Model).textarea.Value(); got != "use @skill/alpha " {
+		t.Fatalf("selected Enter = %q", got)
+	}
+}
+
 func TestTabFallsBackToListifyWithoutCompletion(t *testing.T) {
 	m := newCompletionTestModel(t, []string{"sop-chain"}, nil)
 	m.textarea.SetValue("plain text")

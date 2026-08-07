@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>file-context-compaction</title>
-<style>:root { 
-    --bg: #1e1e1e; --nav: #252526; --card: #2d2d2d; --border: #3e3e42; 
-    --text: #d4d4d4; --accent: #569cd6; --success: #4ec9b0; 
-    --warn: #ce9178; --code-bg: #202020; 
+<style>:root {
+    --bg: #1e1e1e; --nav: #252526; --card: #2d2d2d; --border: #3e3e42;
+    --text: #d4d4d4; --accent: #569cd6; --success: #4ec9b0;
+    --warn: #ce9178; --code-bg: #202020;
 }
 body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); margin:0; line-height:1.6; }
 nav { background:var(--nav); padding:15px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:center; align-items:center; position:sticky; top:0; z-index:100; flex-wrap:wrap; }
@@ -47,33 +47,33 @@ nav { background:var(--nav); padding:15px 20px; border-bottom:1px solid var(--bo
 /* Diagram */
 .diagram-canvas { background:var(--card); border:1px solid var(--border); padding:15px; border-radius:8px; margin-bottom:30px; font-family:Consolas,monospace; }
 .diagram-header { display:flex; align-items:center; gap:10px; margin-bottom:10px; color:var(--warn); font-size:12px; font-weight:bold; text-transform:uppercase; }
-.diagram-content { 
-    color:#ddd; 
-    white-space:pre-wrap; 
-    background:#202020; 
-    padding:15px; 
-    border-radius:4px; 
+.diagram-content {
+    color:#ddd;
+    white-space:pre-wrap;
+    background:#202020;
+    padding:15px;
+    border-radius:4px;
 }
-.flow-diagram { 
-    display:flex; 
-    flex-wrap:wrap; 
-    align-items:center; 
-    gap:10px; 
-    margin-top:0; 
-    padding: 15px; 
+.flow-diagram {
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:10px;
+    margin-top:0;
+    padding: 15px;
     background: #202020;
     border-radius: 4px;
 }
-.flow-step { 
-    background:#252526; 
-    border:1px solid #555; 
-    padding:8px 12px; 
-    border-radius:6px; 
-    color:#ddd; 
-    font-family:Consolas,monospace; 
-    font-size:13px; 
-    line-height: 1.4; 
-    white-space:pre-wrap; 
+.flow-step {
+    background:#252526;
+    border:1px solid #555;
+    padding:8px 12px;
+    border-radius:6px;
+    color:#ddd;
+    font-family:Consolas,monospace;
+    font-size:13px;
+    line-height: 1.4;
+    white-space:pre-wrap;
 }
 .flow-arrow { color:#888; font-weight:bold; font-size:16px; margin: 0 5px; }
 
@@ -90,27 +90,27 @@ nav { background:var(--nav); padding:15px 20px; border-bottom:1px solid var(--bo
 }
 
 /* Snippet Override */
-.snippet-block { 
-    background: #202020 !important; 
-    padding: 15px !important; 
-    border-radius: 6px !important; 
-    border: 1px solid var(--border) !important; 
-    margin-top: 5px; 
-    overflow: hidden; 
+.snippet-block {
+    background: #202020 !important;
+    padding: 15px !important;
+    border-radius: 6px !important;
+    border: 1px solid var(--border) !important;
+    margin-top: 5px;
+    overflow: hidden;
 }
-.snippet-block pre { 
-    margin: 0 !important; 
-    background: transparent !important; 
-    padding: 0 !important; 
+.snippet-block pre {
+    margin: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
     color: #d4d4d4 !important;
 }
-.snippet-block code { 
-    background: transparent !important; 
-    color: #d4d4d4 !important; 
-    font-family: Consolas, monospace !important; 
-    font-size: 13px !important; 
-    line-height: 1.5 !important; 
-    white-space: pre-wrap !important; 
+.snippet-block code {
+    background: transparent !important;
+    color: #d4d4d4 !important;
+    font-family: Consolas, monospace !important;
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+    white-space: pre-wrap !important;
 }
 .snippet-block code .token.keyword, .snippet-block code .token.selector, .snippet-block code .token.number, .snippet-block code .token.boolean, .snippet-block code .token.constant { color: #569cd6 !important; }
 .snippet-block code .token.string, .snippet-block code .token.char, .snippet-block code .token.attr-value { color: #ce9178 !important; }
@@ -206,9 +206,9 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
 </style>
 <style>code[class*=language-],pre[class*=language-]{color:#ccc;background:0 0;font-family:Consolas,Monaco,'Andale Mono','Ubuntu Mono',monospace;font-size:1em;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.5;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}pre[class*=language-]{padding:1em;margin:.5em 0;overflow:auto}:not(pre)>code[class*=language-],pre[class*=language-]{background:#2d2d2d}:not(pre)>code[class*=language-]{padding:.1em;border-radius:.3em;white-space:normal}.token.block-comment,.token.cdata,.token.comment,.token.doctype,.token.prolog{color:#999}.token.punctuation{color:#ccc}.token.attr-name,.token.deleted,.token.namespace,.token.tag{color:#e2777a}.token.function-name{color:#6196cc}.token.boolean,.token.function,.token.number{color:#f08d49}.token.class-name,.token.constant,.token.property,.token.symbol{color:#f8c555}.token.atrule,.token.builtin,.token.important,.token.keyword,.token.selector{color:#cc99cd}.token.attr-value,.token.char,.token.regex,.token.string,.token.variable{color:#7ec699}.token.entity,.token.operator,.token.url{color:#67cdcc}.token.bold,.token.important{font-weight:700}.token.italic{font-style:italic}.token.entity{cursor:help}.token.inserted{color:green}</style>
 </head><body>
-    <nav><a href="#epic-overview" class="nav-item home always-visible">🏠 Epic</a><div class="nav-items" id="nav-items"><a href="#session-compaction-setting" class="nav-item">Session Compaction Setting</a><a href="#ranged-file-reads" class="nav-item">Ranged File Reads</a><a href="#file-compaction-rules" class="nav-item">File Compaction Rules</a><a href="#compacted-request-context" class="nav-item">Compacted Request Context</a><a href="#live-context-visibility" class="nav-item">Live Context Visibility</a><a href="#compaction-observability" class="nav-item">Compaction Observability</a></div><button class="hamburger" id="hamburger" aria-label="Toggle menu"><span></span><span></span><span></span></button></nav>
+    <nav><a href="#epic-overview" class="nav-item home always-visible">🏠 Epic</a><div class="nav-items" id="nav-items"><a href="#session-compaction-setting" class="nav-item">Session Compaction Setting</a><a href="#ranged-file-reads" class="nav-item">Ranged File Reads</a><a href="#file-compaction-rules" class="nav-item">File Compaction Rules</a><a href="#compacted-request-context" class="nav-item">Compacted Request Context</a><a href="#structured-session-token-tally" class="nav-item">Structured Session Token Tally</a><a href="#live-context-visibility" class="nav-item">Live Context Visibility</a><a href="#compaction-observability" class="nav-item">Compaction Observability</a></div><button class="hamburger" id="hamburger" aria-label="Toggle menu"><span></span><span></span><span></span></button></nav>
     <div class="container">
-        
+
     <section id="epic-overview" class="epic-header">
         <h1>Dynamic File Context Compaction</h1>
         <div class="epic-meta">
@@ -222,14 +222,14 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
             </div>
         </div>
         <div class="milestone-grid">
-            
+
         <a href="#session-compaction-setting" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
                     <span class="ms-num">1</span>
                     <span class="ms-name">Session Compaction Setting</span>
                 </div>
-                <span class="pattern-tag">Settings snapshot into session configuration</span> 
+                <span class="pattern-tag">Settings snapshot into session configuration</span>
                 <p class="ms-count">1 Task(s)</p>
                 <ul class="ms-task-list"><li>1.1 - Resolve compaction from settings into session state</li></ul>
             </div>
@@ -240,7 +240,7 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
                     <span class="ms-num">2</span>
                     <span class="ms-name">Ranged File Reads</span>
                 </div>
-                <span class="pattern-tag">Structured partial observation with full-file freshness</span> 
+                <span class="pattern-tag">Structured partial observation with full-file freshness</span>
                 <p class="ms-count">1 Task(s)</p>
                 <ul class="ms-task-list"><li>2.1 - Support checksum-safe ranged read_file calls</li></ul>
             </div>
@@ -251,7 +251,7 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
                     <span class="ms-num">3</span>
                     <span class="ms-name">File Compaction Rules</span>
                 </div>
-                <span class="pattern-tag">Pure deterministic planner</span> 
+                <span class="pattern-tag">Pure deterministic planner</span>
                 <p class="ms-count">1 Task(s)</p>
                 <ul class="ms-task-list"><li>3.1 - Plan deterministic full-checkpoint compaction</li></ul>
             </div>
@@ -262,54 +262,65 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
                     <span class="ms-num">4</span>
                     <span class="ms-name">Compacted Request Context</span>
                 </div>
-                <span class="pattern-tag">Single request snapshot</span> 
+                <span class="pattern-tag">Single request snapshot</span>
                 <p class="ms-count">1 Task(s)</p>
                 <ul class="ms-task-list"><li>4.1 - Build and send the exact compacted request</li></ul>
+            </div>
+        </a>
+        <a href="#structured-session-token-tally" class="milestone-card-link">
+            <div class="milestone-card">
+                <div class="ms-header">
+                    <span class="ms-num">5</span>
+                    <span class="ms-name">Structured Session Token Tally</span>
+                </div>
+                <span class="pattern-tag">Persisted projection from canonical session history</span>
+                <p class="ms-count">4 Task(s)</p>
+                <ul class="ms-task-list"><li>5.1 - Persist a structured session token tally</li><li>5.2 - Keep TokenTally live across session mutations</li><li>5.3 - Migrate saved sessions to token_tally</li><li>5.4 - Consume token_tally in Chat Analytics</li></ul>
             </div>
         </a>
         <a href="#live-context-visibility" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
-                    <span class="ms-num">5</span>
+                    <span class="ms-num">6</span>
                     <span class="ms-name">Live Context Visibility</span>
                 </div>
-                <span class="pattern-tag">Revision-cached derived state</span> 
+                <span class="pattern-tag">Live projection rendering</span>
                 <p class="ms-count">1 Task(s)</p>
-                <ul class="ms-task-list"><li>5.1 - Show cached compacted context in the footer</li></ul>
+                <ul class="ms-task-list"><li>6.1 - Render live TokenTally in the footer</li></ul>
             </div>
         </a>
         <a href="#compaction-observability" class="milestone-card-link">
             <div class="milestone-card">
                 <div class="ms-header">
-                    <span class="ms-num">6</span>
+                    <span class="ms-num">7</span>
                     <span class="ms-name">Compaction Observability</span>
                 </div>
-                <span class="pattern-tag">Cross-implementation contract fixtures</span> 
+                <span class="pattern-tag">Cross-implementation contract fixtures</span>
                 <p class="ms-count">1 Task(s)</p>
-                <ul class="ms-task-list"><li>6.1 - Align Analytics with full and ranged read rules</li></ul>
+                <ul class="ms-task-list"><li>7.1 - Align Analytics with full and ranged read rules</li></ul>
             </div>
         </a>
         </div>
     </section>
-    
-        
+
+
         <section id="session-compaction-setting" class="milestone-section">
             <div class="section-header">
                 <span class="section-num">1</span>
                 <h2>Session Compaction Setting</h2>
-                <span class="pattern-badge">Settings snapshot into session configuration</span> 
+                <span class="pattern-badge">Settings snapshot into session configuration</span>
             </div>
-            
+
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
                 <div class="cell-value">Resolve one global context_compaction switch into new sessions and preserve it in saved sessions without CLI or agent overrides.</div>
             </div>
-            
+
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
                 <div class="cell-value">Settings and session JSON expose the switch, runtime resolution follows the documented precedence, and tests cover new and continued sessions.</div>
             </div>
-            
+
             <div class="diagram-canvas">
                 <div class="diagram-header">
                     <span class="icon">📐</span>
@@ -339,12 +350,12 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
                         <span class="cell-label">Why</span>
                         <span class="cell-value">Makes compaction a single settings-controlled behavior while keeping each session deterministic after creation.</span>
                     </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
                     <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  defaultconfig/settings.json</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/settings.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/runtime/runtime.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/runtime/runtime_test.go</li><li class="file-mod"><span class="action-sym">~</span>  .squid-os/plans/session-config-resolution.md</li></ul>
                 </div>
-                    
+
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
                     <pre><code class="language-json">type Settings struct {
@@ -361,7 +372,7 @@ type SessionConfig struct {
 // Existing session: persisted SessionConfig
 // No CLI or agent override.</code></pre>
                 </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
                     <ul class="acceptance-list"><li>The default settings file defines context_compaction.</li><li>New sessions copy the settings value into initial and config.</li><li>Existing interactive and autonomous sessions preserve their persisted value.</li><li>No CLI option, runtime Overrides field, or agent field controls compaction.</li><li>session-config-resolution.md documents settings-only resolution and immediate application.</li></ul>
@@ -374,19 +385,19 @@ type SessionConfig struct {
             <div class="section-header">
                 <span class="section-num">2</span>
                 <h2>Ranged File Reads</h2>
-                <span class="pattern-badge">Structured partial observation with full-file freshness</span> 
+                <span class="pattern-badge">Structured partial observation with full-file freshness</span>
             </div>
-            
+
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
                 <div class="cell-value">Let read_file return focused line ranges while retaining canonical file paths and full-file checksums for stale-file protection.</div>
             </div>
-            
+
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
                 <div class="cell-value">Full and ranged reads share the existing FileEntry/file_state flow, range reads return bounded content, and later compaction can distinguish partial reads from instruction arguments.</div>
             </div>
-            
+
             <div class="diagram-canvas">
                 <div class="diagram-header">
                     <span class="icon">📐</span>
@@ -420,12 +431,12 @@ type SessionConfig struct {
                         <span class="cell-label">Why</span>
                         <span class="cell-value">Provides the focused inspection efficiency currently obtained through sed without introducing a range registry or weakening stale-file detection.</span>
                     </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
                     <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/tools/core.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/tools/core_test.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/tool_exec.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/tool_exec_test.go</li></ul>
                 </div>
-                    
+
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
                     <pre><code class="language-go">// read_file input contract
@@ -440,7 +451,7 @@ type SessionConfig struct {
 // no range fields =&gt; full read
 // FileEntry.Path remains canonical and FileEntry.Checksum remains full-file.</code></pre>
                 </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
                     <ul class="acceptance-list"><li>Omitting both range arguments returns the complete file with unchanged behavior.</li><li>A valid inclusive range returns only the requested lines with stable line-bound semantics.</li><li>Invalid, reversed, zero, and out-of-bounds ranges return clear errors without updating file state.</li><li>A successful ranged read computes FileEntry.Checksum from the complete file bytes and merges it through the existing file_state path.</li><li>Multiple ranged reads of the same tracked file version succeed and do not invalidate one another.</li><li>If a ranged read detects that a previously tracked file changed externally, it is rejected without replacing the tracked checksum and asks for a full read.</li><li>A full read after an external change refreshes the tracked checksum through existing read behavior.</li><li>No range registry, coverage model, or FileStateEntry schema expansion is introduced.</li></ul>
@@ -453,19 +464,19 @@ type SessionConfig struct {
             <div class="section-header">
                 <span class="section-num">3</span>
                 <h2>File Compaction Rules</h2>
-                <span class="pattern-badge">Pure deterministic planner</span> 
+                <span class="pattern-badge">Pure deterministic planner</span>
             </div>
-            
+
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
                 <div class="cell-value">Derive one immutable compaction plan from persisted file-tool history using full-checkpoint rules and partial-read observations.</div>
             </div>
-            
+
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
                 <div class="cell-value">The planner distinguishes full reads from ranged reads using persisted arguments, compacts only events superseded by a later full checkpoint, and reports combined instruction/result savings without mutating history.</div>
             </div>
-            
+
             <div class="diagram-canvas">
                 <div class="diagram-header">
                     <span class="icon">📐</span>
@@ -501,12 +512,12 @@ type SessionConfig struct {
                         <span class="cell-label">Why</span>
                         <span class="cell-value">Centralizes safe file rules for request construction, footer accounting, Analytics parity, and later tool-specific extensions.</span>
                     </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
                     <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/compaction.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/compaction_test.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/compaction_benchmark_test.go</li></ul>
                 </div>
-                    
+
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
                     <pre><code class="language-go">type CompactionDecision struct {
@@ -545,7 +556,7 @@ func BuildCompactionPlan(messages []config.Message) CompactionPlan</code></pre>
 // write_file trace write/create =&gt; full checkpoint
 // edit_file =&gt; delta, including no-op read traces</code></pre>
                 </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
                     <ul class="acceptance-list"><li>The planner uses canonical FileEntry.path to group events and persisted read_file arguments to distinguish full from partial reads.</li><li>Successful full reads and write/create events are full checkpoints.</li><li>Ranged reads never supersede earlier reads, ranges, or edits.</li><li>A later full read, write, or create compacts all earlier successful events for that path, including ranged reads.</li><li>The latest checkpoint and all later partial reads and edits remain retained.</li><li>No-op edit_file calls that emit read are not checkpoints.</li><li>Failed and incomplete operations remain retained.</li><li>Raw, retained, and saved instruction/execution totals match persisted metrics.</li><li>Planning is deterministic and does not mutate messages.</li><li>The planner scans persisted history once, groups events by canonical path with maps, and performs direct decision lookup by tool-call ID.</li><li>The implementation avoids repeated whole-history scans per event and scales linearly with messages, tool calls, and file events.</li><li>Benchmarks report planner ns/op, B/op, and allocs/op for a large synthetic session.</li></ul>
@@ -558,19 +569,19 @@ func BuildCompactionPlan(messages []config.Message) CompactionPlan</code></pre>
             <div class="section-header">
                 <span class="section-num">4</span>
                 <h2>Compacted Request Context</h2>
-                <span class="pattern-badge">Single request snapshot</span> 
+                <span class="pattern-badge">Single request snapshot</span>
             </div>
-            
+
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
                 <div class="cell-value">Build, transform, and measure one exact provider-message snapshot for the next LLM request.</div>
             </div>
-            
+
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
                 <div class="cell-value">Enabled sessions send compacted file history with valid tool pairing; disabled sessions remain unchanged; reported compacted tokens describe the exact request.</div>
             </div>
-            
+
             <div class="diagram-canvas">
                 <div class="diagram-header">
                     <span class="icon">📐</span>
@@ -606,12 +617,12 @@ func BuildCompactionPlan(messages []config.Message) CompactionPlan</code></pre>
                         <span class="cell-label">Why</span>
                         <span class="cell-value">Prevents request construction and token reporting from drifting while preserving complete persisted history.</span>
                     </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
                     <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/context.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/context_test.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/engine.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/loop.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/context_benchmark_test.go</li></ul>
                 </div>
-                    
+
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
                     <pre><code class="language-go">type ContextTokens struct {
@@ -629,7 +640,7 @@ type Context struct {
 func BuildContext(messages []config.Message, enabled bool) Context
 func (s *Session) BuildContext() Context</code></pre>
                 </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
                     <ul class="acceptance-list"><li>Disabled compaction produces the existing provider messages and zero savings.</li><li>Enabled compaction preserves tool-call IDs, names, chronology, valid JSON arguments, and matching results.</li><li>Superseded read results are replaced while path and optional range arguments remain valid.</li><li>Superseded edit old_string/new_string and result content are replaced with fixed internal text.</li><li>Superseded write/create content and result content are replaced with fixed internal text.</li><li>Persisted messages are unchanged after BuildContext.</li><li>Compacted token count includes replacement overhead and describes Context.Messages exactly.</li><li>StartStreamWithContext sends Context.Messages without an independent rebuild.</li><li>Context transformation uses direct plan lookup, reuses unchanged strings where practical, and does not deep-copy the complete session history.</li><li>Benchmarks report request-building ns/op, B/op, and allocs/op for a large synthetic session.</li></ul>
@@ -638,61 +649,268 @@ func (s *Session) BuildContext() Context</code></pre>
                 <div class="task-footer"><span class="task-verify">✔ go test ./internal/chat -run Context</span> <span class="task-verify">✔ go test -bench &#x27;BuildContext&#x27; -benchmem ./internal/chat</span> </div>
             </div></div>
         </section>
-        <section id="live-context-visibility" class="milestone-section">
+        <section id="structured-session-token-tally" class="milestone-section">
             <div class="section-header">
                 <span class="section-num">5</span>
-                <h2>Live Context Visibility</h2>
-                <span class="pattern-badge">Revision-cached derived state</span> 
+                <h2>Structured Session Token Tally</h2>
+                <span class="pattern-badge">Persisted projection from canonical session history</span>
             </div>
-            
+
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
-                <div class="cell-value">Expose compacted next-request size in the footer without rescanning history on every render.</div>
+                <div class="cell-value">Replace the scalar total_tokens field with one structured lifetime and current next-request token tally calculated by Squid-OS.</div>
             </div>
-            
+
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">The footer context bar uses compacted next-request tokens, shows savings, preserves lifetime input/output counters, and refreshes after request-content mutations.</div>
+                <div class="cell-value">Saved sessions contain complete lifetime and context totals, existing sessions are migrated safely, and Chat Analytics consumes the shared payload instead of duplicating tally and compaction calculations.</div>
             </div>
-            
+
             <div class="diagram-canvas">
                 <div class="diagram-header">
                     <span class="icon">📐</span>
                     <span class="label">Architecture & Flow</span>
                 </div>
                 <pre class="mermaid">flowchart LR
-    M[message or tool mutation] --> I[invalidate Context cache]
-    F[footer render] --> Q{cache current}
-    Q -->|yes| U[use token totals]
-    Q -->|no| B[BuildContext once]
-    B --> U
-    U --> V[compacted over context window]
-    U --> L[lifetime input output separate]</pre>
+    H[session history] --> C[CalculateTokenTally]
+    C --> T[token_tally]
+    T --> S[session save]
+    T --> F[footer]
+    T --> A[Chat Analytics]
+    O[old sessions] --> M[verified migration]
+    M --> T</pre>
             </div>
             <div class="task-list">
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 5.1</span>
-                        <span class="task-name">Show cached compacted context in the footer</span>
+                        <span class="task-name">Persist a structured session token tally</span>
                         <span class="layer-badge" style="background:#569cd6">feature</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Cache the derived Context on Session mutations and update footer contracts to show compacted next-request usage and savings separately from lifetime input/output totals.</span>
+                        <span class="cell-value">Add one Go token tally contract that combines lifetime breakdowns with raw, compacted, and saved next-request context totals, and persist it instead of scalar total_tokens.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">Makes context-window pressure accurate without expensive recomputation on every TUI frame.</span>
+                        <span class="cell-value">Provides one reusable token overview for session files, saving, footer rendering, Analytics, and a future Squid server API.</span>
                     </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/tool_exec.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/render.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/ui/footer.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/ui/footer_test.go</li></ul>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/config/session.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/token_tally.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/token_tally_test.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/session_persistence.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/render.go</li></ul>
                 </div>
-                    
+
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">type TokenTally struct {
+    Lifetime LifetimeTokenTally `json:&quot;lifetime&quot;`
+    Context ContextTokenTally `json:&quot;context&quot;`
+}
+
+type LifetimeTokenTally struct {
+    Input InputTokenTally `json:&quot;input&quot;`
+    Output OutputTokenTally `json:&quot;output&quot;`
+    Total int `json:&quot;total&quot;`
+}
+
+type ContextTokenTally struct {
+    Raw int `json:&quot;raw&quot;`
+    Compacted int `json:&quot;compacted&quot;`
+    Saved int `json:&quot;saved&quot;`
+    SavedInstruction int `json:&quot;saved_instruction&quot;`
+    SavedExecution int `json:&quot;saved_execution&quot;`
+}
+
+func (s *Session) CalculateTokenTally() config.TokenTally</code></pre>
+                </div>
+
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>SessionDoc persists token_tally and no longer writes scalar total_tokens.</li><li>Lifetime input and output totals retain the existing user, tool execution, system prompt, tool definitions, synthetic, assistant, thinking, and tool instruction breakdowns.</li><li>Context raw, compacted, saved, saved instruction, and saved execution values come from the same Context used for request construction.</li><li>TokenTally totals are internally consistent and covered by unit tests.</li><li>Session save refreshes TokenTally immediately before serialization.</li><li>Footer data is populated from the in-memory TokenTally rather than independent total calculations.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/config ./internal/chat ./internal/app</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 5.2</span>
+                        <span class="task-name">Keep TokenTally live across session mutations</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Refresh SessionDoc.TokenTally at request-relevant mutation boundaries and use it as the footer token projection throughout the active session.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">A save-only tally would be stale; keeping it live makes footer and persisted values accurate without adding a separate context cache.</span>
+                    </div>
+
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/tool_exec.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/turn.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/loop.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/render.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/stream.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/app/session_persistence.go</li><li class="file-add"><span class="action-sym">+</span>  internal/chat/token_tally_lifecycle_test.go</li></ul>
+                </div>
+
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">func (s *Session) RefreshTokenTally()
+
+// Lifecycle contract:
+// new/load session -&gt; refresh
+// persisted request-content mutation -&gt; refresh
+// BuildContext -&gt; update Context tally from exact outgoing messages
+// footer -&gt; read Doc.TokenTally
+// save -&gt; final refresh safeguard then serialize</code></pre>
+                </div>
+
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>New and loaded sessions calculate TokenTally before the footer first reads it.</li><li>Appending or removing persisted user, assistant, synthetic, system, and internal messages refreshes the lifetime and next-request tally.</li><li>Completing tool execution and applying turn transitions refreshes TokenTally before the next LLM step.</li><li>BuildContext updates TokenTally.Context from the exact provider messages it returns and sends.</li><li>The footer reads SessionDoc.TokenTally and performs no history scan or compaction calculation during rendering.</li><li>During streaming, live output metrics are overlaid for display only; persisted TokenTally refreshes when the assistant message is saved.</li><li>Session save serializes the current TokenTally and performs a final refresh only as a correctness safeguard.</li><li>No separate context cache, contextDirty flag, or context revision is introduced.</li><li>Lifecycle tests prove tally values update after each mutation boundary and never remain stale.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/chat ./internal/app -run TokenTally</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 5.3</span>
+                        <span class="task-name">Migrate saved sessions to token_tally</span>
+                        <span class="layer-badge" style="background:#888">chore</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Use the workspace session-config-migrator to transform every saved session from total_tokens to a fully calculated token_tally payload.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Ensures existing sessions receive the same overview without silently losing history or requiring runtime fallback logic.</span>
+                    </div>
+
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  &lt;temp-dir&gt;/session_token_tally_migration.py</li></ul>
+                </div>
+
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-python">MIGRATION_API_VERSION = 1
+MIGRATION_ID = &quot;session-token-tally&quot;
+ALLOWED_CHANGED_PATHS = {&quot;total_tokens&quot;, &quot;token_tally&quot;}
+
+def migrate(document: dict) -&gt; dict: ...
+def validate(before: dict, after: dict) -&gt; list[str]: ...</code></pre>
+                </div>
+
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>Migration analysis and field mapping receive explicit approval before execution.</li><li>The callback calculates lifetime and current file-compaction context totals deterministically from each complete session.</li><li>The callback removes total_tokens only after token_tally is complete and validated.</li><li>The runner creates timestamped source-identical .bck and migrated .new trees without modifying live sessions.</li><li>Every discovered session is accounted for, source remains unchanged, and validation reports zero failures before adoption.</li><li>The migration report states exact source, backup, migrated paths, counts, changed paths, and adoption safety.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ python3 &lt;working-dir&gt;/.squid-os/skills/session-config-migrator/scripts/migrate_sessions.py --source &lt;sessions-dir&gt; --migration &lt;temp-dir&gt;/session_token_tally_migration.py</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 5.4</span>
+                        <span class="task-name">Consume token_tally in Chat Analytics</span>
+                        <span class="layer-badge" style="background:#c586c0">refactor</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Update Chat Analytics tally, dashboard, and file compaction projections to consume the persisted token_tally payload for migrated sessions.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Removes duplicated session-wide token aggregation and makes Squid-OS the source of truth for token totals.</span>
+                    </div>
+
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  &lt;skill-folder&gt;/scripts/server.py</li><li class="file-mod"><span class="action-sym">~</span>  &lt;skill-folder&gt;/scripts/test_file_compaction.py</li><li class="file-mod"><span class="action-sym">~</span>  &lt;skill-folder&gt;/assets/index.html</li></ul>
+                </div>
+
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-python"># API projection contract
+{
+  &quot;lifetime&quot;: session[&quot;token_tally&quot;][&quot;lifetime&quot;],
+  &quot;context&quot;: session[&quot;token_tally&quot;][&quot;context&quot;]
+}</code></pre>
+                </div>
+
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>The tally endpoint and dashboard summaries read lifetime totals from token_tally.</li><li>The files/compaction UI reads current raw, compacted, and saved context totals from token_tally.</li><li>Per-file rows continue to derive file-level details from tool history because token_tally is session-wide.</li><li>Migrated sessions require no duplicate session-wide tally or compaction calculation in Python.</li><li>Endpoint and UI tests verify the persisted payload is presented unchanged.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ python3 -m unittest discover -s &lt;skill-folder&gt;/scripts -p &#x27;test_*.py&#x27; -v</span> </div>
+            </div></div>
+        </section>
+        <section id="live-context-visibility" class="milestone-section">
+            <div class="section-header">
+                <span class="section-num">6</span>
+                <h2>Live Context Visibility</h2>
+                <span class="pattern-badge">Live projection rendering</span>
+            </div>
+
+            <div class="ms-overview-box">
+                <span class="cell-label">Objective</span>
+                <div class="cell-value">Render the live SessionDoc.TokenTally in the footer while keeping lifetime traffic and next-request context visually distinct.</div>
+            </div>
+
+            <div class="ms-success-box">
+                <span class="cell-label success">Success Criteria</span>
+                <div class="cell-value">The footer reads the maintained token tally without building context or scanning history, uses compacted next-request tokens for context pressure, and overlays active stream output only for display.</div>
+            </div>
+
+            <div class="diagram-canvas">
+                <div class="diagram-header">
+                    <span class="icon">📐</span>
+                    <span class="label">Architecture & Flow</span>
+                </div>
+                <pre class="mermaid">flowchart LR
+    T[SessionDoc TokenTally] --> F[FooterData]
+    S[active stream output] --> O[display overlay]
+    O --> F
+    F --> L[lifetime input output]
+    F --> C[compacted context over window]
+    F --> V[saved tokens]</pre>
+            </div>
+            <div class="task-list">
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 6.1</span>
+                        <span class="task-name">Render live TokenTally in the footer</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Update footer data and rendering to consume the live SessionDoc.TokenTally, displaying lifetime traffic separately from compacted next-request context and savings.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Makes context-window pressure accurate while keeping View rendering free of history scans, compaction work, and duplicate cache state.</span>
+                    </div>
+
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/app/render.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/ui/footer.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/ui/footer_test.go</li></ul>
+                </div>
+
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
                     <pre><code class="language-go">type FooterData struct {
@@ -702,37 +920,34 @@ func (s *Session) BuildContext() Context</code></pre>
     CompactedContextTokens int
     SavedContextTokens int
     ContextWindow int
-}
-
-func (s *Session) BuildContext() Context
-func (s *Session) InvalidateContext()</code></pre>
+}</code></pre>
                 </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Session caches one Context and invalidates it whenever persisted request content changes.</li><li>Repeated footer renders without mutation reuse the cache.</li><li>The context fraction and bar use CompactedContextTokens divided by ContextWindow.</li><li>Savings are shown when compaction is enabled and nonzero.</li><li>Lifetime input/output remain separate and never drive context-window usage.</li><li>During streaming the footer reflects the sent snapshot; after persistence it refreshes for the next request.</li><li>Footer tests cover enabled, disabled, zero-window, over-window, narrow, and wide layouts.</li></ul>
+                    <ul class="acceptance-list"><li>buildFooterData reads SessionDoc.TokenTally and does not call BuildContext or scan persisted messages.</li><li>The context fraction and usage bar use CompactedContextTokens divided by ContextWindow.</li><li>The footer displays SavedContextTokens when compaction is enabled and savings are nonzero.</li><li>Lifetime input/output counters remain separate and never drive context-window usage.</li><li>During streaming, live output metrics are overlaid for display without mutating persisted TokenTally.</li><li>No context cache, contextDirty flag, context revision, or footer-specific token cache is introduced.</li><li>Footer tests cover enabled, disabled, zero-window, over-window, narrow, wide, and active-stream layouts.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ go test ./internal/chat ./internal/app ./internal/ui</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/app ./internal/ui -run Footer</span> </div>
             </div></div>
         </section>
         <section id="compaction-observability" class="milestone-section">
             <div class="section-header">
-                <span class="section-num">6</span>
+                <span class="section-num">7</span>
                 <h2>Compaction Observability</h2>
-                <span class="pattern-badge">Cross-implementation contract fixtures</span> 
+                <span class="pattern-badge">Cross-implementation contract fixtures</span>
             </div>
-            
+
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
                 <div class="cell-value">Keep Chat Analytics and Squid-OS aligned on the current next-request file compaction calculation.</div>
             </div>
-            
+
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
                 <div class="cell-value">Analytics displays the same raw, compacted, and saved values as Go for full and ranged read sequences, with no persisted per-turn metrics or actual/forecast modes.</div>
             </div>
-            
+
             <div class="diagram-canvas">
                 <div class="diagram-header">
                     <span class="icon">📐</span>
@@ -751,7 +966,7 @@ func (s *Session) InvalidateContext()</code></pre>
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
-                        <span class="task-num"># 6.1</span>
+                        <span class="task-num"># 7.1</span>
                         <span class="task-name">Align Analytics with full and ranged read rules</span>
                         <span class="layer-badge" style="background:#4ec9b0">test</span>
                     </div>
@@ -765,12 +980,12 @@ func (s *Session) InvalidateContext()</code></pre>
                         <span class="cell-label">Why</span>
                         <span class="cell-value">Prevents dashboard drift without persisting compaction decisions, request metrics, or historical turn records.</span>
                     </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/testdata/file_compaction_cases.json</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/compaction_test.go</li><li class="file-mod"><span class="action-sym">~</span>  .squid-os/plans/context-compression/README.md</li><li class="file-mod"><span class="action-sym">~</span>  /home/goglue/.config/squid-os/skills/chat-analytics/scripts/server.py</li><li class="file-mod"><span class="action-sym">~</span>  /home/goglue/.config/squid-os/skills/chat-analytics/scripts/test_file_compaction.py</li><li class="file-mod"><span class="action-sym">~</span>  /home/goglue/.config/squid-os/skills/chat-analytics/assets/index.html</li></ul>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/chat/testdata/file_compaction_cases.json</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/compaction_test.go</li><li class="file-mod"><span class="action-sym">~</span>  .squid-os/plans/context-compression/README.md</li><li class="file-mod"><span class="action-sym">~</span>  &lt;skill-folder&gt;/scripts/server.py</li><li class="file-mod"><span class="action-sym">~</span>  &lt;skill-folder&gt;/scripts/test_file_compaction.py</li><li class="file-mod"><span class="action-sym">~</span>  &lt;skill-folder&gt;/assets/index.html</li></ul>
                 </div>
-                    
+
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
                     <pre><code class="language-json">{
@@ -782,13 +997,13 @@ func (s *Session) InvalidateContext()</code></pre>
   }
 }</code></pre>
                 </div>
-                    
+
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
                     <ul class="acceptance-list"><li>The one-page README states settings-only control, dynamic non-destructive compaction, and fixed internal replacement text.</li><li>The README defines ranged reads as observations and full reads/write/create as checkpoints.</li><li>Go and Python fixtures cover repeated full reads, multiple ranges, range-edit-range, ranges followed by full read, write/read checkpoints, no-op edits, failures, and interleaved paths.</li><li>Analytics always presents the current next-request calculation regardless of whether the session switch is enabled.</li><li>Analytics combines instruction and execution tokens and includes replacement overhead once runtime transformation lands.</li><li>No context metrics are persisted on assistant messages and no historical per-turn records are added.</li><li>Bash, sed parsing, and structured search remain explicitly out of scope for this plan.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ go test ./internal/chat &amp;&amp; python3 -m unittest discover -s /home/goglue/.config/squid-os/skills/chat-analytics/scripts -p &#x27;test_*.py&#x27; -v</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/chat &amp;&amp; python3 -m unittest discover -s &lt;skill-folder&gt;/scripts -p &#x27;test_*.py&#x27; -v</span> </div>
             </div></div>
         </section>
     </div>

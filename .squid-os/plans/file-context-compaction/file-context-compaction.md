@@ -333,37 +333,238 @@ go test -bench 'BuildContext' -benchmem ./internal/chat
 
 ---
 
-## 5. Live Context Visibility
+## 5. Structured Session Token Tally
 
-- **Pattern:** Revision-cached derived state
+- **Pattern:** Persisted projection from canonical session history
 
-**Objective:** Expose compacted next-request size in the footer without rescanning history on every render.
+**Objective:** Replace the scalar total_tokens field with one structured lifetime and current next-request token tally calculated by Squid-OS.
 
-**Success Criteria:** The footer context bar uses compacted next-request tokens, shows savings, preserves lifetime input/output counters, and refreshes after request-content mutations.
+**Success Criteria:** Saved sessions contain complete lifetime and context totals, existing sessions are migrated safely, and Chat Analytics consumes the shared payload instead of duplicating tally and compaction calculations.
 
 ```mermaid
 flowchart LR
-    M[message or tool mutation] --> I[invalidate Context cache]
-    F[footer render] --> Q{cache current}
-    Q -->|yes| U[use token totals]
-    Q -->|no| B[BuildContext once]
-    B --> U
-    U --> V[compacted over context window]
-    U --> L[lifetime input output separate]
+    H[session history] --> C[CalculateTokenTally]
+    C --> T[token_tally]
+    T --> S[session save]
+    T --> F[footer]
+    T --> A[Chat Analytics]
+    O[old sessions] --> M[verified migration]
+    M --> T
 ```
 
-### 5.1. Show cached compacted context in the footer
+### 5.1. Persist a structured session token tally
 
 **Type:** feature
 
-**What:** Cache the derived Context on Session mutations and update footer contracts to show compacted next-request usage and savings separately from lifetime input/output totals.
+**What:** Add one Go token tally contract that combines lifetime breakdowns with raw, compacted, and saved next-request context totals, and persist it instead of scalar total_tokens.
 
-**Why:** Makes context-window pressure accurate without expensive recomputation on every TUI frame.
+**Why:** Provides one reusable token overview for session files, saving, footer rendering, Analytics, and a future Squid server API.
+
+**Files:**
+
+- ~ internal/config/session.go
+- + internal/chat/token_tally.go
+- + internal/chat/token_tally_test.go
+- ~ internal/chat/session.go
+- ~ internal/app/session_persistence.go
+- ~ internal/app/render.go
+
+**Snippet:**
+
+```
+type TokenTally struct {
+    Lifetime LifetimeTokenTally `json:"lifetime"`
+    Context ContextTokenTally `json:"context"`
+}
+
+type LifetimeTokenTally struct {
+    Input InputTokenTally `json:"input"`
+    Output OutputTokenTally `json:"output"`
+    Total int `json:"total"`
+}
+
+type ContextTokenTally struct {
+    Raw int `json:"raw"`
+    Compacted int `json:"compacted"`
+    Saved int `json:"saved"`
+    SavedInstruction int `json:"saved_instruction"`
+    SavedExecution int `json:"saved_execution"`
+}
+
+func (s *Session) CalculateTokenTally() config.TokenTally
+```
+
+**Acceptance Criteria:**
+
+- [ ] SessionDoc persists token_tally and no longer writes scalar total_tokens.
+- [ ] Lifetime input and output totals retain the existing user, tool execution, system prompt, tool definitions, synthetic, assistant, thinking, and tool instruction breakdowns.
+- [ ] Context raw, compacted, saved, saved instruction, and saved execution values come from the same Context used for request construction.
+- [ ] TokenTally totals are internally consistent and covered by unit tests.
+- [ ] Session save refreshes TokenTally immediately before serialization.
+- [ ] Footer data is populated from the in-memory TokenTally rather than independent total calculations.
+
+**Verify:**
+
+```bash
+go test ./internal/config ./internal/chat ./internal/app
+```
+
+### 5.2. Keep TokenTally live across session mutations
+
+**Type:** feature
+
+**What:** Refresh SessionDoc.TokenTally at request-relevant mutation boundaries and use it as the footer token projection throughout the active session.
+
+**Why:** A save-only tally would be stale; keeping it live makes footer and persisted values accurate without adding a separate context cache.
 
 **Files:**
 
 - ~ internal/chat/session.go
 - ~ internal/chat/tool_exec.go
+- ~ internal/chat/turn.go
+- ~ internal/chat/loop.go
+- ~ internal/app/render.go
+- ~ internal/app/stream.go
+- ~ internal/app/session_persistence.go
+- + internal/chat/token_tally_lifecycle_test.go
+
+**Snippet:**
+
+```
+func (s *Session) RefreshTokenTally()
+
+// Lifecycle contract:
+// new/load session -> refresh
+// persisted request-content mutation -> refresh
+// BuildContext -> update Context tally from exact outgoing messages
+// footer -> read Doc.TokenTally
+// save -> final refresh safeguard then serialize
+```
+
+**Acceptance Criteria:**
+
+- [ ] New and loaded sessions calculate TokenTally before the footer first reads it.
+- [ ] Appending or removing persisted user, assistant, synthetic, system, and internal messages refreshes the lifetime and next-request tally.
+- [ ] Completing tool execution and applying turn transitions refreshes TokenTally before the next LLM step.
+- [ ] BuildContext updates TokenTally.Context from the exact provider messages it returns and sends.
+- [ ] The footer reads SessionDoc.TokenTally and performs no history scan or compaction calculation during rendering.
+- [ ] During streaming, live output metrics are overlaid for display only; persisted TokenTally refreshes when the assistant message is saved.
+- [ ] Session save serializes the current TokenTally and performs a final refresh only as a correctness safeguard.
+- [ ] No separate context cache, contextDirty flag, or context revision is introduced.
+- [ ] Lifecycle tests prove tally values update after each mutation boundary and never remain stale.
+
+**Verify:**
+
+```bash
+go test ./internal/chat ./internal/app -run TokenTally
+```
+
+### 5.3. Migrate saved sessions to token_tally
+
+**Type:** chore
+
+**What:** Use the workspace session-config-migrator to transform every saved session from total_tokens to a fully calculated token_tally payload.
+
+**Why:** Ensures existing sessions receive the same overview without silently losing history or requiring runtime fallback logic.
+
+**Files:**
+
+- + <temp-dir>/session_token_tally_migration.py
+
+**Snippet:**
+
+```
+MIGRATION_API_VERSION = 1
+MIGRATION_ID = "session-token-tally"
+ALLOWED_CHANGED_PATHS = {"total_tokens", "token_tally"}
+
+def migrate(document: dict) -> dict: ...
+def validate(before: dict, after: dict) -> list[str]: ...
+```
+
+**Acceptance Criteria:**
+
+- [ ] Migration analysis and field mapping receive explicit approval before execution.
+- [ ] The callback calculates lifetime and current file-compaction context totals deterministically from each complete session.
+- [ ] The callback removes total_tokens only after token_tally is complete and validated.
+- [ ] The runner creates timestamped source-identical .bck and migrated .new trees without modifying live sessions.
+- [ ] Every discovered session is accounted for, source remains unchanged, and validation reports zero failures before adoption.
+- [ ] The migration report states exact source, backup, migrated paths, counts, changed paths, and adoption safety.
+
+**Verify:**
+
+```bash
+python3 <working-dir>/.squid-os/skills/session-config-migrator/scripts/migrate_sessions.py --source <sessions-dir> --migration <temp-dir>/session_token_tally_migration.py
+```
+
+### 5.4. Consume token_tally in Chat Analytics
+
+**Type:** refactor
+
+**What:** Update Chat Analytics tally, dashboard, and file compaction projections to consume the persisted token_tally payload for migrated sessions.
+
+**Why:** Removes duplicated session-wide token aggregation and makes Squid-OS the source of truth for token totals.
+
+**Files:**
+
+- ~ <skill-folder>/scripts/server.py
+- ~ <skill-folder>/scripts/test_file_compaction.py
+- ~ <skill-folder>/assets/index.html
+
+**Snippet:**
+
+```
+# API projection contract
+{
+  "lifetime": session["token_tally"]["lifetime"],
+  "context": session["token_tally"]["context"]
+}
+```
+
+**Acceptance Criteria:**
+
+- [ ] The tally endpoint and dashboard summaries read lifetime totals from token_tally.
+- [ ] The files/compaction UI reads current raw, compacted, and saved context totals from token_tally.
+- [ ] Per-file rows continue to derive file-level details from tool history because token_tally is session-wide.
+- [ ] Migrated sessions require no duplicate session-wide tally or compaction calculation in Python.
+- [ ] Endpoint and UI tests verify the persisted payload is presented unchanged.
+
+**Verify:**
+
+```bash
+python3 -m unittest discover -s <skill-folder>/scripts -p 'test_*.py' -v
+```
+
+---
+
+## 6. Live Context Visibility
+
+- **Pattern:** Live projection rendering
+
+**Objective:** Render the live SessionDoc.TokenTally in the footer while keeping lifetime traffic and next-request context visually distinct.
+
+**Success Criteria:** The footer reads the maintained token tally without building context or scanning history, uses compacted next-request tokens for context pressure, and overlays active stream output only for display.
+
+```mermaid
+flowchart LR
+    T[SessionDoc TokenTally] --> F[FooterData]
+    S[active stream output] --> O[display overlay]
+    O --> F
+    F --> L[lifetime input output]
+    F --> C[compacted context over window]
+    F --> V[saved tokens]
+```
+
+### 6.1. Render live TokenTally in the footer
+
+**Type:** feature
+
+**What:** Update footer data and rendering to consume the live SessionDoc.TokenTally, displaying lifetime traffic separately from compacted next-request context and savings.
+
+**Why:** Makes context-window pressure accurate while keeping View rendering free of history scans, compaction work, and duplicate cache state.
+
+**Files:**
+
 - ~ internal/app/render.go
 - ~ internal/ui/footer.go
 - ~ internal/ui/footer_test.go
@@ -379,30 +580,27 @@ type FooterData struct {
     SavedContextTokens int
     ContextWindow int
 }
-
-func (s *Session) BuildContext() Context
-func (s *Session) InvalidateContext()
 ```
 
 **Acceptance Criteria:**
 
-- [ ] Session caches one Context and invalidates it whenever persisted request content changes.
-- [ ] Repeated footer renders without mutation reuse the cache.
-- [ ] The context fraction and bar use CompactedContextTokens divided by ContextWindow.
-- [ ] Savings are shown when compaction is enabled and nonzero.
-- [ ] Lifetime input/output remain separate and never drive context-window usage.
-- [ ] During streaming the footer reflects the sent snapshot; after persistence it refreshes for the next request.
-- [ ] Footer tests cover enabled, disabled, zero-window, over-window, narrow, and wide layouts.
+- [ ] buildFooterData reads SessionDoc.TokenTally and does not call BuildContext or scan persisted messages.
+- [ ] The context fraction and usage bar use CompactedContextTokens divided by ContextWindow.
+- [ ] The footer displays SavedContextTokens when compaction is enabled and savings are nonzero.
+- [ ] Lifetime input/output counters remain separate and never drive context-window usage.
+- [ ] During streaming, live output metrics are overlaid for display without mutating persisted TokenTally.
+- [ ] No context cache, contextDirty flag, context revision, or footer-specific token cache is introduced.
+- [ ] Footer tests cover enabled, disabled, zero-window, over-window, narrow, wide, and active-stream layouts.
 
 **Verify:**
 
 ```bash
-go test ./internal/chat ./internal/app ./internal/ui
+go test ./internal/app ./internal/ui -run Footer
 ```
 
 ---
 
-## 6. Compaction Observability
+## 7. Compaction Observability
 
 - **Pattern:** Cross-implementation contract fixtures
 
@@ -421,7 +619,7 @@ flowchart LR
     S[future structured search] -. separate plan .-> G
 ```
 
-### 6.1. Align Analytics with full and ranged read rules
+### 7.1. Align Analytics with full and ranged read rules
 
 **Type:** test
 
@@ -434,9 +632,9 @@ flowchart LR
 - + internal/chat/testdata/file_compaction_cases.json
 - ~ internal/chat/compaction_test.go
 - ~ .squid-os/plans/context-compression/README.md
-- ~ /home/goglue/.config/squid-os/skills/chat-analytics/scripts/server.py
-- ~ /home/goglue/.config/squid-os/skills/chat-analytics/scripts/test_file_compaction.py
-- ~ /home/goglue/.config/squid-os/skills/chat-analytics/assets/index.html
+- ~ <skill-folder>/scripts/server.py
+- ~ <skill-folder>/scripts/test_file_compaction.py
+- ~ <skill-folder>/assets/index.html
 
 **Snippet:**
 
@@ -464,5 +662,5 @@ flowchart LR
 **Verify:**
 
 ```bash
-go test ./internal/chat && python3 -m unittest discover -s /home/goglue/.config/squid-os/skills/chat-analytics/scripts -p 'test_*.py' -v
+go test ./internal/chat && python3 -m unittest discover -s <skill-folder>/scripts -p 'test_*.py' -v
 ```

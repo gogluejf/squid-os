@@ -18,6 +18,14 @@ func getPrefixLen(line string) int {
 	return len([]rune(line)) - len([]rune(content))
 }
 
+// logicalCursorColumn returns the cursor's rune offset in its full logical
+// line. LineInfo.CharOffset is only the terminal-cell offset within the current
+// soft-wrapped visual row, so it must not be used to split textarea content.
+func logicalCursorColumn(ta textarea.Model) int {
+	info := ta.LineInfo()
+	return info.StartColumn + info.ColumnOffset
+}
+
 // listify applies sequential numbering to the textarea content.
 //
 // Behavior depends on cursor position:
@@ -40,7 +48,7 @@ func getPrefixLen(line string) int {
 func listify(ta textarea.Model) textarea.Model {
 	value := ta.Value()
 	cursorLine := ta.Line()
-	rawCursorCol := ta.LineInfo().CharOffset // raw column including prefix
+	rawCursorCol := logicalCursorColumn(ta) // raw logical column including prefix
 
 	lines := splitLines(value)
 	totalLines := len(lines)
@@ -240,7 +248,7 @@ func isNumberingBroken(ta textarea.Model) bool {
 func renumberInPlace(ta textarea.Model) textarea.Model {
 	value := ta.Value()
 	cursorLine := ta.Line()
-	rawCursorCol := ta.LineInfo().CharOffset
+	rawCursorCol := logicalCursorColumn(ta)
 
 	lines := splitLines(value)
 

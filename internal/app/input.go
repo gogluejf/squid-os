@@ -127,6 +127,11 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.Escape):
+		if completion, ok := m.activeCapabilityCompletion(); ok {
+			m.completionDismissed = completion.key()
+			m.recalcLayout()
+			return m, nil
+		}
 		return m, nil
 
 	case key.Matches(msg, keys.Expand):
@@ -142,6 +147,10 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.startHistorySearch()
 
 	case key.Matches(msg, keys.Send):
+		if completion, ok := m.activeCapabilityCompletion(); ok && len(completion.candidates) == 1 {
+			updated, _ := (&m).applyCapabilityCompletion(completion)
+			m = *updated.(*Model)
+		}
 		return m.sendMessage()
 
 	case m.handleViewportScroll(msg):
@@ -156,6 +165,9 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case msg.Type == tea.KeyTab && !msg.Alt:
+		if completion, ok := m.activeCapabilityCompletion(); ok {
+			return (&m).applyCapabilityCompletion(completion)
+		}
 		return m.applyListify()
 
 	case key.Matches(msg, keys.Up):
@@ -179,9 +191,16 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.historyDown()
 
 	default:
+		_, hadCapabilitySuggestion := m.activeCapabilityCompletion()
 		oldLines := m.textarea.LineCount()
 		var cmd tea.Cmd
 		m.textarea, cmd = m.textarea.Update(msg)
+		// Editing or moving away naturally re-evaluates a dismissed suggestion.
+		if m.completionDismissed != "" {
+			if completion, ok := m.capabilityCompletionAtCursor(); !ok || completion.key() != m.completionDismissed {
+				m.completionDismissed = ""
+			}
+		}
 		// Resize if line count changed (e.g., backspace removing a line, Alt+Enter adding one)
 		if m.textarea.LineCount() != oldLines {
 			m.autoSizeTextarea()
@@ -190,6 +209,10 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.historyIdx != -1 && !key.Matches(msg, keys.Left) && !key.Matches(msg, keys.Right) {
 			m.draft = ""
 			m.historyIdx = -1
+		}
+		_, hasCapabilitySuggestion := m.activeCapabilityCompletion()
+		if hadCapabilitySuggestion != hasCapabilitySuggestion {
+			m.recalcLayout()
 		}
 		// Only trigger command palette when "/" is the very first character (textarea was empty).
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == '/' && m.textarea.Value() == "/" {

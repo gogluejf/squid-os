@@ -55,6 +55,10 @@ type Model struct {
 	historyIdx int // -1 = draft, 0..n = browsing history
 	draft      string
 
+	// Capability autocomplete. Escape dismisses the current token's suggestion
+	// until its text changes.
+	completionDismissed string
+
 	// Misc
 	attachedImage string
 	notification  ui.Notification

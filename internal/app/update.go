@@ -98,6 +98,10 @@ func (m *Model) recalcLayout() {
 		}
 	case ModeHistorySearch:
 		overlayHeight = m.historySearch.RenderHeight()
+	case ModeChat:
+		if _, ok := m.activeCapabilityCompletion(); ok {
+			overlayHeight = 1
+		}
 	}
 
 	const statusLineHeight = 1

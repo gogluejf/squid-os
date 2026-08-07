@@ -66,6 +66,10 @@ func (m Model) View() string {
 		}
 	case ModeHistorySearch:
 		sections = append(sections, m.historySearch.Render(m.width))
+	case ModeChat:
+		if suggestion := m.renderCapabilitySuggestion(); suggestion != "" {
+			sections = append(sections, suggestion)
+		}
 	}
 
 	// Status line: notification (left) + attachment chip (right)

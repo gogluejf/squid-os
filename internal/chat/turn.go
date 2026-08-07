@@ -2,11 +2,11 @@ package chat
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 	"time"
 
 	"squid-os/internal/config"
+	"squid-os/internal/util"
 )
 
 // PrepareTurn applies pending changes to the session.
@@ -49,7 +49,7 @@ func PrepareTurn(s *Session) error {
 	applyPendingActiveSkill(s, pending)
 
 	// Handle tools
-	if pending.Tools != nil && !reflect.DeepEqual(*pending.Tools, s.Doc.Config.Tools) {
+	if pending.Tools != nil && !util.SetsEqual(*pending.Tools, s.Doc.Config.Tools) {
 		s.SetTools(*pending.Tools)
 		s.Append(transition("Tools Available Changed", nil))
 	}
@@ -78,11 +78,11 @@ func applyPendingActiveSkill(s *Session, pending *config.PendingConfig) {
 }
 
 func applyPendingCapabilities(s *Session, pending *config.PendingConfig) {
-	if pending.Skills != nil && !reflect.DeepEqual(*pending.Skills, s.Doc.Config.Skills) {
+	if pending.Skills != nil && !util.SetsEqual(*pending.Skills, s.Doc.Config.Skills) {
 		s.SetSkills(*pending.Skills)
 		s.Append(s.BuildCapabilitiesChangedMsg("skills"))
 	}
-	if pending.Agents != nil && !reflect.DeepEqual(*pending.Agents, s.Doc.Config.Agents) {
+	if pending.Agents != nil && !util.SetsEqual(*pending.Agents, s.Doc.Config.Agents) {
 		s.SetAgents(*pending.Agents)
 		s.Append(s.BuildCapabilitiesChangedMsg("agents"))
 	}

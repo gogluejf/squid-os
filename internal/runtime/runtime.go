@@ -259,15 +259,15 @@ func ApplyToExistingSession(doc *config.SessionDoc, desired config.SessionConfig
 		value := desired.ActiveSkill
 		pending.ActiveSkill = &value
 	}
-	if !equalStringSlices(desired.Tools, current.Tools) {
+	if !util.SetsEqual(desired.Tools, current.Tools) {
 		value := clone(desired.Tools)
 		pending.Tools = &value
 	}
-	if !equalCapabilityRefs(desired.Skills, current.Skills) {
+	if !util.SetsEqual(desired.Skills, current.Skills) {
 		value := cloneRefs(desired.Skills)
 		pending.Skills = &value
 	}
-	if !equalCapabilityRefs(desired.Agents, current.Agents) {
+	if !util.SetsEqual(desired.Agents, current.Agents) {
 		value := cloneRefs(desired.Agents)
 		pending.Agents = &value
 	}
@@ -356,30 +356,6 @@ func clone(values []string) []string { return append([]string(nil), values...) }
 
 func cloneRefs(refs []config.CapabilityRef) []config.CapabilityRef {
 	return append([]config.CapabilityRef(nil), refs...)
-}
-
-func equalCapabilityRefs(a, b []config.CapabilityRef) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].Scope != b[i].Scope || a[i].Name != b[i].Name {
-			return false
-		}
-	}
-	return true
-}
-
-func equalStringSlices(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func allPolicy() config.CapabilityPolicy {

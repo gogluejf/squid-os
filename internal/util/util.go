@@ -96,6 +96,24 @@ func EqualStringSlices(a, b []string) bool {
 	return true
 }
 
+// SetsEqual reports whether two slices contain the same elements, ignoring order.
+// E must be comparable.
+func SetsEqual[S ~[]E, E comparable](a, b S) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := make(map[E]struct{}, len(a))
+	for _, v := range a {
+		set[v] = struct{}{}
+	}
+	for _, v := range b {
+		if _, ok := set[v]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // FriendlyPath replaces the user's home directory prefix with "~".
 // Idempotent — calling it on an already-shrunk path is a no-op.
 func FriendlyPath(path string) string {

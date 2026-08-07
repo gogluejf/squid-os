@@ -262,9 +262,10 @@ func SessionPath(p Paths, name string) string {
 }
 
 // SaveSessionDoc writes a session to sessions/<name>.chat.json
-func SaveSessionDoc(p Paths, name string, sf SessionDoc) error {
-	sf.Meta.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	data, err := json.MarshalIndent(sf, "", "  ")
+func SaveSessionDoc(p Paths, name string, doc SessionDoc, totalTokens int) error {
+	doc.Meta.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	doc.TotalTokens = totalTokens
+	data, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return err
 	}

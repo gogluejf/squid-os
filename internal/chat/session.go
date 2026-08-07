@@ -385,10 +385,6 @@ func (s *Session) PushModelSwitch(oldModel, newModel string) {
 	})
 }
 
-func (s *Session) Save(p config.Paths, name string) error {
-	s.Doc.TotalTokens = s.TotalTokens()
-	return config.SaveSessionDoc(p, name, s.Doc)
-}
 
 func BuildConfigMsg(inf config.InferenceConfig, target string) config.Message {
 	thinkStr := "off"

@@ -17,8 +17,7 @@ func (m Model) saveAs(name string, silent bool) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.session.Doc.Config.Autosave.Name = name
-	m.session.Doc.TotalTokens = m.session.TotalTokens()
-	err := config.SaveSessionDoc(m.paths, name, m.session.Doc)
+	err := config.SaveSessionDoc(m.paths, name, m.session.Doc, m.session.TotalTokens())
 	if err != nil {
 		if !silent {
 			(&m).setNotification(ui.NotificationError, "couldn't save session")

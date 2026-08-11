@@ -29,7 +29,7 @@ var ReadFile = Tool{
 		},
 		"end_line": {
 			"type": "integer",
-			"description": "Optional 1-based end line (inclusive). Provide both range fields for a partial read; omit both for a full-file read."
+			"description": "Optional 1-based end line (inclusive); values beyond EOF stop at EOF. Provide both range fields for a partial read; omit both for a full-file read."
 		}
 	},
 	"required": ["path"]
@@ -58,7 +58,7 @@ var ReadFile = Tool{
 				return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("start_line %d exceeds file length (%d lines)", startLine, len(lines))}
 			}
 			if endLine > len(lines) {
-				return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("end_line %d exceeds file length (%d lines)", endLine, len(lines))}
+				endLine = len(lines)
 			}
 
 			ranged := lines[startLine-1 : endLine]

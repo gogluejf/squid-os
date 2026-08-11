@@ -126,6 +126,7 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 	}
 
 	var capturedInstructions string
+	staleRangedRead := false
 	if opts.Decision != nil {
 		capturedInstructions = opts.Decision.Instructions
 		if !opts.Decision.Approved {
@@ -145,21 +146,16 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 		goto doExecute
 	}
 
-	// Validate file state for destructive tools and ranged reads.
-	// Full reads skip validation (they refresh the tracked checksum).
-	// Ranged reads validate — if the file changed externally, reject and ask for a full read.
 	if toolName != "open" {
 		if pathVal, ok := args["path"].(string); ok {
 			resolvedPath := tools.ResolvePath(pathVal, s.Doc.Config.WorkingDir)
 			_, _, isRangedRead, rangeErr := tools.ParseReadRange(args)
 			isRangedRead = toolName == "read_file" && rangeErr == nil && isRangedRead
-			needsValidation := toolName != "read_file" || isRangedRead
-			if needsValidation {
+			if isRangedRead {
+				staleRangedRead = tools.ValidateFileState(resolvedPath, sessionState) != nil
+			} else if toolName != "read_file" {
 				if err := tools.ValidateFileState(resolvedPath, sessionState); err != nil {
-					msg := fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again using the tool \"read_file\" and retry your command.", resolvedPath)
-					if isRangedRead {
-						msg = fmt.Sprintf("blocked: file changed externally since last tracked read: %s — perform a full read_file to refresh the tracked state before retrying ranged reads.", resolvedPath)
-					}
+					msg := fmt.Sprintf("blocked: file changed externally: %s — call read_file with only {\"path\":%q}; omit start_line and end_line, then retry.", resolvedPath, pathVal)
 					entries[i].Execution.Status = tools.ResultStatusError
 					entries[i].Execution.Error = msg
 					for j := i + 1; j < len(entries); j++ {
@@ -258,7 +254,9 @@ doExecute:
 		result.Files[j].ToolCallID = entry.ID
 	}
 	entries[i].Execution.Files = result.Files
-	tools.MergeEntries(result.Files, sessionState)
+	if !staleRangedRead {
+		tools.MergeEntries(result.Files, sessionState)
+	}
 
 	res := ToolExecResult{Action: nextToolAction(i, len(entries)), MsgIdx: msgIdx, ToolIndex: i, NextIndex: i + 1}
 	if toolName == "skill_load" && result.Status == tools.ResultStatusSuccess {

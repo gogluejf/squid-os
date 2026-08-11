@@ -177,7 +177,7 @@ func TestExecuteToolsRangedReadValidatesFileState(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsRangedReadRejectsExternalChange(t *testing.T) {
+func TestExecuteToolsRangedReadAllowsExternalChangeWithoutRefreshingState(t *testing.T) {
 	dir := t.TempDir()
 	content := "line1\nline2\nline3"
 	file := filepath.Join(dir, "test.txt")
@@ -209,11 +209,14 @@ func TestExecuteToolsRangedReadRejectsExternalChange(t *testing.T) {
 	ExecuteTools(s, ToolExecOptions{MsgIdx: 0})
 
 	exec := s.Doc.Messages[0].ToolCalls[0].Execution
-	if exec.Status != tools.ResultStatusError {
-		t.Fatalf("expected error for externally changed file, got success")
+	if exec.Status != tools.ResultStatusSuccess {
+		t.Fatalf("expected stale ranged read to succeed, got %q", exec.Error)
 	}
-	if !strings.Contains(exec.Error, "changed externally") {
-		t.Fatalf("expected external change error, got %q", exec.Error)
+	if exec.Result != "line1\nline2" {
+		t.Fatalf("expected ranged content, got %q", exec.Result)
+	}
+	if s.Doc.FileState[file].Checksum != oldChecksum {
+		t.Fatal("stale ranged read must not refresh tracked checksum")
 	}
 }
 

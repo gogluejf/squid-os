@@ -120,15 +120,14 @@ func TestReadFileRangedReadEndBeyondFile(t *testing.T) {
 		"end_line":   float64(100),
 	}, rt)
 
-	if result.Status != ResultStatusError {
-		t.Fatalf("expected error, got success with result %q", result.Result)
+	if result.Status != ResultStatusSuccess {
+		t.Fatalf("expected end_line to clamp to EOF, got error %q", result.Error)
 	}
-	if !strings.Contains(result.Error, "exceeds file length") {
-		t.Fatalf("expected exceeds error, got %q", result.Error)
+	if result.Result != "line2\nline3" {
+		t.Fatalf("expected lines 2 through EOF, got %q", result.Result)
 	}
-	// Verify no file state is updated on out-of-bounds error
-	if len(result.Files) != 0 {
-		t.Fatalf("expected no file entries on out-of-bounds error, got %d", len(result.Files))
+	if len(result.Files) != 1 {
+		t.Fatalf("expected one file entry, got %d", len(result.Files))
 	}
 }
 

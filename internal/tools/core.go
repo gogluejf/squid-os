@@ -25,11 +25,11 @@ var ReadFile = Tool{
 		},
 		"start_line": {
 			"type": "integer",
-			"description": "Optional 1-based start line (inclusive). Provide both range fields for a partial read; omit both for a full-file read."
+			"description": "Optional 1-based start line, inclusive. For a full-file read, OMIT both start_line and end_line. Only provide this together with end_line when intentionally reading a specific range. Never guess a value."
 		},
 		"end_line": {
 			"type": "integer",
-			"description": "Optional 1-based end line (inclusive); values beyond EOF stop at EOF. Provide both range fields for a partial read; omit both for a full-file read."
+			"description": "Optional 1-based end line, inclusive. For a full-file read, OMIT both start_line and end_line. Only provide this together with start_line when intentionally limiting the read to a known range. Never guess the file's final line number; values beyond EOF stop at EOF."
 		}
 	},
 	"required": ["path"]

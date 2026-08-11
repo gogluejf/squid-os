@@ -42,3 +42,35 @@ func TestAutoSizeTextareaCapsVisualRows(t *testing.T) {
 		t.Fatalf("height = %d, want cap %d", m.textarea.Height(), m.textarea.MaxHeight)
 	}
 }
+
+func TestAutoSizeTextareaPreservesScrolledOffset(t *testing.T) {
+	m := newCompletionTestModel(t, nil, nil)
+	m.width = 32
+	m.height = 30
+	m.recalcLayout()
+	m.viewport.SetContent(strings.Repeat("chat line\n", 100))
+	m.viewport.SetYOffset(20)
+
+	m.textarea.SetValue(strings.Repeat("wrapped words ", 12))
+	m.autoSizeTextarea()
+
+	if m.viewport.YOffset != 20 {
+		t.Fatalf("viewport offset = %d, want 20", m.viewport.YOffset)
+	}
+}
+
+func TestAutoSizeTextareaKeepsBottomFollow(t *testing.T) {
+	m := newCompletionTestModel(t, nil, nil)
+	m.width = 32
+	m.height = 30
+	m.recalcLayout()
+	m.viewport.SetContent(strings.Repeat("chat line\n", 100))
+	m.viewport.GotoBottom()
+
+	m.textarea.SetValue(strings.Repeat("wrapped words ", 12))
+	m.autoSizeTextarea()
+
+	if !m.viewport.AtBottom() {
+		t.Fatalf("viewport offset = %d, want bottom", m.viewport.YOffset)
+	}
+}

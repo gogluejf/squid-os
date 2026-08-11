@@ -7,12 +7,19 @@ import (
 	"squid-os/internal/tools"
 )
 
+type MessageLineRange struct {
+	ID    string
+	Start int // inclusive viewport line
+	End   int // exclusive viewport line
+}
+
 // UISession is the TUI wrapper around a pure chat.Session.
 type UISession struct {
 	*chat.Session
 	UIStream         UIStreamState
 	renderedMessages []string
 	renderedWidth    int
+	messageRanges    []MessageLineRange
 	undoStack        [][]config.Message
 }
 
@@ -69,14 +76,19 @@ func (u *UISession) invalidateRenderFrom(i int) {
 	if i < len(u.renderedMessages) {
 		u.renderedMessages = u.renderedMessages[:i]
 	}
+	u.messageRanges = nil
 }
 
-func (u *UISession) invalidateRenderAll() { u.renderedMessages = nil }
+func (u *UISession) invalidateRenderAll() {
+	u.renderedMessages = nil
+	u.messageRanges = nil
+}
 
 func (u *UISession) invalidateRenderAt(i int) {
 	if i < len(u.renderedMessages) {
 		u.renderedMessages[i] = ""
 	}
+	u.messageRanges = nil
 }
 
 func (u *UISession) lastPendingToolMsgIdx() (int, bool) {

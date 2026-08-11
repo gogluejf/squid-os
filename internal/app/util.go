@@ -132,6 +132,9 @@ func textareaVisualRows(value string, width int) int {
 // autoSizeTextarea adjusts the textarea height to its visual row count,
 // including both hard newlines and soft wrapping, capped at MaxHeight (20).
 func (m *Model) autoSizeTextarea() {
+	wasAtBottom := m.viewport.AtBottom()
+	offset := m.viewport.YOffset
+
 	rows := textareaVisualRows(m.textarea.Value(), m.textarea.Width())
 	if rows < 2 {
 		rows = 2
@@ -141,7 +144,11 @@ func (m *Model) autoSizeTextarea() {
 	}
 	m.textarea.SetHeight(rows)
 	m.recalcLayout()
-	m.updateViewportContent()
+	if wasAtBottom {
+		m.viewport.GotoBottom()
+	} else {
+		m.viewport.SetYOffset(offset)
+	}
 }
 
 // formatContextLength returns a human-readable context window label (e.g. "128k", "32k").

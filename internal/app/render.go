@@ -92,7 +92,8 @@ func (m Model) View() string {
 }
 
 // updateViewportContent rebuilds the viewport content from all current messages
-// plus any active streaming text, and scrolls to the bottom.
+// plus any active streaming text. It does not choose a scroll position; callers
+// must select one of the refreshViewport... policies below.
 // Always syncs textarea height first so layout reflects actual content.
 func (m *Model) updateViewportContent() {
 	m.recalcLayout()
@@ -117,10 +118,15 @@ func (m *Model) updateViewportContent() {
 	}
 
 	//this is needed to have a black first line before rendering message
-	b.WriteString(style.StatusLineStyle.Width(m.width).Render(""))
+	initialBlock := style.StatusLineStyle.Width(m.width).Render("")
+	b.WriteString(initialBlock)
+	currentLine := strings.Count(initialBlock, "\n")
+	messageRanges := make([]MessageLineRange, 0, len(m.session.renderedMessages))
 
 	for i, rendered := range m.session.renderedMessages {
 		msg := m.session.Doc.Messages[i]
+		start := currentLine
+		blockEndsWithNewline := false
 		if msg.Role == "assistant" && msg.SequenceStat != nil {
 			stat := msg.SequenceStat
 			if msg.ID == liveSeqStatID {
@@ -128,9 +134,28 @@ func (m *Model) updateViewportContent() {
 				liveSeqStat = nil
 				liveSeqStatID = ""
 			}
-			b.WriteString(ui.RenderAssistantHeader(msg.CreatedAt, stat, m.width))
+			header := ui.RenderAssistantHeader(msg.CreatedAt, stat, m.width)
+			b.WriteString(header)
+			currentLine += strings.Count(header, "\n")
+			blockEndsWithNewline = strings.HasSuffix(header, "\n")
 		}
 		b.WriteString(rendered)
+		currentLine += strings.Count(rendered, "\n")
+		if rendered != "" {
+			blockEndsWithNewline = strings.HasSuffix(rendered, "\n")
+		}
+		end := currentLine
+		if !blockEndsWithNewline {
+			end++
+		}
+		if end <= start {
+			end = start + 1
+		}
+		messageRanges = append(messageRanges, MessageLineRange{
+			ID:    msg.ID,
+			Start: start,
+			End:   end,
+		})
 	}
 
 	if m.session.Stream.Active {
@@ -192,7 +217,86 @@ func (m *Model) updateViewportContent() {
 		contentLines++
 	}
 
+	m.session.messageRanges = messageRanges
 	m.viewport.SetContent(b.String())
+}
+
+// refreshViewportFollowing rebuilds content and keeps following the bottom only
+// when the user was already there. Scrolling up disables automatic following.
+func (m *Model) refreshViewportFollowing() {
+	wasAtBottom := m.viewport.AtBottom()
+	m.updateViewportContent()
+	if wasAtBottom {
+		m.viewport.GotoBottom()
+	}
+}
+
+// refreshViewportPreserving rebuilds content while retaining the current line
+// offset. SetYOffset also clamps the offset if the new content is shorter.
+func (m *Model) refreshViewportPreserving() {
+	offset := m.viewport.YOffset
+	m.updateViewportContent()
+	m.viewport.SetYOffset(offset)
+}
+
+type viewportAnchor struct {
+	messageID string
+	screenRow int
+	valid     bool
+}
+
+// captureViewportAnchor records the first message boundary at or below the top
+// of the viewport. If none starts in view, it anchors the message containing
+// the top line instead.
+func (m *Model) captureViewportAnchor() viewportAnchor {
+	offset := m.viewport.YOffset
+	bottom := offset + m.viewport.Height
+
+	for _, r := range m.session.messageRanges {
+		if r.Start >= offset && r.Start < bottom {
+			return viewportAnchor{messageID: r.ID, screenRow: r.Start - offset, valid: true}
+		}
+	}
+	for _, r := range m.session.messageRanges {
+		if offset >= r.Start && offset < r.End {
+			return viewportAnchor{messageID: r.ID, screenRow: r.Start - offset, valid: true}
+		}
+	}
+	return viewportAnchor{}
+}
+
+func (m *Model) restoreViewportAnchor(anchor viewportAnchor, fallbackOffset int) {
+	if anchor.valid {
+		for _, r := range m.session.messageRanges {
+			if r.ID == anchor.messageID {
+				m.viewport.SetYOffset(r.Start - anchor.screenRow)
+				return
+			}
+		}
+	}
+	m.viewport.SetYOffset(fallbackOffset)
+}
+
+// refreshViewportAnchored rebuilds content while keeping the same message
+// boundary at the same screen row, even when preceding messages change height.
+func (m *Model) refreshViewportAnchored(invalidate func()) {
+	wasAtBottom := m.viewport.AtBottom()
+	offset := m.viewport.YOffset
+	anchor := m.captureViewportAnchor()
+	if invalidate != nil {
+		invalidate()
+	}
+	m.updateViewportContent()
+	if wasAtBottom {
+		m.viewport.GotoBottom()
+		return
+	}
+	m.restoreViewportAnchor(anchor, offset)
+}
+
+// refreshViewportAtBottom rebuilds content and explicitly shows its end.
+func (m *Model) refreshViewportAtBottom() {
+	m.updateViewportContent()
 	m.viewport.GotoBottom()
 }
 

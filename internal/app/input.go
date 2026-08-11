@@ -71,8 +71,7 @@ func (m Model) handleComponent(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Expand/collapse works during component overlays (e.g. auth questions).
 	if key.Matches(msg, keys.Expand) {
 		m.expanded = !m.expanded
-		m.session.invalidateRenderAll()
-		m.updateViewportContent()
+		m.refreshViewportAnchored(m.session.invalidateRenderAll)
 		return m, nil
 	}
 
@@ -99,7 +98,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.attachedImage = userImage
 		(&m).setNotification(ui.NotificationInfo, "last message removed  ·  ctrl+u to restore")
 		m.autoSave()
-		m.updateViewportContent()
+		m.refreshViewportFollowing()
 		return m, nil
 
 	case key.Matches(msg, keys.UndoDestroy):
@@ -113,7 +112,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				(&m).setNotification(ui.NotificationInfo, "message restored")
 			}
 			m.autoSave()
-			m.updateViewportContent()
+			m.refreshViewportFollowing()
 		}
 		return m, nil
 
@@ -137,8 +136,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Expand):
 		m.expanded = !m.expanded
-		m.session.invalidateRenderAll()
-		m.updateViewportContent()
+		m.refreshViewportAnchored(m.session.invalidateRenderAll)
 		return m, nil
 
 	case key.Matches(msg, keys.Incognito):
@@ -251,8 +249,7 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Expand):
 		m.expanded = !m.expanded
-		m.session.invalidateRenderAll()
-		m.updateViewportContent()
+		m.refreshViewportAnchored(m.session.invalidateRenderAll)
 		return m, nil
 
 	case matchCommandKey(msg) != "":

@@ -136,7 +136,7 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 				return
 			}
 			m.loadUISession(sf, name)
-			m.updateViewportContent()
+			m.refreshViewportAtBottom()
 		},
 		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)

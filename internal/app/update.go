@@ -16,8 +16,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
-		m.recalcLayout()
-		m.updateViewportContent()
+		m.refreshViewportFollowing()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -34,7 +33,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamTickMsg:
 		if m.session.Stream.Active && msg.id == m.session.UIStream.ID {
-			m.updateViewportContent()
+			m.refreshViewportFollowing()
 			return m, streamTickCmd(msg.id)
 		}
 		return m, nil

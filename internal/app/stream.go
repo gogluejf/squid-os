@@ -65,20 +65,18 @@ func (m *Model) setAuthMode() tea.Cmd {
 	}
 
 	m.setComponent(q)
-	m.updateViewportContent()
+	m.refreshViewportFollowing()
 	return q.BlinkCmd()
 }
 
 // setChatMode sets mode to ModeChat, resets the textarea placeholder, recomputes layout,
-// and re-renders the viewport. Callers should not call updateViewportContent() separately
-// after setChatMode — the layout must be recalculated first (to restore full viewport
-// height after component overlays) before rendering.
+// and refreshes the viewport while retaining sticky-bottom behavior.
 func (m *Model) setChatMode() tea.Cmd {
 	m.textarea.Placeholder = "Type a message..."
 	m.mode = ModeChat
 	m.activeComponent = nil
 	m.textarea.Focus()
-	m.updateViewportContent()
+	m.refreshViewportFollowing()
 	return textarea.Blink
 }
 
@@ -197,12 +195,12 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 
 	case chat.LoopContinue:
 		if event.ToolCallDelta != "" {
-			m.updateViewportContent()
+			m.refreshViewportFollowing()
 			return m, waitForStreamEvent(m.session.UIStream.Ch)
 		}
 		m.session.UIStream.TokenCount++
 		if m.session.UIStream.TokenCount%3 == 0 {
-			m.updateViewportContent()
+			m.refreshViewportFollowing()
 		}
 		return m, waitForStreamEvent(m.session.UIStream.Ch)
 	}
@@ -251,7 +249,7 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 			}
 			m.session.UIStream.MsgIdx = result.MsgIdx
 			m.setAuthMode()
-			m.updateViewportContent()
+			m.refreshViewportFollowing()
 			nm, autoSaveCmd := m.autoSave()
 			if autoSaveCmd != nil {
 				return nm, autoSaveCmd
@@ -259,7 +257,7 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case chat.ToolExecContinue:
-			m.updateViewportContent()
+			m.refreshViewportFollowing()
 			msgIdx = result.MsgIdx
 			continue
 
@@ -278,7 +276,7 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 			nm, autoSaveCmd := m.autoSave()
 			m.session.Stream.Reset()
 			m.session.UIStream.reset()
-			m.updateViewportContent()
+			m.refreshViewportFollowing()
 			if autoSaveCmd != nil {
 				nextModel, nextCmd := nm.startStream()
 				return nextModel, tea.Batch(nextCmd, autoSaveCmd)
@@ -295,6 +293,6 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 	ch := chat.StartStream(m.session.Session, m.endpoints)
 	m.session.UIStream.Ch = ch
 
-	m.updateViewportContent()
+	m.refreshViewportAtBottom()
 	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd(m.session.UIStream.ID))
 }

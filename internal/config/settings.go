@@ -67,6 +67,7 @@ type Settings struct {
 	AutoSave            bool   `json:"auto_save"`
 	AutoLoadLastSession bool   `json:"auto_load_last_session"`
 	ContextWindow       int    `json:"context_window"`
+	ContextCompaction   bool   `json:"context_compaction"`
 	MaxToolResultTokens int    `json:"max_tool_result_tokens"`
 	DebugEnabled        bool   `json:"debug_enabled"`
 	Authorization       string `json:"authorization"` // auto | ask-on-write | ask-for-all

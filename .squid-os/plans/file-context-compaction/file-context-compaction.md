@@ -497,43 +497,55 @@ def validate(before: dict, after: dict) -> list[str]: ...
 python3 <working-dir>/.squid-os/skills/session-config-migrator/scripts/migrate_sessions.py --source <sessions-dir> --migration <temp-dir>/session_token_tally_migration.py
 ```
 
+**Structured Summary (corrected rerun, 2026-08-08):**
+
+| Field | Value |
+|---|---|
+| Source | `/home/goglue/.config/squid-os/sessions` |
+| Backup | `/home/goglue/.config/squid-os/sessions.20260808T073751Z.bck` |
+| Migrated | `/home/goglue/.config/squid-os/sessions.20260808T073751Z.new` |
+| Files found | 919 |
+| Files migrated | 919 |
+| Files unchanged | 0 |
+| Files failed | 0 |
+| Changed paths | `total_tokens`, `token_tally` (exactly, on every file) |
+| Safe to adopt | yes |
+| Independent tally mismatch | 0 (backup vs .new) |
+
+**Prior migration superseded:** `sessions.20260808T071516Z.bck/.new` — previous run used a callback that only matched `role == "system"` for `tool_definitions` but all "Tools Enabled" messages are `role == "internal"`. Corrected callback adds `RoleInternal` + `Label 'Tools Enabled'` → `input.tool_definitions` (matching Go `calculateLifetimeTally`) and fixes stale `instr` variable in `build_api_messages` tool-result loop.
+
 ### 5.4. Consume token_tally in Chat Analytics
 
 **Type:** refactor
 
-**What:** Update Chat Analytics tally, dashboard, and file compaction projections to consume the persisted token_tally payload for migrated sessions.
+**Status:** ✅ completed (2025-07-23)
+
+**What:** Updated Chat Analytics tally, dashboard, and file compaction projections to consume the persisted token_tally payload for migrated sessions.
 
 **Why:** Removes duplicated session-wide token aggregation and makes Squid-OS the source of truth for token totals.
 
 **Files:**
 
-- ~ <skill-folder>/scripts/server.py
-- ~ <skill-folder>/scripts/test_file_compaction.py
-- ~ <skill-folder>/assets/index.html
-
-**Snippet:**
-
-```
-# API projection contract
-{
-  "lifetime": session["token_tally"]["lifetime"],
-  "context": session["token_tally"]["context"]
-}
-```
+- ~ scripts/server.py — parse_session_data() now reads lifetime totals from token_tally when present; compaction context totals from token_tally.context; per-file rows still from history. get_session_list() prefers token_tally.lifetime.total.
+- + scripts/test_token_tally.py — 15 new tests covering token_tally consumption, legacy fallback, per-file derivation, endpoint payload preservation, and unchanged file compaction projection.
+- ~ scripts/test_file_compaction.py — unchanged (existing tests still pass).
+- ~ assets/index.html — no changes (endpoint payload structure preserved).
 
 **Acceptance Criteria:**
 
-- [ ] The tally endpoint and dashboard summaries read lifetime totals from token_tally.
-- [ ] The files/compaction UI reads current raw, compacted, and saved context totals from token_tally.
-- [ ] Per-file rows continue to derive file-level details from tool history because token_tally is session-wide.
-- [ ] Migrated sessions require no duplicate session-wide tally or compaction calculation in Python.
-- [ ] Endpoint and UI tests verify the persisted payload is presented unchanged.
+- [x] The tally endpoint and dashboard summaries read lifetime totals from token_tally.
+- [x] The files/compaction UI reads current raw, compacted, and saved context totals from token_tally.
+- [x] Per-file rows continue to derive file-level details from tool history because token_tally is session-wide.
+- [x] Migrated sessions require no duplicate session-wide tally or compaction calculation in Python.
+- [x] Endpoint and UI tests verify the persisted payload is presented unchanged.
 
 **Verify:**
 
 ```bash
-python3 -m unittest discover -s <skill-folder>/scripts -p 'test_*.py' -v
+python3 -m unittest discover -s scripts -p 'test_*.py' -v
 ```
+
+**Result:** 22/22 tests pass (7 existing + 15 new).
 
 ---
 

@@ -185,6 +185,7 @@ func FlushToolMessage(s *Session, msgIdx int) {
 	msg.DurationTimeMs = s.Stream.Metrics.Duration().Milliseconds() + execDurMs
 	msg.InputTokens = config.TotalExecutionTokens(msg.ToolCalls)
 	config.RecomputeSequenceStats(s.Doc.Messages)
+	s.RefreshTokenTally()
 }
 
 // StartStream builds API messages from session state and starts provider streaming.
@@ -203,7 +204,8 @@ func StartStreamWithContext(ctx context.Context, s *Session, endpoints config.En
 		s.Stream.MarkCancelled(msg)
 		cancel()
 	}
-	return engine.Stream(streamCtx, s.BuildMessages(), s.GetTools())
+	reqCtx := s.BuildContext()
+	return engine.Stream(streamCtx, reqCtx.Messages, s.GetTools())
 }
 
 type LoopEventType int

@@ -67,6 +67,7 @@ func NewSession(cfg config.SessionConfig, paths config.Paths, catalog runtimecon
 		s.Append(toolsMsg)
 	}
 
+	s.RefreshTokenTally()
 	return s
 }
 
@@ -78,10 +79,15 @@ func LoadSession(sd config.SessionDoc, name string, paths config.Paths, catalog 
 			info.ModTime = t
 		}
 	}
-	return &Session{Doc: sd, Info: info, Paths: paths, Catalog: catalog}
+	s := &Session{Doc: sd, Info: info, Paths: paths, Catalog: catalog}
+	s.RefreshTokenTally()
+	return s
 }
 
-func (s *Session) Append(msg config.Message) { s.Doc.Messages = append(s.Doc.Messages, msg) }
+func (s *Session) Append(msg config.Message) {
+	s.Doc.Messages = append(s.Doc.Messages, msg)
+	s.RefreshTokenTally()
+}
 
 func (s *Session) TruncateTo(n int) {
 	if n < 0 {
@@ -91,6 +97,7 @@ func (s *Session) TruncateTo(n int) {
 		return
 	}
 	s.Doc.Messages = s.Doc.Messages[:n]
+	s.RefreshTokenTally()
 }
 
 func (s *Session) TruncateToUser() (userText, userImage string) {
@@ -132,27 +139,21 @@ func (s *Session) HasUserMessage() bool {
 	return false
 }
 
-func (s *Session) TotalInputTokens() int {
-	total := 0
-	for _, msg := range s.Doc.Messages {
-		total += msg.InputTokens
-	}
-	return total
-}
-
-func (s *Session) TotalOutputTokens() int {
-	total := 0
-	for _, msg := range s.Doc.Messages {
-		total += msg.TextMetrics.Tokens + msg.ToolCallMetrics.Tokens
-	}
-	return total
-}
-
-func (s *Session) TotalTokens() int { return s.TotalInputTokens() + s.TotalOutputTokens() }
-
 func (s *Session) Messages() []config.Message { return s.Doc.Messages }
 
 func (s *Session) BuildMessages() []goai_provider.Message { return BuildAPIMessages(s.Doc.Messages) }
+
+// BuildContext returns the next provider-message snapshot and refreshes its context tally.
+func (s *Session) BuildContext() Context {
+	ctx := BuildContext(s.Doc.Messages, s.Doc.Config.ContextCompaction)
+
+	if s.Doc.TokenTally == nil {
+		s.Doc.TokenTally = &config.TokenTally{}
+	}
+	s.Doc.TokenTally.Context = ctx.TokenTally()
+
+	return ctx
+}
 
 func (s *Session) ToolContext() tools.RuntimeContext {
 	return tools.RuntimeContext{Config: s.Doc.Config, Catalog: s.Catalog}
@@ -334,6 +335,7 @@ func (s *Session) PushConfigChange(cfg config.InferenceConfig) bool {
 			s.Doc.Messages[i] = BuildConfigMsg(cfg, s.Doc.Config.Target)
 			s.Doc.Initial.Inference = cfg
 			s.Doc.Config.Inference = cfg
+			s.RefreshTokenTally()
 			return true
 		}
 	}
@@ -384,7 +386,6 @@ func (s *Session) PushModelSwitch(oldModel, newModel string) {
 		Params: map[string]string{"from": oldModel, "to": newModel},
 	})
 }
-
 
 func BuildConfigMsg(inf config.InferenceConfig, target string) config.Message {
 	thinkStr := "off"

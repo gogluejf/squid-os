@@ -11,19 +11,27 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// FooterData holds dynamic footer information
+// FooterData holds dynamic footer information.
 type FooterData struct {
-	Model             string
-	Provider          string
-	TotalTokens       int
-	TotalInputTokens  int
-	TotalOutTokens    int
-	TokPerSec         float64
-	SeqDurMs          int64 // live sequence duration shown during streaming
-	Streaming         bool
+	Model    string
+	Provider string
+
+	ContextInputTokens  int
+	ContextOutputTokens int
+	ContextTotalTokens  int
+	SavedContextTokens  int
+	ContextCompaction   bool
+
+	ContextWindow int
+
+	// Streaming overlay (display only, does not mutate persisted tally)
+	StreamingOutputTokens int
+	TokPerSec             float64
+	SeqDurMs              int64 // live sequence duration shown during streaming
+	Streaming             bool
+
 	ThinkingOn        bool   // thinking mode on/off (always visible)
 	AuthorizationMode string // "auto", "ask-on-write", "ask-for-all"
-	ContextWindow     int    // model context window in tokens; 0 if unknown
 	WorkingDir        string
 	Skill             string
 }
@@ -107,16 +115,30 @@ func RenderFooter(data FooterData, width int) string {
 		parts = append(parts, style.FooterValueStyle.Render(fmt.Sprintf("%.1f tok/s", data.TokPerSec)))
 	}
 
-	tokLabel := style.FooterDimStyle.Render(tokenChipBoth(data.TotalOutTokens, data.TotalInputTokens, nil, nil)) +
-		style.FooterDimStyle.Render(" [") + style.FooterValueStyle.Render(formatTokens(data.TotalTokens))
+	// Context output + live streaming overlay
+	liveOut := 0
+	if data.Streaming {
+		liveOut = data.StreamingOutputTokens
+	}
+	displayedOut := data.ContextOutputTokens + liveOut
+	displayedIn := data.ContextInputTokens
+	displayedTotal := data.ContextTotalTokens + liveOut
+
+	tokLabel := style.FooterDimStyle.Render(tokenChipBoth(displayedOut, displayedIn, nil, nil)) +
+		style.FooterDimStyle.Render(" [") + style.FooterValueStyle.Render(formatTokens(displayedTotal))
 	if data.ContextWindow > 0 {
 		tokLabel += style.FooterDimStyle.Render("/" + formatTokens(data.ContextWindow))
 	}
 	tokLabel += style.FooterDimStyle.Render("]")
 	parts = append(parts, tokLabel)
 
+	if data.ContextCompaction && data.SavedContextTokens > 0 {
+		savingsLabel := style.FooterDimStyle.Render("saved ") + style.FooterValueStyle.Render(formatTokens(data.SavedContextTokens))
+		parts = append(parts, savingsLabel)
+	}
+
 	if width >= 120 {
-		ctxBar := renderContextBar(data.TotalTokens, data.ContextWindow)
+		ctxBar := renderContextBar(displayedTotal, data.ContextWindow)
 		if ctxBar != "" {
 			parts = append(parts, ctxBar)
 		}
@@ -139,26 +161,20 @@ func RenderFooter(data FooterData, width int) string {
 	return line1 + "\n" + line2
 }
 
-// renderContextBar renders a 20-char context usage bar followed by the percentage.
-// If contextWindow is 0 (unknown), returns "".
-//
-// The bar is 20 space characters: used portion on bg "237" (darker),
-// remaining portion on bg "233" (lighter). Percentage follows after 1 space.
-func renderContextBar(totalTokens, contextWindow int) string {
+// renderContextBar renders compacted context pressure as a 20-char bar.
+func renderContextBar(contextTotalTokens, contextWindow int) string {
 	if contextWindow == 0 {
 		return ""
 	}
 
-	// Cap usage at 100%
-	usagePct := float64(totalTokens) / float64(contextWindow) * 100.0
+	usagePct := float64(contextTotalTokens) / float64(contextWindow) * 100.0
 	if usagePct > 100 {
 		usagePct = 100
 	}
-	if totalTokens == 0 {
+	if contextTotalTokens == 0 {
 		usagePct = 0
 	}
 
-	// 20 chars = 100%, each char = 5%
 	darkChars := int(usagePct / 5.0)
 	if darkChars > 20 {
 		darkChars = 20
@@ -180,7 +196,6 @@ func renderContextBar(totalTokens, contextWindow int) string {
 }
 
 // getAuthColor returns the ANSI color code for the authorization mode.
-// auto = red (dangerous, no guard), ask-on-write = yellow/warning, ask-for-all = green (safest).
 func (data FooterData) getAuthColor() string {
 	switch data.AuthorizationMode {
 	case "ask-for-all":

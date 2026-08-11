@@ -129,7 +129,7 @@ Use fixed internal replacements:
 
 The replacement format is an implementation detail, not configuration.
 
-When compaction is disabled, build the existing provider messages and report zero savings.
+When compaction is disabled, send the existing (uncompacted) provider messages as the outgoing snapshot, but still calculate the full compaction projection — raw, compacted, saved, saved_instruction, saved_execution — for the token tally and footer. The setting controls only the outgoing snapshot; the projection is always computed.
 
 ## Token accounting
 
@@ -169,18 +169,28 @@ Compacted
 Saved
 ```
 
-This is the same concept whether the session switch is on or off. There is no actual/forecast mode and no historical per-turn metric.
+This is the same concept whether the session switch is on or off. There is no actual/forecast mode and no historical per-turn metric. The persisted `token_tally.context` provides session-wide totals for migrated sessions; per-file rows are always derived from tool history.
 
-Go and Python must share expected fixtures for:
+### Shared fixtures
 
-- Full read followed by full read
-- Multiple partial reads
-- Partial reads followed by edit
-- Partial reads followed by full read
-- Write/create checkpoints
-- No-op and failed edits
-- Interleaved paths
-- Combined instruction/result token totals
+Go (`internal/chat/compaction_test.go`) and Python (`chat-analytics/scripts/test_file_compaction.py`) share a single fixture at `internal/chat/testdata/file_compaction_cases.json`. Both implementations must produce identical compacted_events, retained_events, and token totals for every scenario.
+
+The fixture covers:
+
+- Repeated full reads (repeated_full)
+- Multiple partial reads with no checkpoint (multiple_ranges)
+- Ranged read, edit, ranged read (range_edit_range)
+- Ranged reads followed by full read (ranges_then_full)
+- Write/create followed by read (write_read_checkpoints)
+- Full read, no-op edit, edit (noop_edit)
+- Failed read before successful read (failures_retained)
+- Interleaved paths with independent planning (interleaved_paths)
+- Ranged read, edit, ranged read, full read (range_edit_range_full)
+- Create, edit, write, edit (write_create_edit_edit)
+- Failed write not a checkpoint (failed_write_not_checkpoint)
+- Single full read (single_full_read)
+- Single ranged read (single_ranged_read)
+- Full read then ranged read then edit (full_then_range_then_edit)
 
 ## Out of scope
 

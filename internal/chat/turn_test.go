@@ -98,8 +98,12 @@ func TestPrepareTurnSkillChangeIncludesBodyIDAndTokens(t *testing.T) {
 	if msg.InputTokens != CountTokensApproxString(msg.Text) || msg.InputTokens <= 0 {
 		t.Fatalf("bad input tokens: %+v", msg)
 	}
-	if s.TotalInputTokens() != s.Doc.Messages[0].InputTokens+msg.InputTokens {
-		t.Fatalf("session input tokens not accumulated: %d", s.TotalInputTokens())
+	var inputSum int
+	for i := 0; i < len(s.Doc.Messages); i++ {
+		inputSum += s.Doc.Messages[i].InputTokens
+	}
+	if inputSum != s.Doc.Messages[0].InputTokens+msg.InputTokens {
+		t.Fatalf("session input tokens not accumulated: %d", inputSum)
 	}
 }
 

@@ -4,19 +4,16 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"squid-os/internal/config"
-	"squid-os/internal/diff"
 	"squid-os/internal/style"
-	"squid-os/internal/util"
 )
 
 // ─── read_file ───────────────────────────────────────────────
 
 var ReadFile = Tool{
 	Name:         "read_file",
-	Description:  "Read the contents of a file at the given path (relative to current directory or absolute). Returns the raw text content. Use for reading code, configs, documents, and any text-based files.",
+	Description:  "Read a complete file by default. For a partial read, provide both start_line and end_line.",
 	DisplayParam: "path",
 	Style:        style.ToolStyle(),
 	Schema: []byte(`{
@@ -25,6 +22,14 @@ var ReadFile = Tool{
 		"path": {
 			"type": "string",
 			"description": "Path to the file to read (relative or absolute)"
+		},
+		"start_line": {
+			"type": "integer",
+			"description": "Optional 1-based start line (inclusive). Provide both range fields for a partial read; omit both for a full-file read."
+		},
+		"end_line": {
+			"type": "integer",
+			"description": "Optional 1-based end line (inclusive). Provide both range fields for a partial read; omit both for a full-file read."
 		}
 	},
 	"required": ["path"]
@@ -39,6 +44,34 @@ var ReadFile = Tool{
 		if err != nil {
 			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to read file %s: %v", path, err)}
 		}
+
+		startLine, endLine, ranged, err := ParseReadRange(args)
+		if err != nil {
+			return ToolResult{Status: ResultStatusError, Error: err.Error()}
+		}
+
+		if ranged {
+
+			lines := strings.Split(string(data), "\n")
+			// Validate range bounds against file length
+			if startLine > len(lines) {
+				return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("start_line %d exceeds file length (%d lines)", startLine, len(lines))}
+			}
+			if endLine > len(lines) {
+				return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("end_line %d exceeds file length (%d lines)", endLine, len(lines))}
+			}
+
+			ranged := lines[startLine-1 : endLine]
+			content := strings.Join(ranged, "\n")
+
+			fe := BuildFileEntry(path, config.TraceRead, data, nil)
+			return ToolResult{
+				Status: ResultStatusSuccess,
+				Result: content,
+				Files:  []config.FileEntry{fe},
+			}
+		}
+
 		fe := BuildFileEntry(path, config.TraceRead, data, nil)
 		return ToolResult{
 			Status: ResultStatusSuccess,
@@ -46,6 +79,37 @@ var ReadFile = Tool{
 			Files:  []config.FileEntry{fe},
 		}
 	},
+}
+
+// ParseReadRange classifies omitted or start_line <= 1-only ranges as full reads.
+func ParseReadRange(args map[string]interface{}) (startLine, endLine int, ranged bool, err error) {
+	startLine, hasStart, err := parseIntegralArg(args, "start_line")
+	if err != nil {
+		return 0, 0, false, err
+	}
+	endLine, hasEnd, err := parseIntegralArg(args, "end_line")
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if hasStart && startLine <= 1 && !hasEnd {
+		return 0, 0, false, nil
+	}
+	if !hasStart && !hasEnd {
+		return 0, 0, false, nil
+	}
+	if !hasStart || !hasEnd {
+		return 0, 0, false, fmt.Errorf("both start_line and end_line must be provided together")
+	}
+	if startLine <= 1 {
+		startLine = 1
+	}
+	if endLine < 1 {
+		return 0, 0, false, fmt.Errorf("line numbers must be positive (1-based), got start_line=%d end_line=%d", startLine, endLine)
+	}
+	if startLine > endLine {
+		return 0, 0, false, fmt.Errorf("start_line (%d) must not exceed end_line (%d)", startLine, endLine)
+	}
+	return startLine, endLine, true, nil
 }
 
 // ─── write_file ──────────────────────────────────────────────
@@ -259,35 +323,6 @@ var EditFile = Tool{
 }
 
 // ─── helpers ─────────────────────────────────────────────────
-
-// BuildFileEntry constructs a FileEntry based on old and new data.
-// If newData is nil, it's a read-only operation.
-// If oldData is nil and newData is present, it's a create operation.
-// If both are present, it computes a diff.
-func BuildFileEntry(path string, trace string, oldData, newData []byte) config.FileEntry {
-	var checksum string
-	var diffText string
-
-	if newData != nil {
-		checksum = util.ComputeChecksum(newData)
-		if oldData != nil {
-			diffText = diff.Diff(string(oldData), string(newData))
-		} else {
-			diffText = diff.Diff("", string(newData))
-		}
-	} else if oldData != nil {
-		// Read-only
-		checksum = util.ComputeChecksum(oldData)
-	}
-
-	return config.FileEntry{
-		Path:     path,
-		Trace:    trace,
-		Checksum: checksum,
-		Time:     time.Now(),
-		Diff:     diffText,
-	}
-}
 
 func indexStr(s, substr string) int {
 	return strings.Index(s, substr)

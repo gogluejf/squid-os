@@ -11,6 +11,7 @@
   "auto_save": true,
   "auto_load_last_session": true,
   "context_window": 200000,
+  "context_compaction": true,
   "max_tool_result_tokens": 15000,
   "debug_enabled": true,
   "authorization": "auto",

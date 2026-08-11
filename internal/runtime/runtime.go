@@ -75,11 +75,12 @@ func Resolve(in Inputs) (Resolved, error) {
 	}
 
 	cfg := config.SessionConfig{
-		Target:           string(in.Target),
-		Inference:        config.InferenceConfig{Provider: in.Settings.Provider, Model: in.Settings.Model, Thinking: in.Settings.Thinking},
-		SystemPromptFile: in.Settings.SystemPromptFile,
-		WorkingDir:       workingDir,
-		AuthMode:         in.Settings.ValidateAuthorization(),
+		Target:            string(in.Target),
+		Inference:         config.InferenceConfig{Provider: in.Settings.Provider, Model: in.Settings.Model, Thinking: in.Settings.Thinking},
+		SystemPromptFile:  in.Settings.SystemPromptFile,
+		WorkingDir:        workingDir,
+		AuthMode:          in.Settings.ValidateAuthorization(),
+		ContextCompaction: in.Settings.ContextCompaction,
 		Limits: config.SessionLimits{
 			MaxToolResultTokens: in.Settings.MaxToolResultTokens,
 			MaxAgentDepth:       DefaultMaxAgentDepth,
@@ -93,6 +94,7 @@ func Resolve(in Inputs) (Resolved, error) {
 
 	if in.ExistingSession != nil {
 		existing := config.CloneSessionConfig(in.ExistingSession.Config)
+		existing.ContextCompaction = cfg.ContextCompaction
 		if in.Target == "" || in.Target == TargetInteractive {
 			existing.Inference = cfg.Inference
 			existing.Autosave.Enabled = cfg.Autosave.Enabled

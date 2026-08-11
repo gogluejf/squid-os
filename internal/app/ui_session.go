@@ -51,7 +51,7 @@ func (u *UISession) undoDestroy() (textarea, image string, ok bool) {
 	u.undoStack = u.undoStack[:len(u.undoStack)-1]
 	restoreAt := len(u.Doc.Messages)
 	for _, msg := range entry {
-		u.Doc.Messages = append(u.Doc.Messages, msg)
+		u.Append(msg)
 	}
 	u.invalidateRenderFrom(restoreAt)
 	if len(u.undoStack) > 0 {

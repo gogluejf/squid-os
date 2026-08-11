@@ -45,6 +45,52 @@ const (
 	RoleInternal  = "internal"  // metadata visible to user; excluded from API
 )
 
+// TokenTally is the structured token overview persisted in session files
+// and consumed by footer rendering, Analytics, and future APIs.
+type TokenTally struct {
+	Lifetime LifetimeTokenTally `json:"lifetime"`
+	Context  ContextTokenTally  `json:"context"`
+}
+
+// LifetimeTokenTally holds cumulative input and output token breakdowns
+// across all messages in the session.
+type LifetimeTokenTally struct {
+	Input  InputTokenTally  `json:"input"`
+	Output OutputTokenTally `json:"output"`
+	Total  int              `json:"total"`
+}
+
+// InputTokenTally breaks down input tokens by source.
+type InputTokenTally struct {
+	User            int `json:"user"`
+	ToolExecution   int `json:"tool_execution"`
+	SystemPrompt    int `json:"system_prompt"`
+	ToolDefinitions int `json:"tool_definitions"`
+	Synthetic       int `json:"synthetic"`
+	Total           int `json:"total"`
+}
+
+// OutputTokenTally breaks down output tokens by type.
+type OutputTokenTally struct {
+	Assistant int `json:"assistant"`
+	Thinking  int `json:"thinking"`
+	ToolCalls int `json:"tool_calls"`
+	Total     int `json:"total"`
+}
+
+// ContextTokenTally holds exact next-request provider context token totals.
+type ContextTokenTally struct {
+	Raw              int `json:"raw"`
+	RawInput         int `json:"raw_input"`
+	RawOutput        int `json:"raw_output"`
+	Compacted        int `json:"compacted"`
+	CompactedInput   int `json:"compacted_input"`
+	CompactedOutput  int `json:"compacted_output"`
+	Saved            int `json:"saved"`
+	SavedInstruction int `json:"saved_instruction"`
+	SavedExecution   int `json:"saved_execution"`
+}
+
 // SessionDoc is the persisted session document.
 // Meta holds identity. Initial holds provenance. Config holds current runtime state.
 // Pending holds desired next state (nil = nothing pending).
@@ -55,7 +101,8 @@ type SessionDoc struct {
 	Config      SessionConfig             `json:"config"`
 	Pending     *PendingConfig            `json:"pending,omitempty"`
 	Messages    []Message                 `json:"messages"`
-	TotalTokens int                       `json:"total_tokens"`
+	TotalTokens int                       `json:"total_tokens,omitempty"` // legacy, kept for backward compat on load
+	TokenTally  *TokenTally               `json:"token_tally,omitempty"`
 	FileState   map[string]FileStateEntry `json:"file_state,omitempty"`
 }
 
@@ -69,23 +116,24 @@ type SessionMeta struct {
 // SessionConfig is the single runtime configuration for a session.
 // Used by runtime.Resolve, chat.NewSession, and persisted in SessionDoc.
 type SessionConfig struct {
-	Inference        InferenceConfig   `json:"inference"`
-	SystemPromptFile string            `json:"system_prompt_file,omitempty"`
-	Target           string            `json:"target,omitempty"` // "interactive" or "autonomous"
-	AgentName        string            `json:"agent_name,omitempty"`
-	AgentSystem      string            `json:"agent_system,omitempty"`
-	ActiveSkill      string            `json:"active_skill,omitempty"`
-	AuthMode         AuthorizationMode `json:"auth_mode,omitempty"`
-	WorkingDir       string            `json:"working_dir,omitempty"`
-	Tools            []string          `json:"tools,omitempty"`
-	Skills           []CapabilityRef   `json:"skills,omitempty"`
-	Agents           []CapabilityRef   `json:"agents,omitempty"`
-	SkillPolicy      CapabilityPolicy  `json:"skill_policy"`
-	AgentPolicy      CapabilityPolicy  `json:"agent_policy"`
-	Memory           SessionMemory     `json:"memory,omitempty"`
-	Autosave         SessionAutosave   `json:"autosave,omitempty"`
-	Limits           SessionLimits     `json:"limits,omitempty"`
-	DebugEnabled     bool              `json:"debug_enabled,omitempty"`
+	Inference         InferenceConfig   `json:"inference"`
+	SystemPromptFile  string            `json:"system_prompt_file,omitempty"`
+	Target            string            `json:"target,omitempty"` // "interactive" or "autonomous"
+	AgentName         string            `json:"agent_name,omitempty"`
+	AgentSystem       string            `json:"agent_system,omitempty"`
+	ActiveSkill       string            `json:"active_skill,omitempty"`
+	AuthMode          AuthorizationMode `json:"auth_mode,omitempty"`
+	WorkingDir        string            `json:"working_dir,omitempty"`
+	Tools             []string          `json:"tools,omitempty"`
+	Skills            []CapabilityRef   `json:"skills,omitempty"`
+	Agents            []CapabilityRef   `json:"agents,omitempty"`
+	SkillPolicy       CapabilityPolicy  `json:"skill_policy"`
+	AgentPolicy       CapabilityPolicy  `json:"agent_policy"`
+	Memory            SessionMemory     `json:"memory,omitempty"`
+	Autosave          SessionAutosave   `json:"autosave,omitempty"`
+	Limits            SessionLimits     `json:"limits,omitempty"`
+	DebugEnabled      bool              `json:"debug_enabled,omitempty"`
+	ContextCompaction bool              `json:"context_compaction"`
 }
 
 // PendingConfig holds desired next-state changes. Non-nil fields are pending.
@@ -261,10 +309,12 @@ func SessionPath(p Paths, name string) string {
 	return filepath.Join(p.Sessions, name+".chat.json")
 }
 
-// SaveSessionDoc writes a session to sessions/<name>.chat.json
-func SaveSessionDoc(p Paths, name string, doc SessionDoc, totalTokens int) error {
+// SaveSessionDoc writes a session to sessions/<name>.chat.json.
+// It persists TokenTally and clears the legacy scalar total_tokens.
+func SaveSessionDoc(p Paths, name string, doc SessionDoc, tally *TokenTally) error {
 	doc.Meta.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	doc.TotalTokens = totalTokens
+	doc.TokenTally = tally
+	doc.TotalTokens = 0 // clear legacy scalar on save
 	data, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return err

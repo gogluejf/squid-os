@@ -145,18 +145,30 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 		goto doExecute
 	}
 
-	if toolName != "read_file" && toolName != "open" {
+	// Validate file state for destructive tools and ranged reads.
+	// Full reads skip validation (they refresh the tracked checksum).
+	// Ranged reads validate — if the file changed externally, reject and ask for a full read.
+	if toolName != "open" {
 		if pathVal, ok := args["path"].(string); ok {
 			resolvedPath := tools.ResolvePath(pathVal, s.Doc.Config.WorkingDir)
-			if err := tools.Validate(resolvedPath, sessionState); err != nil {
-				entries[i].Execution.Status = tools.ResultStatusError
-				entries[i].Execution.Error = fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again uisng the tool \"read_file\" and retry your command.", resolvedPath)
-				for j := i + 1; j < len(entries); j++ {
-					entries[j].Execution.Status = tools.ResultStatusError
-					entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"
+			_, _, isRangedRead, rangeErr := tools.ParseReadRange(args)
+			isRangedRead = toolName == "read_file" && rangeErr == nil && isRangedRead
+			needsValidation := toolName != "read_file" || isRangedRead
+			if needsValidation {
+				if err := tools.ValidateFileState(resolvedPath, sessionState); err != nil {
+					msg := fmt.Sprintf("blocked: file changed externally: %s — tool was not executed. Read the file again using the tool \"read_file\" and retry your command.", resolvedPath)
+					if isRangedRead {
+						msg = fmt.Sprintf("blocked: file changed externally since last tracked read: %s — perform a full read_file to refresh the tracked state before retrying ranged reads.", resolvedPath)
+					}
+					entries[i].Execution.Status = tools.ResultStatusError
+					entries[i].Execution.Error = msg
+					for j := i + 1; j < len(entries); j++ {
+						entries[j].Execution.Status = tools.ResultStatusError
+						entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"
+					}
+					FlushToolMessage(s, msgIdx)
+					return ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: i, NextIndex: len(entries)}
 				}
-				FlushToolMessage(s, msgIdx)
-				return ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: i, NextIndex: len(entries)}
 			}
 		}
 	}

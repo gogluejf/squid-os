@@ -39,6 +39,7 @@ func (m Model) openSystemPicker() (Model, tea.Cmd) {
 							newContent := config.LoadSystemPrompt(m.paths, selected)
 							m.session.Doc.Messages[i].Text = newContent
 							m.session.Doc.Messages[i].InputTokens = countTokensApprox(newContent)
+							m.session.RefreshTokenTally()
 							changed = true
 							break
 						}

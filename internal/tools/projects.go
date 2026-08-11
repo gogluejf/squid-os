@@ -9,18 +9,6 @@ import (
 	"squid-os/internal/util"
 )
 
-// ResolvePath resolves a path against the provided session working directory.
-func ResolvePath(p, workingDir string) string {
-	p = util.ExpandHome(p)
-	if filepath.IsAbs(p) {
-		return p
-	}
-	if workingDir != "" {
-		return filepath.Join(workingDir, p)
-	}
-	return p
-}
-
 var SetWorkingDirTool = Tool{
 	Name:         "set_working_dir",
 	Description:  "Set the working directory. Tool calls will use this as the base for relative paths. Use when user requests or to switch context to another project.",

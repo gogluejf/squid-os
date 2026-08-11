@@ -3,19 +3,43 @@ package tools
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"squid-os/internal/config"
+	"squid-os/internal/diff"
 	"squid-os/internal/util"
 )
 
-// Validate checks a path against the session file state map.
-// Returns nil if the path is not tracked, or if the on-disk checksum matches.
-// Returns an error if the file on disk differs from the last recorded value,
-// or if the file was previously marked as deleted.
-func Validate(path string, sessionState map[string]config.FileStateEntry) error {
+// BuildFileEntry constructs a FileEntry from old and new file data.
+func BuildFileEntry(path string, trace string, oldData, newData []byte) config.FileEntry {
+	var checksum string
+	var diffText string
+
+	if newData != nil {
+		checksum = util.ComputeChecksum(newData)
+		if oldData != nil {
+			diffText = diff.Diff(string(oldData), string(newData))
+		} else {
+			diffText = diff.Diff("", string(newData))
+		}
+	} else if oldData != nil {
+		checksum = util.ComputeChecksum(oldData)
+	}
+
+	return config.FileEntry{
+		Path:     path,
+		Trace:    trace,
+		Checksum: checksum,
+		Time:     time.Now(),
+		Diff:     diffText,
+	}
+}
+
+// ValidateFileState checks a path against the session file state map.
+func ValidateFileState(path string, sessionState map[string]config.FileStateEntry) error {
 	stored, ok := sessionState[path]
 	if !ok {
-		return nil // never tracked
+		return nil
 	}
 	if stored.Checksum == "" {
 		return fmt.Errorf("file was deleted during this session: %s", path)
@@ -32,7 +56,6 @@ func Validate(path string, sessionState map[string]config.FileStateEntry) error 
 }
 
 // MergeEntries merges FileEntry results into a file state map.
-// A non-empty checksum sets the entry; an empty checksum marks it as deleted.
 func MergeEntries(entries []config.FileEntry, state map[string]config.FileStateEntry) {
 	if state == nil {
 		return

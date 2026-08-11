@@ -24,7 +24,8 @@ func checkpointSave(session *chat.Session, paths config.Paths, name string) erro
 	if name == "" {
 		return nil
 	}
-	return config.SaveSessionDoc(paths, name, session.Doc, session.TotalTokens())
+	session.RefreshTokenTally()
+	return config.SaveSessionDoc(paths, name, session.Doc, session.Doc.TokenTally)
 }
 
 func Execute(ctx context.Context, request Request) (Result, error) {

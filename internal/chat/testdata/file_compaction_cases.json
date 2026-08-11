@@ -1,0 +1,675 @@
+{
+  "description": "Shared fixture for file-context-compaction. Defines scenarios tested by both Go (internal/chat/compaction_test.go) and Python (chat-analytics/scripts/test_file_compaction.py). Each scenario specifies a sequence of file-tool events and the expected compaction outcome. Go and Python must produce identical compacted_events, retained_events, and token totals for every case.",
+  "semantics": {
+    "control": "Settings-only (context_compaction switch). No CLI or agent override.",
+    "compaction": "Dynamic, non-destructive. Never mutates persisted history.",
+    "replacement": "Fixed internal text. Superseded reads keep path/range args with result replaced. Superseded edits replace old_string, new_string, and result. Superseded writes/creates replace content and result.",
+    "ranged_read": "Partial observation, never a checkpoint. Distinguished by start_line/end_line in instruction arguments (Go) or is_ranged flag (fixture).",
+    "checkpoint": "Full read (no range), write_file trace=write, write_file trace=create. Supersedes all earlier successful events for the same path.",
+    "edit": "Delta, never a checkpoint. No-op edit (trace=read) is still a delta.",
+    "failure": "Failed operations are always retained, never compacted.",
+    "analytics": "Always computes current next-request projection regardless of enabled switch. Setting controls outgoing snapshot only.",
+    "out_of_scope": [
+      "bash result compaction",
+      "sed parsing",
+      "structured search",
+      "glob/find tooling",
+      "per-turn metrics",
+      "persisted compaction decisions"
+    ]
+  },
+  "cases": [
+    {
+      "name": "repeated_full",
+      "description": "Three full reads on the same path. Latest read is the checkpoint; earlier reads are compacted.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        },
+        {
+          "id": "tc2",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        },
+        {
+          "id": "tc3",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        }
+      ],
+      "expected": {
+        "compacted_events": 2,
+        "retained_events": 1,
+        "compacted_instruction_tokens": 20,
+        "compacted_execution_tokens": 40,
+        "compacted_tokens": 60,
+        "retained_instruction_tokens": 10,
+        "retained_execution_tokens": 20,
+        "retained_tokens": 30
+      }
+    },
+    {
+      "name": "multiple_ranges",
+      "description": "Multiple ranged reads on the same path. No checkpoint exists. All events are retained.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": true,
+          "status": "success",
+          "instruction_tokens": 5,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc2",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": true,
+          "status": "success",
+          "instruction_tokens": 5,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc3",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": true,
+          "status": "success",
+          "instruction_tokens": 5,
+          "execution_tokens": 10
+        }
+      ],
+      "expected": {
+        "compacted_events": 0,
+        "retained_events": 3,
+        "compacted_instruction_tokens": 0,
+        "compacted_execution_tokens": 0,
+        "compacted_tokens": 0,
+        "retained_instruction_tokens": 15,
+        "retained_execution_tokens": 30,
+        "retained_tokens": 45
+      }
+    },
+    {
+      "name": "range_edit_range",
+      "description": "Ranged read, edit, ranged read on the same path. No checkpoint. All retained.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": true,
+          "status": "success",
+          "instruction_tokens": 5,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc2",
+          "tool": "edit_file",
+          "path": "/a.go",
+          "trace": "edit",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 15,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc3",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": true,
+          "status": "success",
+          "instruction_tokens": 5,
+          "execution_tokens": 10
+        }
+      ],
+      "expected": {
+        "compacted_events": 0,
+        "retained_events": 3,
+        "compacted_instruction_tokens": 0,
+        "compacted_execution_tokens": 0,
+        "compacted_tokens": 0,
+        "retained_instruction_tokens": 25,
+        "retained_execution_tokens": 30,
+        "retained_tokens": 55
+      }
+    },
+    {
+      "name": "ranges_then_full",
+      "description": "Multiple ranged reads followed by a full read. Full read is the checkpoint; all earlier ranged reads are compacted.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": true,
+          "status": "success",
+          "instruction_tokens": 5,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc2",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": true,
+          "status": "success",
+          "instruction_tokens": 5,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc3",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        }
+      ],
+      "expected": {
+        "compacted_events": 2,
+        "retained_events": 1,
+        "compacted_instruction_tokens": 10,
+        "compacted_execution_tokens": 20,
+        "compacted_tokens": 30,
+        "retained_instruction_tokens": 10,
+        "retained_execution_tokens": 20,
+        "retained_tokens": 30
+      }
+    },
+    {
+      "name": "write_read_checkpoints",
+      "description": "Write (create) followed by full read. Create is a checkpoint but is superseded by the later full read checkpoint. Create is compacted, read is retained.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "write_file",
+          "path": "/a.go",
+          "trace": "create",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 15,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc2",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        }
+      ],
+      "expected": {
+        "compacted_events": 1,
+        "retained_events": 1,
+        "compacted_instruction_tokens": 15,
+        "compacted_execution_tokens": 10,
+        "compacted_tokens": 25,
+        "retained_instruction_tokens": 10,
+        "retained_execution_tokens": 20,
+        "retained_tokens": 30
+      }
+    },
+    {
+      "name": "noop_edit",
+      "description": "Full read, no-op edit (trace=read), edit. No-op edit is not a checkpoint. Full read is the checkpoint; no-op edit and real edit come after it so all are retained.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        },
+        {
+          "id": "tc2",
+          "tool": "edit_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 15,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc3",
+          "tool": "edit_file",
+          "path": "/a.go",
+          "trace": "edit",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 15,
+          "execution_tokens": 10
+        }
+      ],
+      "expected": {
+        "compacted_events": 0,
+        "retained_events": 3,
+        "compacted_instruction_tokens": 0,
+        "compacted_execution_tokens": 0,
+        "compacted_tokens": 0,
+        "retained_instruction_tokens": 40,
+        "retained_execution_tokens": 40,
+        "retained_tokens": 80
+      }
+    },
+    {
+      "name": "failures_retained",
+      "description": "Failed read before a successful full read. Failed read is retained (failures are never compacted). Successful read is the checkpoint and retained.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "error",
+          "instruction_tokens": 10,
+          "execution_tokens": 0
+        },
+        {
+          "id": "tc2",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        }
+      ],
+      "expected": {
+        "compacted_events": 0,
+        "retained_events": 2,
+        "compacted_instruction_tokens": 0,
+        "compacted_execution_tokens": 0,
+        "compacted_tokens": 0,
+        "retained_instruction_tokens": 20,
+        "retained_execution_tokens": 20,
+        "retained_tokens": 40
+      }
+    },
+    {
+      "name": "interleaved_paths",
+      "description": "Two paths interleaved. Each path is planned independently. Path /a.go: tc1 compacted by tc5 (full read checkpoint), tc3 failed (retained). Path /b.go: tc2 compacted by tc4 (write checkpoint).",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        },
+        {
+          "id": "tc2",
+          "tool": "read_file",
+          "path": "/b.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        },
+        {
+          "id": "tc3",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "error",
+          "instruction_tokens": 10,
+          "execution_tokens": 0
+        },
+        {
+          "id": "tc4",
+          "tool": "write_file",
+          "path": "/b.go",
+          "trace": "write",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 15,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc5",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        }
+      ],
+      "expected": {
+        "compacted_events": 2,
+        "retained_events": 3,
+        "compacted_instruction_tokens": 20,
+        "compacted_execution_tokens": 40,
+        "compacted_tokens": 60,
+        "retained_instruction_tokens": 35,
+        "retained_execution_tokens": 30,
+        "retained_tokens": 65
+      }
+    },
+    {
+      "name": "range_edit_range_full",
+      "description": "Ranged read, edit, ranged read, full read. Full read is the checkpoint; all three earlier events are compacted.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": true,
+          "status": "success",
+          "instruction_tokens": 5,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc2",
+          "tool": "edit_file",
+          "path": "/a.go",
+          "trace": "edit",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 15,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc3",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": true,
+          "status": "success",
+          "instruction_tokens": 5,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc4",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        }
+      ],
+      "expected": {
+        "compacted_events": 3,
+        "retained_events": 1,
+        "compacted_instruction_tokens": 25,
+        "compacted_execution_tokens": 30,
+        "compacted_tokens": 55,
+        "retained_instruction_tokens": 10,
+        "retained_execution_tokens": 20,
+        "retained_tokens": 30
+      }
+    },
+    {
+      "name": "write_create_edit_edit",
+      "description": "Create, edit, write, edit. Write is the latest checkpoint. Create and first edit are compacted. Second edit after checkpoint is retained.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "write_file",
+          "path": "/a.go",
+          "trace": "create",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 5
+        },
+        {
+          "id": "tc2",
+          "tool": "edit_file",
+          "path": "/a.go",
+          "trace": "edit",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 20,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc3",
+          "tool": "write_file",
+          "path": "/a.go",
+          "trace": "write",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 15,
+          "execution_tokens": 7
+        },
+        {
+          "id": "tc4",
+          "tool": "edit_file",
+          "path": "/a.go",
+          "trace": "edit",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 20,
+          "execution_tokens": 12
+        }
+      ],
+      "expected": {
+        "compacted_events": 2,
+        "retained_events": 2,
+        "compacted_instruction_tokens": 30,
+        "compacted_execution_tokens": 15,
+        "compacted_tokens": 45,
+        "retained_instruction_tokens": 35,
+        "retained_execution_tokens": 19,
+        "retained_tokens": 54
+      }
+    },
+    {
+      "name": "failed_write_not_checkpoint",
+      "description": "Successful full read followed by failed write. Write fails so it is not a checkpoint. Both events retained.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        },
+        {
+          "id": "tc2",
+          "tool": "write_file",
+          "path": "/a.go",
+          "trace": "write",
+          "is_ranged": false,
+          "status": "error",
+          "instruction_tokens": 15,
+          "execution_tokens": 0
+        }
+      ],
+      "expected": {
+        "compacted_events": 0,
+        "retained_events": 2,
+        "compacted_instruction_tokens": 0,
+        "compacted_execution_tokens": 0,
+        "compacted_tokens": 0,
+        "retained_instruction_tokens": 25,
+        "retained_execution_tokens": 20,
+        "retained_tokens": 45
+      }
+    },
+    {
+      "name": "single_full_read",
+      "description": "Single full read on a path. It is the checkpoint and retained.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        }
+      ],
+      "expected": {
+        "compacted_events": 0,
+        "retained_events": 1,
+        "compacted_instruction_tokens": 0,
+        "compacted_execution_tokens": 0,
+        "compacted_tokens": 0,
+        "retained_instruction_tokens": 10,
+        "retained_execution_tokens": 20,
+        "retained_tokens": 30
+      }
+    },
+    {
+      "name": "single_ranged_read",
+      "description": "Single ranged read. No checkpoint. Retained.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": true,
+          "status": "success",
+          "instruction_tokens": 5,
+          "execution_tokens": 10
+        }
+      ],
+      "expected": {
+        "compacted_events": 0,
+        "retained_events": 1,
+        "compacted_instruction_tokens": 0,
+        "compacted_execution_tokens": 0,
+        "compacted_tokens": 0,
+        "retained_instruction_tokens": 5,
+        "retained_execution_tokens": 10,
+        "retained_tokens": 15
+      }
+    },
+    {
+      "name": "full_then_range_then_edit",
+      "description": "Full read (checkpoint), ranged read after it, edit after that. All retained because they come at or after the checkpoint.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 10,
+          "execution_tokens": 20
+        },
+        {
+          "id": "tc2",
+          "tool": "read_file",
+          "path": "/a.go",
+          "trace": "read",
+          "is_ranged": true,
+          "status": "success",
+          "instruction_tokens": 5,
+          "execution_tokens": 10
+        },
+        {
+          "id": "tc3",
+          "tool": "edit_file",
+          "path": "/a.go",
+          "trace": "edit",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 15,
+          "execution_tokens": 10
+        }
+      ],
+      "expected": {
+        "compacted_events": 0,
+        "retained_events": 3,
+        "compacted_instruction_tokens": 0,
+        "compacted_execution_tokens": 0,
+        "compacted_tokens": 0,
+        "retained_instruction_tokens": 30,
+        "retained_execution_tokens": 40,
+        "retained_tokens": 70
+      }
+    },
+    {
+      "name": "canonical_path_groups_instruction_aliases",
+      "description": "Relative and absolute instruction paths persist the same canonical FileEntry.path, so the later full read compacts the earlier read.",
+      "events": [
+        {
+          "id": "tc1",
+          "tool": "read_file",
+          "path": "src/a.go",
+          "canonical_path": "/work/src/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 7,
+          "execution_tokens": 11
+        },
+        {
+          "id": "tc2",
+          "tool": "read_file",
+          "path": "/work/src/a.go",
+          "canonical_path": "/work/src/a.go",
+          "trace": "read",
+          "is_ranged": false,
+          "status": "success",
+          "instruction_tokens": 13,
+          "execution_tokens": 17
+        }
+      ],
+      "expected": {
+        "compacted_events": 1,
+        "retained_events": 1,
+        "compacted_instruction_tokens": 7,
+        "compacted_execution_tokens": 11,
+        "compacted_tokens": 18,
+        "retained_instruction_tokens": 13,
+        "retained_execution_tokens": 17,
+        "retained_tokens": 30
+      }
+    }
+  ]
+}

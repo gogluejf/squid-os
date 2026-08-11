@@ -196,23 +196,29 @@ func (m *Model) updateViewportContent() {
 	m.viewport.GotoBottom()
 }
 
-// buildFooterData assembles the dynamic footer data.
+// buildFooterData assembles footer data from the live TokenTally.
 func (m Model) buildFooterData() ui.FooterData {
-	sessionIn := m.session.TotalInputTokens()
-	sessionOut := m.session.TotalOutputTokens()
 	streamOut := m.session.Stream.Metrics.TotalOutputTokens()
+
+	tally := m.session.Doc.TokenTally
+	if tally == nil {
+		tally = &config.TokenTally{}
+	}
 
 	inference := m.session.EffectiveInference()
 	return ui.FooterData{
-		Model:             modelBasename(inference.Model),
-		Provider:          inference.Provider,
-		TotalTokens:       sessionIn + sessionOut + streamOut,
-		TotalInputTokens:  sessionIn,
-		TotalOutTokens:    sessionOut + streamOut,
-		Streaming:         m.session.Stream.Active,
-		ThinkingOn:        inference.Thinking.Enabled,
-		AuthorizationMode: string(m.session.Doc.Config.AuthMode),
-		TokPerSec:         jitterTokenRate(m.session.Stream.Metrics.AvgTokenPerSec(), m.session.Stream.Metrics.LastActivity(), m.session.Stream.Active),
+		Model:                 modelBasename(inference.Model),
+		Provider:              inference.Provider,
+		ContextInputTokens:    tally.Context.CompactedInput,
+		ContextOutputTokens:   tally.Context.CompactedOutput,
+		ContextTotalTokens:    tally.Context.Compacted,
+		SavedContextTokens:    tally.Context.Saved,
+		ContextCompaction:     m.session.Doc.Config.ContextCompaction,
+		StreamingOutputTokens: streamOut,
+		Streaming:             m.session.Stream.Active,
+		ThinkingOn:            inference.Thinking.Enabled,
+		AuthorizationMode:     string(m.session.Doc.Config.AuthMode),
+		TokPerSec:             jitterTokenRate(m.session.Stream.Metrics.AvgTokenPerSec(), m.session.Stream.Metrics.LastActivity(), m.session.Stream.Active),
 		SeqDurMs: func() int64 {
 			if m.session.Stream.Active {
 				ss, _ := m.buildLiveSeqStat()

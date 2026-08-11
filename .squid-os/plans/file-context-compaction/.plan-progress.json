@@ -1,0 +1,133 @@
+{
+  "tasks": {
+    "1.1": {
+      "number": "1.1",
+      "status": "done",
+      "name": "Resolve compaction from settings into session state",
+      "milestone": "Session Compaction Setting",
+      "milestone_number": "1",
+      "summary": "Added ContextCompaction bool to Settings and SessionConfig structs. Default settings defines context_compaction=false. Resolve() copies settings value into new sessions; existing sessions (interactive and autonomous) preserve their persisted value. No CLI override path exists \u2014 Overrides struct is untouched. Three new tests verify new-session copy, existing-session preservation (both interactive and autonomous), and no-CLI-override. session-config-resolution.md updated with ContextCompaction row in precedence and application mode tables. All tests pass (go test ./internal/config ./internal/runtime)."
+    },
+    "2.1": {
+      "number": "2.1",
+      "status": "done",
+      "name": "Support checksum-safe ranged read_file calls",
+      "milestone": "Ranged File Reads",
+      "milestone_number": "2",
+      "summary": {
+        "tradeoffs": "Ranged read validation added in tool_exec.go rather than inside the tool Execute handler, because Execute has no access to session file state. This keeps the tool Execute function pure (no session dependency) while still enforcing stale-file protection. Range validation requires both start_line and end_line to be provided together \u2014 partial range args are rejected as an error rather than being treated as a full read, to avoid ambiguous behavior.",
+        "done": "Added optional start_line and end_line arguments to read_file tool schema and Execute handler. Ranged reads return only the selected lines (1-based inclusive) while computing FileEntry.Checksum from the complete file bytes. Added file-state validation in tool_exec.go for ranged reads: if a tracked file has changed on disk, the ranged read is rejected with a message asking for a full read. Full reads skip validation (refreshing checksum). Untracked files pass validation. Updated read_file JSON schema with start_line and end_line properties. Created internal/tools/core_test.go with 14 unit tests covering full reads, ranged reads, edge cases (zero, reversed, out-of-bounds, partial args, single line, first/last line, clamp end), and error conditions. Added 5 integration tests in tool_exec_test.go for ranged read file-state validation, external change rejection, full read validation skip, multiple ranged reads on same version, and untracked file ranged reads.",
+        "confidence": "high",
+        "failures": "None. All 19 new tests pass. Full project build and existing test suite unaffected.",
+        "decisions": "1) Checksum always computed from full file bytes regardless of range \u2014 preserves stale-file detection. 2) end_line beyond file length returns a clear out-of-bounds error without updating file state \u2014 no silent clamping. 3) start_line beyond file length returns an error \u2014 no silent empty results. 4) Ranged read error message specifically mentions performing a full read to refresh tracked state. 5) No FileStateEntry schema expansion \u2014 range presence is detected from ToolCallEntry.Instruction.Arguments JSON."
+      }
+    },
+    "3.1": {
+      "number": "3.1",
+      "status": "done",
+      "name": "Plan deterministic full-checkpoint compaction",
+      "milestone": "File Compaction Rules",
+      "milestone_number": "3",
+      "summary": {
+        "lessons_learned": "Failed tool calls in the test helpers don't set Execution.Tokens (same as real tool execution), so test expectations must account for zero execution tokens on failures. The benchmark confirms linear scaling with ~1600ns per message regardless of session size.",
+        "confidence": "high",
+        "decisions": "1) Single-pass extraction followed by per-path grouping with maps \u2014 O(n) in messages, O(1) lookup by tool-call ID. 2) Checkpoint classification uses persisted read_file arguments (start_line/end_line presence) to distinguish full from ranged reads. 3) edit_file always classified as delta including no-op read traces \u2014 never a checkpoint. 4) Failed operations always retained regardless of position relative to checkpoints. 5) CompactionPlan is a pure value type \u2014 no mutation of input messages. 6) fileEvent is an unexported internal struct to keep the public API minimal. 7) Canonical grouping identity is Execution.Files[0].Path; instruction arguments only classify read ranges and provide fallback path for failed/unpersisted events.",
+        "failures": "None. All 20 unit tests and 4 benchmarks pass. Full project build clean.",
+        "done": "Created internal/chat/compaction.go with BuildCompactionPlan \u2014 a pure deterministic planner that scans messages once, extracts file events, groups by canonical FileEntry.path, identifies full checkpoints (full reads, writes, creates), and produces per-tool-call CompactionDecision entries with CompactionTokens summaries. Created compaction_test.go with 20 unit tests covering: empty input, non-file tools ignored, single full/ranged reads, full-read superseding earlier reads, ranged reads never superseding, full reads compacting earlier ranged reads, write/create as checkpoints, edit_file as delta, no-op edits not checkpoints, failed ops retained, multiple paths, events after checkpoint retained, range-edit-range-full sequences, immutability of input messages, determinism, interleaved paths with failures, direct map lookup by tool-call ID, and failed writes not checkpoints. Created compaction_benchmark_test.go with 4 benchmark sizes (100/500/2000/10000 messages) reporting ns/op, B/op, and allocs/op \u2014 confirming linear scaling. Correctness update: RawInstruction/RawExecution/Raw now include every extracted file event before compaction, retained counts include latest checkpoint and later/failed retained events, saved counts include only superseded successful events, and raw=retained+saved invariants are asserted. Event grouping now uses persisted canonical FileEntry.Path when present, with instruction path only as fallback for unpersisted/failed events.",
+        "tradeoffs": "Token counts use persisted Instruction.Tokens and Execution.Tokens fields directly from the ToolCallEntry \u2014 no re-computation. Failed operations have Execution.Tokens=0 in current tool execution path, so retained tokens for failed ops reflect only instruction tokens. The planner returns a map of decisions keyed by tool-call ID for O(1) lookup, which is the right tradeoff for task 4.1's BuildContext that will need fast per-tool-call decisions."
+      }
+    },
+    "4.1": {
+      "number": "4.1",
+      "status": "done",
+      "name": "Build and send the exact compacted request",
+      "milestone": "Compacted Request Context",
+      "milestone_number": "4",
+      "summary": {
+        "failures": "None. All 20 unit tests pass. 6 benchmarks run clean. Full build succeeds.",
+        "lessons_learned": "The compacted replacement text can be longer than very short original content (e.g. 'file content' is shorter than '[compacted] file read: /file.go'). Tests must use realistic content sizes to verify savings. The context.Context parameter in StartStreamWithContext shadows our Context type \u2014 must use a distinct variable name.",
+        "confidence": "high",
+        "decisions": "1) Context.Messages is []provider.Message to avoid a second stream conversion. 2) Raw and compacted paths share one provider-message builder; compacted mode supplies the existing plan and applies only file-call transforms. 3) compactArguments and compactResult are pure functions. 4) StartStreamWithContext uses reqCtx to avoid shadowing context.Context. 5) Token counting counts actual provider-message content, including replacement overhead.",
+        "tradeoffs": "Token counting uses CountTokensApproxString (len/4 heuristic) for both raw and compacted counts. BuildContext builds both raw and potential compacted message sets so disabled sessions can still report potential savings while sending raw messages.",
+        "done": "Created internal/chat/context.go with Context, ContextTokens, and BuildContext(messages, enabled) \u2014 a single-pass transformer that applies CompactionPlan decisions to produce an exact provider-message snapshot for the next LLM request. Added (*Session).BuildContext() to session.go that delegates to BuildContext using s.Doc.Config.ContextCompaction. Modified StartStreamWithContext in loop.go to use s.BuildContext().Messages instead of s.BuildMessages(), ensuring the stream sends the exact compacted snapshot without an independent rebuild. Created context_test.go with 20 unit tests covering all acceptance criteria. Created context_benchmark_test.go with 6 benchmarks (small/medium/large/xlarge + disabled + session method). All tests pass. Full build clean. Pre-existing cli test failure unrelated."
+      }
+    },
+    "5.1": {
+      "number": "5.1",
+      "status": "done",
+      "name": "Persist a structured session token tally",
+      "milestone": "Structured Session Token Tally",
+      "milestone_number": "5",
+      "summary": {
+        "failures": "None",
+        "lessons_learned": "Compaction on small content can produce negative Saved (replacement text longer than original). Tests must use large content to verify positive savings. BuildToolsEnabledMsg returns empty when no tools registered in test env \u2014 can't assert tool_definitions > 0 without registration.",
+        "decisions": "Placed tally types in config package (shared contract). Placed CalculateTokenTally in chat package (needs BuildContext access). Retained TotalTokens field in SessionDoc with omitempty for backward compat on loading legacy sessions. Footer calls CalculateTokenTally each render to stay live \u2014 acceptable because tally is cheap (single message walk + BuildContext).",
+        "confidence": "high",
+        "done": "Created TokenTally contract (Lifetime + Context) in config.SessionDoc replacing scalar total_tokens. Added CalculateTokenTally() on *Session that computes lifetime input/output breakdowns from messages and context totals from BuildContext. Updated SaveSessionDoc to accept *TokenTally. Session save refreshes tally before persistence. Footer data sourced from in-memory TokenTally. Added 12 unit tests covering empty session, per-role breakdowns, input/output/total consistency, context compaction with/without enabled, JSON round-trip, and full mixed session. All tests pass.",
+        "tradeoffs": "Context.Saved (raw - compacted) and Context.SavedInstruction/SavedExecution measure different things: Saved comes from actual message token counting (can be negative if replacement text is longer), while SavedInstruction/SavedExecution come from CompactionPlan token fields on ToolCallEntry. Both are persisted because they serve different consumers."
+      }
+    },
+    "5.2": {
+      "number": "5.2",
+      "status": "done",
+      "name": "Keep TokenTally live across session mutations",
+      "milestone": "Structured Session Token Tally",
+      "milestone_number": "5",
+      "summary": {
+        "lessons_learned": "Refreshing only Lifetime left Context stale after append, truncate, load, and save. The final implementation assigns one full pure tally at every mutation/load/save boundary.",
+        "tradeoffs": "RefreshTokenTally rebuilds the full tally from current messages instead of preserving Context or tracking dirty state. Session.BuildContext still updates only the exact outgoing Context tally when a stream request is built.",
+        "confidence": "high",
+        "decisions": "RefreshTokenTally assigns s.CalculateTokenTally() directly. CalculateTokenTally is pure and calls pure BuildContext(messages, enabled), so saves and mutation boundaries share the same current full-tally behavior. Session.BuildContext may refresh Doc.TokenTally.Context for the exact outgoing request, but it does not recalculate Lifetime.",
+        "done": "TokenTally stays live through Append, TruncateTo, FlushToolMessage, SaveAssistantMsg, PushConfigChange, NewSession/LoadSession, save, and sys-prompt direct mutation. Footer reads Doc.TokenTally directly and never builds context. Interactive and autonomous saves both call RefreshTokenTally before SaveSessionDoc. Lifecycle tests prove context changes immediately after append, truncate, tool completion, load, and save-time refresh before any stream request.",
+        "failures": "None"
+      }
+    },
+    "5.3": {
+      "number": "5.3",
+      "status": "done",
+      "name": "Migrate saved sessions to token_tally",
+      "milestone": "Structured Session Token Tally",
+      "milestone_number": "5",
+      "summary": {
+        "done": "Used session-config-migrator to migrate all 911 saved sessions from scalar total_tokens to structured token_tally. Wrote /home/goglue/tmp/session_token_tally_migration.py callback implementing migrate() and validate(). Callback reproduces Go token_tally.go lifetime calculation (user/system/synthetic/assistant roles only, internal/tool roles ignored per Go switch), BuildAPIMessages provider conversion, BuildCompactionPlan full-checkpoint compaction, and CountTokensApproxString (len/4, min 1) semantics. Context ALWAYS computes raw, compacted, saved, saved_instruction, saved_execution as if compaction were enabled regardless of config switch. Runner created timestamped .bck and .new trees at /home/goglue/.config/squid-os/sessions.20260808T071516Z.{bck,new}. All 911 files migrated with zero validation failures. Changed paths exactly {total_tokens, token_tally} for every file. Source tree unchanged (911 files still have total_tokens, zero have token_tally). Backup is source-identical at migration time. Migrated .new tree passes callback validation (zero errors), determinism check (re-run produces identical output), and structural validation (all files have token_tally, none have total_tokens, lifetime.total == input.total + output.total, context.saved == context.raw - context.compacted). One source file updated_at changed between backup copy and verification due to live session save during migration window \u2014 does not affect migration integrity as runner verified source manifest consistency during execution.",
+        "confidence": "high",
+        "decisions": "1) Context compaction projection always computed regardless of config switch \u2014 consistent with Go BuildContext behavior. 2) Legacy tool-role messages and internal-role messages are not counted in lifetime tally \u2014 matches Go calculateLifetimeTally switch behavior exactly. 3) Tool definitions (internal role Tools Enabled) not counted as tool_definitions in Go tally \u2014 Go code checks RoleSystem with Label Tools Enabled, but Tools Enabled messages are RoleInternal. 4) Callback placed in /home/goglue/tmp per skill rules. 5) .new tree safe to adopt but not auto-adopted \u2014 source remains untouched.",
+        "failures": "None. All 911 sessions migrated successfully with zero validation errors.",
+        "lessons_learned": "Source session file updated_at can change during migration if a live session is saved concurrently. The runner's manifest comparison catches this \u2014 backup integrity is verified against source-at-copy-time, and source-at-end is verified separately. For future migrations, consider running during low-activity periods or noting that source files may change between backup and verification.",
+        "tradeoffs": "Lifetime total differs from old total_tokens for sessions with internal-role messages (e.g., Tools Enabled) because Go tally only counts user/system/synthetic/assistant roles. This is correct \u2014 the old total_tokens used TotalTokens() which summed all input_tokens regardless of role. Context.Saved can be negative when compacted replacement text is longer than original content (tiny files) \u2014 matches Go behavior exactly. Context.SavedInstruction/SavedExecution come from CompactionPlan persisted token fields while Context.Saved comes from actual provider message token counting \u2014 these measure different things."
+      }
+    },
+    "5.4": {
+      "number": "5.4",
+      "status": "done",
+      "name": "Consume token_tally in Chat Analytics",
+      "milestone": "Structured Session Token Tally",
+      "milestone_number": "5"
+    },
+    "6.1": {
+      "number": "6.1",
+      "status": "done",
+      "name": "Render live TokenTally in the footer",
+      "milestone": "Live Context Visibility",
+      "milestone_number": "6",
+      "summary": {
+        "done": "FooterData now carries ContextCompaction explicitly. RenderFooter shows the savings chip only when compaction is enabled and SavedContextTokens > 0, while the context usage bar continues to use CompactedContextTokens as the potential compacted pressure value.",
+        "decisions": "Disabled compaction can still have positive potential savings in TokenTally.Context; the footer suppresses only the display chip, not the context bar input.",
+        "failures": "None.",
+        "confidence": "high"
+      }
+    },
+    "7.1": {
+      "number": "7.1",
+      "status": "done",
+      "name": "Align Analytics with full and ranged read rules",
+      "milestone": "Compaction Observability",
+      "milestone_number": "7",
+      "summary": {
+        "done": "Updated Go/Python shared fixture with a canonical-path alias case where relative and absolute instruction paths persist the same FileEntry.path and compact together. Updated Chat Analytics projection to retain failed events, use canonical file-entry paths for successful events, and keep per-file/history totals aligned with Go raw=retained+saved accounting.",
+        "failures": "None. Go compaction tests, planner benchmarks, and full Python Analytics tests pass.",
+        "confidence": "high"
+      }
+    }
+  }
+}

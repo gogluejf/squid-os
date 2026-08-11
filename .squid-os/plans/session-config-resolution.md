@@ -62,6 +62,7 @@ When continuing a session (via `--session` or autoload), these flags are rejecte
 | `Limits.MaxAgentDepth` | `D → A → C` | `E → C` |
 | `Limits.MaxTime` | `A → C` | `E → C` |
 | `DebugEnabled` | `S` | TUI: `E → S` · Run: `E` |
+| `ContextCompaction` | `S` | `S` |
 
 ## Application mode
 
@@ -88,3 +89,4 @@ When continuing a session (via `--session` or autoload), these flags are rejecte
 | `Autosave` | Immediate |
 | `Limits` | Immediate |
 | `DebugEnabled` | Immediate |
+| `ContextCompaction` | Immediate (settings-controlled for new and existing sessions) |

@@ -285,3 +285,76 @@ func TestApplyToExistingSessionAppliesAllNonPendingFields(t *testing.T) {
 		t.Fatalf("inference transition not preserved: config=%+v pending=%+v", doc.Config.Inference, doc.Pending)
 	}
 }
+
+func TestCompactionNewSessionCopiesFromSettings(t *testing.T) {
+	paths := config.Paths{MemoryDir: t.TempDir()}
+	trueVal := true
+
+	// Settings compaction enabled
+	resolved, err := Resolve(Inputs{Settings: config.Settings{Provider: "p", Model: "m", ContextCompaction: true}, Paths: paths})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resolved.Config.ContextCompaction {
+		t.Fatalf("new session should copy settings context_compaction=true, got %v", resolved.Config.ContextCompaction)
+	}
+
+	// Settings compaction disabled
+	resolved, err = Resolve(Inputs{Settings: config.Settings{Provider: "p", Model: "m", ContextCompaction: false}, Paths: paths})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Config.ContextCompaction {
+		t.Fatalf("new session should copy settings context_compaction=false, got %v", resolved.Config.ContextCompaction)
+	}
+
+	// Verify NewSessionDoc copies into both Initial and Config
+	cfg := config.SessionConfig{ContextCompaction: trueVal}
+	doc := config.NewSessionDoc(cfg)
+	if !doc.Initial.ContextCompaction {
+		t.Fatalf("Initial.ContextCompaction should be true, got %v", doc.Initial.ContextCompaction)
+	}
+	if !doc.Config.ContextCompaction {
+		t.Fatalf("Config.ContextCompaction should be true, got %v", doc.Config.ContextCompaction)
+	}
+}
+
+func TestCompactionExistingSessionUsesSettings(t *testing.T) {
+	paths := config.Paths{MemoryDir: t.TempDir()}
+
+	doc := config.NewSessionDoc(config.SessionConfig{ContextCompaction: true})
+	resolved, err := Resolve(Inputs{Settings: config.Settings{Provider: "p", Model: "m", ContextCompaction: false}, Paths: paths, ExistingSession: &doc, Target: TargetInteractive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Config.ContextCompaction {
+		t.Fatalf("existing interactive session should use settings context_compaction=false, got %v", resolved.Config.ContextCompaction)
+	}
+
+	doc = config.NewSessionDoc(config.SessionConfig{ContextCompaction: false, AuthMode: config.AuthorizationAuto})
+	resolved, err = Resolve(Inputs{Settings: config.Settings{Provider: "p", Model: "m", ContextCompaction: true, Authorization: "auto"}, Paths: paths, ExistingSession: &doc, Target: TargetAutonomous})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resolved.Config.ContextCompaction {
+		t.Fatalf("existing autonomous session should use settings context_compaction=true, got %v", resolved.Config.ContextCompaction)
+	}
+}
+
+func TestCompactionNoCLIOverride(t *testing.T) {
+	paths := config.Paths{MemoryDir: t.TempDir()}
+
+	// Verify Overrides struct has no ContextCompaction field
+	// by confirming that CLI overrides cannot affect it
+	resolved, err := Resolve(Inputs{
+		Settings: config.Settings{Provider: "p", Model: "m", ContextCompaction: true},
+		Paths:    paths,
+		CLI:      Overrides{Model: "cli/model"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resolved.Config.ContextCompaction {
+		t.Fatalf("compaction should come from settings, not CLI, got %v", resolved.Config.ContextCompaction)
+	}
+}

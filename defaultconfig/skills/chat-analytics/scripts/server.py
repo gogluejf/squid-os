@@ -47,8 +47,8 @@ def time_ago(dt_str):
     except:
         return "unknown"
 
-def load_session(filename):
-    path = os.path.join(SESSIONS_DIR, filename)
+def load_session(session_name):
+    path = os.path.join(SESSIONS_DIR, session_name, "chat.json")
     with open(path, 'r') as f:
         return json.load(f)
 
@@ -556,11 +556,11 @@ def parse_session_data(data):
 
 def get_session_list():
     """Get list of all sessions with metadata."""
-    pattern = os.path.join(SESSIONS_DIR, "*.chat.json")
+    pattern = os.path.join(SESSIONS_DIR, "*", "chat.json")
     files = glob.glob(pattern)
     sessions = []
     for filepath in files:
-        filename = os.path.basename(filepath)
+        filename = os.path.basename(os.path.dirname(filepath))
         try:
             stat = os.stat(filepath)
             data = load_session(filename)
@@ -750,13 +750,13 @@ def get_skills_weekly():
     """Get skill loads grouped by week. Skills appear via synthetic messages
     with label='skill-load' and params.name, or via tool_calls named 'skill-load'.
     Week assignment is based on the message timestamp, not the session updated_at."""
-    pattern = os.path.join(SESSIONS_DIR, "*.chat.json")
+    pattern = os.path.join(SESSIONS_DIR, "*", "chat.json")
     files = glob.glob(pattern)
     weekly = {}
     all_skills = set()
 
     for filepath in files:
-        filename = os.path.basename(filepath)
+        filename = os.path.basename(os.path.dirname(filepath))
         try:
             data = load_session(filename)
         except:
@@ -958,14 +958,12 @@ class AnalyticsHandler(SimpleHTTPRequestHandler):
         if path == '/api/dashboard/skills':
             return self.json_response(get_skills_weekly())
 
-        # Turn detail: /api/sessions/<filename>/turn?msg_id=msg_X
+        # Turn detail: /api/sessions/<session>/turn?msg_id=msg_X
         import re
         import urllib.parse
-        m_turn = re.match(r'^/api/sessions/([^/]+?)(?:\.chat\.json)?/turn', path)
+        m_turn = re.match(r'^/api/sessions/([^/]+?)/turn', path)
         if m_turn:
             filename = m_turn.group(1)
-            if not filename.endswith('.chat.json'):
-                filename = filename + '.chat.json'
             # Extract msg_id from query string
             parts = urllib.parse.urlparse(path)
             qs = urllib.parse.parse_qs(parts.query)
@@ -980,15 +978,12 @@ class AnalyticsHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self.json_response({'error': str(e)}, status=500)
 
-        # Per-session endpoints: /api/sessions/<filename>/<endpoint>
+        # Per-session endpoints: /api/sessions/<session>/<endpoint>
         import re
-        m = re.match(r'^/api/sessions/([^/]+?)(?:\.chat\.json)?/(tally|timeline|performance|tools|skills|files|general)$', path)
+        m = re.match(r'^/api/sessions/([^/]+?)/(tally|timeline|performance|tools|skills|files|general)$', path)
         if m:
             filename = m.group(1)
             endpoint = m.group(2)
-            # Ensure filename has .chat.json extension
-            if not filename.endswith('.chat.json'):
-                filename = filename + '.chat.json'
 
             try:
                 data = load_session(filename)
@@ -1040,12 +1035,10 @@ class AnalyticsHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self.json_response({'error': str(e)}, status=500)
 
-        # Full session JSON: /api/sessions/<filename>
-        m = re.match(r'^/api/sessions/([^/]+?)(?:\.chat\.json)?$', path)
+        # Full session JSON: /api/sessions/<session>
+        m = re.match(r'^/api/sessions/([^/]+?)$', path)
         if m:
             filename = m.group(1)
-            if not filename.endswith('.chat.json'):
-                filename = filename + '.chat.json'
             try:
                 data = load_session(filename)
                 return self.json_response(data)
@@ -1108,7 +1101,7 @@ def main():
         sys.exit(1)
 
     # Count available sessions
-    count = len(glob.glob(os.path.join(SESSIONS_DIR, "*.chat.json")))
+    count = len(glob.glob(os.path.join(SESSIONS_DIR, "*", "chat.json")))
     print(f"Chat Analytics Server")
     print(f"Sessions directory: {SESSIONS_DIR}")
     print(f"Sessions found: {count}")

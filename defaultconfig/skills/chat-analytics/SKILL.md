@@ -51,15 +51,15 @@ Global queries:
 - `curl -s http://localhost:17771/api/dashboard/models`
 - `curl -s http://localhost:17771/api/dashboard/activity`
 
-Per-session queries (replace `<file>` with filename without `.chat.json`):
-- `/api/sessions/<file>/tally`
-- `/api/sessions/<file>/timeline`
-- `/api/sessions/<file>/performance`
-- `/api/sessions/<file>/tools`
-- `/api/sessions/<file>/skills`
-- `/api/sessions/<file>/files`
-- `/api/sessions/<file>/general`
-- `/api/sessions/<file>`
+Per-session queries (replace `<session>` with the session folder name):
+- `/api/sessions/<session>/tally`
+- `/api/sessions/<session>/timeline`
+- `/api/sessions/<session>/performance`
+- `/api/sessions/<session>/tools`
+- `/api/sessions/<session>/skills`
+- `/api/sessions/<session>/files`
+- `/api/sessions/<session>/general`
+- `/api/sessions/<session>`
 
 When the user asks an analytics question:
 1. Check server state first with:

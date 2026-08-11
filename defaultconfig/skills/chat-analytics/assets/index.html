@@ -1054,7 +1054,7 @@
                 div.onclick = () => showDetail(s.filename);
                 div.innerHTML = `
                     <div class="meta" style="margin-bottom:4px">
-                        <span class="filename" title="${s.filename}" style="flex:1;overflow:hidden;text-overflow:ellipsis">${s.filename.replace('.chat.json', '')}</span>
+                        <span class="filename" title="${s.filename}" style="flex:1;overflow:hidden;text-overflow:ellipsis">${s.filename}</span>
                         <span>${s.time_ago}</span>
                     </div>
                     <div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:8px">
@@ -1148,7 +1148,7 @@
             const tbody = document.querySelector('#top10-table tbody');
             tbody.innerHTML = sessions.map(s => `
                 <tr>
-                    <td class="link-cell"><a href="#" onclick="showDetail('${s.filename}');return false">${s.filename.replace('.chat.json','')}</a></td>
+                    <td class="link-cell"><a href="#" onclick="showDetail('${s.filename}');return false">${s.filename}</a></td>
                     <td class="mono">${s.model.split('/').pop()}</td>
                     <td class="mono" style="color:var(--success)">${fmtK(s.total_tokens)}</td>
                     <td style="color:var(--warn)">${s.turns} <span style="color:var(--text-muted)">(${s.messages} msgs)</span></td>
@@ -1346,7 +1346,7 @@
             });
             showView('detail');
 
-            document.getElementById('detail-title').textContent = filename.replace('.chat.json', '');
+            document.getElementById('detail-title').textContent = filename;
 
             // Show loading
             document.getElementById('main').querySelector('#view-detail').innerHTML = '<div class="loading">Loading session data...</div>';
@@ -1373,7 +1373,7 @@
         function renderDetail(filename, general, tally, timeline, tools, skills, files, perf) {
             currentDetailSession = filename;
             rebuildDetailView();
-            document.getElementById('detail-title').textContent = `Session Details: ${filename.replace('.chat.json', '')}`;
+            document.getElementById('detail-title').textContent = `Session Details: ${filename}`;
 
             document.getElementById('detail-model').textContent = general.model;
             document.getElementById('detail-provider').textContent =
@@ -2331,14 +2331,14 @@
             const meta = document.getElementById('turn-panel-meta');
             
             title.textContent = 'Turn: ' + msgId;
-            meta.textContent = sessionId.replace('.chat.json', '');
+            meta.textContent = sessionId;
             body.className = 'loading';
             body.innerHTML = '<div style="text-align:center;padding:40px">Loading turn data...</div>';
             
             panel.classList.add('active');
             overlay.classList.add('active');
             
-            fetch('/api/sessions/' + encodeURIComponent(sessionId.replace('.chat.json', '')) + '/turn?msg_id=' + encodeURIComponent(msgId))
+            fetch('/api/sessions/' + encodeURIComponent(sessionId) + '/turn?msg_id=' + encodeURIComponent(msgId))
                 .then(r => r.json())
                 .then(data => {
                     if (data.error) {

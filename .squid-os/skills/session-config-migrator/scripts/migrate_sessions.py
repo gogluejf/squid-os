@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--migration", required=True, type=Path)
-    parser.add_argument("--pattern", default="*.chat.json")
+    parser.add_argument("--pattern", default="*/chat.json")
     parser.add_argument("--timestamp", help="UTC naming token for reproducible tests")
     return parser.parse_args()
 

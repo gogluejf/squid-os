@@ -182,7 +182,7 @@ Key files:
 - `settings.json`
 - `endpoints.json`
 - `history.json`
-- `sessions/*.chat.json`
+- `sessions/*/chat.json`
 - `sys-prompts/*`
 
 Settings model (provider/model/thinking/autosave/autoload/history) in [`internal/config/settings.go`](internal/config/settings.go).

@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -283,7 +282,7 @@ func TotalExecutionTokens(entries []ToolCallEntry) int {
 func NewSessionDoc(cfg SessionConfig) SessionDoc {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return SessionDoc{
-		Version: 2,
+		Version: 1,
 		Meta: SessionMeta{
 			ID:        uuid.New().String(),
 			CreatedAt: now,
@@ -304,12 +303,12 @@ func CloneSessionConfig(cfg SessionConfig) SessionConfig {
 	return cfg
 }
 
-// SessionPath returns the file path for a session by name.
+// SessionPath returns the chat document path for a session by name.
 func SessionPath(p Paths, name string) string {
-	return filepath.Join(p.Sessions, name+".chat.json")
+	return filepath.Join(p.Sessions, name, "chat.json")
 }
 
-// SaveSessionDoc writes a session to sessions/<name>.chat.json.
+// SaveSessionDoc writes a session to sessions/<name>/chat.json.
 // It persists TokenTally and clears the legacy scalar total_tokens.
 func SaveSessionDoc(p Paths, name string, doc SessionDoc, tally *TokenTally) error {
 	doc.Meta.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -319,10 +318,21 @@ func SaveSessionDoc(p Paths, name string, doc SessionDoc, tally *TokenTally) err
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(SessionPath(p, name), data, 0644)
+	path := SessionPath(p, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	return os.Chtimes(filepath.Dir(path), info.ModTime(), info.ModTime())
 }
 
-// LoadSessionDoc reads a session from sessions/<name>.chat.json
+// LoadSessionDoc reads a session from sessions/<name>/chat.json.
 func LoadSessionDoc(p Paths, name string) (SessionDoc, error) {
 	file := SessionPath(p, name)
 	data, err := os.ReadFile(file)
@@ -336,7 +346,7 @@ func LoadSessionDoc(p Paths, name string) (SessionDoc, error) {
 	return sf, nil
 }
 
-// ListSessions returns available session info (name + modified time), sorted by most recently modified.
+// ListSessions returns available session info (name + chat document modified time), sorted by most recently modified.
 func ListSessions(p Paths) []SessionInfo {
 	entries, err := os.ReadDir(p.Sessions)
 	if err != nil {
@@ -345,16 +355,17 @@ func ListSessions(p Paths) []SessionInfo {
 
 	var sessions []SessionInfo
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".chat.json") {
-			info, err := e.Info()
-			if err != nil {
-				continue
-			}
-			sessions = append(sessions, SessionInfo{
-				Name:    strings.TrimSuffix(e.Name(), ".chat.json"),
-				ModTime: info.ModTime(),
-			})
+		if !e.IsDir() {
+			continue
 		}
+		info, err := os.Stat(filepath.Join(p.Sessions, e.Name(), "chat.json"))
+		if err != nil || info.IsDir() {
+			continue
+		}
+		sessions = append(sessions, SessionInfo{
+			Name:    e.Name(),
+			ModTime: info.ModTime(),
+		})
 	}
 
 	sort.Slice(sessions, func(i, j int) bool {

@@ -15,7 +15,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestCalculateTokenTallyEmptySession(t *testing.T) {
-	session := NewSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
 	tally := session.CalculateTokenTally()
 
 	if tally == nil {
@@ -43,7 +43,7 @@ func TestCalculateTokenTallyEmptySession(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCalculateTokenTallySystemPrompt(t *testing.T) {
-	session := NewSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
 	tally := session.CalculateTokenTally()
 
 	// System prompt and environment messages should contribute to system_prompt
@@ -57,7 +57,7 @@ func TestCalculateTokenTallySystemPrompt(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCalculateTokenTallySystemPromptBreakdown(t *testing.T) {
-	session := NewSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
 	tally := session.CalculateTokenTally()
 
 	// System prompt and environment messages contribute to system_prompt
@@ -73,7 +73,7 @@ func TestCalculateTokenTallySystemPromptBreakdown(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCalculateTokenTallyUserMessage(t *testing.T) {
-	session := NewSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
 	session.Append(NewUserMessage("msg_1", "hello world", ""))
 	tally := session.CalculateTokenTally()
 
@@ -87,7 +87,7 @@ func TestCalculateTokenTallyUserMessage(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCalculateTokenTallyAssistantWithThinking(t *testing.T) {
-	session := NewSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
 	session.Append(NewUserMessage("msg_1", "hello", ""))
 	session.Append(config.Message{
 		ID:              "msg_2",
@@ -116,7 +116,7 @@ func TestCalculateTokenTallyAssistantWithThinking(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCalculateTokenTallyToolExecutionInput(t *testing.T) {
-	session := NewSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
 	session.Append(NewUserMessage("msg_1", "hello", ""))
 	session.Append(config.Message{
 		ID:          "msg_2",
@@ -137,7 +137,7 @@ func TestCalculateTokenTallyToolExecutionInput(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCalculateTokenTallySynthetic(t *testing.T) {
-	session := NewSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
 	session.Append(config.Message{
 		ID:          "msg_1",
 		Role:        config.RoleSynthetic,
@@ -157,7 +157,7 @@ func TestCalculateTokenTallySynthetic(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCalculateTokenTallyInputConsistency(t *testing.T) {
-	session := NewSession(config.SessionConfig{Tools: []string{"read_file"}}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{Tools: []string{"read_file"}}, config.Paths{}, runtimeconfig.Catalog{})
 	session.Append(NewUserMessage("msg_1", "hello world", ""))
 	session.Append(config.Message{
 		ID:              "msg_2",
@@ -209,7 +209,7 @@ func TestCalculateTokenTallyInputConsistency(t *testing.T) {
 func TestCalculateTokenTallyContextProjectionAlways(t *testing.T) {
 	// Even with compaction disabled, the context tally should project
 	// potential savings because BuildContext always computes the plan.
-	session := NewSession(config.SessionConfig{ContextCompaction: false}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{ContextCompaction: false}, config.Paths{}, runtimeconfig.Catalog{})
 	session.Append(NewUserMessage("msg_1", "hello", ""))
 	tally := session.CalculateTokenTally()
 
@@ -362,7 +362,7 @@ func TestCalculateTokenTallyFullSession(t *testing.T) {
 		Tools:             []string{"read_file"},
 		ContextCompaction: true,
 	}
-	session := NewSession(cfg, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(cfg, config.Paths{}, runtimeconfig.Catalog{})
 
 	// Add user message
 	session.Append(NewUserMessage("msg_1", "read this file", ""))
@@ -430,7 +430,7 @@ func TestCalculateTokenTallyFullSession(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestCalculateTokenTallyJSONRoundTrip(t *testing.T) {
-	session := NewSession(config.SessionConfig{Tools: []string{"read_file"}}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{Tools: []string{"read_file"}}, config.Paths{}, runtimeconfig.Catalog{})
 	session.Append(NewUserMessage("msg_1", "test", ""))
 	tally := session.CalculateTokenTally()
 
@@ -505,7 +505,7 @@ func TestContextSavedCanBeNegative(t *testing.T) {
 func TestCalculateTokenTallyToolsEnabledInternal(t *testing.T) {
 	// BuildToolsEnabledMsg creates RoleInternal messages with Label "Tools Enabled".
 	// calculateLifetimeTally must route these to ToolDefinitions, not SystemPrompt.
-	session := NewSession(config.SessionConfig{Tools: []string{"read_file", "write_file"}},
+	session := NewRootSession(config.SessionConfig{Tools: []string{"read_file", "write_file"}},
 		config.Paths{}, runtimeconfig.Catalog{})
 
 	// Verify the Tools Enabled message exists and is RoleInternal
@@ -577,13 +577,14 @@ func TestSessionDocLegacyTotalTokensClearOnSave(t *testing.T) {
 	tmpDir := t.TempDir()
 	paths := config.Paths{Sessions: tmpDir}
 	tally := &config.TokenTally{}
-	err := config.SaveSessionDoc(paths, "test", doc, tally)
+	sessionDir := config.RootSessionDir(paths, "test")
+	err := config.SaveSessionDoc(sessionDir, doc, tally)
 	if err != nil {
 		t.Fatalf("SaveSessionDoc failed: %v", err)
 	}
 
 	// Read back the saved file
-	data, err := os.ReadFile(config.SessionPath(paths, "test"))
+	data, err := os.ReadFile(config.SessionFilePath(sessionDir))
 	if err != nil {
 		t.Fatalf("failed to read saved session: %v", err)
 	}

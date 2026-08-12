@@ -32,13 +32,13 @@ Analyzes relevant old and new session JSON structures from a user-specified Git 
         ...
 
 8. Keep the callback pure and deterministic. It transforms one parsed JSON document, does not mutate its input, performs no filesystem/network/subprocess operations, and returns schema-specific validation errors from validate().
-9. Run `python3 <skill-folder>/scripts/migrate_sessions.py --source <session-directory> --migration <temporary-callback.py>`. The permanent runner owns discovery, timestamped naming, backup/new tree copying, JSON I/O, callback enforcement, metadata restoration, generic integrity checks, and reporting.
+9. Run exactly `python3 <skill-folder>/scripts/migrate_sessions.py --source <session-directory> --migration <temporary-callback.py>`. Do not add naming or timestamp arguments. The permanent runner obtains the current UTC time internally and owns discovery, timestamped naming, backup/new tree copying, JSON I/O, callback enforcement, metadata restoration, generic integrity checks, and reporting.
 10. Review the runner report. Report the exact source, `.bck`, and `.new` paths; file totals; migration/validation failures; changed paths; metadata results; and whether the `.new` tree is safe to adopt. Never replace the live source directory automatically.
 
 ## Rules
 - Never modify or replace the source session directory.
-- Create `<source>.<UTC timestamp>.bck` and `<source>.<UTC timestamp>.new`; refuse to overwrite existing destinations.
-- Preserve directory and file metadata in both copies to the maximum supported by the OS. After migrated JSON writes, restore source mode, atime, and mtime; preserve ownership when permitted. Preserve embedded `meta.created_at` and `meta.updated_at` unless explicitly approved as changed paths. Do not claim filesystem birth-time preservation when unsupported or unverifiable.
+- Create `<source>.<UTC timestamp>.bck` and `<source>.<UTC timestamp>.new`; refuse to overwrite existing destinations. The production CLI has no timestamp override: it always obtains current UTC internally. Tests may inject a clock only through the Python function API, never through a CLI argument available to agents or operators.
+- Preserve directory and file metadata in both copies to the maximum supported by the OS. After all migrated JSON writes, restore the entire destination tree bottom-up so parent directory atime/mtime values are not left changed by child writes. Verify source-relative directory names are unchanged and verify mode, atime, and mtime for every non-symlink directory and file. Preserve ownership when permitted. Preserve embedded `meta.created_at` and `meta.updated_at` unless explicitly approved as changed paths. Do not claim filesystem birth-time preservation when unsupported or unverifiable.
 - The backup must remain content-identical to the source. Apply transformations only inside `.new`.
 - Reject callback modules with the wrong interface version, missing metadata, invalid changed paths, or missing functions.
 - Run migrate twice and require identical results. Reject input mutation and non-JSON-object output.

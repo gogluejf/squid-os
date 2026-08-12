@@ -16,17 +16,45 @@ import (
 
 // Session is the pure runtime session: persisted document + pure stream state.
 type Session struct {
-	Doc     config.SessionDoc
-	Stream  StreamState
-	Info    config.SessionInfo
-	Paths   config.Paths
-	Catalog runtimeconfig.Catalog
+	Doc        config.SessionDoc
+	Stream     StreamState
+	Info       config.SessionInfo
+	Paths      config.Paths
+	Catalog    runtimeconfig.Catalog
+	SessionDir string // runtime-only: resolved session directory for persistence (not serialized into SessionDoc)
 }
 
-// NewSession creates a pure session with initial system/environment/config/tool messages.
-func NewSession(cfg config.SessionConfig, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
+// NewRootSession creates a root session with a canonical directory. The directory
+// is reserved in memory immediately; persistence still depends on Autosave.Enabled
+// or an explicit save.
+func NewRootSession(cfg config.SessionConfig, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
+	name := cfg.Autosave.Name
+	if name == "" {
+		name = time.Now().Format("2006-01-02_15-04-05")
+	}
+	sessionDir := config.RootSessionDir(paths, name)
 	doc := config.NewSessionDoc(cfg)
-	s := &Session{Doc: doc, Paths: paths, Catalog: catalog}
+	s := &Session{Doc: doc, Info: config.SessionInfo{Name: name}, Paths: paths, Catalog: catalog, SessionDir: sessionDir}
+	return initSessionMessages(s, cfg)
+}
+
+// NewChildSession creates a child session beneath its immediate parent.
+func NewChildSession(cfg config.SessionConfig, identity config.SessionIdentity, parentSessionDir string, paths config.Paths, catalog runtimeconfig.Catalog) (*Session, error) {
+	if !cfg.Autosave.Enabled {
+		return nil, fmt.Errorf("child session persistence must be enabled")
+	}
+	if err := config.ValidateSessionName(cfg.Autosave.Name); err != nil {
+		return nil, fmt.Errorf("child session name: %w", err)
+	}
+	sessionDir := config.ChildSessionDir(parentSessionDir, cfg.Autosave.Name)
+	doc := config.NewSessionDocWithIdentity(cfg, identity)
+	s := &Session{Doc: doc, Info: config.SessionInfo{Name: cfg.Autosave.Name}, Paths: paths, Catalog: catalog, SessionDir: sessionDir}
+	return initSessionMessages(s, cfg), nil
+}
+
+func initSessionMessages(s *Session, cfg config.SessionConfig) *Session {
+	paths := s.Paths
+	catalog := s.Catalog
 
 	sysContent := config.LoadSystemPrompt(paths, cfg.SystemPromptFile)
 	s.Append(config.Message{
@@ -71,17 +99,28 @@ func NewSession(cfg config.SessionConfig, paths config.Paths, catalog runtimecon
 	return s
 }
 
-// LoadSession wraps an existing session document.
-func LoadSession(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
-	info := config.SessionInfo{Name: name}
+// LoadSession wraps a persisted session at its canonical directory.
+func LoadSession(sd config.SessionDoc, sessionDir string, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
+	info := config.SessionInfo{Name: filepath.Base(sessionDir)}
 	if sd.Meta.UpdatedAt != "" {
 		if t, err := time.Parse(time.RFC3339, sd.Meta.UpdatedAt); err == nil {
 			info.ModTime = t
 		}
 	}
-	s := &Session{Doc: sd, Info: info, Paths: paths, Catalog: catalog}
+	s := &Session{Doc: sd, Info: info, Paths: paths, Catalog: catalog, SessionDir: sessionDir}
 	s.RefreshTokenTally()
 	return s
+}
+
+// LoadRootSession resolves a root name and loads it at its canonical directory.
+func LoadRootSession(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
+	return LoadSession(sd, config.RootSessionDir(paths, name), paths, catalog)
+}
+
+// Save persists the session in its canonical directory.
+func (s *Session) Save() error {
+	s.RefreshTokenTally()
+	return config.SaveSessionDoc(s.SessionDir, s.Doc, s.Doc.TokenTally)
 }
 
 func (s *Session) Append(msg config.Message) {
@@ -155,8 +194,15 @@ func (s *Session) BuildContext() Context {
 	return ctx
 }
 
-func (s *Session) ToolContext() tools.RuntimeContext {
-	return tools.RuntimeContext{Config: s.Doc.Config, Catalog: s.Catalog}
+func (s *Session) ToolContext(toolCallID string, childRef tools.ChildSessionRef) tools.RuntimeContext {
+	return tools.RuntimeContext{
+		Config:     s.Doc.Config,
+		Catalog:    s.Catalog,
+		Identity:   s.Doc.Identity,
+		SessionDir: s.SessionDir,
+		ToolCallID: toolCallID,
+		ChildRef:   childRef,
+	}
 }
 
 func (s *Session) GetTools() []tools.Tool {

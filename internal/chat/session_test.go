@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewSessionIncludesToolsBootstrap(t *testing.T) {
-	session := NewSession(config.SessionConfig{Tools: []string{"read_file"}}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{Tools: []string{"read_file"}}, config.Paths{}, runtimeconfig.Catalog{})
 	assertMessageOrder(t, session.Doc.Messages, "sys0", "env0", "config0", "tools0")
 
 	message := messageByID(session.Doc.Messages, "tools0")
@@ -34,7 +34,7 @@ func TestSetPendingInferenceBeforeFirstTurnRewritesBootstrap(t *testing.T) {
 		Model:    "gpt",
 		Thinking: config.ThinkingConfig{Enabled: true},
 	}
-	session := NewSession(config.SessionConfig{Inference: initial}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{Inference: initial}, config.Paths{}, runtimeconfig.Catalog{})
 
 	session.SetPendingInference(next)
 
@@ -64,7 +64,7 @@ func TestSetPendingInferenceBeforeFirstTurnRewritesBootstrap(t *testing.T) {
 func TestSetPendingInferenceAfterFirstTurnQueuesTransition(t *testing.T) {
 	initial := config.InferenceConfig{Provider: "vllm", Model: "qwen"}
 	next := config.InferenceConfig{Provider: "openai", Model: "gpt"}
-	session := NewSession(config.SessionConfig{Inference: initial}, config.Paths{}, runtimeconfig.Catalog{})
+	session := NewRootSession(config.SessionConfig{Inference: initial}, config.Paths{}, runtimeconfig.Catalog{})
 	session.Append(NewUserMessage("msg_1", "hello", ""))
 
 	session.SetPendingInference(next)
@@ -94,8 +94,8 @@ func TestSessionCatalogAreIndependent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sessionA := NewSession(config.SessionConfig{WorkingDir: workspaceA}, paths, catalogsA)
-	sessionB := NewSession(config.SessionConfig{WorkingDir: workspaceB}, paths, catalogsB)
+	sessionA := NewRootSession(config.SessionConfig{WorkingDir: workspaceA}, paths, catalogsA)
+	sessionB := NewRootSession(config.SessionConfig{WorkingDir: workspaceB}, paths, catalogsB)
 	if _, ok := sessionA.Catalog.Skills.Resolve("build-a"); !ok {
 		t.Fatal("session A lost its catalog")
 	}
@@ -122,7 +122,7 @@ func TestSetWorkingDirReappliesCapabilityPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session := NewSession(cfg, paths, catalogs)
+	session := NewRootSession(cfg, paths, catalogs)
 
 	summary, err := session.SetWorkingDir(workspaceB)
 	if err != nil {

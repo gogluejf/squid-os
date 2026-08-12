@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,47 +11,94 @@ import (
 	"squid-os/internal/ui"
 )
 
-// saveAs persists the current session under the given name and updates LastSessionName.
-// Pass silent=true to skip setting a notification (e.g. for background auto-saves).
-func (m Model) saveAs(name string, silent bool) (Model, tea.Cmd) {
-	if name == "" || m.incognito {
+// saveTo persists the current session to an explicit resolved destination.
+// Saving to the current directory writes in place. A different destination
+// forks only when the current session file already exists; otherwise it is the
+// first save of the in-memory session.
+func (m Model) saveTo(destinationDir string, silent bool) (Model, tea.Cmd) {
+	if destinationDir == "" || m.incognito {
 		return m, nil
 	}
-	m.session.Doc.Config.Autosave.Name = name
 
+	name := filepath.Base(destinationDir)
+	m.session.Doc.Config.Autosave.Name = name
 	m.session.RefreshTokenTally()
-	err := config.SaveSessionDoc(m.paths, name, m.session.Doc, m.session.Doc.TokenTally)
-	if err != nil {
-		if !silent {
-			(&m).setNotification(ui.NotificationError, "couldn't save session")
+
+	if destinationDir == m.session.SessionDir {
+		if err := m.session.Save(); err != nil {
+			if !silent {
+				(&m).setNotification(ui.NotificationError, "couldn't save session: "+err.Error())
+			}
+			return m, nil
 		}
 	} else {
-		if m.settings.LastSessionName != name {
-			m.settings.LastSessionName = name
-			_ = config.SaveSettings(m.paths, m.settings)
+		sourceFile := config.SessionFilePath(m.session.SessionDir)
+		_, sourceErr := os.Stat(sourceFile)
+		switch {
+		case sourceErr == nil:
+			if _, err := config.ForkSessionTree(m.session.SessionDir, destinationDir); err != nil {
+				if !silent {
+					(&m).setNotification(ui.NotificationError, "couldn't fork session: "+err.Error())
+				}
+				return m, nil
+			}
+			forkedDoc, err := config.LoadSessionDoc(destinationDir)
+			if err != nil {
+				if !silent {
+					(&m).setNotification(ui.NotificationError, "couldn't load forked session: "+err.Error())
+				}
+				return m, nil
+			}
+			m.session.Doc = forkedDoc
+			m.session.SessionDir = destinationDir
+			m.session.Doc.Config.Autosave.Name = name
+			if err := m.session.Save(); err != nil {
+				if !silent {
+					(&m).setNotification(ui.NotificationError, "couldn't update forked session: "+err.Error())
+				}
+				return m, nil
+			}
+		case os.IsNotExist(sourceErr):
+			m.session.SessionDir = destinationDir
+			if err := m.session.Save(); err != nil {
+				if !silent {
+					(&m).setNotification(ui.NotificationError, "couldn't save session: "+err.Error())
+				}
+				return m, nil
+			}
+		default:
+			if !silent {
+				(&m).setNotification(ui.NotificationError, "couldn't inspect session: "+sourceErr.Error())
+			}
+			return m, nil
 		}
-		m.session.Info.Name = name
-		m.session.Info.ModTime = time.Now()
-		if !silent {
-			(&m).setNotification(ui.NotificationInfo, "session saved to "+config.SessionPath(m.paths, name))
-		}
+	}
+
+	if m.settings.LastSessionName != name {
+		m.settings.LastSessionName = name
+		_ = config.SaveSettings(m.paths, m.settings)
+	}
+	m.session.Info.Name = name
+	m.session.Info.ModTime = time.Now()
+	if !silent {
+		(&m).setNotification(ui.NotificationInfo, "session saved to "+config.SessionFilePath(m.session.SessionDir))
 	}
 	return m, nil
 }
 
-// autoSave persists silently after each assistant reply when session autosave is enabled.
-// Only saves if there is at least one user message, OR the session file already
-// exists on disk (to keep it in sync after destroys).
+// autoSave persists the current session in place after each assistant reply.
+// It never resolves a root name, so the same path works for root and child sessions.
 func (m Model) autoSave() (Model, tea.Cmd) {
 	if !m.session.Doc.Config.Autosave.Enabled || m.incognito {
 		return m, nil
 	}
-	name := m.session.Doc.Config.Autosave.Name
 	if !m.session.HasUserMessage() {
-		path := config.SessionPath(m.paths, name)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
+		if _, err := os.Stat(config.SessionFilePath(m.session.SessionDir)); os.IsNotExist(err) {
 			return m, nil
 		}
 	}
-	return m.saveAs(name, true)
+	if err := m.session.Save(); err != nil {
+		return m, nil
+	}
+	return m, nil
 }

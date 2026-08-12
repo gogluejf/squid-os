@@ -187,6 +187,20 @@ func executeAgentCLI(name, prompt string, values map[string]interface{}, ctx Run
 	if cfg.WorkingDir != "" {
 		argv = append(argv, "--working-dir", cfg.WorkingDir)
 	}
+
+	// Pass preallocated child session lineage to the child process
+	if ctx.ChildRef.ID != "" && ctx.ChildRef.Name != "" {
+		argv = append(argv,
+			"--session-id", ctx.ChildRef.ID,
+			"--parent-session-id", ctx.Identity.ID,
+			"--root-session-id", ctx.Identity.RootID,
+			"--parent-tool-call-id", ctx.ToolCallID,
+			"--session-depth", fmt.Sprint(ctx.Identity.Depth+1),
+			"--parent-session-dir", ctx.SessionDir,
+			"--save-name", ctx.ChildRef.Name,
+		)
+	}
+
 	appendOptional := func(key, flag string) {
 		if value, ok := values[key]; ok {
 			argv = append(argv, flag, fmt.Sprint(value))

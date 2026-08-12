@@ -1,0 +1,75 @@
+{
+  "tasks": {
+    "1.1": {
+      "number": "1.1",
+      "status": "done",
+      "name": "Introduce durable session lineage and child execution links",
+      "milestone": "Session Lineage",
+      "milestone_number": "1"
+    },
+    "1.2": {
+      "number": "1.2",
+      "status": "done",
+      "name": "Migrate persisted root sessions to the identity schema",
+      "milestone": "Session Lineage",
+      "milestone_number": "1"
+    },
+    "2.1": {
+      "number": "2.1",
+      "status": "done",
+      "name": "Add parent-relative session location primitives",
+      "milestone": "Parent-Relative Session Storage",
+      "milestone_number": "2"
+    },
+    "2.2": {
+      "number": "2.2",
+      "status": "done",
+      "name": "Carry the current session directory through runtime persistence",
+      "milestone": "Parent-Relative Session Storage",
+      "milestone_number": "2"
+    },
+    "3.1": {
+      "number": "3.1",
+      "status": "done",
+      "name": "Preallocate and persist child linkage during agent tool execution",
+      "milestone": "Recursive Agent Delegation",
+      "milestone_number": "3"
+    },
+    "3.2": {
+      "number": "3.2",
+      "status": "done",
+      "name": "Launch delegated runs with trusted recursive session context",
+      "milestone": "Recursive Agent Delegation",
+      "milestone_number": "3"
+    },
+    "3.3": {
+      "number": "3.3",
+      "status": "done",
+      "name": "Resolve and validate child sessions from parent links",
+      "milestone": "Recursive Agent Delegation",
+      "milestone_number": "3",
+      "summary": {
+        "done": "Implemented LoadChildSession in internal/config/session.go to resolve child sessions from parent tool-call links. Validates child file path (parentDir/agents/ChildSessionName/chat.json), child ID, ParentID, RootID, ParentToolCallID, and depth. Returns loaded document and runtime directory for recursive resolution. Added 9 comprehensive tests covering success, missing child name, absent file, ID mismatches (child, parent, root, tool-call), depth mismatch, grandchild recursion, and no-global-scan isolation.",
+        "decisions": "Placed LoadChildSession in config package alongside ChildSessionDir and LoadSessionDocAt since it is a pure filesystem resolution + identity validation primitive. Uses ChildSessionDir for path construction. Validates all 5 identity fields plus depth. Returns child runtime directory for recursive descendant resolution.",
+        "tradeoffs": "Returns first validation error rather than accumulating all errors for brevity. LoadChildSession is in config package (not chat) to keep it a pure resolution primitive independent of runtime state.",
+        "failures": "None",
+        "lessons_learned": "None",
+        "confidence": "high"
+      }
+    },
+    "4.1": {
+      "number": "4.1",
+      "status": "done",
+      "name": "Fork complete session trees with remapped identities",
+      "milestone": "Whole-Tree Session Forking",
+      "milestone_number": "4"
+    },
+    "4.2": {
+      "number": "4.2",
+      "status": "done",
+      "name": "Verify recursive delegation and fork behavior end to end",
+      "milestone": "Whole-Tree Session Forking",
+      "milestone_number": "4"
+    }
+  }
+}

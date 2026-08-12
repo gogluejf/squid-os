@@ -172,7 +172,7 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 	if shouldAuthorize(s.Doc.Config.AuthMode, tool, args) {
 		entries[i].Execution.Error = ""
 		if tool.Preview != nil {
-			preview := tool.Preview(args, s.ToolContext())
+			preview := tool.Preview(args, s.ToolContext(entry.ID, tools.ChildSessionRef{}))
 			if preview.Status == tools.ResultStatusError {
 				entries[i].Execution.Status = tools.ResultStatusError
 				entries[i].Execution.Error = preview.Error
@@ -220,10 +220,26 @@ doExecute:
 	entries[i].Execution.Error = ""
 	entries[i].Execution.Files = nil
 
+	// For agent tools, preallocate child session identity before launch.
+	var childRef tools.ChildSessionRef
+	isAgent := tools.IsAgentTool(toolName)
+	if isAgent {
+		agentName := ""
+		if toolName == "call_agent" {
+			agentName, _ = args["agent"].(string)
+		}
+		childRef = tools.GenerateChildSessionRef(toolName, agentName, entry.ID)
+		entries[i].Execution.ChildSessionID = childRef.ID
+		entries[i].Execution.ChildSessionName = childRef.Name
+		// Checkpoint parent before delegation so the child link is durable.
+		FlushToolMessage(s, msgIdx)
+	}
+
 	maxToolResultTokens := s.Doc.Config.Limits.MaxToolResultTokens
 
+	ctx := s.ToolContext(entry.ID, childRef)
 	resultStart := time.Now()
-	result := tool.Execute(args, s.ToolContext())
+	result := tool.Execute(args, ctx)
 
 	// Apply session state changes before recording the final tool result so
 	// status, content, duration, and token accounting stay consistent.

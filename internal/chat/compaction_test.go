@@ -214,12 +214,14 @@ func TestCompactionNonFileTools(t *testing.T) {
 					DurationMs int64  `json:"duration_ms,omitempty"`
 				}{Name: "bash", Arguments: `{"command":"ls"}`, Tokens: 10},
 				Execution: struct {
-					Status     string             `json:"status,omitempty"`
-					Result     string             `json:"result,omitempty"`
-					Error      string             `json:"error,omitempty"`
-					Tokens     int                `json:"tokens,omitempty"`
-					DurationMs int64              `json:"duration_ms"`
-					Files      []config.FileEntry `json:"files,omitempty"`
+					Status           string             `json:"status,omitempty"`
+					Result           string             `json:"result,omitempty"`
+					Error            string             `json:"error,omitempty"`
+					Tokens           int                `json:"tokens,omitempty"`
+					DurationMs       int64              `json:"duration_ms"`
+					Files            []config.FileEntry `json:"files,omitempty"`
+					ChildSessionID   string             `json:"child_session_id,omitempty"`
+					ChildSessionName string             `json:"child_session_name,omitempty"`
 				}{Status: tools.ResultStatusSuccess, Result: "output", Tokens: 20},
 			},
 		}),

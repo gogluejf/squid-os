@@ -11,8 +11,9 @@ import (
 )
 
 type Request struct {
-	Session runtimeconfig.SessionRequest
-	OnEvent func(chat.LoopEvent)
+	Session      runtimeconfig.SessionRequest
+	ChildSession *config.ChildSessionOptions
+	OnEvent      func(chat.LoopEvent)
 }
 
 type Result struct {
@@ -20,25 +21,38 @@ type Result struct {
 	Session                     *chat.Session
 }
 
-func checkpointSave(session *chat.Session, paths config.Paths, name string) error {
-	if name == "" {
-		return nil
-	}
-	session.RefreshTokenTally()
-	return config.SaveSessionDoc(paths, name, session.Doc, session.Doc.TokenTally)
+func checkpointSave(session *chat.Session) error {
+	return session.Save()
 }
 
 func Execute(ctx context.Context, request Request) (Result, error) {
 	sessionRequest := request.Session
 	cfg := sessionRequest.Config
 	var session *chat.Session
+
 	if sessionRequest.ExistingSession != nil {
-		session = chat.LoadSession(*sessionRequest.ExistingSession, sessionRequest.SessionName, sessionRequest.Paths, sessionRequest.Catalog)
+		session = chat.LoadRootSession(*sessionRequest.ExistingSession, sessionRequest.SessionName, sessionRequest.Paths, sessionRequest.Catalog)
 		cfg = session.Doc.Config
+	} else if request.ChildSession != nil {
+		// Child session: build identity and resolve directory beneath parent
+		cs := request.ChildSession
+		identity := config.SessionIdentity{
+			ID:               cs.ID,
+			ParentID:         cs.ParentID,
+			RootID:           cs.RootID,
+			ParentToolCallID: cs.ParentToolCallID,
+			Depth:            cs.Depth,
+		}
+		var err error
+		session, err = chat.NewChildSession(cfg, identity, cs.ParentSessionDir, sessionRequest.Paths, sessionRequest.Catalog)
+		if err != nil {
+			return Result{}, err
+		}
 	} else {
 		cfg.Memory = config.SessionMemory{Namespace: string(cfg.Memory.Namespace), Path: cfg.Memory.Path, Instructions: cfg.Memory.Instructions}
-		session = chat.NewSession(cfg, sessionRequest.Paths, sessionRequest.Catalog)
+		session = chat.NewRootSession(cfg, sessionRequest.Paths, sessionRequest.Catalog)
 	}
+
 	session.Append(chat.NewUserMessage(fmt.Sprintf("msg_%d", len(session.Doc.Messages)+1), sessionRequest.Prompt, ""))
 	if err := chat.PrepareTurn(session); err != nil {
 		return Result{}, err
@@ -64,18 +78,18 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 			final = finalPass
 			finalPass = ""
 			if cfg.Autosave.Enabled {
-				_ = checkpointSave(session, paths, cfg.Autosave.Name)
+				_ = checkpointSave(session)
 			}
 		}
 		if event.Type == chat.LoopEventToolFlushed {
 			finalPass = ""
 			if cfg.Autosave.Enabled {
-				_ = checkpointSave(session, paths, cfg.Autosave.Name)
+				_ = checkpointSave(session)
 			}
 		}
 		if event.Type == chat.LoopEventError {
 			if cfg.Autosave.Enabled {
-				_ = checkpointSave(session, paths, cfg.Autosave.Name)
+				_ = checkpointSave(session)
 			}
 			if event.Error != nil {
 				return Result{FinalText: final, Session: session}, event.Error
@@ -84,7 +98,7 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 		}
 		if event.Type == chat.LoopEventNeedAuth {
 			if cfg.Autosave.Enabled {
-				_ = checkpointSave(session, paths, cfg.Autosave.Name)
+				_ = checkpointSave(session)
 			}
 			return Result{FinalText: final, Session: session}, fmt.Errorf("tool authorization required for %s", event.AuthRequest.ToolName)
 		}
@@ -95,7 +109,7 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 	}
 	result := Result{FinalText: final, Session: session}
 	if cfg.Autosave.Enabled {
-		if err := checkpointSave(session, paths, cfg.Autosave.Name); err != nil {
+		if err := checkpointSave(session); err != nil {
 			return result, fmt.Errorf("autosave: %w", err)
 		}
 		result.SavedSessionName = cfg.Autosave.Name

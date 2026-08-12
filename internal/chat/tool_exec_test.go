@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"squid-os/internal/config"
+	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/tools"
 	"squid-os/internal/util"
 )
@@ -350,5 +351,193 @@ func TestExecuteToolsRangedReadNotTrackedFile(t *testing.T) {
 	}
 	if exec.Result != "line2\nline3" {
 		t.Fatalf("expected ranged content, got %q", exec.Result)
+	}
+}
+
+func TestExecuteToolsAgentToolPreallocatesChildRef(t *testing.T) {
+	// Verify that call_agent preallocates child ID/name on the execution entry
+	// even when the tool fails (e.g., agent not in scope).
+	s := &Session{Doc: config.SessionDoc{FileState: map[string]config.FileStateEntry{}}}
+	s.Doc.Config.Tools = []string{"call_agent"}
+	s.Doc.Config.Agents = nil // no agents in scope
+	s.Doc.Identity = config.SessionIdentity{
+		ID:     "parent-1",
+		RootID: "parent-1",
+		Depth:  0,
+	}
+	s.Doc.Messages = []config.Message{{
+		ID:   "msg_1",
+		Role: config.RoleAssistant,
+		ToolCalls: []config.ToolCallEntry{{
+			ID:   "tool_agent_1",
+			Type: "function",
+			Instruction: struct {
+				Name       string `json:"name"`
+				Arguments  string `json:"arguments"`
+				Tokens     int    `json:"tokens,omitempty"`
+				DurationMs int64  `json:"duration_ms,omitempty"`
+			}{Name: "call_agent", Arguments: `{"agent":"trader","prompt":"analyze"}`},
+		}},
+	}}
+
+	ExecuteTools(s, ToolExecOptions{MsgIdx: 0})
+
+	exec := s.Doc.Messages[0].ToolCalls[0].Execution
+	// Child fields should be populated even on failure
+	if exec.ChildSessionID == "" {
+		t.Error("expected non-empty child_session_id for agent tool")
+	}
+	if exec.ChildSessionName == "" {
+		t.Error("expected non-empty child_session_name for agent tool")
+	}
+	// Name should contain agent name and tool call ID
+	if !strings.Contains(exec.ChildSessionName, "trader") {
+		t.Errorf("expected agent name in child name, got %q", exec.ChildSessionName)
+	}
+	if !strings.Contains(exec.ChildSessionName, "tool_agent_1") {
+		t.Errorf("expected tool call ID in child name, got %q", exec.ChildSessionName)
+	}
+	// The tool should still fail because the agent is not in scope
+	if exec.Status != tools.ResultStatusError {
+		t.Errorf("expected error status for out-of-scope agent, got %q", exec.Status)
+	}
+}
+
+func TestExecuteToolsInlineAgentPreallocatesChildRef(t *testing.T) {
+	// Verify that inline_agent preallocates child ID/name on the execution entry
+	// even when the tool fails (e.g., depth exceeded).
+	s := &Session{Doc: config.SessionDoc{FileState: map[string]config.FileStateEntry{}}}
+	s.Doc.Config.Tools = []string{"inline_agent"}
+	s.Doc.Config.Limits.MaxAgentDepth = 0 // depth exceeded
+	s.Doc.Identity = config.SessionIdentity{
+		ID:     "parent-2",
+		RootID: "parent-2",
+		Depth:  0,
+	}
+	s.Doc.Messages = []config.Message{{
+		ID:   "msg_1",
+		Role: config.RoleAssistant,
+		ToolCalls: []config.ToolCallEntry{{
+			ID:   "tool_inline_1",
+			Type: "function",
+			Instruction: struct {
+				Name       string `json:"name"`
+				Arguments  string `json:"arguments"`
+				Tokens     int    `json:"tokens,omitempty"`
+				DurationMs int64  `json:"duration_ms,omitempty"`
+			}{Name: "inline_agent", Arguments: `{"prompt":"do something"}`},
+		}},
+	}}
+
+	ExecuteTools(s, ToolExecOptions{MsgIdx: 0})
+
+	exec := s.Doc.Messages[0].ToolCalls[0].Execution
+	if exec.ChildSessionID == "" {
+		t.Error("expected non-empty child_session_id for inline agent tool")
+	}
+	if exec.ChildSessionName == "" {
+		t.Error("expected non-empty child_session_name for inline agent tool")
+	}
+	// Name should have "inline-" prefix and tool call ID
+	if !strings.HasPrefix(exec.ChildSessionName, "inline-") {
+		t.Errorf("expected inline prefix in child name, got %q", exec.ChildSessionName)
+	}
+	if !strings.Contains(exec.ChildSessionName, "tool_inline_1") {
+		t.Errorf("expected tool call ID in child name, got %q", exec.ChildSessionName)
+	}
+}
+
+func TestExecuteToolsNonAgentToolNoChildRef(t *testing.T) {
+	// Verify that non-agent tools do NOT populate child fields.
+	dir := t.TempDir()
+	content := "hello"
+	file := filepath.Join(dir, "test.txt")
+	os.WriteFile(file, []byte(content), 0644)
+
+	s := &Session{Doc: config.SessionDoc{FileState: map[string]config.FileStateEntry{}}}
+	s.Doc.Config.Tools = []string{"read_file"}
+	s.Doc.Config.WorkingDir = dir
+	s.Doc.Identity = config.SessionIdentity{
+		ID:     "parent-3",
+		RootID: "parent-3",
+		Depth:  0,
+	}
+	s.Doc.Messages = []config.Message{{
+		ID:   "msg_1",
+		Role: config.RoleAssistant,
+		ToolCalls: []config.ToolCallEntry{{
+			ID:   "tool_read_1",
+			Type: "function",
+			Instruction: struct {
+				Name       string `json:"name"`
+				Arguments  string `json:"arguments"`
+				Tokens     int    `json:"tokens,omitempty"`
+				DurationMs int64  `json:"duration_ms,omitempty"`
+			}{Name: "read_file", Arguments: `{"path":"test.txt"}`},
+		}},
+	}}
+
+	ExecuteTools(s, ToolExecOptions{MsgIdx: 0})
+
+	exec := s.Doc.Messages[0].ToolCalls[0].Execution
+	if exec.ChildSessionID != "" {
+		t.Errorf("expected empty child_session_id for non-agent tool, got %q", exec.ChildSessionID)
+	}
+	if exec.ChildSessionName != "" {
+		t.Errorf("expected empty child_session_name for non-agent tool, got %q", exec.ChildSessionName)
+	}
+}
+
+func TestSessionToolContextIncludesIdentity(t *testing.T) {
+	paths := config.Paths{Sessions: "/tmp/sessions"}
+	s := NewRootSession(config.SessionConfig{
+		Tools:            []string{"read_file"},
+		AuthMode:         config.AuthorizationAuto,
+		Inference:        config.InferenceConfig{Provider: "test", Model: "test"},
+		SystemPromptFile: "default",
+		Autosave:         config.SessionAutosave{Name: "test"},
+	}, paths, runtimeconfig.Catalog{})
+
+	ctx := s.ToolContext("tool_identity", tools.ChildSessionRef{})
+	if ctx.ToolCallID != "tool_identity" {
+		t.Errorf("expected tool call ID %q, got %q", "tool_identity", ctx.ToolCallID)
+	}
+	if ctx.Identity.ID == "" {
+		t.Error("expected non-empty identity ID in ToolContext")
+	}
+	if ctx.Identity.RootID != ctx.Identity.ID {
+		t.Errorf("expected root ID to equal ID for root session, got root=%q id=%q", ctx.Identity.RootID, ctx.Identity.ID)
+	}
+	if ctx.Identity.Depth != 0 {
+		t.Errorf("expected depth 0 for root session, got %d", ctx.Identity.Depth)
+	}
+	if ctx.SessionDir != "/tmp/sessions/test" {
+		t.Errorf("expected session dir %q, got %q", "/tmp/sessions/test", ctx.SessionDir)
+	}
+}
+
+func TestSessionToolContextIncludesOptionalChildRef(t *testing.T) {
+	paths := config.Paths{Sessions: "/tmp/sessions"}
+	s := NewRootSession(config.SessionConfig{
+		Tools:            []string{"read_file"},
+		AuthMode:         config.AuthorizationAuto,
+		Inference:        config.InferenceConfig{Provider: "test", Model: "test"},
+		SystemPromptFile: "default",
+		Autosave:         config.SessionAutosave{Name: "test"},
+	}, paths, runtimeconfig.Catalog{})
+
+	childRef := tools.ChildSessionRef{ID: "child_123", Name: "child-session"}
+	ctx := s.ToolContext("tool_abc", childRef)
+	if ctx.ToolCallID != "tool_abc" {
+		t.Errorf("expected tool call ID %q, got %q", "tool_abc", ctx.ToolCallID)
+	}
+	if ctx.ChildRef != childRef {
+		t.Errorf("expected child ref %#v, got %#v", childRef, ctx.ChildRef)
+	}
+	if ctx.Identity.ID == "" {
+		t.Error("expected identity ID in ToolContext")
+	}
+	if ctx.SessionDir != "/tmp/sessions/test" {
+		t.Errorf("expected session dir in ToolContext, got %q", ctx.SessionDir)
 	}
 }

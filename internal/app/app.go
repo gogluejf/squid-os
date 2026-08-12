@@ -111,15 +111,13 @@ func New(options StartupOptions) Model {
 	var sess *UISession
 	var notification ui.Notification
 	if initialSession != nil {
-		sess = NewUISessionFromDoc(*initialSession, options.Session.SessionName, paths, options.Session.Catalog)
-		// Show friendly notification for auto-load
+		sess = LoadRootUISession(*initialSession, options.Session.SessionName, paths, options.Session.Catalog)
 		notification = ui.Notification{
 			Level:   ui.NotificationInfo,
-			Message: fmt.Sprintf("Auto-load on, last session loaded: %s", config.SessionPath(paths, options.Session.SessionName)),
+			Message: fmt.Sprintf("Auto-load on, last session loaded: %s", sess.SessionDir),
 		}
 	} else {
-		sess = NewUISession(runtimeConfig, paths, options.Session.Catalog)
-		// Fresh session — clear LastSessionName so auto-save doesn't overwrite the previous session
+		sess = NewRootUISession(runtimeConfig, paths, options.Session.Catalog)
 		if settings.LastSessionName != "" {
 			settings.LastSessionName = ""
 			_ = config.SaveSettings(paths, settings)

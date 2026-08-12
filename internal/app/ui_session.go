@@ -23,12 +23,12 @@ type UISession struct {
 	undoStack        [][]config.Message
 }
 
-func NewUISession(cfg config.SessionConfig, paths config.Paths, catalog runtimeconfig.Catalog) *UISession {
-	return &UISession{Session: chat.NewSession(cfg, paths, catalog)}
+func NewRootUISession(cfg config.SessionConfig, paths config.Paths, catalog runtimeconfig.Catalog) *UISession {
+	return &UISession{Session: chat.NewRootSession(cfg, paths, catalog)}
 }
 
-func NewUISessionFromDoc(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) *UISession {
-	return &UISession{Session: chat.LoadSession(sd, name, paths, catalog)}
+func LoadRootUISession(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) *UISession {
+	return &UISession{Session: chat.LoadRootSession(sd, name, paths, catalog)}
 }
 
 func (u *UISession) destroyLastSequence() (userText, userImage string) {

@@ -120,14 +120,14 @@ func launchTUI(opts *TUIOptions) error {
 	}
 
 	if sessionName != "" {
-		doc, err := config.LoadSessionDoc(cfg.paths, sessionName)
+		doc, err := config.LoadSessionDoc(config.RootSessionDir(cfg.paths, sessionName))
 		if err != nil {
 			return fmt.Errorf("load session %q: %w", sessionName, err)
 		}
 		existing = &doc
 	} else if opts.AgentName == "" && cfg.settings.AutoLoadLastSession && cfg.settings.LastSessionName != "" {
 		// Only autoload last session when no agent is specified
-		if doc, err := config.LoadSessionDoc(cfg.paths, cfg.settings.LastSessionName); err == nil {
+		if doc, err := config.LoadSessionDoc(config.RootSessionDir(cfg.paths, cfg.settings.LastSessionName)); err == nil {
 			existing, sessionName = &doc, cfg.settings.LastSessionName
 		}
 	}

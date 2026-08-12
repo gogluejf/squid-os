@@ -24,6 +24,12 @@ type RunOptions struct {
 	ToolNames, SkillNames, CallableAgentNames                            []string
 	Limits                                                               LimitOptions
 	thinking, save                                                       bool
+	// Child session lineage flags (internal: set by agent delegation only)
+	ChildSessionID, ParentSessionID, RootSessionID, ParentToolCallID string
+	SessionDepth                                                     int
+	ParentSessionDir                                                 string
+	childSessionID, parentSessionID, rootSessionID, parentToolCallID bool
+	childSessionDepth, parentSessionDir                              bool
 }
 
 type runCmd struct{ execute func(*RunOptions) error }
@@ -63,6 +69,19 @@ func (runCmd) Flags(f *pflag.FlagSet) *RunOptions {
 	f.StringVar(&o.Limits.MaxTime, "max-time", "", "maximum duration")
 	f.IntVar(&o.Limits.MaxToolResultTokens, "max-tool-result-tokens", 0, "maximum tool result tokens")
 	f.IntVar(&o.Limits.MaxAgentDepth, "max-agent-depth", 0, "maximum nested agent depth")
+	// Internal child-session flags — hidden from help, used only by agent delegation.
+	f.StringVar(&o.ChildSessionID, "session-id", "", "internal: preallocated child session ID")
+	f.MarkHidden("session-id")
+	f.StringVar(&o.ParentSessionID, "parent-session-id", "", "internal: parent session ID")
+	f.MarkHidden("parent-session-id")
+	f.StringVar(&o.RootSessionID, "root-session-id", "", "internal: root session ID")
+	f.MarkHidden("root-session-id")
+	f.StringVar(&o.ParentToolCallID, "parent-tool-call-id", "", "internal: parent tool-call ID")
+	f.MarkHidden("parent-tool-call-id")
+	f.IntVar(&o.SessionDepth, "session-depth", 0, "internal: child session depth")
+	f.MarkHidden("session-depth")
+	f.StringVar(&o.ParentSessionDir, "parent-session-dir", "", "internal: parent session directory")
+	f.MarkHidden("parent-session-dir")
 	return o
 }
 
@@ -89,6 +108,67 @@ func (runCmd) Prepare(cmd *cobra.Command, o *RunOptions, args []string) error {
 	}
 	if o.Limits.MaxSteps < 0 || o.Limits.MaxTools < 0 || o.Limits.MaxToolResultTokens < 0 || o.Limits.MaxAgentDepth < 0 {
 		return fmt.Errorf("run limits cannot be negative")
+	}
+	// Reject bootstrap-changing flags when continuing a session.
+	// These checks run in Prepare so they are caught by CLI tests before execute.
+	sessionChanged := cmd.Flags().Changed("session")
+	if sessionChanged {
+		if o.AgentSystem != "" {
+			return fmt.Errorf("--system cannot be used when continuing a session")
+		}
+		if o.WorkingDir != "" {
+			return fmt.Errorf("--working-dir cannot be used when continuing a session")
+		}
+		if o.MemoryNamespace != "" {
+			return fmt.Errorf("--memory-namespace cannot be used when continuing a session")
+		}
+		if o.MemoryInstructions != "" {
+			return fmt.Errorf("--memory-instructions cannot be used when continuing a session")
+		}
+	}
+	// Track which internal child-session flags were set
+	o.childSessionID = cmd.Flags().Changed("session-id")
+	o.parentSessionID = cmd.Flags().Changed("parent-session-id")
+	o.rootSessionID = cmd.Flags().Changed("root-session-id")
+	o.parentToolCallID = cmd.Flags().Changed("parent-tool-call-id")
+	o.childSessionDepth = cmd.Flags().Changed("session-depth")
+	o.parentSessionDir = cmd.Flags().Changed("parent-session-dir")
+	if err := validateChildSessionFlags(o); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateChildSessionFlags validates the internal lineage flags used for child sessions.
+func validateChildSessionFlags(o *RunOptions) error {
+	anySet := o.childSessionID || o.parentSessionID || o.rootSessionID || o.parentToolCallID || o.childSessionDepth || o.parentSessionDir
+	if !anySet {
+		return nil
+	}
+	// All lineage flags must be provided together
+	if !o.childSessionID {
+		return fmt.Errorf("--session-id is required for child sessions")
+	}
+	if !o.rootSessionID {
+		return fmt.Errorf("--root-session-id is required for child sessions")
+	}
+	if !o.childSessionDepth {
+		return fmt.Errorf("--session-depth is required for child sessions")
+	}
+	if !o.parentSessionDir {
+		return fmt.Errorf("--parent-session-dir is required for child sessions")
+	}
+	if o.SessionDepth < 1 {
+		return fmt.Errorf("session depth must be at least 1 for child sessions")
+	}
+	if o.ChildSessionID == "" {
+		return fmt.Errorf("--session-id must not be empty")
+	}
+	if o.RootSessionID == "" {
+		return fmt.Errorf("--root-session-id must not be empty")
+	}
+	if o.ParentSessionDir == "" {
+		return fmt.Errorf("--parent-session-dir must not be empty")
 	}
 	return nil
 }
@@ -126,7 +206,7 @@ func executeRun(o *RunOptions) error {
 
 	var existing *config.SessionDoc
 	if o.SessionName != "" {
-		doc, err := config.LoadSessionDoc(cfg.paths, o.SessionName)
+		doc, err := config.LoadSessionDoc(config.RootSessionDir(cfg.paths, o.SessionName))
 		if err != nil {
 			return err
 		}
@@ -152,6 +232,20 @@ func executeRun(o *RunOptions) error {
 	if err != nil {
 		return err
 	}
+
+	// Build child session options if internal lineage flags are present
+	var childOpts *config.ChildSessionOptions
+	if o.childSessionID {
+		childOpts = &config.ChildSessionOptions{
+			ID:               o.ChildSessionID,
+			ParentID:         o.ParentSessionID,
+			RootID:           o.RootSessionID,
+			ParentToolCallID: o.ParentToolCallID,
+			Depth:            o.SessionDepth,
+			ParentSessionDir: o.ParentSessionDir,
+		}
+	}
+
 	resolved, err := runtimeconfig.Resolve(runtimeconfig.Inputs{
 		Settings: cfg.settings, Paths: cfg.paths, AgentName: o.AgentName, ExistingSession: existing, SessionName: o.SessionName, Target: runtimeconfig.TargetAutonomous,
 		CLI: runtimeconfig.Overrides{AgentName: o.AgentName, Model: o.Model, Thinking: o.Thinking, WorkingDir: o.WorkingDir, AgentSystem: o.AgentSystem,
@@ -167,7 +261,7 @@ func executeRun(o *RunOptions) error {
 		return fmt.Errorf("no model configured")
 	}
 	runtimeconfig.ApplyToExistingSession(existing, resolved.Config)
-	request := runservice.Request{Session: runtimeconfig.SessionRequest{Paths: cfg.paths, Endpoints: cfg.endpoints, Config: resolved.Config, Catalog: resolved.Catalog, ExistingSession: existing, SessionName: o.SessionName, Prompt: o.Prompt}}
+	request := runservice.Request{Session: runtimeconfig.SessionRequest{Paths: cfg.paths, Endpoints: cfg.endpoints, Config: resolved.Config, Catalog: resolved.Catalog, ExistingSession: existing, SessionName: o.SessionName, Prompt: o.Prompt}, ChildSession: childOpts}
 	if runservice.OutputMode(o.Mode) == runservice.OutputStream {
 		stream := runservice.NewStreamWriter(os.Stdout)
 		saved := resolved.Config.Autosave.Enabled

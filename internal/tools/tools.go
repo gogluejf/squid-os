@@ -33,8 +33,20 @@ type Catalog interface {
 }
 
 type RuntimeContext struct {
-	Config  config.SessionConfig
-	Catalog Catalog
+	Config     config.SessionConfig
+	Catalog    Catalog
+	Identity   config.SessionIdentity
+	SessionDir string
+	ToolCallID string
+	// ChildRef is the preallocated child session reference for agent delegation.
+	// Empty for non-agent tools.
+	ChildRef ChildSessionRef
+}
+
+// ChildSessionRef holds the preallocated identity of a delegated child session.
+type ChildSessionRef struct {
+	ID   string
+	Name string
 }
 
 // Tool defines the contract for a callable tool.
@@ -158,5 +170,30 @@ func (t *Tool) DisplayValue(argsJSON string) string {
 		return fmt.Sprintf("%v", v)
 	default:
 		return ""
+	}
+}
+
+// IsAgentTool returns true if the given tool name is an agent delegation tool.
+func IsAgentTool(name string) bool {
+	return name == "call_agent" || name == "inline_agent"
+}
+
+// GenerateChildSessionRef allocates a child session ID and name for an agent
+// tool call. For call_agent the name is "<agent-name>-<tool-call-id>".
+// For inline_agent the name is "inline-<tool-call-id>".
+func GenerateChildSessionRef(toolName, agentName, toolCallID string) ChildSessionRef {
+	childID := fmt.Sprintf("child-%s-%s", toolCallID, agentName)
+	if toolName == "inline_agent" {
+		childID = fmt.Sprintf("child-inline-%s", toolCallID)
+	}
+	var childName string
+	if toolName == "call_agent" {
+		childName = fmt.Sprintf("%s-%s", agentName, toolCallID)
+	} else {
+		childName = fmt.Sprintf("inline-%s", toolCallID)
+	}
+	return ChildSessionRef{
+		ID:   childID,
+		Name: childName,
 	}
 }

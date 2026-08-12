@@ -14,6 +14,7 @@ import re
 import shutil
 import stat
 import sys
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
@@ -24,13 +25,12 @@ class MigrationFailure(Exception):
     pass
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--migration", required=True, type=Path)
     parser.add_argument("--pattern", default="*/chat.json")
-    parser.add_argument("--timestamp", help="UTC naming token for reproducible tests")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def load_module(path: Path) -> ModuleType:
@@ -168,6 +168,47 @@ def restore_metadata(source: Path, destination: Path) -> list[str]:
     return warnings
 
 
+def restore_tree_metadata(source: Path, destination: Path) -> list[str]:
+    """Restore copied tree metadata bottom-up after migration writes."""
+    warnings: list[str] = []
+    source_paths = [source, *source.rglob("*")]
+    for source_path in sorted(
+        source_paths,
+        key=lambda path: len(path.relative_to(source).parts),
+        reverse=True,
+    ):
+        if source_path.is_symlink():
+            continue
+        relative = source_path.relative_to(source)
+        destination_path = destination / relative
+        if destination_path.exists():
+            warnings.extend(restore_metadata(source_path, destination_path))
+    return warnings
+
+
+def metadata_mismatches(source: Path, destination: Path) -> list[str]:
+    """Report mode and timestamp differences for all non-symlink tree entries."""
+    errors: list[str] = []
+    for source_path in [source, *source.rglob("*")]:
+        if source_path.is_symlink():
+            continue
+        relative = source_path.relative_to(source)
+        destination_path = destination / relative
+        if not destination_path.exists():
+            errors.append(f"metadata target missing: {relative.as_posix() or '.'}")
+            continue
+        source_info = source_path.stat(follow_symlinks=False)
+        destination_info = destination_path.stat(follow_symlinks=False)
+        label = relative.as_posix() or "."
+        if stat.S_IMODE(destination_info.st_mode) != stat.S_IMODE(source_info.st_mode):
+            errors.append(f"mode not preserved: {label}")
+        if destination_info.st_atime_ns != source_info.st_atime_ns:
+            errors.append(f"atime not preserved: {label}")
+        if destination_info.st_mtime_ns != source_info.st_mtime_ns:
+            errors.append(f"mtime not preserved: {label}")
+    return errors
+
+
 def atomic_write_json(path: Path, document: dict[str, Any], source: Path) -> list[str]:
     temporary = path.with_name(f".{path.name}.migrating-{os.getpid()}")
     try:
@@ -200,14 +241,22 @@ def callback_errors(module: ModuleType, before: dict[str, Any], after: dict[str,
     return result
 
 
-def run() -> int:
-    args = parse_args()
+def run(
+    argv: list[str] | None = None,
+    *,
+    now: Callable[[], datetime] | None = None,
+) -> int:
+    args = parse_args(argv)
     source = args.source.resolve()
     migration_path = args.migration.resolve()
     if not source.is_dir():
         raise MigrationFailure(f"source is not a directory: {source}")
     module = load_module(migration_path)
-    token = args.timestamp or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    clock = now or (lambda: datetime.now(timezone.utc))
+    current_time = clock()
+    if current_time.tzinfo is None:
+        raise MigrationFailure("migration clock must return a timezone-aware datetime")
+    token = current_time.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup = source.with_name(f"{source.name}.{token}.bck")
     destination = source.with_name(f"{source.name}.{token}.new")
     if backup.exists() or destination.exists():
@@ -278,6 +327,14 @@ def run() -> int:
         except Exception as exc:
             report["failed"] += 1
             report["failures"].append(f"{rel.as_posix()}: {exc}")
+
+    # Replacing migrated files changes their parent directory timestamps. Restore
+    # the entire copied tree bottom-up only after every write is complete.
+    report["warnings"].extend(restore_tree_metadata(source, destination))
+    destination_metadata_errors = metadata_mismatches(source, destination)
+    if destination_metadata_errors:
+        report["failed"] += len(destination_metadata_errors)
+        report["failures"].extend(destination_metadata_errors)
 
     if manifest(source) != original_manifest:
         report["failed"] += 1

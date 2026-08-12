@@ -1,0 +1,281 @@
+{
+    "plan_name": "subagent-session-tree",
+    "title": "Recursive Subagent Session Persistence",
+    "problem": "Delegated agent runs have no durable lineage or parent-relative storage, so their transcripts cannot be reliably saved, traversed, or validated as children of the invoking session. Session identity also currently lives in Meta, while tool executions cannot identify the child session they created.",
+    "goal": "Persist every delegated run as an independently identified SessionDoc beneath its immediate parent, link it from the creating tool call, support recursive save/load and whole-tree forks without stored paths, and safely migrate existing root session documents.",
+    "milestones": [
+        {
+            "number": "1",
+            "name": "Session Lineage",
+            "pattern": [
+                "Explicit Identity and Backward-Compatible Schema Evolution"
+            ],
+            "objective": "Give root and delegated session documents durable lineage, and let parent tool executions identify the child they created.",
+            "success": "New documents carry explicit identity, existing documents have a deterministic migration, and ordinary tool calls remain unchanged.",
+            "diagram": "classDiagram\n    class SessionDoc {\n      Identity identity\n      SessionMeta meta\n      SessionConfig config\n    }\n    class SessionIdentity {\n      string id\n      string parentID\n      string rootID\n      string parentToolCallID\n      int depth\n    }\n    class ToolExecution {\n      string childSessionID\n      string childSessionName\n    }\n    SessionDoc *-- SessionIdentity\n    ToolExecution ..> SessionIdentity : links child",
+            "tasks": [
+                {
+                    "number": "1.1",
+                    "name": "Introduce durable session lineage and child execution links",
+                    "type": "feature",
+                    "what": "Move immutable session identity out of `SessionMeta` into `SessionIdentity`, and add optional child ID/name fields to tool-call execution records.",
+                    "why": "Separates lineage from timestamps and lets a parent tool call locate and validate its recursively stored child without persisting a path.",
+                    "files": [
+                        "~ internal/config/session.go",
+                        "~ internal/config/session_test.go"
+                    ],
+                    "snippet": [
+                        "type SessionIdentity struct {\n    ID               string `json:\"id\"`\n    ParentID         string `json:\"parent_id,omitempty\"`\n    RootID           string `json:\"root_id\"`\n    ParentToolCallID string `json:\"parent_tool_call_id,omitempty\"`\n    Depth            int    `json:\"depth\"`\n}\n\ntype SessionMeta struct {\n    CreatedAt string `json:\"created_at\"`\n    UpdatedAt string `json:\"updated_at\"`\n}\n\n// ToolCallEntry.Execution additions:\n// ChildSessionID string `json:\"child_session_id,omitempty\"`\n// ChildSessionName string `json:\"child_session_name,omitempty\"`"
+                    ],
+                    "acceptance": [
+                        "A new root session has a non-empty ID, RootID equal to ID, empty parent fields, and depth zero.",
+                        "Child lineage can be constructed with parent ID, root ID, parent tool-call ID, and depth without changing SessionConfig.",
+                        "Tool execution JSON omits child fields for non-agent tools and round-trips them when present.",
+                        "Meta retains timestamps but no longer owns session identity."
+                    ],
+                    "verify": [
+                        "go test ./internal/config"
+                    ]
+                },
+                {
+                    "number": "1.2",
+                    "name": "Migrate persisted root sessions to the identity schema",
+                    "type": "chore",
+                    "what": "Use the `session-config-migrator` workflow to transform existing session JSON from `meta.id` into the new top-level identity object.",
+                    "why": "Preserves current session IDs and timestamps while making every legacy document a valid root in the new lineage model.",
+                    "files": [
+                        "~ .squid-os/skills/session-config-migrator/scripts/migrate_sessions.py"
+                    ],
+                    "snippet": [
+                        "# Migration callback contract\nMIGRATION_API_VERSION = 1\nMIGRATION_ID = \"session-lineage-identity\"\nALLOWED_CHANGED_PATHS = {\"identity\", \"meta.id\"}\n\ndef migrate(document: dict) -> dict: ...\ndef validate(before: dict, after: dict) -> list[str]: ..."
+                    ],
+                    "acceptance": [
+                        "The migration copies meta.id to identity.id and identity.root_id without generating a replacement ID.",
+                        "The migration sets parent_id and parent_tool_call_id empty and depth zero for existing root sessions.",
+                        "The migration removes meta.id while preserving meta.created_at, meta.updated_at, messages, configs, and token data.",
+                        "The migrator produces untouched backup and validated migrated trees and never replaces the live sessions directory.",
+                        "Unsupported or missing legacy IDs fail validation instead of inventing identity."
+                    ],
+                    "verify": [
+                        "python3 .squid-os/skills/session-config-migrator/scripts/migrate_sessions.py --help"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "2",
+            "name": "Parent-Relative Session Storage",
+            "pattern": [
+                "Filesystem Aggregate and Explicit Runtime Location"
+            ],
+            "objective": "Make each loaded session know its runtime directory and save delegated sessions beneath the immediate parent without changing the global sessions root.",
+            "success": "Root behavior remains name-based, child persistence is recursive, and no absolute or relative session path is persisted in chat.json.",
+            "diagram": "flowchart TD\n    R[Sessions root] --> RS[Root session name]\n    RS --> RC[Root chat JSON]\n    RS --> A1[agents]\n    A1 --> CS[Child session name]\n    CS --> CC[Child chat JSON]\n    CS --> A2[agents]\n    A2 --> GS[Grandchild session name]\n    GS --> GC[Grandchild chat JSON]",
+            "tasks": [
+                {
+                    "number": "2.1",
+                    "name": "Add parent-relative session location primitives",
+                    "type": "feature",
+                    "what": "Introduce explicit root and child session-directory resolution, plus load/save operations that target a resolved session directory rather than overloading Paths.Sessions.",
+                    "why": "A nested session must checkpoint repeatedly under its parent while the application environment continues to expose the real global sessions root.",
+                    "files": [
+                        "~ internal/config/session.go",
+                        "~ internal/config/session_test.go"
+                    ],
+                    "snippet": [
+                        "func RootSessionDir(paths Paths, name string) string\nfunc ChildSessionDir(parentDir, childName string) string\nfunc SessionDocPath(sessionDir string) string\nfunc SaveSessionDocAt(sessionDir string, doc SessionDoc, tally *TokenTally) error\nfunc LoadSessionDocAt(sessionDir string) (SessionDoc, error)\n\n// Existing name-based root functions delegate to these primitives."
+                    ],
+                    "acceptance": [
+                        "Root save/load/list behavior and sessions/name/chat.json layout remain backward compatible.",
+                        "A child resolves to parentDir/agents/childName/chat.json and a grandchild follows the same rule recursively.",
+                        "Nested saves do not modify Paths.Sessions or the sessions directory shown in environment context.",
+                        "Session names are validated so they cannot escape their parent agents directory."
+                    ],
+                    "verify": [
+                        "go test ./internal/config"
+                    ]
+                },
+                {
+                    "number": "2.2",
+                    "name": "Carry the current session directory through runtime persistence",
+                    "type": "feature",
+                    "what": "Add a non-persisted current session directory to session requests and chat sessions, and make TUI/run checkpoint paths use that resolved directory.",
+                    "why": "Creation, repeated autosaves, reloads, and further nested calls must share one authoritative runtime location without storing paths in SessionDoc.",
+                    "files": [
+                        "~ internal/runtime/runtime.go",
+                        "~ internal/chat/session.go",
+                        "~ internal/run/run.go",
+                        "~ internal/app/ui_session.go",
+                        "~ internal/app/session_persistence.go"
+                    ],
+                    "snippet": [
+                        "type SessionRequest struct {\n    // existing fields\n    SessionDir string\n}\n\ntype Session struct {\n    // existing fields\n    SessionDir string // runtime-only\n}\n\nfunc NewSession(/* existing args */, sessionDir string) *Session\nfunc LoadSession(/* existing args */, sessionDir string) *Session"
+                    ],
+                    "acceptance": [
+                        "Root TUI and run sessions resolve SessionDir from Paths.Sessions and the root session name.",
+                        "A child uses its supplied resolved directory for initial, tool-flush, completion, error, and timeout checkpoints.",
+                        "A reloaded session uses the directory of the selected chat document for subsequent saves and descendant creation.",
+                        "SessionDir is not serialized into SessionDoc and does not alter working directory or environment paths."
+                    ],
+                    "verify": [
+                        "go test ./internal/chat ./internal/run ./internal/app ./internal/runtime"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "3",
+            "name": "Recursive Agent Delegation",
+            "pattern": [
+                "Preallocated Child Invocation and Parent-Owned Linkage"
+            ],
+            "objective": "Preallocate child identity at the agent tool call, launch the child with trusted internal lineage/location inputs, and persist a navigable recursive relationship.",
+            "success": "Installed and inline agents create unique child transcripts, parent calls contain child links, and nested agents repeat the same behavior within depth limits.",
+            "diagram": "sequenceDiagram\n    participant P as Parent session\n    participant E as Tool executor\n    participant C as Child run\n    P->>E: agent tool call with call ID\n    E->>E: allocate child ID and name\n    E->>P: stage child ID and name\n    E->>P: checkpoint parent\n    E->>C: launch with lineage and parent directory\n    C->>C: save under parent agents child name\n    C-->>E: final stdout or error\n    E->>P: finalize tool execution",
+            "tasks": [
+                {
+                    "number": "3.1",
+                    "name": "Preallocate and persist child linkage during agent tool execution",
+                    "type": "feature",
+                    "what": "Extend the tool execution contract so agent tools receive the current tool-call ID/session context and stage child ID/name on the execution entry before process launch.",
+                    "why": "The parent must own the child identity, save the relationship before delegation, and avoid parsing IDs from child stdout or using a callback protocol.",
+                    "files": [
+                        "~ internal/tools/tools.go",
+                        "~ internal/chat/session.go",
+                        "~ internal/chat/tool_exec.go",
+                        "~ internal/chat/tool_exec_test.go"
+                    ],
+                    "snippet": [
+                        "type RuntimeContext struct {\n    Config       config.SessionConfig\n    Catalog      Catalog\n    Identity     config.SessionIdentity\n    SessionDir   string\n    ToolCallID   string\n}\n\ntype ChildSessionRef struct {\n    ID   string\n    Name string\n}\n\n// Agent execution preparation stages ChildSessionRef on ToolCallEntry.Execution\n// and checkpoints the parent before launching the child."
+                    ],
+                    "acceptance": [
+                        "Only call_agent and inline_agent allocate child sessions; ordinary tools leave child fields empty.",
+                        "The child ID is allocated by the parent before launch and matches the ID passed to the child.",
+                        "Installed child names use agent-name plus tool-call ID; inline names use inline plus tool-call ID.",
+                        "The parent execution entry contains child ID/name before the subprocess starts and is checkpointed when the parent is persistable.",
+                        "Failed launches retain a stable child reference and normal tool error semantics."
+                    ],
+                    "verify": [
+                        "go test ./internal/chat ./internal/tools"
+                    ]
+                },
+                {
+                    "number": "3.2",
+                    "name": "Launch delegated runs with trusted recursive session context",
+                    "type": "feature",
+                    "what": "Add internal run options for preallocated identity and parent session directory, then make call_agent and inline_agent launch children with forced autosave beneath the immediate parent.",
+                    "why": "Delegated runs need durable transcripts and recursive storage while public --session remains an unambiguous root-session loader.",
+                    "files": [
+                        "~ internal/tools/agents.go",
+                        "~ internal/tools/agents_test.go",
+                        "~ internal/cli/run.go",
+                        "~ internal/cli/cli_test.go",
+                        "~ internal/run/run.go"
+                    ],
+                    "snippet": [
+                        "type ChildSessionOptions struct {\n    ID               string\n    ParentID         string\n    RootID           string\n    ParentToolCallID string\n    Depth            int\n    ParentSessionDir string\n    Name             string\n}\n\n// Internal CLI contract:\n// --session-id\n// --parent-session-id\n// --root-session-id\n// --parent-tool-call-id\n// --session-depth\n// --parent-session-dir\n// --save-name"
+                    ],
+                    "acceptance": [
+                        "Agent tools pass the preallocated identity, generated save name, immediate parent directory, and decremented max-agent-depth.",
+                        "The child creates Identity with depth parent plus one and saves to parentDir/agents/saveName/chat.json.",
+                        "Child autosave is forced for initial/partial/final transcripts regardless of the parent agent definition save default.",
+                        "A child calling another agent uses its own SessionDir as the next parent directory, producing recursive storage.",
+                        "Public --session name loading and root picker/analytics discovery remain unchanged.",
+                        "Internal lineage flags reject partial, inconsistent, negative-depth, or non-child combinations."
+                    ],
+                    "verify": [
+                        "go test ./internal/tools ./internal/cli ./internal/run"
+                    ]
+                },
+                {
+                    "number": "3.3",
+                    "name": "Resolve and validate child sessions from parent links",
+                    "type": "feature",
+                    "what": "Add parent-relative child resolution that loads a referenced child by local name and verifies its session, parent, root, and tool-call identity.",
+                    "why": "Future tree browsing and current diagnostics need a safe way to revisit child logs without global ID lookup, stored paths, or making children normal root sessions.",
+                    "files": [
+                        "~ internal/config/session.go",
+                        "~ internal/config/session_test.go",
+                        "~ internal/chat/session.go"
+                    ],
+                    "snippet": [
+                        "func LoadChildSession(\n    parentDir string,\n    parent config.SessionDoc,\n    toolCall config.ToolCallEntry,\n) (doc config.SessionDoc, childDir string, err error)"
+                    ],
+                    "acceptance": [
+                        "A child is resolved only as parentDir/agents/ChildSessionName/chat.json.",
+                        "Loading fails clearly when the file is absent or child ID, ParentID, RootID, ParentToolCallID, or depth is inconsistent.",
+                        "A successfully loaded child returns its runtime directory so its descendants can be resolved recursively.",
+                        "The API does not recursively scan global sessions and does not expose children through root ListSessions."
+                    ],
+                    "verify": [
+                        "go test ./internal/config ./internal/chat"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "4",
+            "name": "Whole-Tree Session Forking",
+            "pattern": [
+                "Aggregate Copy with Identity Remapping"
+            ],
+            "objective": "Preserve recursive agent history when save-as creates a new root session while ensuring the copied tree has independent identities.",
+            "success": "A full session-tree fork copies every child, rewrites all lineage and tool links consistently, and never references the source tree for navigation.",
+            "diagram": "flowchart LR\n    O[Original tree] --> M[Build old ID to new ID map]\n    M --> C[Copy root and agents folders]\n    C --> R[Rewrite identities]\n    R --> L[Rewrite child links]\n    L --> V[Validate independent copied tree]",
+            "tasks": [
+                {
+                    "number": "4.1",
+                    "name": "Fork complete session trees with remapped identities",
+                    "type": "feature",
+                    "what": "Change save-as for an already persisted session to copy its complete recursive agents tree and rewrite all copied session identities and child links.",
+                    "why": "A fork should preserve inspectable delegated history without duplicating immutable IDs or depending on the original directory.",
+                    "files": [
+                        "~ internal/config/session.go",
+                        "~ internal/config/session_test.go",
+                        "~ internal/app/session_persistence.go",
+                        "~ internal/app/tui_session.go"
+                    ],
+                    "snippet": [
+                        "type SessionTreeForkResult struct {\n    RootIdentity config.SessionIdentity\n    IDMap        map[string]string\n}\n\nfunc ForkSessionTree(\n    sourceDir string,\n    destinationDir string,\n) (SessionTreeForkResult, error)"
+                    ],
+                    "acceptance": [
+                        "Save-as to a new root name copies the root chat document and every recursive agents directory.",
+                        "Every copied session receives a new unique ID and the copied root has RootID equal to its new ID.",
+                        "Copied ParentID, RootID, and tool execution ChildSessionID values use the new ID mapping.",
+                        "ParentToolCallID, depth, child names, messages, and directory layout are preserved.",
+                        "Fork validation fails atomically on broken lineage, duplicate IDs, destination collision, or incomplete copying.",
+                        "A first save of an unsaved root remains a normal save rather than a fork."
+                    ],
+                    "verify": [
+                        "go test ./internal/config ./internal/app"
+                    ]
+                },
+                {
+                    "number": "4.2",
+                    "name": "Verify recursive delegation and fork behavior end to end",
+                    "type": "test",
+                    "what": "Add integration coverage for root-to-child-to-grandchild persistence, parent-relative reload, failure checkpoints, and independent whole-tree forks.",
+                    "why": "The feature crosses CLI subprocesses, tool execution, session persistence, and schema lineage, so unit tests alone cannot protect the complete contract.",
+                    "files": [
+                        "+ internal/run/subagent_session_test.go",
+                        "~ internal/tools/agents_test.go",
+                        "~ internal/config/session_test.go"
+                    ],
+                    "snippet": [
+                        "func TestDelegatedRunPersistsRecursiveSessionTree(t *testing.T)\nfunc TestFailedDelegatedRunKeepsInspectableChild(t *testing.T)\nfunc TestLoadChildValidatesParentToolLink(t *testing.T)\nfunc TestSaveAsForkRemapsCompleteSessionTree(t *testing.T)"
+                    ],
+                    "acceptance": [
+                        "A direct child and grandchild are saved at the expected recursive locations with correct depths and lineage.",
+                        "Parent tool execution child references match the created documents.",
+                        "Partial child logs remain readable after child error or timeout.",
+                        "Loading through parent links succeeds while root session listing remains noise-free.",
+                        "The forked tree is navigable after the source tree is removed from the test fixture."
+                    ],
+                    "verify": [
+                        "go test ./..."
+                    ]
+                }
+            ]
+        }
+    ]
+}

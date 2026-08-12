@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"squid-os/internal/chat"
 	"squid-os/internal/config"
 	"squid-os/internal/log"
 	runtimeconfig "squid-os/internal/runtime"
@@ -19,7 +20,7 @@ func (m *Model) loadUISession(doc config.SessionDoc, name string) bool {
 		return false
 	}
 	runtimeconfig.ApplyToExistingSession(&doc, resolved.Config)
-	m.session = NewUISessionFromDoc(doc, name, m.paths, resolved.Catalog)
+	m.session = LoadRootUISession(doc, name, m.paths, resolved.Catalog)
 	return true
 }
 
@@ -39,7 +40,8 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 		Value: name,
 		OnConfirm: func(value string, ctx any) tea.Cmd {
 			m := ctx.(*Model)
-			nm, cmd := m.saveAs(value, false)
+			destinationDir := config.RootSessionDir(m.paths, value)
+			nm, cmd := m.saveTo(destinationDir, false)
 			*m = nm
 			if cmd != nil {
 				return tea.Batch(m.setChatMode(), cmd)
@@ -67,7 +69,7 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 		(&m).setNotification(ui.NotificationError, err.Error())
 		return m, nil
 	}
-	m.session = NewUISession(sessionConfig.Config, m.paths, sessionConfig.Catalog)
+	m.session = NewRootUISession(sessionConfig.Config, m.paths, sessionConfig.Catalog)
 	m.settings.LastSessionName = ""
 	_ = config.SaveSettings(m.paths, m.settings)
 	if m.settings.AutoSave {
@@ -88,10 +90,10 @@ func (m Model) toggleIncognito() (Model, tea.Cmd) {
 		_ = config.SaveSettings(m.paths, m.settings)
 		(&m).setNotification(ui.NotificationInfo, "incognito is on")
 	} else {
-		// Resume — reload from disk if the session was previously saved
-		if m.session.Info.Name != "" {
-			if sf, err := config.LoadSessionDoc(m.paths, m.session.Info.Name); err == nil {
-				m.loadUISession(sf, m.session.Info.Name)
+		// Resume from this session's canonical location, whether root or child.
+		if doc, err := config.LoadSessionDoc(m.session.SessionDir); err == nil {
+			m.session = &UISession{Session: chat.LoadSession(doc, m.session.SessionDir, m.paths, m.session.Catalog)}
+			if m.session.Doc.Identity.Depth == 0 {
 				m.settings.LastSessionName = m.session.Info.Name
 				_ = config.SaveSettings(m.paths, m.settings)
 			}
@@ -131,11 +133,11 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			if name == "" {
 				return
 			}
-			sf, err := config.LoadSessionDoc(m.paths, name)
+			doc, err := config.LoadSessionDoc(config.RootSessionDir(m.paths, name))
 			if err != nil {
 				return
 			}
-			m.loadUISession(sf, name)
+			m.loadUISession(doc, name)
 			m.refreshViewportAtBottom()
 		},
 		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
@@ -146,13 +148,14 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			}
 			m.settings.LastSessionName = selected
 			_ = config.SaveSettings(m.paths, m.settings)
-			sf, err := config.LoadSessionDoc(m.paths, selected)
+			sessionDir := config.RootSessionDir(m.paths, selected)
+			doc, err := config.LoadSessionDoc(sessionDir)
 			if err != nil {
 				return m.setChatMode()
 			}
-			m.loadUISession(sf, selected)
+			m.loadUISession(doc, selected)
 			m.sessionSnapshot = nil
-			m.setNotification(ui.NotificationInfo, "session loaded from "+config.SessionPath(m.paths, selected))
+			m.setNotification(ui.NotificationInfo, "session loaded from "+sessionDir)
 			if msgIdx, ok := m.session.lastPendingToolMsgIdx(); ok {
 				return tea.Batch(m.setChatMode(), func() tea.Msg { return pendingToolResumeMsg{msgIdx: msgIdx} })
 			}

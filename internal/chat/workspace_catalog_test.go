@@ -28,7 +28,7 @@ func TestSetWorkingDirToolSwapsSessionCatalog(t *testing.T) {
 		AgentPolicy: config.CapabilityPolicy{Mode: config.PolicyModeAll},
 		Skills:      []config.CapabilityRef{{Scope: config.CapabilityScopeWorkspace, Name: "build-a"}},
 	}
-	session := NewSession(cfg, paths, catalog)
+	session := NewRootSession(cfg, paths, catalog)
 	args, _ := json.Marshal(map[string]any{"path": workspaceB})
 	session.Stream.PartialTools = []PartialTool{{ID: "tool-1", Name: "set_working_dir", Args: string(args), FirstAt: time.Now(), DoneAt: time.Now()}}
 

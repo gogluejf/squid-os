@@ -225,8 +225,20 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 		result := chat.ExecuteTools(m.session.Session, chat.ToolExecOptions{
 			Decision: decision,
 			MsgIdx:   msgIdx,
+			Checkpoint: func() error {
+				if !m.session.Doc.Config.Autosave.Enabled || m.incognito {
+					return nil
+				}
+				return m.session.Save()
+			},
 		})
 		decision = nil
+		if result.Error != nil {
+			m.setNotification(ui.NotificationError, result.Error.Error())
+			m.session.Stream.Reset()
+			m.session.UIStream.reset()
+			return m, m.setChatMode()
+		}
 
 		if result.MsgIdx >= 0 {
 			m.session.invalidateRenderFrom(result.MsgIdx)
@@ -250,10 +262,6 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 			m.session.UIStream.MsgIdx = result.MsgIdx
 			m.setAuthMode()
 			m.refreshViewportFollowing()
-			nm, autoSaveCmd := m.autoSave()
-			if autoSaveCmd != nil {
-				return nm, autoSaveCmd
-			}
 			return m, nil
 
 		case chat.ToolExecContinue:
@@ -273,14 +281,9 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 
 				m.session.Append(userMsg)
 			}
-			nm, autoSaveCmd := m.autoSave()
 			m.session.Stream.Reset()
 			m.session.UIStream.reset()
 			m.refreshViewportFollowing()
-			if autoSaveCmd != nil {
-				nextModel, nextCmd := nm.startStream()
-				return nextModel, tea.Batch(nextCmd, autoSaveCmd)
-			}
 			return m.startStream()
 		}
 	}

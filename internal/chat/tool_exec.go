@@ -34,8 +34,9 @@ type AuthDecision struct {
 }
 
 type ToolExecOptions struct {
-	Decision *AuthDecision
-	MsgIdx   int
+	Decision   *AuthDecision
+	MsgIdx     int
+	Checkpoint func() error
 }
 
 type ToolExecResult struct {
@@ -46,6 +47,7 @@ type ToolExecResult struct {
 	AuthRequest      *AuthRequest
 	CapturedUserText string
 	LoadedSkill      string
+	Error            error
 }
 
 func BuildInstructionEntry(p PartialTool) config.ToolCallEntry {
@@ -62,6 +64,24 @@ func BuildInstructionEntry(p PartialTool) config.ToolCallEntry {
 	}
 }
 
+func flushAndCheckpoint(s *Session, msgIdx int, checkpoint func() error) error {
+	FlushToolMessage(s, msgIdx)
+	if checkpoint != nil {
+		return checkpoint()
+	}
+	return nil
+}
+
+func checkpointFailure(msgIdx, toolIndex int, err error) ToolExecResult {
+	return ToolExecResult{
+		Action:    ToolExecDone,
+		MsgIdx:    msgIdx,
+		ToolIndex: toolIndex,
+		NextIndex: toolIndex,
+		Error:     fmt.Errorf("tool checkpoint: %w", err),
+	}
+}
+
 func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 	if s.Doc.FileState == nil {
 		s.Doc.FileState = make(map[string]config.FileStateEntry)
@@ -75,7 +95,7 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 			entries[i] = BuildInstructionEntry(p)
 			entries[i].Execution.Status = tools.ResultStatusPending
 		}
-		msgIdx = SaveAssistantMsg(s, config.Message{
+		msgIdx = AppendAssistantMsg(s, config.Message{
 			ID:                 fmt.Sprintf("msg_%d", len(s.Doc.Messages)+1),
 			Role:               config.RoleAssistant,
 			CreatedAt:          s.Stream.Metrics.Start,
@@ -96,7 +116,9 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 	entries := s.Doc.Messages[msgIdx].ToolCalls
 	startIndex := nextExecutableToolIndex(entries)
 	if startIndex >= len(entries) {
-		FlushToolMessage(s, msgIdx)
+		if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+			return checkpointFailure(msgIdx, len(entries)-1, err)
+		}
 		return ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: len(entries) - 1, NextIndex: len(entries)}
 	}
 
@@ -109,7 +131,9 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 	if tool == nil {
 		entry.Execution.Status = tools.ResultStatusError
 		entry.Execution.Error = fmt.Sprintf("unknown tool: %s", toolName)
-		FlushToolMessage(s, msgIdx)
+		if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+			return checkpointFailure(msgIdx, i, err)
+		}
 		return ToolExecResult{Action: nextToolAction(i, len(entries)), MsgIdx: msgIdx, ToolIndex: i, NextIndex: i + 1}
 	}
 
@@ -121,7 +145,9 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 			entries[j].Execution.Status = tools.ResultStatusError
 			entries[j].Execution.Error = "cancelled: prior tool had malformed arguments"
 		}
-		FlushToolMessage(s, msgIdx)
+		if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+			return checkpointFailure(msgIdx, i, err)
+		}
 		return ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: i, NextIndex: len(entries)}
 	}
 
@@ -136,7 +162,9 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 				entries[j].Execution.Status = tools.ResultStatusError
 				entries[j].Execution.Error = "cancelled: previous tool was not approved"
 			}
-			FlushToolMessage(s, msgIdx)
+			if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+				return checkpointFailure(msgIdx, i, err)
+			}
 			res := ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: i, NextIndex: len(entries)}
 			if capturedInstructions != "" {
 				res.CapturedUserText = capturedInstructions
@@ -162,7 +190,9 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 						entries[j].Execution.Status = tools.ResultStatusError
 						entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"
 					}
-					FlushToolMessage(s, msgIdx)
+					if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+						return checkpointFailure(msgIdx, i, err)
+					}
 					return ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: i, NextIndex: len(entries)}
 				}
 			}
@@ -176,7 +206,9 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 			if preview.Status == tools.ResultStatusError {
 				entries[i].Execution.Status = tools.ResultStatusError
 				entries[i].Execution.Error = preview.Error
-				FlushToolMessage(s, msgIdx)
+				if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+					return checkpointFailure(msgIdx, i, err)
+				}
 				return ToolExecResult{Action: nextToolAction(i, len(entries)), MsgIdx: msgIdx, ToolIndex: i, NextIndex: i + 1}
 			}
 			for j := range preview.Files {
@@ -196,7 +228,9 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 		if tool.IsDestructive != nil {
 			isDestructive = tool.IsDestructive(args)
 		}
-		FlushToolMessage(s, msgIdx)
+		if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+			return checkpointFailure(msgIdx, i, err)
+		}
 		return ToolExecResult{
 			Action:    ToolExecNeedAuth,
 			MsgIdx:    msgIdx,
@@ -231,8 +265,10 @@ doExecute:
 		childRef = tools.GenerateChildSessionRef(toolName, agentName, entry.ID)
 		entries[i].Execution.ChildSessionID = childRef.ID
 		entries[i].Execution.ChildSessionName = childRef.Name
-		// Checkpoint parent before delegation so the child link is durable.
-		FlushToolMessage(s, msgIdx)
+		// Persist the parent link before delegation; a failed checkpoint prevents launch.
+		if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+			return checkpointFailure(msgIdx, i, err)
+		}
 	}
 
 	maxToolResultTokens := s.Doc.Config.Limits.MaxToolResultTokens
@@ -292,7 +328,9 @@ doExecute:
 		res.CapturedUserText = capturedInstructions
 	}
 
-	FlushToolMessage(s, msgIdx)
+	if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+		return checkpointFailure(msgIdx, i, err)
+	}
 	return res
 }
 

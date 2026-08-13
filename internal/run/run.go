@@ -71,7 +71,13 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 	final := ""
 	finalPass := ""
 	paths := sessionRequest.Paths
-	for event := range chat.RunLoop(ctx, session, paths, sessionRequest.Endpoints) {
+	checkpoint := func() error {
+		if !cfg.Autosave.Enabled {
+			return nil
+		}
+		return checkpointSave(session)
+	}
+	for event := range chat.RunLoop(ctx, session, paths, sessionRequest.Endpoints, checkpoint) {
 		if request.OnEvent != nil {
 			request.OnEvent(event)
 		}
@@ -87,9 +93,6 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 		}
 		if event.Type == chat.LoopEventToolFlushed {
 			finalPass = ""
-			if cfg.Autosave.Enabled {
-				_ = checkpointSave(session)
-			}
 		}
 		if event.Type == chat.LoopEventError {
 			if cfg.Autosave.Enabled {
@@ -101,9 +104,6 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 			return Result{FinalText: final, Session: session}, fmt.Errorf("run failed")
 		}
 		if event.Type == chat.LoopEventNeedAuth {
-			if cfg.Autosave.Enabled {
-				_ = checkpointSave(session)
-			}
 			return Result{FinalText: final, Session: session}, fmt.Errorf("tool authorization required for %s", event.AuthRequest.ToolName)
 		}
 	}

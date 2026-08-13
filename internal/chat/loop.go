@@ -61,7 +61,7 @@ func ProcessStreamEvent(s *Session, event StreamEvent) LoopResult {
 			return LoopResult{Action: LoopToolCalls}
 		}
 
-		idx := SaveAssistantMsg(s, config.Message{
+		idx := AppendAssistantMsg(s, config.Message{
 			ID:                 nextMessageID(s),
 			Role:               config.RoleAssistant,
 			CreatedAt:          s.Stream.Metrics.Start,
@@ -170,7 +170,7 @@ func nextMessageID(s *Session) string {
 	return fmt.Sprintf("msg_%d", len(s.Doc.Messages)+1)
 }
 
-func SaveAssistantMsg(s *Session, msg config.Message) int {
+func AppendAssistantMsg(s *Session, msg config.Message) int {
 	s.Append(msg)
 	config.RecomputeSequenceStats(s.Doc.Messages)
 	return len(s.Doc.Messages) - 1
@@ -233,7 +233,7 @@ type LoopEvent struct {
 	Cancelled   bool
 }
 
-func RunLoop(ctx context.Context, s *Session, paths config.Paths, endpoints config.EndpointsConfig) <-chan LoopEvent {
+func RunLoop(ctx context.Context, s *Session, paths config.Paths, endpoints config.EndpointsConfig, checkpoint func() error) <-chan LoopEvent {
 	out := make(chan LoopEvent, 64)
 	go func() {
 		defer close(out)
@@ -289,9 +289,13 @@ func RunLoop(ctx context.Context, s *Session, paths config.Paths, endpoints conf
 							out <- LoopEvent{Type: LoopEventError, Error: fmt.Errorf("maximum tools exceeded")}
 							return
 						}
-						toolRes := ExecuteTools(s, ToolExecOptions{MsgIdx: msgIdx})
+						toolRes := ExecuteTools(s, ToolExecOptions{MsgIdx: msgIdx, Checkpoint: checkpoint})
 						toolCount++
 						out <- LoopEvent{Type: LoopEventToolFlushed, MsgIdx: toolRes.MsgIdx, ToolIndex: toolRes.ToolIndex}
+						if toolRes.Error != nil {
+							out <- LoopEvent{Type: LoopEventError, Error: toolRes.Error, MsgIdx: toolRes.MsgIdx}
+							return
+						}
 						switch toolRes.Action {
 						case ToolExecNeedAuth:
 							out <- LoopEvent{Type: LoopEventNeedAuth, MsgIdx: toolRes.MsgIdx, ToolIndex: toolRes.ToolIndex, AuthRequest: toolRes.AuthRequest}

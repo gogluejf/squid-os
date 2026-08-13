@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -485,6 +486,82 @@ func TestExecuteToolsNonAgentToolNoChildRef(t *testing.T) {
 	}
 	if exec.ChildSessionName != "" {
 		t.Errorf("expected empty child_session_name for non-agent tool, got %q", exec.ChildSessionName)
+	}
+}
+
+func TestAgentCheckpointPersistsLinkBeforeLaunchAndStopsOnFailure(t *testing.T) {
+	s := &Session{Doc: config.NewSessionDoc(config.SessionConfig{Tools: []string{"call_agent"}})}
+	s.Doc.Messages = []config.Message{{
+		ID:   "msg_1",
+		Role: config.RoleAssistant,
+		ToolCalls: []config.ToolCallEntry{{
+			ID: "tool_agent_1",
+			Instruction: struct {
+				Name       string `json:"name"`
+				Arguments  string `json:"arguments"`
+				Tokens     int    `json:"tokens,omitempty"`
+				DurationMs int64  `json:"duration_ms,omitempty"`
+			}{Name: "call_agent", Arguments: `{"agent":"trader","prompt":"analyze"}`},
+		}},
+	}}
+
+	checkpointCalls := 0
+	result := ExecuteTools(s, ToolExecOptions{
+		MsgIdx: 0,
+		Checkpoint: func() error {
+			checkpointCalls++
+			exec := s.Doc.Messages[0].ToolCalls[0].Execution
+			if exec.ChildSessionID == "" || exec.ChildSessionName == "" {
+				t.Fatal("checkpoint ran before child link was staged")
+			}
+			return errors.New("disk full")
+		},
+	})
+
+	if checkpointCalls != 1 {
+		t.Fatalf("checkpoint calls = %d, want 1", checkpointCalls)
+	}
+	if result.Error == nil || !strings.Contains(result.Error.Error(), "disk full") {
+		t.Fatalf("expected checkpoint failure, got %v", result.Error)
+	}
+	if s.Doc.Messages[0].ToolCalls[0].Execution.Status != "" {
+		t.Fatal("agent executed despite pre-launch checkpoint failure")
+	}
+}
+
+func TestCompletedToolFlushInvokesCheckpoint(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := &Session{Doc: config.NewSessionDoc(config.SessionConfig{Tools: []string{"read_file"}, WorkingDir: dir})}
+	s.Doc.Messages = []config.Message{{
+		ID:   "msg_1",
+		Role: config.RoleAssistant,
+		ToolCalls: []config.ToolCallEntry{{
+			ID: "tool_read_1",
+			Instruction: struct {
+				Name       string `json:"name"`
+				Arguments  string `json:"arguments"`
+				Tokens     int    `json:"tokens,omitempty"`
+				DurationMs int64  `json:"duration_ms,omitempty"`
+			}{Name: "read_file", Arguments: `{"path":"test.txt"}`},
+		}},
+	}}
+
+	checkpointCalls := 0
+	result := ExecuteTools(s, ToolExecOptions{MsgIdx: 0, Checkpoint: func() error {
+		checkpointCalls++
+		return nil
+	}})
+	if result.Error != nil {
+		t.Fatal(result.Error)
+	}
+	if checkpointCalls != 1 {
+		t.Fatalf("checkpoint calls = %d, want 1", checkpointCalls)
+	}
+	if s.Doc.Messages[0].ToolCalls[0].Execution.Status != tools.ResultStatusSuccess {
+		t.Fatalf("tool status = %q", s.Doc.Messages[0].ToolCalls[0].Execution.Status)
 	}
 }
 

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"encoding/json"
+
 	"squid-os/internal/config"
 	"squid-os/internal/tools"
 )
@@ -47,7 +48,6 @@ type fileEvent struct {
 	path              string
 	trace             string
 	isCheckpoint      bool // true for full reads, writes, creates
-	isRangedRead      bool // true for partial observations
 	isSuccessful      bool
 	instructionTokens int
 	executionTokens   int
@@ -211,11 +211,6 @@ func extractFileEvent(tc config.ToolCallEntry) *fileEvent {
 		path = tc.Execution.Files[0].Path
 	}
 
-	_, _, isRangedRead, rangeErr := tools.ParseReadRange(args)
-	if toolName != "read_file" || rangeErr != nil {
-		isRangedRead = false
-	}
-
 	// Determine success status
 	isSuccessful := tc.Execution.Status == tools.ResultStatusSuccess
 
@@ -235,14 +230,13 @@ func extractFileEvent(tc config.ToolCallEntry) *fileEvent {
 	}
 
 	// Classify checkpoint:
-	// - read_file without range => full checkpoint
+	// - read_file => full checkpoint
 	// - write_file trace write/create => full checkpoint
 	// - edit_file => delta (never a checkpoint, including no-op read traces)
-	// - ranged read => partial observation (never a checkpoint)
 	isCheckpoint := false
 	switch toolName {
 	case "read_file":
-		if !isRangedRead && isSuccessful {
+		if isSuccessful {
 			isCheckpoint = true
 		}
 	case "write_file":
@@ -260,7 +254,6 @@ func extractFileEvent(tc config.ToolCallEntry) *fileEvent {
 		path:              path,
 		trace:             trace,
 		isCheckpoint:      isCheckpoint,
-		isRangedRead:      isRangedRead,
 		isSuccessful:      isSuccessful,
 		instructionTokens: tc.Instruction.Tokens,
 		executionTokens:   tc.Execution.Tokens,

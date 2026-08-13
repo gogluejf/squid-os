@@ -12,16 +12,9 @@ import (
 	"squid-os/internal/tools"
 )
 
-// Helper: build a ToolCallEntry for read_file with optional range
-func tcRead(tcID, path string, startLine, endLine *int, isSuccessful bool, instrTokens, execTokens int) config.ToolCallEntry {
-	args := map[string]interface{}{"path": path}
-	if startLine != nil {
-		args["start_line"] = *startLine
-	}
-	if endLine != nil {
-		args["end_line"] = *endLine
-	}
-	argsJSON, _ := json.Marshal(args)
+// Helper: build a ToolCallEntry for read_file
+func tcRead(tcID, path string, isSuccessful bool, instrTokens, execTokens int) config.ToolCallEntry {
+	argsJSON, _ := json.Marshal(map[string]interface{}{"path": path})
 
 	tc := config.ToolCallEntry{
 		ID:   tcID,
@@ -233,25 +226,11 @@ func TestCompactionNonFileTools(t *testing.T) {
 	}
 }
 
-// Test: Single full read is a checkpoint — retained, nothing compacted
+// Test: Single read is a checkpoint — retained, nothing compacted
 func TestCompactionSingleFullRead(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
-		}),
-	}
-
-	plan := BuildCompactionPlan(messages)
-	assertDecision(t, plan, "tc1", false, false, "")
-	assertTokens(t, plan.Tokens, 10, 20, 10, 20, 0, 0)
-}
-
-// Test: Single ranged read is not a checkpoint — retained
-func TestCompactionSingleRangedRead(t *testing.T) {
-	sl, el := 1, 10
-	messages := []config.Message{
-		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", &sl, &el, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 	}
 
@@ -264,10 +243,10 @@ func TestCompactionSingleRangedRead(t *testing.T) {
 func TestCompactionFullReadSupersedesEarlierFullRead(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 
@@ -275,89 +254,13 @@ func TestCompactionFullReadSupersedesEarlierFullRead(t *testing.T) {
 	assertDecision(t, plan, "tc1", true, true, "tc2")
 	assertDecision(t, plan, "tc2", false, false, "")
 	assertTokens(t, plan.Tokens, 20, 40, 10, 20, 10, 20)
-}
-
-// Test: Ranged read never supersedes earlier events
-func TestCompactionRangedReadNeverSupersedes(t *testing.T) {
-	sl, el := 1, 10
-	messages := []config.Message{
-		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20), // full read
-		}),
-		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", &sl, &el, true, 5, 10), // ranged read
-		}),
-	}
-
-	plan := BuildCompactionPlan(messages)
-	// tc1 is the only checkpoint; tc2 (ranged) comes after it, so both retained
-	assertDecision(t, plan, "tc1", false, false, "")
-	assertDecision(t, plan, "tc2", false, false, "")
-	assertTokens(t, plan.Tokens, 15, 30, 15, 30, 0, 0)
-}
-
-// Test: Ranged reads before a full read are compacted
-func TestCompactionFullReadCompactsEarlierRangedReads(t *testing.T) {
-	sl1, el1 := 1, 5
-	sl2, el2 := 10, 20
-	messages := []config.Message{
-		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", &sl1, &el1, true, 5, 10), // ranged
-		}),
-		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", &sl2, &el2, true, 5, 10), // ranged
-		}),
-		msgWithTools("msg3", []config.ToolCallEntry{
-			tcRead("tc3", "/file.go", nil, nil, true, 10, 20), // full read (checkpoint)
-		}),
-	}
-
-	plan := BuildCompactionPlan(messages)
-	assertDecision(t, plan, "tc1", true, true, "tc3")
-	assertDecision(t, plan, "tc2", true, true, "tc3")
-	assertDecision(t, plan, "tc3", false, false, "")
-	assertTokens(t, plan.Tokens, 20, 40, 10, 20, 10, 20)
-}
-
-// Test: Write is a checkpoint — compacts earlier reads
-func TestCompactionWriteCompactsEarlierReads(t *testing.T) {
-	messages := []config.Message{
-		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
-		}),
-		msgWithTools("msg2", []config.ToolCallEntry{
-			tcWrite("tc2", "/file.go", false, true, 15, 10),
-		}),
-	}
-
-	plan := BuildCompactionPlan(messages)
-	assertDecision(t, plan, "tc1", true, true, "tc2")
-	assertDecision(t, plan, "tc2", false, false, "")
-	assertTokens(t, plan.Tokens, 25, 30, 15, 10, 10, 20)
-}
-
-// Test: Create is a checkpoint — compacts earlier reads
-func TestCompactionCreateCompactsEarlierReads(t *testing.T) {
-	messages := []config.Message{
-		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/newfile.go", nil, nil, true, 10, 20),
-		}),
-		msgWithTools("msg2", []config.ToolCallEntry{
-			tcWrite("tc2", "/newfile.go", true, true, 15, 10),
-		}),
-	}
-
-	plan := BuildCompactionPlan(messages)
-	assertDecision(t, plan, "tc1", true, true, "tc2")
-	assertDecision(t, plan, "tc2", false, false, "")
-	assertTokens(t, plan.Tokens, 25, 30, 15, 10, 10, 20)
 }
 
 // Test: edit_file is a delta — never a checkpoint
 func TestCompactionEditIsDelta(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20), // full read (checkpoint)
+			tcRead("tc1", "/file.go", true, 10, 20), // full read (checkpoint)
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
 			tcEdit("tc2", "/file.go", false, true, 15, 10), // edit (delta)
@@ -378,7 +281,7 @@ func TestCompactionNoOpEditNotCheckpoint(t *testing.T) {
 			tcEdit("tc1", "/file.go", true, true, 15, 10), // no-op edit (trace=read)
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20), // full read (checkpoint)
+			tcRead("tc2", "/file.go", true, 10, 20), // full read (checkpoint)
 		}),
 	}
 
@@ -394,10 +297,10 @@ func TestCompactionNoOpEditNotCheckpoint(t *testing.T) {
 func TestCompactionFailedOpsRetained(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, false, 10, 5), // failed read
+			tcRead("tc1", "/file.go", false, 10, 5), // failed read
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20), // successful full read (checkpoint)
+			tcRead("tc2", "/file.go", true, 10, 20), // successful full read (checkpoint)
 		}),
 	}
 
@@ -413,16 +316,16 @@ func TestCompactionFailedOpsRetained(t *testing.T) {
 func TestCompactionMultiplePaths(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/a.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/a.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/b.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/b.go", true, 10, 20),
 		}),
 		msgWithTools("msg3", []config.ToolCallEntry{
-			tcRead("tc3", "/a.go", nil, nil, true, 10, 20), // checkpoint for /a.go
+			tcRead("tc3", "/a.go", true, 10, 20), // checkpoint for /a.go
 		}),
 		msgWithTools("msg4", []config.ToolCallEntry{
-			tcRead("tc4", "/b.go", nil, nil, true, 10, 20), // checkpoint for /b.go
+			tcRead("tc4", "/b.go", true, 10, 20), // checkpoint for /b.go
 		}),
 	}
 
@@ -438,13 +341,12 @@ func TestCompactionMultiplePaths(t *testing.T) {
 
 // Test: Events after latest checkpoint are retained
 func TestCompactionEventsAfterCheckpointRetained(t *testing.T) {
-	sl, el := 1, 10
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20), // checkpoint
+			tcRead("tc1", "/file.go", true, 10, 20), // checkpoint, superseded by tc2
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", &sl, &el, true, 5, 10), // ranged read after checkpoint
+			tcRead("tc2", "/file.go", true, 5, 10), // latest checkpoint
 		}),
 		msgWithTools("msg3", []config.ToolCallEntry{
 			tcEdit("tc3", "/file.go", false, true, 15, 10), // edit after checkpoint
@@ -452,28 +354,27 @@ func TestCompactionEventsAfterCheckpointRetained(t *testing.T) {
 	}
 
 	plan := BuildCompactionPlan(messages)
-	assertDecision(t, plan, "tc1", false, false, "")
+	// tc1 compacted by tc2 (latest checkpoint), tc2 and tc3 retained
+	assertDecision(t, plan, "tc1", true, true, "tc2")
 	assertDecision(t, plan, "tc2", false, false, "")
 	assertDecision(t, plan, "tc3", false, false, "")
-	assertTokens(t, plan.Tokens, 30, 40, 30, 40, 0, 0)
+	assertTokens(t, plan.Tokens, 30, 40, 20, 20, 10, 20)
 }
 
-// Test: Range-edit-range sequence — ranges before full read are compacted
-func TestCompactionRangeEditRangeFullRead(t *testing.T) {
-	sl1, el1 := 1, 5
-	sl2, el2 := 10, 20
+// Test: Multiple reads and edits — all before full read are compacted
+func TestCompactionReadEditReadFullRead(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", &sl1, &el1, true, 5, 10), // ranged
+			tcRead("tc1", "/file.go", true, 5, 10), // read
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
 			tcEdit("tc2", "/file.go", false, true, 15, 10), // edit
 		}),
 		msgWithTools("msg3", []config.ToolCallEntry{
-			tcRead("tc3", "/file.go", &sl2, &el2, true, 5, 10), // ranged
+			tcRead("tc3", "/file.go", true, 5, 10), // read
 		}),
 		msgWithTools("msg4", []config.ToolCallEntry{
-			tcRead("tc4", "/file.go", nil, nil, true, 10, 20), // full read (checkpoint)
+			tcRead("tc4", "/file.go", true, 10, 20), // full read (checkpoint)
 		}),
 	}
 
@@ -490,10 +391,10 @@ func TestCompactionRangeEditRangeFullRead(t *testing.T) {
 func TestCompactionDoesNotMutateMessages(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 
@@ -519,10 +420,10 @@ func TestCompactionDoesNotMutateMessages(t *testing.T) {
 func TestCompactionDeterministic(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg3", []config.ToolCallEntry{
 			tcWrite("tc3", "/file.go", false, true, 15, 10),
@@ -553,19 +454,19 @@ func TestCompactionDeterministic(t *testing.T) {
 func TestCompactionInterleavedPaths(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/a.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/a.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/b.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/b.go", true, 10, 20),
 		}),
 		msgWithTools("msg3", []config.ToolCallEntry{
-			tcRead("tc3", "/a.go", nil, nil, false, 10, 5), // failed read for /a.go
+			tcRead("tc3", "/a.go", false, 10, 5), // failed read for /a.go
 		}),
 		msgWithTools("msg4", []config.ToolCallEntry{
 			tcWrite("tc4", "/b.go", false, true, 15, 10), // checkpoint for /b.go
 		}),
 		msgWithTools("msg5", []config.ToolCallEntry{
-			tcRead("tc5", "/a.go", nil, nil, true, 10, 20), // checkpoint for /a.go
+			tcRead("tc5", "/a.go", true, 10, 20), // checkpoint for /a.go
 		}),
 	}
 
@@ -587,10 +488,10 @@ func TestCompactionInterleavedPaths(t *testing.T) {
 func TestCompactionDirectLookupByToolCallID(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 
@@ -618,7 +519,7 @@ func TestCompactionDirectLookupByToolCallID(t *testing.T) {
 func TestCompactionFailedWriteNotCheckpoint(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
 			tcWrite("tc2", "/file.go", false, false, 15, 5), // failed write
@@ -644,7 +545,7 @@ type fixtureEvent struct {
 	Path              string `json:"path"`
 	CanonicalPath     string `json:"canonical_path"`
 	Trace             string `json:"trace"`
-	IsRanged          bool   `json:"is_ranged"`
+	IsRanged          bool   `json:"is_ranged"` // kept for backward compat, ignored
 	Status            string `json:"status"`
 	InstructionTokens int    `json:"instruction_tokens"`
 	ExecutionTokens   int    `json:"execution_tokens"`
@@ -677,10 +578,6 @@ type fixtureFile struct {
 // fixtureToolCall converts a fixture event to a Go ToolCallEntry.
 func fixtureToolCall(ev fixtureEvent) config.ToolCallEntry {
 	args := map[string]interface{}{"path": ev.Path}
-	if ev.IsRanged && ev.Tool == "read_file" {
-		args["start_line"] = 1
-		args["end_line"] = 10
-	}
 	argsJSON, _ := json.Marshal(args)
 
 	tc := config.ToolCallEntry{
@@ -812,18 +709,4 @@ func TestCompactionFixture(t *testing.T) {
 	}
 }
 
-func TestCompactionStartLineOneWithoutEndIsFullCheckpoint(t *testing.T) {
-	first := tcRead("tc1", "/file.go", nil, nil, true, 10, 20)
-	second := tcRead("tc2", "/file.go", nil, nil, true, 10, 20)
-	second.Instruction.Arguments = `{"path":"/file.go","start_line":1}`
-	plan := BuildCompactionPlan([]config.Message{
-		msgWithTools("msg1", []config.ToolCallEntry{first}),
-		msgWithTools("msg2", []config.ToolCallEntry{second}),
-	})
-	if !plan.Decisions["tc1"].CompactResult {
-		t.Fatal("start_line=1 without end_line should be a full checkpoint")
-	}
-	if plan.Decisions["tc2"].CompactResult {
-		t.Fatal("latest full checkpoint must be retained")
-	}
-}
+

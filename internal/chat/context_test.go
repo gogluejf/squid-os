@@ -69,13 +69,13 @@ func TestBuildContextDisabledStillProjectsPotentialCompaction(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
 			func() config.ToolCallEntry {
-				tc := tcRead("tc1", "/file.go", nil, nil, true, 500, 5000)
+				tc := tcRead("tc1", "/file.go", true, 500, 5000)
 				tc.Execution.Result = longContent
 				return tc
 			}(),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 500, 5000),
+			tcRead("tc2", "/file.go", true, 500, 5000),
 		}),
 	}
 	ctx := BuildContext(messages, false)
@@ -141,10 +141,10 @@ func TestBuildContextTokenBreakdownByProviderRole(t *testing.T) {
 func TestBuildContextEnabledPreservesToolCallIDs(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc_read1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc_read1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc_read2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc_read2", "/file.go", true, 10, 20),
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -168,10 +168,10 @@ func TestBuildContextEnabledPreservesToolCallIDs(t *testing.T) {
 func TestBuildContextEnabledPreservesToolNames(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -192,13 +192,13 @@ func TestBuildContextEnabledPreservesToolNames(t *testing.T) {
 func TestBuildContextEnabledPreservesChronology(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/a.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/a.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/b.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/b.go", true, 10, 20),
 		}),
 		msgWithTools("msg3", []config.ToolCallEntry{
-			tcRead("tc3", "/a.go", nil, nil, true, 10, 20),
+			tcRead("tc3", "/a.go", true, 10, 20),
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -226,10 +226,10 @@ func TestBuildContextEnabledPreservesChronology(t *testing.T) {
 func TestBuildContextEnabledProducesValidJSONArgs(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -264,10 +264,10 @@ func TestBuildContextEnabledProducesValidJSONArgs(t *testing.T) {
 func TestBuildContextSupersededReadReplaced(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -294,42 +294,6 @@ func TestBuildContextSupersededReadReplaced(t *testing.T) {
 	}
 }
 
-func TestBuildContextSupersededRangedReadPreservesRange(t *testing.T) {
-	sl, el := 5, 15
-	messages := []config.Message{
-		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", &sl, &el, true, 10, 20),
-		}),
-		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
-		}),
-	}
-	ctx := BuildContext(messages, true)
-
-	// tc1 should be compacted but preserve start_line and end_line
-	for _, msg := range ctx.Messages {
-		if msg.Role == goai_provider.RoleAssistant {
-			for _, part := range msg.Content {
-				if part.Type == goai_provider.PartToolCall && part.ToolCallID == "tc1" {
-					var v map[string]interface{}
-					if err := json.Unmarshal(part.ToolInput, &v); err != nil {
-						t.Fatalf("invalid JSON: %v", err)
-					}
-					if p, ok := v["path"].(string); !ok || p != "/file.go" {
-						t.Errorf("path not preserved: %v", v)
-					}
-					if slVal, ok := v["start_line"].(float64); !ok || int(slVal) != 5 {
-						t.Errorf("start_line not preserved: %v", v)
-					}
-					if elVal, ok := v["end_line"].(float64); !ok || int(elVal) != 15 {
-						t.Errorf("end_line not preserved: %v", v)
-					}
-				}
-			}
-		}
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Superseded edit_file old_string/new_string replaced with fixed text
 // ---------------------------------------------------------------------------
@@ -340,7 +304,7 @@ func TestBuildContextSupersededEditReplaced(t *testing.T) {
 			tcEdit("tc1", "/file.go", false, true, 15, 10),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -388,7 +352,7 @@ func TestBuildContextSupersededWriteReplaced(t *testing.T) {
 			tcWrite("tc1", "/file.go", true, true, 15, 10),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -429,10 +393,10 @@ func TestBuildContextSupersededWriteReplaced(t *testing.T) {
 func TestBuildContextDoesNotMutatePersistedMessages(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 
@@ -455,10 +419,10 @@ func TestBuildContextDoesNotMutatePersistedMessages(t *testing.T) {
 func TestBuildContextSessionDoesNotMutatePersistedMessages(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 	s := buildTestSession(messages, true)
@@ -483,10 +447,10 @@ func TestBuildContextSessionDoesNotMutatePersistedMessages(t *testing.T) {
 func TestBuildContextTokenCountDescribesMessages(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -514,10 +478,10 @@ func TestBuildContextStreamSendsExactSnapshot(t *testing.T) {
 	// by calling it twice and comparing the messages.
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
 	ctx1 := BuildContext(messages, true)
@@ -565,16 +529,16 @@ func TestBuildContextUsesDirectPlanLookup(t *testing.T) {
 	// decisions are applied correctly via direct map lookup.
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 		msgWithTools("msg3", []config.ToolCallEntry{
-			tcRead("tc3", "/other.go", nil, nil, true, 10, 20),
+			tcRead("tc3", "/other.go", true, 10, 20),
 		}),
 		msgWithTools("msg4", []config.ToolCallEntry{
-			tcRead("tc4", "/other.go", nil, nil, true, 10, 20),
+			tcRead("tc4", "/other.go", true, 10, 20),
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -670,10 +634,10 @@ func TestBuildContextNonFileToolsUnchanged(t *testing.T) {
 func TestBuildContextFailedOpsNotCompacted(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, false, 10, 5), // failed
+			tcRead("tc1", "/file.go", false, 10, 5), // failed
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 10, 20), // successful
+			tcRead("tc2", "/file.go", true, 10, 20), // successful
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -708,13 +672,13 @@ func TestBuildContextTokenCountIncludesReplacementOverhead(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
 			func() config.ToolCallEntry {
-				tc := tcRead("tc1", "/file.go", nil, nil, true, 500, 5000)
+				tc := tcRead("tc1", "/file.go", true, 500, 5000)
 				tc.Execution.Result = longContent // large result
 				return tc
 			}(),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 500, 5000),
+			tcRead("tc2", "/file.go", true, 500, 5000),
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -741,13 +705,13 @@ func TestContextTokensFields(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
 			func() config.ToolCallEntry {
-				tc := tcRead("tc1", "/file.go", nil, nil, true, 500, 5000)
+				tc := tcRead("tc1", "/file.go", true, 500, 5000)
 				tc.Execution.Result = longContent
 				return tc
 			}(),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 500, 5000),
+			tcRead("tc2", "/file.go", true, 500, 5000),
 		}),
 	}
 	ctx := BuildContext(messages, true)
@@ -772,13 +736,13 @@ func TestSessionBuildContextRespectsCompactionSetting(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
 			func() config.ToolCallEntry {
-				tc := tcRead("tc1", "/file.go", nil, nil, true, 500, 5000)
+				tc := tcRead("tc1", "/file.go", true, 500, 5000)
 				tc.Execution.Result = longContent
 				return tc
 			}(),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 500, 5000),
+			tcRead("tc2", "/file.go", true, 500, 5000),
 		}),
 	}
 

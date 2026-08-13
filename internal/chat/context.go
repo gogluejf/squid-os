@@ -205,17 +205,7 @@ func compactArguments(tc config.ToolCallEntry, d CompactionDecision) string {
 
 	switch tc.Instruction.Name {
 	case "read_file":
-		compacted := map[string]interface{}{"path": path}
-		var origArgs map[string]interface{}
-		if err := json.Unmarshal([]byte(tc.Instruction.Arguments), &origArgs); err == nil {
-			if sl, ok := origArgs["start_line"].(float64); ok {
-				compacted["start_line"] = int(sl)
-			}
-			if el, ok := origArgs["end_line"].(float64); ok {
-				compacted["end_line"] = int(el)
-			}
-		}
-		b, _ := json.Marshal(compacted)
+		b, _ := json.Marshal(map[string]interface{}{"path": path})
 		return string(b)
 	case "write_file":
 		b, _ := json.Marshal(map[string]interface{}{"path": path, "content": "<COMPACTED>"})

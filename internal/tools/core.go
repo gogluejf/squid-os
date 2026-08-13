@@ -12,8 +12,8 @@ import (
 // ─── read_file ───────────────────────────────────────────────
 
 var ReadFile = Tool{
-	Name:         "read_file",
-	Description:  "Read a complete file by default. For a partial read, provide both start_line and end_line.",
+	Name:        "read_file",
+	Description: "Read a complete file. Path can be relative or absolute.",
 	DisplayParam: "path",
 	Style:        style.ToolStyle(),
 	Schema: []byte(`{
@@ -22,14 +22,6 @@ var ReadFile = Tool{
 		"path": {
 			"type": "string",
 			"description": "Path to the file to read (relative or absolute)"
-		},
-		"start_line": {
-			"type": "integer",
-			"description": "Optional 1-based start line, inclusive. For a full-file read, OMIT both start_line and end_line. Only provide this together with end_line when intentionally reading a specific range. Never guess a value."
-		},
-		"end_line": {
-			"type": "integer",
-			"description": "Optional 1-based end line, inclusive. For a full-file read, OMIT both start_line and end_line. Only provide this together with start_line when intentionally limiting the read to a known range. Never guess the file's final line number; values beyond EOF stop at EOF."
 		}
 	},
 	"required": ["path"]
@@ -45,33 +37,6 @@ var ReadFile = Tool{
 			return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("failed to read file %s: %v", path, err)}
 		}
 
-		startLine, endLine, ranged, err := ParseReadRange(args)
-		if err != nil {
-			return ToolResult{Status: ResultStatusError, Error: err.Error()}
-		}
-
-		if ranged {
-
-			lines := strings.Split(string(data), "\n")
-			// Validate range bounds against file length
-			if startLine > len(lines) {
-				return ToolResult{Status: ResultStatusError, Error: fmt.Sprintf("start_line %d exceeds file length (%d lines)", startLine, len(lines))}
-			}
-			if endLine > len(lines) {
-				endLine = len(lines)
-			}
-
-			ranged := lines[startLine-1 : endLine]
-			content := strings.Join(ranged, "\n")
-
-			fe := BuildFileEntry(path, config.TraceRead, data, nil)
-			return ToolResult{
-				Status: ResultStatusSuccess,
-				Result: content,
-				Files:  []config.FileEntry{fe},
-			}
-		}
-
 		fe := BuildFileEntry(path, config.TraceRead, data, nil)
 		return ToolResult{
 			Status: ResultStatusSuccess,
@@ -79,37 +44,6 @@ var ReadFile = Tool{
 			Files:  []config.FileEntry{fe},
 		}
 	},
-}
-
-// ParseReadRange classifies omitted or start_line <= 1-only ranges as full reads.
-func ParseReadRange(args map[string]interface{}) (startLine, endLine int, ranged bool, err error) {
-	startLine, hasStart, err := parseIntegralArg(args, "start_line")
-	if err != nil {
-		return 0, 0, false, err
-	}
-	endLine, hasEnd, err := parseIntegralArg(args, "end_line")
-	if err != nil {
-		return 0, 0, false, err
-	}
-	if hasStart && startLine <= 1 && !hasEnd {
-		return 0, 0, false, nil
-	}
-	if !hasStart && !hasEnd {
-		return 0, 0, false, nil
-	}
-	if !hasStart || !hasEnd {
-		return 0, 0, false, fmt.Errorf("both start_line and end_line must be provided together")
-	}
-	if startLine <= 1 {
-		startLine = 1
-	}
-	if endLine < 1 {
-		return 0, 0, false, fmt.Errorf("line numbers must be positive (1-based), got start_line=%d end_line=%d", startLine, endLine)
-	}
-	if startLine > endLine {
-		return 0, 0, false, fmt.Errorf("start_line (%d) must not exceed end_line (%d)", startLine, endLine)
-	}
-	return startLine, endLine, true, nil
 }
 
 // ─── write_file ──────────────────────────────────────────────

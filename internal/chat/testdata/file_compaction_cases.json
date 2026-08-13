@@ -67,14 +67,14 @@
     },
     {
       "name": "multiple_ranges",
-      "description": "Multiple ranged reads on the same path. No checkpoint exists. All events are retained.",
+      "description": "Multiple reads on the same path. All reads are checkpoints; latest supersedes earlier ones.",
       "events": [
         {
           "id": "tc1",
           "tool": "read_file",
           "path": "/a.go",
           "trace": "read",
-          "is_ranged": true,
+          "is_ranged": false,
           "status": "success",
           "instruction_tokens": 5,
           "execution_tokens": 10
@@ -84,7 +84,7 @@
           "tool": "read_file",
           "path": "/a.go",
           "trace": "read",
-          "is_ranged": true,
+          "is_ranged": false,
           "status": "success",
           "instruction_tokens": 5,
           "execution_tokens": 10
@@ -94,33 +94,33 @@
           "tool": "read_file",
           "path": "/a.go",
           "trace": "read",
-          "is_ranged": true,
+          "is_ranged": false,
           "status": "success",
           "instruction_tokens": 5,
           "execution_tokens": 10
         }
       ],
       "expected": {
-        "compacted_events": 0,
-        "retained_events": 3,
-        "compacted_instruction_tokens": 0,
-        "compacted_execution_tokens": 0,
-        "compacted_tokens": 0,
-        "retained_instruction_tokens": 15,
-        "retained_execution_tokens": 30,
-        "retained_tokens": 45
+        "compacted_events": 2,
+        "retained_events": 1,
+        "compacted_instruction_tokens": 10,
+        "compacted_execution_tokens": 20,
+        "compacted_tokens": 30,
+        "retained_instruction_tokens": 5,
+        "retained_execution_tokens": 10,
+        "retained_tokens": 15
       }
     },
     {
       "name": "range_edit_range",
-      "description": "Ranged read, edit, ranged read on the same path. No checkpoint. All retained.",
+      "description": "Read, edit, read on the same path. Latest read is the checkpoint; earlier read and edit are compacted.",
       "events": [
         {
           "id": "tc1",
           "tool": "read_file",
           "path": "/a.go",
           "trace": "read",
-          "is_ranged": true,
+          "is_ranged": false,
           "status": "success",
           "instruction_tokens": 5,
           "execution_tokens": 10
@@ -140,33 +140,33 @@
           "tool": "read_file",
           "path": "/a.go",
           "trace": "read",
-          "is_ranged": true,
+          "is_ranged": false,
           "status": "success",
           "instruction_tokens": 5,
           "execution_tokens": 10
         }
       ],
       "expected": {
-        "compacted_events": 0,
-        "retained_events": 3,
-        "compacted_instruction_tokens": 0,
-        "compacted_execution_tokens": 0,
-        "compacted_tokens": 0,
-        "retained_instruction_tokens": 25,
-        "retained_execution_tokens": 30,
-        "retained_tokens": 55
+        "compacted_events": 2,
+        "retained_events": 1,
+        "compacted_instruction_tokens": 20,
+        "compacted_execution_tokens": 20,
+        "compacted_tokens": 40,
+        "retained_instruction_tokens": 5,
+        "retained_execution_tokens": 10,
+        "retained_tokens": 15
       }
     },
     {
       "name": "ranges_then_full",
-      "description": "Multiple ranged reads followed by a full read. Full read is the checkpoint; all earlier ranged reads are compacted.",
+      "description": "Multiple reads followed by a full read. Full read is the latest checkpoint; all earlier reads are compacted.",
       "events": [
         {
           "id": "tc1",
           "tool": "read_file",
           "path": "/a.go",
           "trace": "read",
-          "is_ranged": true,
+          "is_ranged": false,
           "status": "success",
           "instruction_tokens": 5,
           "execution_tokens": 10
@@ -176,7 +176,7 @@
           "tool": "read_file",
           "path": "/a.go",
           "trace": "read",
-          "is_ranged": true,
+          "is_ranged": false,
           "status": "success",
           "instruction_tokens": 5,
           "execution_tokens": 10
@@ -389,14 +389,14 @@
     },
     {
       "name": "range_edit_range_full",
-      "description": "Ranged read, edit, ranged read, full read. Full read is the checkpoint; all three earlier events are compacted.",
+      "description": "Read, edit, read, read. Latest read is the checkpoint; all three earlier events are compacted.",
       "events": [
         {
           "id": "tc1",
           "tool": "read_file",
           "path": "/a.go",
           "trace": "read",
-          "is_ranged": true,
+          "is_ranged": false,
           "status": "success",
           "instruction_tokens": 5,
           "execution_tokens": 10
@@ -416,7 +416,7 @@
           "tool": "read_file",
           "path": "/a.go",
           "trace": "read",
-          "is_ranged": true,
+          "is_ranged": false,
           "status": "success",
           "instruction_tokens": 5,
           "execution_tokens": 10
@@ -563,14 +563,14 @@
     },
     {
       "name": "single_ranged_read",
-      "description": "Single ranged read. No checkpoint. Retained.",
+      "description": "Single read. It is a checkpoint and retained.",
       "events": [
         {
           "id": "tc1",
           "tool": "read_file",
           "path": "/a.go",
           "trace": "read",
-          "is_ranged": true,
+          "is_ranged": false,
           "status": "success",
           "instruction_tokens": 5,
           "execution_tokens": 10
@@ -589,7 +589,7 @@
     },
     {
       "name": "full_then_range_then_edit",
-      "description": "Full read (checkpoint), ranged read after it, edit after that. All retained because they come at or after the checkpoint.",
+      "description": "Read (checkpoint), another read (supersedes first), edit after. First read compacted by second read; second read and edit retained.",
       "events": [
         {
           "id": "tc1",
@@ -606,7 +606,7 @@
           "tool": "read_file",
           "path": "/a.go",
           "trace": "read",
-          "is_ranged": true,
+          "is_ranged": false,
           "status": "success",
           "instruction_tokens": 5,
           "execution_tokens": 10
@@ -623,14 +623,14 @@
         }
       ],
       "expected": {
-        "compacted_events": 0,
-        "retained_events": 3,
-        "compacted_instruction_tokens": 0,
-        "compacted_execution_tokens": 0,
-        "compacted_tokens": 0,
-        "retained_instruction_tokens": 30,
-        "retained_execution_tokens": 40,
-        "retained_tokens": 70
+        "compacted_events": 1,
+        "retained_events": 2,
+        "compacted_instruction_tokens": 10,
+        "compacted_execution_tokens": 20,
+        "compacted_tokens": 30,
+        "retained_instruction_tokens": 20,
+        "retained_execution_tokens": 20,
+        "retained_tokens": 40
       }
     },
     {

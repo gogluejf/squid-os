@@ -234,13 +234,13 @@ func TestCalculateTokenTallyContextDisabledProjectsSavings(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
 			func() config.ToolCallEntry {
-				tc := tcRead("tc1", "/file.go", nil, nil, true, 500, 5000)
+				tc := tcRead("tc1", "/file.go", true, 500, 5000)
 				tc.Execution.Result = longContent
 				return tc
 			}(),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 500, 5000),
+			tcRead("tc2", "/file.go", true, 500, 5000),
 		}),
 	}
 	session := buildTestSession(messages, false)
@@ -289,13 +289,13 @@ func TestCalculateTokenTallyContextWithCompaction(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
 			func() config.ToolCallEntry {
-				tc := tcRead("tc1", "/file.go", nil, nil, true, 500, 5000)
+				tc := tcRead("tc1", "/file.go", true, 500, 5000)
 				tc.Execution.Result = longContent
 				return tc
 			}(),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 500, 5000),
+			tcRead("tc2", "/file.go", true, 500, 5000),
 		}),
 	}
 	session := buildTestSession(messages, true)
@@ -335,13 +335,13 @@ func TestCalculateTokenTallyContextSavedEqualsRawMinusCompacted(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
 			func() config.ToolCallEntry {
-				tc := tcRead("tc1", "/file.go", nil, nil, true, 500, 5000)
+				tc := tcRead("tc1", "/file.go", true, 500, 5000)
 				tc.Execution.Result = longContent
 				return tc
 			}(),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 500, 5000),
+			tcRead("tc2", "/file.go", true, 500, 5000),
 		}),
 	}
 	session := buildTestSession(messages, true)
@@ -369,7 +369,7 @@ func TestCalculateTokenTallyFullSession(t *testing.T) {
 
 	// Add assistant with tool call (large execution result for compaction savings)
 	longContent := strings.Repeat("line of code content\n", 500)
-	tc := tcRead("tc1", "/file.go", nil, nil, true, 10, 20)
+	tc := tcRead("tc1", "/file.go", true, 10, 20)
 	tc.Execution.Result = longContent
 	assistant := config.Message{
 		ID:              "msg_2",
@@ -386,7 +386,7 @@ func TestCalculateTokenTallyFullSession(t *testing.T) {
 	session.Doc.Messages[msgIdx].InputTokens = 20 // execution tokens
 
 	// Add another read to trigger compaction
-	tc2 := tcRead("tc2", "/file.go", nil, nil, true, 10, 20)
+	tc2 := tcRead("tc2", "/file.go", true, 10, 20)
 	assistant2 := config.Message{
 		ID:          "msg_3",
 		Role:        config.RoleAssistant,
@@ -472,14 +472,14 @@ func TestContextSavedCanBeNegative(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
 			func() config.ToolCallEntry {
-				tc := tcRead("tc1", "/file.go", nil, nil, true, 10, 1)
+				tc := tcRead("tc1", "/file.go", true, 10, 1)
 				tc.Execution.Result = "x" // 1-char result, compacted replacement is longer
 				return tc
 			}(),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
 			func() config.ToolCallEntry {
-				tc := tcRead("tc2", "/file.go", nil, nil, true, 10, 1)
+				tc := tcRead("tc2", "/file.go", true, 10, 1)
 				tc.Execution.Result = "y"
 				return tc
 			}(),

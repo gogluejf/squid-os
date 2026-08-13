@@ -8,8 +8,8 @@ import (
 )
 
 // generateBuildContextSession builds a large synthetic session with N tool-call
-// messages spread across P paths, with a mix of full reads, ranged reads,
-// edits, and writes. Each path gets a final full read as the latest checkpoint.
+// messages spread across P paths, with a mix of reads, edits, and writes.
+// Each path gets a final full read as the latest checkpoint.
 func generateBuildContextSession(numMessages, numPaths int) []config.Message {
 	messages := make([]config.Message, 0, numMessages)
 
@@ -17,18 +17,15 @@ func generateBuildContextSession(numMessages, numPaths int) []config.Message {
 		path := "/file" + string(rune('A'+(i%numPaths))) + ".go"
 		var tc config.ToolCallEntry
 
-		switch i % 5 {
+		switch i % 4 {
 		case 0:
-			tc = tcRead(fmt.Sprintf("tc_%d", i), path, nil, nil, true, 50, 100)
+			tc = tcRead(fmt.Sprintf("tc_%d", i), path, true, 50, 100)
 		case 1:
-			sl, el := 1, 10
-			tc = tcRead(fmt.Sprintf("tc_%d", i), path, &sl, &el, true, 30, 60)
-		case 2:
 			tc = tcEdit(fmt.Sprintf("tc_%d", i), path, false, true, 40, 20)
-		case 3:
-			tc = tcWrite(fmt.Sprintf("tc_%d", i), path, i%10 == 3, true, 60, 30)
+		case 2:
+			tc = tcWrite(fmt.Sprintf("tc_%d", i), path, i%10 == 2, true, 60, 30)
 		default:
-			tc = tcRead(fmt.Sprintf("tc_%d", i), path, nil, nil, true, 50, 100)
+			tc = tcRead(fmt.Sprintf("tc_%d", i), path, true, 50, 100)
 		}
 
 		messages = append(messages, msgWithTools(fmt.Sprintf("msg_%d", i), []config.ToolCallEntry{tc}))
@@ -37,7 +34,7 @@ func generateBuildContextSession(numMessages, numPaths int) []config.Message {
 	// Add a final full read for each path to ensure a clear checkpoint
 	for p := 0; p < numPaths; p++ {
 		path := "/file" + string(rune('A'+p)) + ".go"
-		tc := tcRead(fmt.Sprintf("tc_final_%d", p), path, nil, nil, true, 50, 100)
+		tc := tcRead(fmt.Sprintf("tc_final_%d", p), path, true, 50, 100)
 		messages = append(messages, msgWithTools(fmt.Sprintf("msg_final_%d", p), []config.ToolCallEntry{tc}))
 	}
 

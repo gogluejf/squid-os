@@ -248,13 +248,13 @@ func TestLifecycleBuildContextCompactionSavings(t *testing.T) {
 	messages := []config.Message{
 		msgWithTools("msg1", []config.ToolCallEntry{
 			func() config.ToolCallEntry {
-				tc := tcRead("tc1", "/file.go", nil, nil, true, 100, 1000)
+				tc := tcRead("tc1", "/file.go", true, 100, 1000)
 				tc.Execution.Result = longContent
 				return tc
 			}(),
 		}),
 		msgWithTools("msg2", []config.ToolCallEntry{
-			tcRead("tc2", "/file.go", nil, nil, true, 100, 1000),
+			tcRead("tc2", "/file.go", true, 100, 1000),
 		}),
 	}
 	s := buildTestSession(messages, true)
@@ -468,7 +468,7 @@ func TestLifecycleContextChangesImmediatelyAfterAppendAndTruncate(t *testing.T) 
 func TestLifecycleContextChangesImmediatelyAfterToolCompletion(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
 	s.Append(NewUserMessage("msg_1", "read file", ""))
-	tc := tcRead("tc1", "/file.go", nil, nil, true, 10, 50)
+	tc := tcRead("tc1", "/file.go", true, 10, 50)
 	tc.Execution.Status = ""
 	tc.Execution.Result = ""
 	tc.Execution.Tokens = 0
@@ -546,7 +546,7 @@ func TestLifecycleRealisticSessionFlow(t *testing.T) {
 		Role: config.RoleAssistant,
 		Text: "reading file",
 		ToolCalls: []config.ToolCallEntry{
-			tcRead("tc1", "/file.go", nil, nil, true, 10, 20),
+			tcRead("tc1", "/file.go", true, 10, 20),
 		},
 	})
 

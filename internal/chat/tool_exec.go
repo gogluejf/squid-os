@@ -152,7 +152,6 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 	}
 
 	var capturedInstructions string
-	staleRangedRead := false
 	if opts.Decision != nil {
 		capturedInstructions = opts.Decision.Instructions
 		if !opts.Decision.Approved {
@@ -175,26 +174,20 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 	}
 
 	if toolName != "open" {
-		if pathVal, ok := args["path"].(string); ok {
+		if pathVal, ok := args["path"].(string); ok && toolName != "read_file" {
 			resolvedPath := tools.ResolvePath(pathVal, s.Doc.Config.WorkingDir)
-			_, _, isRangedRead, rangeErr := tools.ParseReadRange(args)
-			isRangedRead = toolName == "read_file" && rangeErr == nil && isRangedRead
-			if isRangedRead {
-				staleRangedRead = tools.ValidateFileState(resolvedPath, sessionState) != nil
-			} else if toolName != "read_file" {
-				if err := tools.ValidateFileState(resolvedPath, sessionState); err != nil {
-					msg := fmt.Sprintf("blocked: file changed externally: %s — call read_file with only {\"path\":%q}; omit start_line and end_line, then retry.", resolvedPath, pathVal)
-					entries[i].Execution.Status = tools.ResultStatusError
-					entries[i].Execution.Error = msg
-					for j := i + 1; j < len(entries); j++ {
-						entries[j].Execution.Status = tools.ResultStatusError
-						entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"
-					}
-					if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
-						return checkpointFailure(msgIdx, i, err)
-					}
-					return ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: i, NextIndex: len(entries)}
+			if err := tools.ValidateFileState(resolvedPath, sessionState); err != nil {
+				msg := fmt.Sprintf("blocked: file changed externally: %s — call read_file with {\"path\":%q}, then retry.", resolvedPath, pathVal)
+				entries[i].Execution.Status = tools.ResultStatusError
+				entries[i].Execution.Error = msg
+				for j := i + 1; j < len(entries); j++ {
+					entries[j].Execution.Status = tools.ResultStatusError
+					entries[j].Execution.Error = "cancelled: prior tool failed due to file change, remaining tools skipped"
 				}
+				if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+					return checkpointFailure(msgIdx, i, err)
+				}
+				return ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: i, NextIndex: len(entries)}
 			}
 		}
 	}
@@ -305,9 +298,7 @@ doExecute:
 		result.Files[j].ToolCallID = entry.ID
 	}
 	entries[i].Execution.Files = result.Files
-	if !staleRangedRead {
-		tools.MergeEntries(result.Files, sessionState)
-	}
+	tools.MergeEntries(result.Files, sessionState)
 
 	res := ToolExecResult{Action: nextToolAction(i, len(entries)), MsgIdx: msgIdx, ToolIndex: i, NextIndex: i + 1}
 	if toolName == "skill_load" && result.Status == tools.ResultStatusSuccess {

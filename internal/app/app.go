@@ -111,10 +111,16 @@ func New(options StartupOptions) Model {
 	var sess *UISession
 	var notification ui.Notification
 	if initialSession != nil {
-		sess = LoadRootUISession(*initialSession, options.Session.SessionName, paths, options.Session.Catalog)
-		notification = ui.Notification{
-			Level:   ui.NotificationInfo,
-			Message: fmt.Sprintf("Auto-load on, last session loaded: %s", sess.SessionDir),
+		var err error
+		sess, err = LoadRootUISession(*initialSession, options.Session.SessionName, paths, options.Session.Catalog)
+		if err != nil {
+			sess = NewRootUISession(runtimeConfig, paths, options.Session.Catalog)
+			notification = ui.Notification{Level: ui.NotificationError, Message: err.Error()}
+		} else {
+			notification = ui.Notification{
+				Level:   ui.NotificationInfo,
+				Message: fmt.Sprintf("Auto-load on, last session loaded: %s", sess.SessionDir),
+			}
 		}
 	} else {
 		sess = NewRootUISession(runtimeConfig, paths, options.Session.Catalog)

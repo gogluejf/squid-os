@@ -27,8 +27,12 @@ func NewRootUISession(cfg config.SessionConfig, paths config.Paths, catalog runt
 	return &UISession{Session: chat.NewRootSession(cfg, paths, catalog)}
 }
 
-func LoadRootUISession(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) *UISession {
-	return &UISession{Session: chat.LoadRootSession(sd, name, paths, catalog)}
+func LoadRootUISession(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) (*UISession, error) {
+	session, err := chat.LoadRootSession(sd, name, paths, catalog)
+	if err != nil {
+		return nil, err
+	}
+	return &UISession{Session: session}, nil
 }
 
 func (u *UISession) destroyLastSequence() (userText, userImage string) {

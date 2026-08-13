@@ -16,7 +16,8 @@ import (
 const (
 	ResultStatusSuccess = "success"
 	ResultStatusError   = "error"
-	ResultStatusPending = "pending" // awaiting user authorization
+	ResultStatusPending = "pending" // awaiting user authorization or execution
+	ResultStatusRunning = "running" // execution started; repaired as interrupted after restart
 )
 
 // ToolResult is returned by Execute instead of (string, error).

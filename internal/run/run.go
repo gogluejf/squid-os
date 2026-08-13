@@ -31,7 +31,10 @@ func bootstrapSession(request Request) (*chat.Session, config.SessionConfig, err
 
 	switch {
 	case sessionRequest.ExistingSession != nil:
-		session := chat.LoadRootSession(*sessionRequest.ExistingSession, sessionRequest.SessionName, sessionRequest.Paths, sessionRequest.Catalog)
+		session, err := chat.LoadRootSession(*sessionRequest.ExistingSession, sessionRequest.SessionName, sessionRequest.Paths, sessionRequest.Catalog)
+		if err != nil {
+			return nil, config.SessionConfig{}, err
+		}
 		return session, session.Doc.Config, nil
 	case request.ChildSession != nil:
 		cs := request.ChildSession

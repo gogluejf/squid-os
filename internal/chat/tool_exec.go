@@ -249,15 +249,14 @@ func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
 	}
 
 doExecute:
-	entries[i].Execution.Status = ""
 	entries[i].Execution.Result = ""
 	entries[i].Execution.Error = ""
 	entries[i].Execution.Files = nil
 
-	// For agent tools, preallocate child session identity before launch.
+	// Preallocate agent lineage before marking the tool running so the same
+	// checkpoint records both the child link and execution state.
 	var childRef tools.ChildSessionRef
-	isAgent := tools.IsAgentTool(toolName)
-	if isAgent {
+	if tools.IsAgentTool(toolName) {
 		agentName := ""
 		if toolName == "call_agent" {
 			agentName, _ = args["agent"].(string)
@@ -265,10 +264,10 @@ doExecute:
 		childRef = tools.GenerateChildSessionRef(toolName, agentName, entry.ID)
 		entries[i].Execution.ChildSessionID = childRef.ID
 		entries[i].Execution.ChildSessionName = childRef.Name
-		// Persist the parent link before delegation; a failed checkpoint prevents launch.
-		if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
-			return checkpointFailure(msgIdx, i, err)
-		}
+	}
+	entries[i].Execution.Status = tools.ResultStatusRunning
+	if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+		return checkpointFailure(msgIdx, i, err)
 	}
 
 	maxToolResultTokens := s.Doc.Config.Limits.MaxToolResultTokens

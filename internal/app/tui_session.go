@@ -20,7 +20,11 @@ func (m *Model) loadUISession(doc config.SessionDoc, name string) bool {
 		return false
 	}
 	runtimeconfig.ApplyToExistingSession(&doc, resolved.Config)
-	m.session = LoadRootUISession(doc, name, m.paths, resolved.Catalog)
+	loaded, err := LoadRootUISession(doc, name, m.paths, resolved.Catalog)
+	if err != nil {
+		return false
+	}
+	m.session = loaded
 	return true
 }
 
@@ -96,7 +100,12 @@ func (m Model) toggleIncognito() (Model, tea.Cmd) {
 	} else {
 		// Resume from this session's canonical location, whether root or child.
 		if doc, err := config.LoadSessionDoc(m.session.SessionDir); err == nil {
-			m.session = &UISession{Session: chat.LoadSession(doc, m.session.SessionDir, m.paths, m.session.Catalog)}
+			loaded, loadErr := chat.LoadSession(doc, m.session.SessionDir, m.paths, m.session.Catalog)
+			if loadErr != nil {
+				m.setNotification(ui.NotificationError, loadErr.Error())
+				return m, m.setChatMode()
+			}
+			m.session = &UISession{Session: loaded}
 			if m.session.Doc.Identity.Depth == 0 {
 				m.settings.LastSessionName = m.session.Info.Name
 				_ = config.SaveSettings(m.paths, m.settings)

@@ -101,6 +101,22 @@ func TestRunRejectsIncompleteChildLineageFlags(t *testing.T) {
 	}
 }
 
+func TestRunRejectsSessionWithChildLineageFlags(t *testing.T) {
+	cmd := testRoot(t, nil, nil, nil)
+	cmd.SetArgs([]string{
+		"run", "--prompt", "x", "--session", "existing",
+		"--session-id", "child",
+		"--parent-session-id", "parent",
+		"--root-session-id", "root",
+		"--parent-tool-call-id", "tool",
+		"--session-depth", "1",
+		"--parent-session-dir", "/tmp/parent",
+	})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("expected session/child-lineage conflict, got %v", err)
+	}
+}
+
 func TestTUIOverrides(t *testing.T) {
 	var got *TUIOptions
 	cmd := testRoot(t, &got, nil, nil)

@@ -519,13 +519,13 @@ func TestAgentCheckpointPersistsLinkBeforeLaunchAndStopsOnFailure(t *testing.T) 
 	})
 
 	if checkpointCalls != 1 {
-		t.Fatalf("checkpoint calls = %d, want 1", checkpointCalls)
+		t.Fatalf("checkpoint calls = %d, want 1 before blocked launch", checkpointCalls)
 	}
 	if result.Error == nil || !strings.Contains(result.Error.Error(), "disk full") {
 		t.Fatalf("expected checkpoint failure, got %v", result.Error)
 	}
-	if s.Doc.Messages[0].ToolCalls[0].Execution.Status != "" {
-		t.Fatal("agent executed despite pre-launch checkpoint failure")
+	if s.Doc.Messages[0].ToolCalls[0].Execution.Status != tools.ResultStatusRunning {
+		t.Fatalf("tool status = %q, want running after blocked launch", s.Doc.Messages[0].ToolCalls[0].Execution.Status)
 	}
 }
 
@@ -557,11 +557,56 @@ func TestCompletedToolFlushInvokesCheckpoint(t *testing.T) {
 	if result.Error != nil {
 		t.Fatal(result.Error)
 	}
-	if checkpointCalls != 1 {
-		t.Fatalf("checkpoint calls = %d, want 1", checkpointCalls)
+	if checkpointCalls != 2 {
+		t.Fatalf("checkpoint calls = %d, want 2 (running and completed)", checkpointCalls)
 	}
 	if s.Doc.Messages[0].ToolCalls[0].Execution.Status != tools.ResultStatusSuccess {
 		t.Fatalf("tool status = %q", s.Doc.Messages[0].ToolCalls[0].Execution.Status)
+	}
+}
+
+func TestLoadSessionRepairsAndPersistsInterruptedToolBatch(t *testing.T) {
+	sessionDir := t.TempDir()
+	doc := config.NewSessionDoc(config.SessionConfig{})
+	doc.Messages = []config.Message{{
+		ID:   "msg_1",
+		Role: config.RoleAssistant,
+		ToolCalls: []config.ToolCallEntry{
+			{ID: "tool_1"},
+			{ID: "tool_2"},
+			{ID: "tool_3"},
+		},
+	}}
+	doc.Messages[0].ToolCalls[0].Execution.Status = tools.ResultStatusSuccess
+	doc.Messages[0].ToolCalls[0].Execution.Result = "done"
+	doc.Messages[0].ToolCalls[1].Execution.Status = tools.ResultStatusRunning
+	doc.Messages[0].ToolCalls[2].Execution.Status = tools.ResultStatusPending
+	if err := config.SaveSessionDoc(sessionDir, doc, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := LoadSession(doc, sessionDir, config.Paths{}, runtimeconfig.Catalog{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := loaded.Doc.Messages[0].ToolCalls
+	if entries[0].Execution.Status != tools.ResultStatusSuccess || entries[0].Execution.Result != "done" {
+		t.Fatal("completed tool was changed during recovery")
+	}
+	if entries[1].Execution.Status != tools.ResultStatusError || entries[1].Execution.Error != "interrupted during execution" {
+		t.Fatalf("running tool recovery = %#v", entries[1].Execution)
+	}
+	if entries[2].Execution.Status != tools.ResultStatusError || entries[2].Execution.Error != "not executed due to runtime interruption" {
+		t.Fatalf("later tool recovery = %#v", entries[2].Execution)
+	}
+
+	persisted, err := config.LoadSessionDoc(sessionDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Messages[0].ToolCalls[1].Execution.Status != tools.ResultStatusError ||
+		persisted.Messages[0].ToolCalls[2].Execution.Status != tools.ResultStatusError {
+		t.Fatal("interrupted recovery was not persisted")
 	}
 }
 

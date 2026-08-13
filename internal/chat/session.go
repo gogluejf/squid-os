@@ -99,8 +99,9 @@ func initSessionMessages(s *Session, cfg config.SessionConfig) *Session {
 	return s
 }
 
-// LoadSession wraps a persisted session at its canonical directory.
-func LoadSession(sd config.SessionDoc, sessionDir string, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
+// LoadSession wraps a persisted session at its canonical directory and repairs
+// any tool batch interrupted by a prior process crash before returning it.
+func LoadSession(sd config.SessionDoc, sessionDir string, paths config.Paths, catalog runtimeconfig.Catalog) (*Session, error) {
 	info := config.SessionInfo{Name: filepath.Base(sessionDir)}
 	if sd.Meta.UpdatedAt != "" {
 		if t, err := time.Parse(time.RFC3339, sd.Meta.UpdatedAt); err == nil {
@@ -108,13 +109,50 @@ func LoadSession(sd config.SessionDoc, sessionDir string, paths config.Paths, ca
 		}
 	}
 	s := &Session{Doc: sd, Info: info, Paths: paths, Catalog: catalog, SessionDir: sessionDir}
+	if msgIdx, repaired := s.repairInterruptedTools(); repaired {
+		FlushToolMessage(s, msgIdx)
+		if err := s.Save(); err != nil {
+			return nil, fmt.Errorf("persist interrupted tool recovery: %w", err)
+		}
+	}
 	s.RefreshTokenTally()
-	return s
+	return s, nil
 }
 
 // LoadRootSession resolves a root name and loads it at its canonical directory.
-func LoadRootSession(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
+func LoadRootSession(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) (*Session, error) {
 	return LoadSession(sd, config.RootSessionDir(paths, name), paths, catalog)
+}
+
+func (s *Session) repairInterruptedTools() (int, bool) {
+	for msgIdx := range s.Doc.Messages {
+		entries := s.Doc.Messages[msgIdx].ToolCalls
+		firstRunning := -1
+		for i := range entries {
+			if entries[i].Execution.Status == tools.ResultStatusRunning {
+				firstRunning = i
+				break
+			}
+		}
+		if firstRunning < 0 {
+			continue
+		}
+
+		entries[firstRunning].Execution.Status = tools.ResultStatusError
+		entries[firstRunning].Execution.Result = ""
+		entries[firstRunning].Execution.Error = "interrupted during execution"
+		for i := firstRunning + 1; i < len(entries); i++ {
+			switch entries[i].Execution.Status {
+			case "", tools.ResultStatusPending, tools.ResultStatusRunning:
+				entries[i].Execution.Status = tools.ResultStatusError
+				entries[i].Execution.Result = ""
+				entries[i].Execution.Error = "not executed due to runtime interruption"
+			}
+		}
+		s.Doc.Messages[msgIdx].ToolCalls = entries
+		return msgIdx, true
+	}
+	return -1, false
 }
 
 // Save persists the session in its canonical directory.

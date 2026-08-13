@@ -35,7 +35,10 @@ func TestLifecycleLoadSessionHasTally(t *testing.T) {
 	s.Append(NewUserMessage("msg_1", "hello", ""))
 
 	// Simulate load by wrapping the doc
-	loaded := LoadRootSession(s.Doc, "test", config.Paths{}, runtimeconfig.Catalog{})
+	loaded, err := LoadRootSession(s.Doc, "test", config.Paths{}, runtimeconfig.Catalog{})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if loaded.Doc.TokenTally == nil {
 		t.Fatal("LoadSession should have recalculated TokenTally")
@@ -143,7 +146,7 @@ func TestLifecycleSaveAssistantMsgUpdatesTally(t *testing.T) {
 	s.Append(NewUserMessage("msg_1", "hello", ""))
 	before := s.Doc.TokenTally.Lifetime.Total
 
-	idx := SaveAssistantMsg(s, config.Message{
+	idx := AppendAssistantMsg(s, config.Message{
 		ID:          "msg_2",
 		Role:        config.RoleAssistant,
 		Text:        "response",
@@ -172,7 +175,7 @@ func TestLifecycleFlushToolMessageUpdatesTally(t *testing.T) {
 	s.Append(NewUserMessage("msg_1", "hello", ""))
 
 	// Save an assistant message with tool calls (pending execution)
-	msgIdx := SaveAssistantMsg(s, config.Message{
+	msgIdx := AppendAssistantMsg(s, config.Message{
 		ID:   "msg_2",
 		Role: config.RoleAssistant,
 		ToolCalls: []config.ToolCallEntry{
@@ -469,7 +472,7 @@ func TestLifecycleContextChangesImmediatelyAfterToolCompletion(t *testing.T) {
 	tc.Execution.Status = ""
 	tc.Execution.Result = ""
 	tc.Execution.Tokens = 0
-	msgIdx := SaveAssistantMsg(s, config.Message{
+	msgIdx := AppendAssistantMsg(s, config.Message{
 		ID:        "msg_2",
 		Role:      config.RoleAssistant,
 		ToolCalls: []config.ToolCallEntry{tc},
@@ -490,7 +493,10 @@ func TestLifecycleLoadRefreshesContextBeforeStream(t *testing.T) {
 	s.Append(NewUserMessage("msg_1", "hello", ""))
 	s.Doc.TokenTally.Context.Raw = 0
 
-	loaded := LoadRootSession(s.Doc, "test", config.Paths{}, runtimeconfig.Catalog{})
+	loaded, err := LoadRootSession(s.Doc, "test", config.Paths{}, runtimeconfig.Catalog{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if loaded.Doc.TokenTally.Context.Raw == 0 {
 		t.Fatal("loaded session should refresh context tally immediately")
 	}
@@ -535,7 +541,7 @@ func TestLifecycleRealisticSessionFlow(t *testing.T) {
 	}
 
 	// 3. Assistant responds with tool call
-	msgIdx := SaveAssistantMsg(s, config.Message{
+	msgIdx := AppendAssistantMsg(s, config.Message{
 		ID:   "msg_2",
 		Role: config.RoleAssistant,
 		Text: "reading file",

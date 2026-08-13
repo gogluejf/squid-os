@@ -145,6 +145,11 @@ func validateChildSessionFlags(o *RunOptions) error {
 	if !anySet {
 		return nil
 	}
+	// Existing child continuation is not implemented yet. A future child load
+	// path must resolve the persisted child from its parent link and directory.
+	if o.SessionName != "" {
+		return fmt.Errorf("--session cannot be combined with child session lineage flags")
+	}
 	// All lineage flags must be provided together
 	if !o.childSessionID {
 		return fmt.Errorf("--session-id is required for child sessions")

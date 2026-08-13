@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"squid-os/internal/agent"
 	"squid-os/internal/config"
 	"squid-os/internal/skills"
@@ -178,14 +180,9 @@ func IsAgentTool(name string) bool {
 	return name == "call_agent" || name == "inline_agent"
 }
 
-// GenerateChildSessionRef allocates a child session ID and name for an agent
-// tool call. For call_agent the name is "<agent-name>-<tool-call-id>".
-// For inline_agent the name is "inline-<tool-call-id>".
+// GenerateChildSessionRef allocates a globally unique child identity and a
+// human-readable directory name for an agent tool call.
 func GenerateChildSessionRef(toolName, agentName, toolCallID string) ChildSessionRef {
-	childID := fmt.Sprintf("child-%s-%s", toolCallID, agentName)
-	if toolName == "inline_agent" {
-		childID = fmt.Sprintf("child-inline-%s", toolCallID)
-	}
 	var childName string
 	if toolName == "call_agent" {
 		childName = fmt.Sprintf("%s-%s", agentName, toolCallID)
@@ -193,7 +190,7 @@ func GenerateChildSessionRef(toolName, agentName, toolCallID string) ChildSessio
 		childName = fmt.Sprintf("inline-%s", toolCallID)
 	}
 	return ChildSessionRef{
-		ID:   childID,
+		ID:   uuid.New().String(),
 		Name: childName,
 	}
 }

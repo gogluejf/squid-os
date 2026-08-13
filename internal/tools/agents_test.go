@@ -86,6 +86,17 @@ func TestGenerateChildSessionRefUniqueNames(t *testing.T) {
 	}
 }
 
+func TestGenerateChildSessionRefUniqueIDsForSameCall(t *testing.T) {
+	ref1 := GenerateChildSessionRef("call_agent", "trader", "tool_1")
+	ref2 := GenerateChildSessionRef("call_agent", "trader", "tool_1")
+	if ref1.ID == ref2.ID {
+		t.Fatal("repeated tool metadata produced the same child ID")
+	}
+	if ref1.Name != ref2.Name {
+		t.Fatalf("human-readable child names changed: %q != %q", ref1.Name, ref2.Name)
+	}
+}
+
 func TestChildSessionRefEmptyForNonAgent(t *testing.T) {
 	// Non-agent tools should have an empty ChildRef
 	var ref ChildSessionRef

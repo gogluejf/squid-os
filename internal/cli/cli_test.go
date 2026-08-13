@@ -87,6 +87,20 @@ func TestSessionAllowsSaveName(t *testing.T) {
 	}
 }
 
+func TestRunRejectsIncompleteChildLineageFlags(t *testing.T) {
+	cmd := testRoot(t, nil, nil, nil)
+	cmd.SetArgs([]string{
+		"run", "--prompt", "x",
+		"--session-id", "child",
+		"--root-session-id", "root",
+		"--session-depth", "1",
+		"--parent-session-dir", "/tmp/parent",
+	})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "--parent-session-id") {
+		t.Fatalf("expected missing parent session ID error, got %v", err)
+	}
+}
+
 func TestTUIOverrides(t *testing.T) {
 	var got *TUIOptions
 	cmd := testRoot(t, &got, nil, nil)

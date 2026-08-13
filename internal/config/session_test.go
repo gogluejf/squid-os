@@ -1255,6 +1255,26 @@ func TestForkSessionTreeNoDuplicateIDsInFork(t *testing.T) {
 	}
 }
 
+func TestForkSessionTreeRejectsDanglingChildLinkWithoutDestination(t *testing.T) {
+	sourceDir := filepath.Join(t.TempDir(), "source-session")
+	destinationDir := filepath.Join(t.TempDir(), "destination-session")
+
+	root := NewSessionDoc(SessionConfig{})
+	root.Messages = []Message{{ID: "m1", Role: RoleAssistant, ToolCalls: []ToolCallEntry{{ID: "tc-1"}}}}
+	root.Messages[0].ToolCalls[0].Execution.ChildSessionID = "missing-child"
+	root.Messages[0].ToolCalls[0].Execution.ChildSessionName = "missing-child"
+	if err := SaveSessionDoc(sourceDir, root, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ForkSessionTree(sourceDir, destinationDir); err == nil {
+		t.Fatal("expected dangling child link error")
+	}
+	if _, err := os.Stat(destinationDir); !os.IsNotExist(err) {
+		t.Fatalf("failed fork left destination behind: %v", err)
+	}
+}
+
 func TestForkSessionTreeFailsOnMissingSource(t *testing.T) {
 	_, err := ForkSessionTree("/nonexistent/source", "/some/dest")
 	if err == nil {

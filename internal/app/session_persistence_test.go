@@ -37,12 +37,16 @@ func TestNewRootSessionAlwaysHasCanonicalDirectory(t *testing.T) {
 func TestAutoSaveWritesCurrentDirectoryInPlace(t *testing.T) {
 	m := testRootModel(t, "autosaved", true)
 	originalDir := m.session.SessionDir
+	originalID := m.session.Doc.Identity.ID
 	m.session.Append(chat.NewUserMessage("msg_1", "hello", ""))
 
 	m, _ = m.autoSave()
 
 	if m.session.SessionDir != originalDir {
 		t.Fatalf("autosave changed SessionDir from %q to %q", originalDir, m.session.SessionDir)
+	}
+	if m.session.Doc.Identity.ID != originalID {
+		t.Fatal("autosave forked the session identity")
 	}
 	if _, err := os.Stat(config.SessionFilePath(originalDir)); err != nil {
 		t.Fatalf("autosave did not write current session: %v", err)

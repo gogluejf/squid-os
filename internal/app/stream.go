@@ -293,6 +293,6 @@ func (m *Model) startStream() (tea.Model, tea.Cmd) {
 	ch := chat.StartStream(m.session.Session, m.endpoints)
 	m.session.UIStream.Ch = ch
 
-	m.refreshViewportAtBottom()
+	m.refreshViewportAtBottom() // should it be following ? refreshViewportFollowing ? only sendmessage to gotobottom ??
 	return m, tea.Batch(waitForStreamEvent(ch), streamTickCmd(m.session.UIStream.ID))
 }

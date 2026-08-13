@@ -221,6 +221,9 @@ func Resolve(in Inputs) (Resolved, error) {
 		case cfg.Autosave.Name == "":
 			cfg.Autosave.Name = time.Now().Format("2006-01-02_15-04-05")
 		}
+		if err := config.ValidateSessionName(cfg.Autosave.Name); err != nil {
+			return Resolved{}, fmt.Errorf("invalid save name:: %w", err)
+		}
 	} else {
 		cfg.Autosave.Name = ""
 	}

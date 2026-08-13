@@ -40,6 +40,10 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 		Value: name,
 		OnConfirm: func(value string, ctx any) tea.Cmd {
 			m := ctx.(*Model)
+			if err := config.ValidateSessionName(value); err != nil {
+				m.setNotification(ui.NotificationError, "invalid session name: "+err.Error())
+				return m.setChatMode()
+			}
 			destinationDir := config.RootSessionDir(m.paths, value)
 			nm, cmd := m.saveTo(destinationDir, false)
 			*m = nm

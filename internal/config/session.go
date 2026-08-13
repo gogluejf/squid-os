@@ -460,6 +460,9 @@ func LoadChildSession(parentDir string, parent SessionDoc, toolCall ToolCallEntr
 	if childName == "" {
 		return SessionDoc{}, "", fmt.Errorf("tool call %q has no child session name", toolCall.ID)
 	}
+	if err := ValidateSessionName(childName); err != nil {
+		return SessionDoc{}, "", fmt.Errorf("tool call %q child session name: %w", toolCall.ID, err)
+	}
 
 	dir := ChildSessionDir(parentDir, childName)
 
@@ -571,10 +574,11 @@ func ForkSessionTree(sourceDir string, destinationDir string) (SessionTreeForkRe
 		return SessionTreeForkResult{}, fmt.Errorf("source session document not found: %s", sourceDocPath)
 	}
 
-	// 2. Validate destination collision
-	destDocPath := SessionFilePath(destinationDir)
-	if _, err := os.Stat(destDocPath); err == nil {
-		return SessionTreeForkResult{}, fmt.Errorf("destination session already exists: %s", destDocPath)
+	// 2. Refuse any destination collision so the final rename is atomic.
+	if _, err := os.Stat(destinationDir); err == nil {
+		return SessionTreeForkResult{}, fmt.Errorf("destination session already exists: %s", destinationDir)
+	} else if !os.IsNotExist(err) {
+		return SessionTreeForkResult{}, fmt.Errorf("inspect destination session: %w", err)
 	}
 
 	// 3. Collect all chat.json paths in the source tree, relative to sourceDir
@@ -602,45 +606,89 @@ func ForkSessionTree(sourceDir string, destinationDir string) (SessionTreeForkRe
 		nodes = append(nodes, sessionNode{relPath: rel, doc: doc})
 	}
 
-	// 5. Collect all source IDs first
+	// 5. Index source sessions by ID and relative document path.
 	sourceIDs := make(map[string]bool, len(nodes))
-	idToNodeIdx := make(map[string]int, len(nodes))
-	for i, n := range nodes {
+	nodesByPath := make(map[string]sessionNode, len(nodes))
+	for _, n := range nodes {
+		if n.doc.Identity.ID == "" {
+			return SessionTreeForkResult{}, fmt.Errorf("source session %s has an empty ID", n.relPath)
+		}
+		if sourceIDs[n.doc.Identity.ID] {
+			return SessionTreeForkResult{}, fmt.Errorf("source tree has duplicate ID %q", n.doc.Identity.ID)
+		}
 		sourceIDs[n.doc.Identity.ID] = true
-		idToNodeIdx[n.doc.Identity.ID] = i
+		nodesByPath[filepath.Clean(n.relPath)] = n
 	}
 
-	// 6. Validate source lineage: check for duplicate IDs and broken parent refs
-	for _, n := range nodes {
-		// Validate that ParentID points to an ID in the source tree
-		if n.doc.Identity.ParentID != "" && !sourceIDs[n.doc.Identity.ParentID] {
-			return SessionTreeForkResult{}, fmt.Errorf("source tree has broken lineage: %s references parent ID %q which is not in the tree",
-				n.relPath, n.doc.Identity.ParentID)
-		}
-	}
-
-	// Check for duplicate IDs (map size should equal slice length)
-	if len(sourceIDs) != len(nodes) {
-		// Find the duplicate
-		seen := make(map[string]bool)
-		for _, n := range nodes {
-			if seen[n.doc.Identity.ID] {
-				return SessionTreeForkResult{}, fmt.Errorf("source tree has duplicate ID %q", n.doc.Identity.ID)
-			}
-			seen[n.doc.Identity.ID] = true
-		}
-	}
-
-	// 6. Identify the root document (chat.json at the top level of sourceDir)
-	rootID := ""
-	for _, n := range nodes {
-		if filepath.Dir(n.relPath) == "." {
-			rootID = n.doc.Identity.ID
-			break
-		}
-	}
-	if rootID == "" {
+	// 6. Identify and validate the root document.
+	root, ok := nodesByPath["chat.json"]
+	if !ok {
 		return SessionTreeForkResult{}, fmt.Errorf("no root session found at source directory: %s", sourceDir)
+	}
+	rootID := root.doc.Identity.ID
+	if root.doc.Identity.ParentID != "" || root.doc.Identity.ParentToolCallID != "" || root.doc.Identity.Depth != 0 || root.doc.Identity.RootID != rootID {
+		return SessionTreeForkResult{}, fmt.Errorf("source root session has invalid identity")
+	}
+
+	// Validate each descendant against its filesystem parent and originating tool link.
+	for _, n := range nodes {
+		if n.relPath == "chat.json" {
+			continue
+		}
+		relDir := filepath.Dir(n.relPath)
+		parts := splitCleanPath(relDir)
+		if len(parts) < 2 || len(parts)%2 != 0 {
+			return SessionTreeForkResult{}, fmt.Errorf("source session has invalid child layout: %s", n.relPath)
+		}
+		for i := 0; i < len(parts); i += 2 {
+			if parts[i] != "agents" {
+				return SessionTreeForkResult{}, fmt.Errorf("source session has invalid child layout: %s", n.relPath)
+			}
+			if err := ValidateSessionName(parts[i+1]); err != nil {
+				return SessionTreeForkResult{}, fmt.Errorf("source session has invalid child name in %s: %w", n.relPath, err)
+			}
+		}
+
+		parentRelPath := "chat.json"
+		if len(parts) > 2 {
+			parentRelPath = filepath.Join(filepath.Join(parts[:len(parts)-2]...), "chat.json")
+		}
+		parent, ok := nodesByPath[parentRelPath]
+		if !ok {
+			return SessionTreeForkResult{}, fmt.Errorf("source session %s has no filesystem parent session", n.relPath)
+		}
+		if n.doc.Identity.ParentID != parent.doc.Identity.ID {
+			return SessionTreeForkResult{}, fmt.Errorf("source tree has broken lineage: session %s ParentID %q does not match parent %q", n.relPath, n.doc.Identity.ParentID, parent.doc.Identity.ID)
+		}
+		if n.doc.Identity.RootID != rootID {
+			return SessionTreeForkResult{}, fmt.Errorf("source session %s RootID %q does not match root %q", n.relPath, n.doc.Identity.RootID, rootID)
+		}
+		if n.doc.Identity.Depth != parent.doc.Identity.Depth+1 {
+			return SessionTreeForkResult{}, fmt.Errorf("source session %s depth %d does not follow parent depth %d", n.relPath, n.doc.Identity.Depth, parent.doc.Identity.Depth)
+		}
+	}
+
+	// Every persisted child link must resolve to the expected child document.
+	for _, n := range nodes {
+		parentDir := filepath.Dir(n.relPath)
+		for _, msg := range n.doc.Messages {
+			for _, tc := range msg.ToolCalls {
+				if tc.Execution.ChildSessionID == "" && tc.Execution.ChildSessionName == "" {
+					continue
+				}
+				if tc.Execution.ChildSessionID == "" || tc.Execution.ChildSessionName == "" {
+					return SessionTreeForkResult{}, fmt.Errorf("source session %s has incomplete child link on tool call %q", n.relPath, tc.ID)
+				}
+				if err := ValidateSessionName(tc.Execution.ChildSessionName); err != nil {
+					return SessionTreeForkResult{}, fmt.Errorf("source session %s has invalid child link name: %w", n.relPath, err)
+				}
+				childPath := filepath.Join(parentDir, "agents", tc.Execution.ChildSessionName, "chat.json")
+				child, ok := nodesByPath[childPath]
+				if !ok || child.doc.Identity.ID != tc.Execution.ChildSessionID {
+					return SessionTreeForkResult{}, fmt.Errorf("source session %s tool call %q has a dangling child link", n.relPath, tc.ID)
+				}
+			}
+		}
 	}
 
 	// 7. Generate new IDs and build the map
@@ -653,8 +701,18 @@ func ForkSessionTree(sourceDir string, destinationDir string) (SessionTreeForkRe
 	// 8. Determine new root ID
 	newRootID := idMap[rootID]
 
-	// 9. Rewrite and save each session
+	// 9. Rewrite into a temporary sibling tree, then atomically rename it.
 	now := time.Now().UTC().Format(time.RFC3339)
+	tempDir, err := os.MkdirTemp(filepath.Dir(destinationDir), "."+filepath.Base(destinationDir)+".fork-")
+	if err != nil {
+		return SessionTreeForkResult{}, fmt.Errorf("create temporary fork directory: %w", err)
+	}
+	cleanupTemp := true
+	defer func() {
+		if cleanupTemp {
+			_ = os.RemoveAll(tempDir)
+		}
+	}()
 
 	for _, n := range nodes {
 		doc := n.doc // copy struct
@@ -682,8 +740,8 @@ func ForkSessionTree(sourceDir string, destinationDir string) (SessionTreeForkRe
 		doc.Meta.CreatedAt = now
 		doc.Meta.UpdatedAt = now
 
-		// Compute destination directory
-		destSubDir := filepath.Join(destinationDir, filepath.Dir(n.relPath))
+		// Compute temporary destination directory.
+		destSubDir := filepath.Join(tempDir, filepath.Dir(n.relPath))
 		destDocPath := SessionFilePath(destSubDir)
 
 		// Write
@@ -699,7 +757,7 @@ func ForkSessionTree(sourceDir string, destinationDir string) (SessionTreeForkRe
 		}
 	}
 
-	// 10. Validate the forked tree has no duplicate new IDs
+	// 10. Validate the forked tree has no duplicate new IDs.
 	seenNewIDs := make(map[string]bool, len(idMap))
 	for _, newID := range idMap {
 		if seenNewIDs[newID] {
@@ -707,6 +765,11 @@ func ForkSessionTree(sourceDir string, destinationDir string) (SessionTreeForkRe
 		}
 		seenNewIDs[newID] = true
 	}
+
+	if err := os.Rename(tempDir, destinationDir); err != nil {
+		return SessionTreeForkResult{}, fmt.Errorf("publish forked session tree: %w", err)
+	}
+	cleanupTemp = false
 
 	return SessionTreeForkResult{
 		RootIdentity: SessionIdentity{
@@ -716,6 +779,19 @@ func ForkSessionTree(sourceDir string, destinationDir string) (SessionTreeForkRe
 		},
 		IDMap: idMap,
 	}, nil
+}
+
+func splitCleanPath(path string) []string {
+	if path == "." || path == "" {
+		return nil
+	}
+	var parts []string
+	for path != "." && path != "" {
+		dir, base := filepath.Split(path)
+		parts = append([]string{base}, parts...)
+		path = filepath.Clean(dir)
+	}
+	return parts
 }
 
 // collectChatJSONPaths walks the directory tree rooted at dir and returns

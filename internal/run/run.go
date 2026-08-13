@@ -25,16 +25,15 @@ func checkpointSave(session *chat.Session) error {
 	return session.Save()
 }
 
-func Execute(ctx context.Context, request Request) (Result, error) {
+func bootstrapSession(request Request) (*chat.Session, config.SessionConfig, error) {
 	sessionRequest := request.Session
 	cfg := sessionRequest.Config
-	var session *chat.Session
 
-	if sessionRequest.ExistingSession != nil {
-		session = chat.LoadRootSession(*sessionRequest.ExistingSession, sessionRequest.SessionName, sessionRequest.Paths, sessionRequest.Catalog)
-		cfg = session.Doc.Config
-	} else if request.ChildSession != nil {
-		// Child session: build identity and resolve directory beneath parent
+	switch {
+	case sessionRequest.ExistingSession != nil:
+		session := chat.LoadRootSession(*sessionRequest.ExistingSession, sessionRequest.SessionName, sessionRequest.Paths, sessionRequest.Catalog)
+		return session, session.Doc.Config, nil
+	case request.ChildSession != nil:
 		cs := request.ChildSession
 		identity := config.SessionIdentity{
 			ID:               cs.ID,
@@ -43,14 +42,19 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 			ParentToolCallID: cs.ParentToolCallID,
 			Depth:            cs.Depth,
 		}
-		var err error
-		session, err = chat.NewChildSession(cfg, identity, cs.ParentSessionDir, sessionRequest.Paths, sessionRequest.Catalog)
-		if err != nil {
-			return Result{}, err
-		}
-	} else {
+		session, err := chat.NewChildSession(cfg, identity, cs.ParentSessionDir, sessionRequest.Paths, sessionRequest.Catalog)
+		return session, cfg, err
+	default:
 		cfg.Memory = config.SessionMemory{Namespace: string(cfg.Memory.Namespace), Path: cfg.Memory.Path, Instructions: cfg.Memory.Instructions}
-		session = chat.NewRootSession(cfg, sessionRequest.Paths, sessionRequest.Catalog)
+		return chat.NewRootSession(cfg, sessionRequest.Paths, sessionRequest.Catalog), cfg, nil
+	}
+}
+
+func Execute(ctx context.Context, request Request) (Result, error) {
+	sessionRequest := request.Session
+	session, cfg, err := bootstrapSession(request)
+	if err != nil {
+		return Result{}, err
 	}
 
 	session.Append(chat.NewUserMessage(fmt.Sprintf("msg_%d", len(session.Doc.Messages)+1), sessionRequest.Prompt, ""))

@@ -149,8 +149,14 @@ func validateChildSessionFlags(o *RunOptions) error {
 	if !o.childSessionID {
 		return fmt.Errorf("--session-id is required for child sessions")
 	}
+	if !o.parentSessionID {
+		return fmt.Errorf("--parent-session-id is required for child sessions")
+	}
 	if !o.rootSessionID {
 		return fmt.Errorf("--root-session-id is required for child sessions")
+	}
+	if !o.parentToolCallID {
+		return fmt.Errorf("--parent-tool-call-id is required for child sessions")
 	}
 	if !o.childSessionDepth {
 		return fmt.Errorf("--session-depth is required for child sessions")
@@ -164,8 +170,14 @@ func validateChildSessionFlags(o *RunOptions) error {
 	if o.ChildSessionID == "" {
 		return fmt.Errorf("--session-id must not be empty")
 	}
+	if o.ParentSessionID == "" {
+		return fmt.Errorf("--parent-session-id must not be empty")
+	}
 	if o.RootSessionID == "" {
 		return fmt.Errorf("--root-session-id must not be empty")
+	}
+	if o.ParentToolCallID == "" {
+		return fmt.Errorf("--parent-tool-call-id must not be empty")
 	}
 	if o.ParentSessionDir == "" {
 		return fmt.Errorf("--parent-session-dir must not be empty")
@@ -206,6 +218,9 @@ func executeRun(o *RunOptions) error {
 
 	var existing *config.SessionDoc
 	if o.SessionName != "" {
+		if err := config.ValidateSessionName(o.SessionName); err != nil {
+			return fmt.Errorf("session name: %w", err)
+		}
 		doc, err := config.LoadSessionDoc(config.RootSessionDir(cfg.paths, o.SessionName))
 		if err != nil {
 			return err

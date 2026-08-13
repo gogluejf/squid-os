@@ -207,6 +207,18 @@ func TestResolveAutosaveNamePrecedence(t *testing.T) {
 	}
 }
 
+func TestResolveRejectsTraversalAutosaveName(t *testing.T) {
+	on := true
+	_, err := Resolve(Inputs{
+		Settings: config.Settings{Provider: "p", Model: "m"},
+		Paths:    config.Paths{MemoryDir: t.TempDir()},
+		CLI:      Overrides{Autosave: &on, AutosaveName: "../escape"},
+	})
+	if err == nil {
+		t.Fatal("expected traversal autosave name to be rejected")
+	}
+}
+
 func TestResolveCapabilityPolicyAndWorkspaceShadowing(t *testing.T) {
 	globalSkills, globalAgents, workspace := t.TempDir(), t.TempDir(), t.TempDir()
 	writeRuntimeSkill(t, globalSkills, "review", "global")

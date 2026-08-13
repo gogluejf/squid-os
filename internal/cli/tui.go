@@ -120,6 +120,9 @@ func launchTUI(opts *TUIOptions) error {
 	}
 
 	if sessionName != "" {
+		if err := config.ValidateSessionName(sessionName); err != nil {
+			return fmt.Errorf("session name: %w", err)
+		}
 		doc, err := config.LoadSessionDoc(config.RootSessionDir(cfg.paths, sessionName))
 		if err != nil {
 			return fmt.Errorf("load session %q: %w", sessionName, err)

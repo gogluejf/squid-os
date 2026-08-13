@@ -176,7 +176,11 @@ func launchTUI(opts *TUIOptions) error {
 	if sessionName != "" {
 		cfg.settings.LastSessionName = sessionName
 	}
-	program := tea.NewProgram(app.New(app.StartupOptions{Session: request, Settings: cfg.settings, History: cfg.history}), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	model, err := app.New(app.StartupOptions{Session: request, Settings: cfg.settings, History: cfg.history})
+	if err != nil {
+		return fmt.Errorf("start TUI: %w", err)
+	}
+	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("TUI error: %w", err)
 	}

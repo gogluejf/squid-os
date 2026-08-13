@@ -79,7 +79,7 @@ type StartupOptions struct {
 }
 
 // New creates a new app model from explicit startup options.
-func New(options StartupOptions) Model {
+func New(options StartupOptions) (Model, error) {
 	paths := options.Session.Paths
 	settings := options.Settings
 	endpoints := options.Session.Endpoints
@@ -114,13 +114,11 @@ func New(options StartupOptions) Model {
 		var err error
 		sess, err = LoadRootUISession(*initialSession, options.Session.SessionName, paths, options.Session.Catalog)
 		if err != nil {
-			sess = NewRootUISession(runtimeConfig, paths, options.Session.Catalog)
-			notification = ui.Notification{Level: ui.NotificationError, Message: err.Error()}
-		} else {
-			notification = ui.Notification{
-				Level:   ui.NotificationInfo,
-				Message: fmt.Sprintf("Auto-load on, last session loaded: %s", sess.SessionDir),
-			}
+			return Model{}, err
+		}
+		notification = ui.Notification{
+			Level:   ui.NotificationInfo,
+			Message: fmt.Sprintf("Auto-load on, last session loaded: %s", sess.SessionDir),
 		}
 	} else {
 		sess = NewRootUISession(runtimeConfig, paths, options.Session.Catalog)
@@ -144,7 +142,7 @@ func New(options StartupOptions) Model {
 		historySearch: ui.NewHistorySearchOverlay(nil),
 		incognito:     false,
 		notification:  notification,
-	}
+	}, nil
 }
 
 func (m *Model) setNotification(level ui.NotificationLevel, msg string) {

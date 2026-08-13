@@ -1160,10 +1160,7 @@ func TestNewChildSessionPreservesLineage(t *testing.T) {
 		Depth:            1,
 	}
 	cfg := config.SessionConfig{Autosave: config.SessionAutosave{Enabled: true, Name: "child-session"}}
-	session, err := chat.NewChildSession(cfg, identity, parentDir, config.Paths{}, runtimeconfig.Catalog{})
-	if err != nil {
-		t.Fatalf("NewChildSession: %v", err)
-	}
+	session := chat.NewChildSession(cfg, identity, parentDir, config.Paths{}, runtimeconfig.Catalog{})
 	sessionDir := config.ChildSessionDir(parentDir, cfg.Autosave.Name)
 
 	// Verify identity is preserved in the document.

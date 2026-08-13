@@ -23,6 +23,34 @@ func TestNewSessionIncludesToolsBootstrap(t *testing.T) {
 	}
 }
 
+func TestLoadChildRejectsDifferentAutosaveName(t *testing.T) {
+	paths := config.Paths{Sessions: t.TempDir()}
+	childDir := config.ChildSessionDir(config.RootSessionDir(paths, "root"), "child")
+	doc := config.NewSessionDocWithIdentity(config.SessionConfig{
+		Autosave: config.SessionAutosave{Enabled: true, Name: "different-name"},
+	}, config.SessionIdentity{ID: "child", ParentID: "parent", RootID: "root", Depth: 1})
+
+	if _, err := LoadSession(doc, childDir, paths, runtimeconfig.Catalog{}); err == nil || !strings.Contains(err.Error(), "child session save-as is not supported") {
+		t.Fatalf("expected child save-as rejection, got %v", err)
+	}
+}
+
+func TestLoadChildKeepsMatchingNestedDirectory(t *testing.T) {
+	paths := config.Paths{Sessions: t.TempDir()}
+	childDir := config.ChildSessionDir(config.RootSessionDir(paths, "root"), "child")
+	doc := config.NewSessionDocWithIdentity(config.SessionConfig{
+		Autosave: config.SessionAutosave{Enabled: true, Name: "child"},
+	}, config.SessionIdentity{ID: "child", ParentID: "parent", RootID: "root", Depth: 1})
+
+	session, err := LoadSession(doc, childDir, paths, runtimeconfig.Catalog{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.SessionDir != childDir {
+		t.Fatalf("child SessionDir = %q, want %q", session.SessionDir, childDir)
+	}
+}
+
 func TestSetPendingInferenceBeforeFirstTurnRewritesBootstrap(t *testing.T) {
 	initial := config.InferenceConfig{
 		Provider: "vllm",

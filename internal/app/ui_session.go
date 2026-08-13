@@ -27,8 +27,8 @@ func NewRootUISession(cfg config.SessionConfig, paths config.Paths, catalog runt
 	return &UISession{Session: chat.NewRootSession(cfg, paths, catalog)}
 }
 
-func LoadRootUISession(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) (*UISession, error) {
-	session, err := chat.LoadRootSession(sd, name, paths, catalog)
+func LoadRootUISession(sd config.SessionDoc, sourceName string, paths config.Paths, catalog runtimeconfig.Catalog) (*UISession, error) {
+	session, err := chat.LoadRootSession(sd, sourceName, paths, catalog)
 	if err != nil {
 		return nil, err
 	}

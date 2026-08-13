@@ -363,7 +363,7 @@ func newCompletionTestModel(t *testing.T, skillNames, agentNames []string) Model
 		t.Fatal(err)
 	}
 
-	m := New(StartupOptions{Session: runtimeconfig.SessionRequest{
+	m, err := New(StartupOptions{Session: runtimeconfig.SessionRequest{
 		Config: config.SessionConfig{Skills: skillRefs, Agents: agentRefs},
 		Catalog: runtimeconfig.Catalog{
 			WorkingDir: workspace,
@@ -371,6 +371,9 @@ func newCompletionTestModel(t *testing.T, skillNames, agentNames []string) Model
 			Agents:     agentRegistry,
 		},
 	}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	m.width, m.height, m.ready = 100, 30, true
 	m.recalcLayout()
 	return m

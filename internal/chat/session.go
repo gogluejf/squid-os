@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	goai_provider "github.com/zendev-sh/goai/provider"
 
 	"squid-os/internal/config"
@@ -24,32 +25,35 @@ type Session struct {
 	SessionDir string // runtime-only: resolved session directory for persistence (not serialized into SessionDoc)
 }
 
-// NewRootSession creates a root session with a canonical directory. The directory
-// is reserved in memory immediately; persistence still depends on Autosave.Enabled
-// or an explicit save.
+// NewRootSession creates a root session with a canonical directory. Persistence
+// still depends on Autosave.Enabled or an explicit save.
 func NewRootSession(cfg config.SessionConfig, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
-	name := cfg.Autosave.Name
-	if name == "" {
-		name = time.Now().Format("2006-01-02_15-04-05")
+	name := sessionName(cfg.Autosave.Name)
+	id := uuid.New().String()
+	return newSessionWithIdentity(cfg, config.SessionIdentity{ID: id, RootID: id}, config.RootSessionDir(paths, name), paths, catalog)
+}
+
+// NewChildSession creates a child session beneath its immediate parent.
+func NewChildSession(cfg config.SessionConfig, identity config.SessionIdentity, parentSessionDir string, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
+	name := sessionName(cfg.Autosave.Name)
+	return newSessionWithIdentity(cfg, identity, config.ChildSessionDir(parentSessionDir, name), paths, catalog)
+}
+
+func newSessionWithIdentity(cfg config.SessionConfig, identity config.SessionIdentity, sessionDir string, paths config.Paths, catalog runtimeconfig.Catalog) *Session {
+	name := filepath.Base(sessionDir)
+	if cfg.Autosave.Name == "" {
+		cfg.Autosave.Name = name
 	}
-	sessionDir := config.RootSessionDir(paths, name)
-	doc := config.NewSessionDoc(cfg)
+	doc := config.NewSessionDocWithIdentity(cfg, identity)
 	s := &Session{Doc: doc, Info: config.SessionInfo{Name: name}, Paths: paths, Catalog: catalog, SessionDir: sessionDir}
 	return initSessionMessages(s, cfg)
 }
 
-// NewChildSession creates a child session beneath its immediate parent.
-func NewChildSession(cfg config.SessionConfig, identity config.SessionIdentity, parentSessionDir string, paths config.Paths, catalog runtimeconfig.Catalog) (*Session, error) {
-	if !cfg.Autosave.Enabled {
-		return nil, fmt.Errorf("child session persistence must be enabled")
+func sessionName(name string) string {
+	if name != "" {
+		return name
 	}
-	if err := config.ValidateSessionName(cfg.Autosave.Name); err != nil {
-		return nil, fmt.Errorf("child session name: %w", err)
-	}
-	sessionDir := config.ChildSessionDir(parentSessionDir, cfg.Autosave.Name)
-	doc := config.NewSessionDocWithIdentity(cfg, identity)
-	s := &Session{Doc: doc, Info: config.SessionInfo{Name: cfg.Autosave.Name}, Paths: paths, Catalog: catalog, SessionDir: sessionDir}
-	return initSessionMessages(s, cfg), nil
+	return time.Now().Format("2006-01-02_15-04-05")
 }
 
 func initSessionMessages(s *Session, cfg config.SessionConfig) *Session {
@@ -99,9 +103,35 @@ func initSessionMessages(s *Session, cfg config.SessionConfig) *Session {
 	return s
 }
 
-// LoadSession wraps a persisted session at its canonical directory and repairs
-// any tool batch interrupted by a prior process crash before returning it.
+// LoadSession wraps a persisted session at its canonical source directory. For
+// roots, a different configured autosave name forks the complete tree first.
+// Children always remain at their supplied nested directory.
 func LoadSession(sd config.SessionDoc, sessionDir string, paths config.Paths, catalog runtimeconfig.Catalog) (*Session, error) {
+	currentName := filepath.Base(sessionDir)
+	isRoot := sd.Identity.Depth == 0 && sd.Identity.ParentID == ""
+	if !isRoot && sd.Config.Autosave.Enabled && sd.Config.Autosave.Name != "" && sd.Config.Autosave.Name != currentName {
+		return nil, fmt.Errorf("child session save-as is not supported: current=%q requested=%q", currentName, sd.Config.Autosave.Name)
+	}
+
+	locationChanged := false
+	if isRoot && sd.Config.Autosave.Enabled {
+		destinationName := sd.Config.Autosave.Name
+		if destinationName != "" && destinationName != filepath.Base(sessionDir) {
+			destinationDir := config.RootSessionDir(paths, destinationName)
+			if _, err := config.ForkSessionTree(sessionDir, destinationDir); err != nil {
+				return nil, fmt.Errorf("fork loaded session: %w", err)
+			}
+			forked, err := config.LoadSessionDoc(destinationDir)
+			if err != nil {
+				return nil, fmt.Errorf("load forked session: %w", err)
+			}
+			sd = forked
+			sd.Config.Autosave.Name = destinationName
+			sessionDir = destinationDir
+			locationChanged = true
+		}
+	}
+
 	info := config.SessionInfo{Name: filepath.Base(sessionDir)}
 	if sd.Meta.UpdatedAt != "" {
 		if t, err := time.Parse(time.RFC3339, sd.Meta.UpdatedAt); err == nil {
@@ -109,6 +139,11 @@ func LoadSession(sd config.SessionDoc, sessionDir string, paths config.Paths, ca
 		}
 	}
 	s := &Session{Doc: sd, Info: info, Paths: paths, Catalog: catalog, SessionDir: sessionDir}
+	if locationChanged {
+		if err := s.Save(); err != nil {
+			return nil, fmt.Errorf("persist fork destination config: %w", err)
+		}
+	}
 	if msgIdx, repaired := s.repairInterruptedTools(); repaired {
 		FlushToolMessage(s, msgIdx)
 		if err := s.Save(); err != nil {
@@ -119,9 +154,10 @@ func LoadSession(sd config.SessionDoc, sessionDir string, paths config.Paths, ca
 	return s, nil
 }
 
-// LoadRootSession resolves a root name and loads it at its canonical directory.
-func LoadRootSession(sd config.SessionDoc, name string, paths config.Paths, catalog runtimeconfig.Catalog) (*Session, error) {
-	return LoadSession(sd, config.RootSessionDir(paths, name), paths, catalog)
+// LoadRootSession resolves the source root name before delegating to the generic
+// loader. LoadSession may fork the root when its configured autosave name differs.
+func LoadRootSession(sd config.SessionDoc, sourceName string, paths config.Paths, catalog runtimeconfig.Catalog) (*Session, error) {
+	return LoadSession(sd, config.RootSessionDir(paths, sourceName), paths, catalog)
 }
 
 func (s *Session) repairInterruptedTools() (int, bool) {

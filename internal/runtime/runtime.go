@@ -212,20 +212,16 @@ func Resolve(in Inputs) (Resolved, error) {
 		return Resolved{}, err
 	}
 
-	if cfg.Autosave.Enabled {
-		switch {
-		case c.AutosaveName != "":
-			cfg.Autosave.Name = c.AutosaveName
-		case in.SessionName != "":
-			cfg.Autosave.Name = in.SessionName
-		case cfg.Autosave.Name == "":
-			cfg.Autosave.Name = time.Now().Format("2006-01-02_15-04-05")
-		}
-		if err := config.ValidateSessionName(cfg.Autosave.Name); err != nil {
-			return Resolved{}, fmt.Errorf("invalid save name:: %w", err)
-		}
-	} else {
-		cfg.Autosave.Name = ""
+	switch {
+	case c.AutosaveName != "":
+		cfg.Autosave.Name = c.AutosaveName
+	case in.SessionName != "":
+		cfg.Autosave.Name = in.SessionName
+	case cfg.Autosave.Name == "":
+		cfg.Autosave.Name = time.Now().Format("2006-01-02_15-04-05")
+	}
+	if err := config.ValidateSessionName(cfg.Autosave.Name); err != nil {
+		return Resolved{}, fmt.Errorf("invalid save name: %w", err)
 	}
 
 	if cfg.Memory.Namespace == "" {

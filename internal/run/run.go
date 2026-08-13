@@ -22,6 +22,9 @@ type Result struct {
 }
 
 func checkpointSave(session *chat.Session) error {
+	if !session.Doc.Config.Autosave.Enabled {
+		return nil
+	}
 	return session.Save()
 }
 
@@ -45,8 +48,8 @@ func bootstrapSession(request Request) (*chat.Session, config.SessionConfig, err
 			ParentToolCallID: cs.ParentToolCallID,
 			Depth:            cs.Depth,
 		}
-		session, err := chat.NewChildSession(cfg, identity, cs.ParentSessionDir, sessionRequest.Paths, sessionRequest.Catalog)
-		return session, cfg, err
+		session := chat.NewChildSession(cfg, identity, cs.ParentSessionDir, sessionRequest.Paths, sessionRequest.Catalog)
+		return session, cfg, nil
 	default:
 		cfg.Memory = config.SessionMemory{Namespace: string(cfg.Memory.Namespace), Path: cfg.Memory.Path, Instructions: cfg.Memory.Instructions}
 		return chat.NewRootSession(cfg, sessionRequest.Paths, sessionRequest.Catalog), cfg, nil
@@ -75,9 +78,6 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 	finalPass := ""
 	paths := sessionRequest.Paths
 	checkpoint := func() error {
-		if !cfg.Autosave.Enabled {
-			return nil
-		}
 		return checkpointSave(session)
 	}
 	for event := range chat.RunLoop(ctx, session, paths, sessionRequest.Endpoints, checkpoint) {
@@ -90,17 +90,13 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 		if event.Type == chat.LoopEventDone {
 			final = finalPass
 			finalPass = ""
-			if cfg.Autosave.Enabled {
-				_ = checkpointSave(session)
-			}
+			_ = checkpointSave(session)
 		}
 		if event.Type == chat.LoopEventToolFlushed {
 			finalPass = ""
 		}
 		if event.Type == chat.LoopEventError {
-			if cfg.Autosave.Enabled {
-				_ = checkpointSave(session)
-			}
+			_ = checkpointSave(session)
 			if event.Error != nil {
 				return Result{FinalText: final, Session: session}, event.Error
 			}
@@ -115,11 +111,11 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 		final = finalPass
 	}
 	result := Result{FinalText: final, Session: session}
+	if err := checkpointSave(session); err != nil {
+		return result, fmt.Errorf("autosave: %w", err)
+	}
 	if cfg.Autosave.Enabled {
-		if err := checkpointSave(session); err != nil {
-			return result, fmt.Errorf("autosave: %w", err)
-		}
-		result.SavedSessionName = cfg.Autosave.Name
+		result.SavedSessionName = session.Info.Name
 	}
 	return result, nil
 }

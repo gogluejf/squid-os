@@ -18,10 +18,13 @@ func TestSkillPickerUsesSessionCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	model := New(StartupOptions{Session: runtimeconfig.SessionRequest{
+	model, err := New(StartupOptions{Session: runtimeconfig.SessionRequest{
 		Config:  config.SessionConfig{Skills: []config.CapabilityRef{{Scope: config.CapabilityScopeWorkspace, Name: "build-a"}}},
 		Catalog: runtimeconfig.Catalog{WorkingDir: workspaceA, Skills: registryA},
 	}})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	updated, _ := model.openSkillPicker()
 	picker, ok := updated.activeComponent.(*component.Picker)

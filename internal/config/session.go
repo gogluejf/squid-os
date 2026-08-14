@@ -279,7 +279,9 @@ type Message struct {
 	Params map[string]string `json:"params,omitempty"`
 }
 
-// SessionInfo holds display metadata for a saved session.
+// SessionInfo holds user-facing metadata for a persisted session.
+// Name is empty until chat.json has been successfully written or loaded; it
+// must not expose a provisional SessionDir name for an unsaved session.
 type SessionInfo struct {
 	Name    string
 	ModTime time.Time

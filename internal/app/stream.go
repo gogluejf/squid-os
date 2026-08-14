@@ -226,10 +226,7 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 			Decision: decision,
 			MsgIdx:   msgIdx,
 			Checkpoint: func() error {
-				if !m.session.Doc.Config.Autosave.Enabled || m.incognito {
-					return nil
-				}
-				return m.session.Save()
+				return m.persistAutoSave()
 			},
 		})
 		decision = nil

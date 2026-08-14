@@ -29,6 +29,9 @@ func TestNewRootSessionAlwaysHasCanonicalDirectory(t *testing.T) {
 	if filepath.Dir(m.session.SessionDir) != m.paths.Sessions {
 		t.Fatalf("SessionDir %q is not below sessions root %q", m.session.SessionDir, m.paths.Sessions)
 	}
+	if m.session.Info.Name != "" {
+		t.Fatalf("fresh unsaved session displays name %q", m.session.Info.Name)
+	}
 	if _, err := os.Stat(config.SessionFilePath(m.session.SessionDir)); !os.IsNotExist(err) {
 		t.Fatalf("fresh session should not be persisted yet: %v", err)
 	}
@@ -51,6 +54,12 @@ func TestAutoSaveWritesCurrentDirectoryInPlace(t *testing.T) {
 	if _, err := os.Stat(config.SessionFilePath(originalDir)); err != nil {
 		t.Fatalf("autosave did not write current session: %v", err)
 	}
+	if m.session.Info.Name != "autosaved" {
+		t.Fatalf("saved session display name = %q", m.session.Info.Name)
+	}
+	if m.settings.LastSessionName != "autosaved" {
+		t.Fatalf("LastSessionName = %q, want autosaved", m.settings.LastSessionName)
+	}
 }
 
 func TestSaveToDifferentUnpersistedDirectoryIsFirstSave(t *testing.T) {
@@ -58,7 +67,7 @@ func TestSaveToDifferentUnpersistedDirectoryIsFirstSave(t *testing.T) {
 	oldID := m.session.Doc.Identity.ID
 	destination := config.RootSessionDir(m.paths, "chosen")
 
-	m, _ = m.saveTo(destination, false)
+	m, _ = m.saveTo(destination)
 
 	if m.session.SessionDir != destination {
 		t.Fatalf("SessionDir = %q, want %q", m.session.SessionDir, destination)
@@ -80,7 +89,7 @@ func TestSaveToDifferentPersistedDirectoryForksAndReloads(t *testing.T) {
 	sourceID := m.session.Doc.Identity.ID
 	destination := config.RootSessionDir(m.paths, "fork")
 
-	m, _ = m.saveTo(destination, false)
+	m, _ = m.saveTo(destination)
 
 	if m.session.SessionDir != destination {
 		t.Fatalf("SessionDir = %q, want %q", m.session.SessionDir, destination)

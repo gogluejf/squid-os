@@ -17,8 +17,11 @@ func TestBootstrapFreshRootAutosaveOffHasDirectoryButDoesNotCheckpoint(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if session.SessionDir == "" || session.Info.Name == "" {
-		t.Fatal("autosave-off root has no canonical name/directory")
+	if session.SessionDir == "" {
+		t.Fatal("autosave-off root has no canonical directory")
+	}
+	if session.Info.Name != "" {
+		t.Fatalf("unsaved root has persisted display name %q", session.Info.Name)
 	}
 	if err := checkpointSave(session); err != nil {
 		t.Fatal(err)
@@ -40,8 +43,11 @@ func TestBootstrapChildAutosaveOffHasDirectoryButDoesNotCheckpoint(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if session.SessionDir == "" || session.Info.Name == "" {
-		t.Fatal("autosave-off child has no canonical name/directory")
+	if session.SessionDir == "" {
+		t.Fatal("autosave-off child has no canonical directory")
+	}
+	if session.Info.Name != "" {
+		t.Fatalf("unsaved child has persisted display name %q", session.Info.Name)
 	}
 	if filepath.Dir(session.SessionDir) != filepath.Join(parentDir, "agents") {
 		t.Fatalf("child directory = %q", session.SessionDir)

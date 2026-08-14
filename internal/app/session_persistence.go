@@ -15,7 +15,7 @@ import (
 // Saving to the current directory writes in place. A different destination
 // forks only when the current session file already exists; otherwise it is the
 // first save of the in-memory session.
-func (m Model) saveTo(destinationDir string, silent bool) (Model, tea.Cmd) {
+func (m Model) saveTo(destinationDir string) (Model, tea.Cmd) {
 	if destinationDir == "" || m.incognito {
 		return m, nil
 	}
@@ -26,9 +26,7 @@ func (m Model) saveTo(destinationDir string, silent bool) (Model, tea.Cmd) {
 
 	if destinationDir == m.session.SessionDir {
 		if err := m.session.Save(); err != nil {
-			if !silent {
-				(&m).setNotification(ui.NotificationError, "couldn't save session: "+err.Error())
-			}
+			(&m).setNotification(ui.NotificationError, "couldn't save session: "+err.Error())
 			return m, nil
 		}
 	} else {
@@ -37,39 +35,29 @@ func (m Model) saveTo(destinationDir string, silent bool) (Model, tea.Cmd) {
 		switch {
 		case sourceErr == nil:
 			if _, err := config.ForkSessionTree(m.session.SessionDir, destinationDir); err != nil {
-				if !silent {
-					(&m).setNotification(ui.NotificationError, "couldn't fork session: "+err.Error())
-				}
+				(&m).setNotification(ui.NotificationError, "couldn't fork session: "+err.Error())
 				return m, nil
 			}
 			forkedDoc, err := config.LoadSessionDoc(destinationDir)
 			if err != nil {
-				if !silent {
-					(&m).setNotification(ui.NotificationError, "couldn't load forked session: "+err.Error())
-				}
+				(&m).setNotification(ui.NotificationError, "couldn't load forked session: "+err.Error())
 				return m, nil
 			}
 			m.session.Doc = forkedDoc
 			m.session.SessionDir = destinationDir
 			m.session.Doc.Config.Autosave.Name = name
 			if err := m.session.Save(); err != nil {
-				if !silent {
-					(&m).setNotification(ui.NotificationError, "couldn't update forked session: "+err.Error())
-				}
+				(&m).setNotification(ui.NotificationError, "couldn't update forked session: "+err.Error())
 				return m, nil
 			}
 		case os.IsNotExist(sourceErr):
 			m.session.SessionDir = destinationDir
 			if err := m.session.Save(); err != nil {
-				if !silent {
-					(&m).setNotification(ui.NotificationError, "couldn't save session: "+err.Error())
-				}
+				(&m).setNotification(ui.NotificationError, "couldn't save session: "+err.Error())
 				return m, nil
 			}
 		default:
-			if !silent {
-				(&m).setNotification(ui.NotificationError, "couldn't inspect session: "+sourceErr.Error())
-			}
+			(&m).setNotification(ui.NotificationError, "couldn't inspect session: "+sourceErr.Error())
 			return m, nil
 		}
 	}
@@ -80,10 +68,28 @@ func (m Model) saveTo(destinationDir string, silent bool) (Model, tea.Cmd) {
 	}
 	m.session.Info.Name = name
 	m.session.Info.ModTime = time.Now()
-	if !silent {
-		(&m).setNotification(ui.NotificationInfo, "session saved to "+config.SessionFilePath(m.session.SessionDir))
-	}
+	(&m).setNotification(ui.NotificationInfo, "session saved to "+config.SessionFilePath(m.session.SessionDir))
 	return m, nil
+}
+
+// persistAutoSave writes the current session and, after the first successful
+// root-session write, registers it as the TUI's last session. Autonomous runs
+// do not use this helper and never update LastSessionName.
+func (m *Model) persistAutoSave() error {
+	if !m.session.Doc.Config.Autosave.Enabled || m.incognito {
+		return nil
+	}
+	if err := m.session.Save(); err != nil {
+		return err
+	}
+	name := filepath.Base(m.session.SessionDir)
+	m.session.Info.Name = name
+	m.session.Info.ModTime = time.Now()
+	if m.session.Doc.Identity.Depth == 0 && m.settings.LastSessionName != name {
+		m.settings.LastSessionName = name
+		_ = config.SaveSettings(m.paths, m.settings)
+	}
+	return nil
 }
 
 // autoSave persists the current session in place after each assistant reply.
@@ -97,7 +103,7 @@ func (m Model) autoSave() (Model, tea.Cmd) {
 			return m, nil
 		}
 	}
-	if err := m.session.Save(); err != nil {
+	if err := m.persistAutoSave(); err != nil {
 		return m, nil
 	}
 	return m, nil

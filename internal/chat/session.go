@@ -17,12 +17,14 @@ import (
 
 // Session is the pure runtime session: persisted document + pure stream state.
 type Session struct {
-	Doc        config.SessionDoc
-	Stream     StreamState
-	Info       config.SessionInfo
-	Paths      config.Paths
-	Catalog    runtimeconfig.Catalog
-	SessionDir string // runtime-only: resolved session directory for persistence (not serialized into SessionDoc)
+	Doc     config.SessionDoc
+	Stream  StreamState
+	Info    config.SessionInfo
+	Paths   config.Paths
+	Catalog runtimeconfig.Catalog
+	// SessionDir is the canonical or provisional directory that would contain
+	// chat.json. It is always set, even before the session has been persisted.
+	SessionDir string
 }
 
 // NewRootSession creates a root session with a canonical directory. Persistence
@@ -45,7 +47,7 @@ func newSessionWithIdentity(cfg config.SessionConfig, identity config.SessionIde
 		cfg.Autosave.Name = name
 	}
 	doc := config.NewSessionDocWithIdentity(cfg, identity)
-	s := &Session{Doc: doc, Info: config.SessionInfo{Name: name}, Paths: paths, Catalog: catalog, SessionDir: sessionDir}
+	s := &Session{Doc: doc, Paths: paths, Catalog: catalog, SessionDir: sessionDir}
 	return initSessionMessages(s, cfg)
 }
 

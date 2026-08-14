@@ -49,7 +49,7 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 				return m.setChatMode()
 			}
 			destinationDir := config.RootSessionDir(m.paths, value)
-			nm, cmd := m.saveTo(destinationDir, false)
+			nm, cmd := m.saveTo(destinationDir)
 			*m = nm
 			if cmd != nil {
 				return tea.Batch(m.setChatMode(), cmd)

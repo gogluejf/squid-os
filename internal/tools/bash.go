@@ -16,7 +16,7 @@ import (
 var Bash = Tool{
 	Name:         "bash",
 	Description:  "Execute a shell command and return stdout/stderr. Use for git, find, grep, curl, and other CLI tools. Does not modify files. Timeout: 120 seconds.",
-	DisplayParam: "command",
+	DisplayParams: []string{"command"},
 	Style:        style.ToolStyle(),
 	IsDestructive: func(args map[string]interface{}) bool {
 		d, _ := args["destructive"].(bool)

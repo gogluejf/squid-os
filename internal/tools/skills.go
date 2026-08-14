@@ -12,7 +12,7 @@ import (
 var SkillLoad = Tool{
 	Name:         "skill_load",
 	Description:  "Load a skill by name and inject its instructions into context. Returns the skill's full instructions.",
-	DisplayParam: "name",
+	DisplayParams: []string{"name"},
 	Style:        style.SkillStyle(),
 	Schema: []byte(`{
 	"type": "object",
@@ -65,7 +65,7 @@ var SkillLoad = Tool{
 var SkillList = Tool{
 	Name:         "skill_list",
 	Description:  "Return a list of all available skills with name and description. Lightweight, always available.",
-	DisplayParam: "",
+	DisplayParams: []string{},
 	Style:        style.SkillStyle(),
 	Schema:       []byte(`{"type": "object", "properties": {}}`),
 	Execute: func(_ map[string]interface{}, rt RuntimeContext) ToolResult {

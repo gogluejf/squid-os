@@ -12,7 +12,7 @@ import (
 var SetWorkingDirTool = Tool{
 	Name:         "set_working_dir",
 	Description:  "Set the working directory. Tool calls will use this as the base for relative paths. Use when user requests or to switch context to another project.",
-	DisplayParam: "path",
+	DisplayParams: []string{"path"},
 	Style:        style.ToolStyle(),
 	Schema: []byte(`{
 	"type": "object",

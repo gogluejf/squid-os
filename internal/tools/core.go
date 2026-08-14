@@ -14,7 +14,7 @@ import (
 var ReadFile = Tool{
 	Name:        "read_file",
 	Description: "Read a complete file. Path can be relative or absolute.",
-	DisplayParam: "path",
+	DisplayParams: []string{"path"},
 	Style:        style.ToolStyle(),
 	Schema: []byte(`{
 	"type": "object",
@@ -84,7 +84,7 @@ func doWriteFile(path, content string, dryRun bool) (ToolResult, error) {
 var WriteFile = Tool{
 	Name:          "write_file",
 	Description:   "Create a new file or completely overwrite an existing file with the given content. Use for new files or full rewrites only. Path can be relative to current directory or absolute.",
-	DisplayParam:  "path",
+	DisplayParams:  []string{"path"},
 	Style:         style.ToolStyle(),
 	IsDestructive: func(args map[string]interface{}) bool { return true },
 	Schema: []byte(`{
@@ -185,7 +185,7 @@ func doEditFile(path, oldStr, newStr string, replaceAll bool, dryRun bool) (Tool
 var EditFile = Tool{
 	Name:          "edit_file",
 	Description:   "Perform a precise string replacement in an existing file. old_string must match exactly. replace_all replaces every occurrence. Prefer over write_file for modifications. Path can be relative to current directory or absolute.",
-	DisplayParam:  "path",
+	DisplayParams:  []string{"path"},
 	Style:         style.ToolStyle(),
 	IsDestructive: func(args map[string]interface{}) bool { return true },
 	Schema: []byte(`{

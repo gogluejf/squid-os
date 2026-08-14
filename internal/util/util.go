@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// Truncate shortens s to maxLen characters, appending "..." if truncated.
-func Truncate(s string, maxLen int) string {
+// TruncateChars shortens s to maxLen characters, appending "..." if truncated.
+func TruncateChars(s string, maxLen int) string {
 	if maxLen <= 0 {
 		return ""
 	}
@@ -22,6 +22,18 @@ func Truncate(s string, maxLen int) string {
 		return s[:maxLen]
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// TruncateWords limits s to maxWords, cutting at word boundaries.
+func TruncateWords(s string, maxWords int) string {
+	if maxWords <= 0 {
+		return ""
+	}
+	words := strings.Fields(s)
+	if len(words) <= maxWords {
+		return s
+	}
+	return strings.Join(words[:maxWords], " ")
 }
 
 // FriendlyModDate returns a human-readable relative time string for a modified date.

@@ -13,7 +13,7 @@ import (
 var Open = Tool{
 	Name:         "open",
 	Description:  "Open a file, URL, or directory with the system default application (xdg-open on Linux, open on macOS, start on Windows). Use for launching browsers, editors, or previewing files.",
-	DisplayParam: "path",
+	DisplayParams: []string{"path"},
 	Style:        style.ToolStyle(),
 	Schema: []byte(`{
 	"type": "object",

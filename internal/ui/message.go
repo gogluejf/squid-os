@@ -252,7 +252,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 			}
 			allOthers := append([]string{}, parts...)
 			allOthers = append(allOthers, fixedParts...)
-			parts = append(parts, t.Style.Param.Render(util.Truncate(display, availablePartWidth(boxWidth, allOthers))))
+			parts = append(parts, t.Style.Param.Render(util.TruncateChars(display, availablePartWidth(boxWidth, allOthers))))
 		}
 		parts = append(parts, fixedParts...)
 
@@ -503,8 +503,8 @@ func renderSideBySideDiffContent(lines []diffLine, contentW int, s style.StyleLa
 
 	var result []string
 	for _, p := range pairs {
-		lText := util.Truncate(p.left, leftW-numWidth-6)
-		rText := util.Truncate(p.right, rightW-numWidth-6)
+		lText := util.TruncateChars(p.left, leftW-numWidth-6)
+		rText := util.TruncateChars(p.right, rightW-numWidth-6)
 
 		oldStr := "-"
 		if p.oldLn > 0 {
@@ -678,7 +678,7 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, ex
 			}
 			allOthers := append([]string{}, parts...)
 			allOthers = append(allOthers, fixedParts...)
-			parts = append(parts, t.Style.Param.Render(util.Truncate(display, availablePartWidth(boxWidth, allOthers))))
+			parts = append(parts, t.Style.Param.Render(util.TruncateChars(display, availablePartWidth(boxWidth, allOthers))))
 		}
 		parts = append(parts, fixedParts...)
 

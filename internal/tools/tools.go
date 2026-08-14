@@ -3,6 +3,7 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -54,13 +55,13 @@ type ChildSessionRef struct {
 
 // Tool defines the contract for a callable tool.
 type Tool struct {
-	Name         string
-	Description  string
-	DisplayParam string
-	Style        style.StyleLabel
-	Schema       []byte
-	Execute      func(args map[string]interface{}, ctx RuntimeContext) ToolResult
-	Preview      func(args map[string]interface{}, ctx RuntimeContext) ToolResult
+	Name          string
+	Description   string
+	DisplayParams []string
+	Style         style.StyleLabel
+	Schema        []byte
+	Execute       func(args map[string]interface{}, ctx RuntimeContext) ToolResult
+	Preview       func(args map[string]interface{}, ctx RuntimeContext) ToolResult
 	// IsDestructive is optional. If present, it returns true if the tool call modifies
 	// disk state, makes network calls, or otherwise has security implications.
 	// nil means the tool is never destructive. Used by the authorization
@@ -150,30 +151,37 @@ func (r *Registry) List() []Tool {
 	return cp
 }
 
-// DisplayValue extracts the display-friendly value from args JSON string using
-// the tool's DisplayParam. Returns "" if the param isn't set or not found in args.
+// DisplayValue extracts display-friendly values from args JSON string using
+// the tool's DisplayParams. Returns the values joined by " · ".
 func (t *Tool) DisplayValue(argsJSON string) string {
-	if t == nil || t.DisplayParam == "" || argsJSON == "" {
+	if t == nil || len(t.DisplayParams) == 0 || argsJSON == "" {
 		return ""
 	}
 	var args map[string]interface{}
 	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 		return ""
 	}
-	val, ok := args[t.DisplayParam]
-	if !ok {
+	var parts []string
+	for _, key := range t.DisplayParams {
+		val, ok := args[key]
+		if !ok {
+			continue
+		}
+		switch v := val.(type) {
+		case string:
+			if v != "" {
+				parts = append(parts, v)
+			}
+		case float64:
+			parts = append(parts, fmt.Sprintf("%g", v))
+		case bool:
+			parts = append(parts, fmt.Sprintf("%v", v))
+		}
+	}
+	if len(parts) == 0 {
 		return ""
 	}
-	switch v := val.(type) {
-	case string:
-		return v
-	case float64:
-		return fmt.Sprintf("%g", v)
-	case bool:
-		return fmt.Sprintf("%v", v)
-	default:
-		return ""
-	}
+	return strings.Join(parts, " · ")
 }
 
 // IsAgentTool returns true if the given tool name is an agent delegation tool.

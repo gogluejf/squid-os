@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"squid-os/internal/style"
+	"squid-os/internal/util"
 )
 
 var ListAgents = Tool{
@@ -26,11 +27,15 @@ var ListAgents = Tool{
 var CallAgent = Tool{
 	Name:         "call_agent",
 	Description:  "Run an installed callable agent and return its final answer.",
-	DisplayParam: "agent",
+	DisplayParams: []string{"agent", "label"},
 	Style:        style.AgentStyle(),
 	Schema: []byte(`{
 		"type": "object",
 		"properties": {
+			"label": {
+				"type": "string",
+				"description": "Short description (10 words max) of the caller's intent for this agent call. Used for display."
+			},
 			"agent": {
 				"type": "string",
 				"description": "Name of the installed agent to execute. The agent must be allowed by the current session's callable agent scope."
@@ -59,12 +64,17 @@ var CallAgent = Tool{
 }
 
 var InlineAgent = Tool{
-	Name:        "inline_agent",
-	Description: "Run an ad hoc inline agent and return its final answer.",
-	Style:       style.AgentStyle(),
+	Name:         "inline_agent",
+	Description:  "Run an ad hoc inline agent and return its final answer.",
+	DisplayParams: []string{"label"},
+	Style:        style.AgentStyle(),
 	Schema: []byte(`{
 		"type": "object",
 		"properties": {
+			"label": {
+				"type": "string",
+				"description": "Short description (15 words max) of the caller's intent for this inline agent call. Used for display."
+			},
 			"prompt": {
 				"type": "string",
 				"description": "Task or instruction to send to the inline agent."
@@ -145,8 +155,13 @@ func executeCallAgent(args map[string]interface{}, ctx RuntimeContext) ToolResul
 	cfg := ctx.Config
 	name, _ := args["agent"].(string)
 	prompt, _ := args["prompt"].(string)
+	label, _ := args["label"].(string)
 	if name == "" || prompt == "" {
 		return failure("agent and prompt are required")
+	}
+	label = util.TruncateWords(label, 15)
+	if label != "" {
+		args["label"] = label
 	}
 	ref, ok := findCapability(cfg.Agents, name)
 	if !ok {
@@ -164,8 +179,13 @@ func executeCallAgent(args map[string]interface{}, ctx RuntimeContext) ToolResul
 
 func executeInlineAgent(args map[string]interface{}, ctx RuntimeContext) ToolResult {
 	prompt, _ := args["prompt"].(string)
+	label, _ := args["label"].(string)
 	if prompt == "" {
 		return failure("prompt is required")
+	}
+	label = util.TruncateWords(label, 15)
+	if label != "" {
+		args["label"] = label
 	}
 	return executeAgentCLI("", prompt, args, ctx, args)
 }

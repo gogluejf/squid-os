@@ -1,0 +1,446 @@
+{
+    "plan_name": "multimodal-attachments",
+    "title": "Portable Multimodal Attachments",
+    "problem": "Squid only supports one extension-detected image path, writes against prospective session storage, and lacks reusable ingestion, model filtering, rich references, and media inspection.",
+    "goal": "Provide session-local, portable attachments from files, URLs, clipboard, and tools through one reusable media contract, with safe temporary persistence, model-aware delivery, visible chips, accurate accounting, and graceful fallback.",
+    "milestones": [
+        {
+            "number": "1",
+            "name": "Attachment Workspace",
+            "pattern": [
+                "Port and Adapter; Repository; Transactional Workspace"
+            ],
+            "objective": "Create the reusable attachment model and runtime workspace used by composer input, tools, persistence, and provider delivery.",
+            "success": "Attachments are session-local, content-validated, safely stored in temporary or persistent workspaces, and survive first-save and fork operations.",
+            "diagram": "flowchart LR\n    S[Local File URL Clipboard Tool] --> I[Attachment Service]\n    I --> V[Validation and MIME Detection]\n    V --> W[Runtime Workspace]\n    W --> R[Session Attachment Registry]\n    W --> P[Persistent Media on Save]",
+            "tasks": [
+                {
+                    "number": "1.1",
+                    "name": "Define attachment registry and workspace contract",
+                    "type": "feature",
+                    "what": "Replace the single image-path concept with persisted attachment metadata and a runtime workspace abstraction shared by all ingestion sources.",
+                    "why": "A stable contract prevents duplicated composer/tool logic and keeps canonical references portable across session moves.",
+                    "files": [
+                        "+ internal/media/attachment.go",
+                        "+ internal/media/workspace.go",
+                        "~ internal/config/session.go",
+                        "~ internal/chat/session.go"
+                    ],
+                    "snippet": [
+                        "type Attachment struct {\n    ID string\n    RelativePath string\n    DisplayName string\n    MIME string\n    Kind Kind\n    Size int64\n    SHA256 string\n    Source Source\n    DerivedFrom string\n}\n\ntype Workspace interface {\n    MediaDir() string\n    Resolve(ref string) (Attachment, string, error)\n    Ingest(ctx context.Context, source Source) (Attachment, error)\n}"
+                    ],
+                    "acceptance": [
+                        "Session documents persist a top-level attachments collection and messages can retain multiple @file references.",
+                        "All stored paths are session-relative and traversal-safe.",
+                        "Legacy ImagePath messages remain loadable through migration or compatibility projection.",
+                        "Unsaved and incognito sessions resolve attachments without writing under persistent session storage."
+                    ],
+                    "verify": [
+                        "go test ./internal/media ./internal/config ./internal/chat"
+                    ]
+                },
+                {
+                    "number": "1.2",
+                    "name": "Implement safe reusable ingestion",
+                    "type": "feature",
+                    "what": "Implement local-file, URL, byte-stream, and clipboard ingestion behind the attachment service with content MIME detection, hashing, deduplication, and limits.",
+                    "why": "Every caller needs identical safety, naming, validation, and storage behavior.",
+                    "files": [
+                        "+ internal/media/ingest.go",
+                        "+ internal/media/mime.go",
+                        "+ internal/media/url.go",
+                        "+ internal/media/limits.go"
+                    ],
+                    "snippet": [
+                        "type Limits struct {\n    MaxFiles int\n    MaxBytes int64\n    MaxDownloadBytes int64\n    DownloadTimeout time.Duration\n    MaxRedirects int\n}\n\ntype Source struct {\n    Kind SourceKind\n    Path string\n    URL string\n    Name string\n    Reader io.Reader\n}"
+                    ],
+                    "acceptance": [
+                        "MIME is detected from content with extension used only as a hint.",
+                        "URL ingestion enforces scheme, timeout, redirect, size, and private-network SSRF policy.",
+                        "Duplicate content reuses one session attachment while preserving a usable display reference.",
+                        "Partial or rejected ingestion leaves no orphaned final media file."
+                    ],
+                    "verify": [
+                        "go test ./internal/media"
+                    ]
+                },
+                {
+                    "number": "1.3",
+                    "name": "Migrate and fork complete attachment workspaces",
+                    "type": "feature",
+                    "what": "Move temporary media on first explicit save and copy complete media trees during session forks while preserving attachment references.",
+                    "why": "Autosave-off must not leak data into persistent sessions, and forked sessions must remain self-contained.",
+                    "files": [
+                        "~ internal/app/session_persistence.go",
+                        "~ internal/config/session.go",
+                        "~ internal/chat/session.go",
+                        "+ internal/media/migrate.go"
+                    ],
+                    "snippet": [
+                        "type MigrationResult struct {\n    Workspace Workspace\n    Moved []string\n}\n\nfunc PersistWorkspace(ctx context.Context, src Workspace, destination string) (MigrationResult, error)\nfunc CopyWorkspace(ctx context.Context, srcDir, destinationDir string) error"
+                    ],
+                    "acceptance": [
+                        "Autosave-off attachment ingestion writes only to a runtime temp directory until explicit save.",
+                        "First save publishes chat metadata and media as one recoverable operation and updates runtime resolution.",
+                        "Fork copies attachments and media unchanged while retaining session-local identity.",
+                        "A failed move or copy does not leave a session document referencing missing media."
+                    ],
+                    "verify": [
+                        "go test ./internal/media ./internal/config ./internal/app ./internal/chat"
+                    ]
+                },
+                {
+                    "number": "1.4",
+                    "name": "Manage incognito attachment lifecycle",
+                    "type": "feature",
+                    "what": "Allocate isolated incognito workspaces, remove them on normal exit, and perform bounded stale-workspace cleanup at startup.",
+                    "why": "Incognito attachments must stay ephemeral without allowing abandoned temporary files to accumulate indefinitely.",
+                    "files": [
+                        "~ internal/app/app.go",
+                        "~ internal/app/tui_session.go",
+                        "+ internal/media/cleanup.go",
+                        "~ internal/run/run.go"
+                    ],
+                    "snippet": [
+                        "type CleanupPolicy struct {\n    Root string\n    OlderThan time.Duration\n    MaxEntries int\n}\n\nfunc CleanupStale(policy CleanupPolicy) error"
+                    ],
+                    "acceptance": [
+                        "Incognito and normal unsaved runtime media use separate runtime directories.",
+                        "Normal incognito shutdown removes its workspace.",
+                        "Startup cleanup is bounded and removes only stale Squid-owned incognito directories.",
+                        "Crash leftovers never become visible as saved sessions."
+                    ],
+                    "verify": [
+                        "go test ./internal/media ./internal/app ./internal/run"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "2",
+            "name": "Attachment Composer",
+            "pattern": [
+                "Reference Token; Progressive Disclosure; Bounded Search"
+            ],
+            "objective": "Let users discover, ingest, edit, and clearly recognize canonical capability and file references in the composer and history.",
+            "success": "Users can attach from bounded search, paths, URLs, and clipboard; large pastes become text attachments; all references render as distinct chips.",
+            "diagram": "flowchart LR\n    K[At Completion or Paste] --> C[Composer Controller]\n    C --> S[Bounded Search Roots]\n    C --> I[Shared Attachment Service]\n    I --> T[Canonical File Reference]\n    T --> H[Chip Renderer and History]",
+            "tasks": [
+                {
+                    "number": "2.1",
+                    "name": "Add bounded file completion and direct source entry",
+                    "type": "feature",
+                    "what": "Extend @ completion with files from configurable search roots, existing session media, direct paths, and media URLs; initially configure only the working directory.",
+                    "why": "Bounded roots stay useful and efficient without intrusive home-directory scans.",
+                    "files": [
+                        "~ internal/app/capability_completion.go",
+                        "+ internal/app/file_completion.go",
+                        "~ internal/app/app.go",
+                        "~ internal/config/settings.go"
+                    ],
+                    "snippet": [
+                        "type FileSearchConfig struct {\n    Roots []string\n    MaxDepth int\n    MaxResults int\n    Ignore []string\n}\n\ntype ReferenceCandidate struct {\n    Kind string\n    Name string\n    Source string\n}"
+                    ],
+                    "acceptance": [
+                        "Default file search root is only the current working directory.",
+                        "Search roots accept a configurable string array for future Pictures or Documents opt-in.",
+                        "Search ignores configured heavy or hidden directories and obeys depth and result bounds.",
+                        "Selecting an external file or URL ingests it before inserting a canonical @file reference."
+                    ],
+                    "verify": [
+                        "go test ./internal/app ./internal/config"
+                    ]
+                },
+                {
+                    "number": "2.2",
+                    "name": "Handle clipboard files and bounded text paste",
+                    "type": "feature",
+                    "what": "Handle Ctrl+V and Shift+Insert through one paste flow: ingest clipboard files/images, insert normal text, and convert text above a configurable threshold into a text attachment.",
+                    "why": "Paste should feel native while preventing very large text from overwhelming the composer or request.",
+                    "files": [
+                        "~ internal/app/keymap.go",
+                        "~ internal/app/input.go",
+                        "+ internal/app/paste.go",
+                        "~ internal/config/settings.go",
+                        "~ internal/ui/help.go"
+                    ],
+                    "snippet": [
+                        "type PasteConfig struct {\n    LargeTextBytes int\n}\n\ntype ClipboardPayload struct {\n    Text string\n    Files []string\n    Image []byte\n    MIME string\n}"
+                    ],
+                    "acceptance": [
+                        "Ctrl+V and Shift+Insert invoke the same attachment-aware paste behavior.",
+                        "Text below the threshold is inserted directly without changing ordinary terminal paste behavior.",
+                        "Text above the default 32 KiB configurable threshold is stored as a text attachment and inserts @file reference text.",
+                        "Notifications identify clipboard, local-file, or URL origin and the resulting workspace media path."
+                    ],
+                    "verify": [
+                        "go test ./internal/app ./internal/ui ./internal/config"
+                    ]
+                },
+                {
+                    "number": "2.3",
+                    "name": "Render canonical references as visible chips",
+                    "type": "feature",
+                    "what": "Render file, skill, agent, and tool references as emoji chips in composer text and historical user messages without altering stored canonical text.",
+                    "why": "Distinct, high-contrast chips let users spot active references without carefully reading every message.",
+                    "files": [
+                        "+ internal/ui/reference.go",
+                        "~ internal/ui/message.go",
+                        "~ internal/style/styles.go",
+                        "~ internal/app/render.go"
+                    ],
+                    "snippet": [
+                        "type ReferenceKind string\n\nconst (\n    ReferenceFile ReferenceKind = \"file\"\n    ReferenceSkill ReferenceKind = \"skill\"\n    ReferenceAgent ReferenceKind = \"agent\"\n    ReferenceTool ReferenceKind = \"tool\"\n)\n\nfunc RenderReferences(text string, background string) string"
+                    ],
+                    "acceptance": [
+                        "All four qualified reference kinds render with emoji, name, padding, and a shared contrasting soft-gray background.",
+                        "Chip colors remain distinguishable on the user-message background and narrow terminals.",
+                        "History rendering derives chips from canonical text after reload.",
+                        "Malformed or unknown references remain readable plain text."
+                    ],
+                    "verify": [
+                        "go test ./internal/ui ./internal/app ./internal/style"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "3",
+            "name": "Model-Aware Delivery",
+            "pattern": [
+                "Anti-Corruption Layer; Capability Gate; Graceful Degradation"
+            ],
+            "objective": "Resolve canonical references into generic GoAI parts, filter known restrictions, attempt unknown models, and recover cleanly from media rejection.",
+            "success": "Supported media reaches each provider through GoAI, unsupported media never crashes model switching, and accounting includes attachment costs.",
+            "diagram": "sequenceDiagram\n    participant Session\n    participant Resolver\n    participant Capability\n    participant GoAI\n    participant Provider\n    Session->>Resolver: Canonical references\n    Resolver->>Capability: Classified attachments\n    Capability->>GoAI: Allowed generic parts\n    GoAI->>Provider: Provider wire format\n    Provider-->>GoAI: Success or media rejection\n    GoAI-->>Capability: Rejection\n    Capability->>GoAI: Retry without rejected media",
+            "tasks": [
+                {
+                    "number": "3.1",
+                    "name": "Build generic GoAI attachment parts",
+                    "type": "feature",
+                    "what": "Resolve every referenced attachment at context-build time into generic GoAI image, file, or bounded inline-text parts while retaining canonical message text.",
+                    "why": "Squid should own attachment semantics while GoAI owns provider-specific wire conversion.",
+                    "files": [
+                        "~ internal/chat/context.go",
+                        "~ internal/chat/engine.go",
+                        "~ internal/chat/image.go",
+                        "+ internal/chat/attachment.go",
+                        "~ internal/config/session.go"
+                    ],
+                    "snippet": [
+                        "type ResolvedAttachment struct {\n    Attachment media.Attachment\n    Part goai_provider.Part\n    EstimatedTokens int\n}\n\nfunc ResolveMessageAttachments(msg config.Message, workspace media.Workspace) ([]ResolvedAttachment, []error)"
+                    ],
+                    "acceptance": [
+                        "Messages support multiple referenced attachments and reference removal prevents delivery.",
+                        "Images use PartImage and supported documents use PartFile with MIME and filename metadata.",
+                        "Text attachments are injected as bounded text with explicit source and truncation markers.",
+                        "Missing or corrupt files produce an omission marker rather than aborting context construction."
+                    ],
+                    "verify": [
+                        "go test ./internal/chat ./internal/config"
+                    ]
+                },
+                {
+                    "number": "3.2",
+                    "name": "Apply model restrictions with unknown-model fallback",
+                    "type": "feature",
+                    "what": "Expose GoAI model capabilities to request preparation, omit known-unsupported modalities, attempt unknown modalities, and retry once without media after a classified provider rejection.",
+                    "why": "Fast-changing model catalogs should work optimistically without allowing unsupported media to crash a session after model switching.",
+                    "files": [
+                        "~ internal/chat/provider/provider.go",
+                        "~ internal/chat/engine.go",
+                        "+ internal/chat/media_policy.go",
+                        "~ internal/chat/stream.go",
+                        "~ internal/app/stream.go"
+                    ],
+                    "snippet": [
+                        "type MediaDecision string\n\nconst (\n    MediaAllow MediaDecision = \"allow\"\n    MediaOmit MediaDecision = \"omit\"\n    MediaAttempt MediaDecision = \"attempt\"\n)\n\ntype MediaPolicy interface {\n    Decide(caps *goai_provider.ModelCapabilities, kind media.Kind) MediaDecision\n    IsMediaRejection(error) bool\n}"
+                    ],
+                    "acceptance": [
+                        "Known supported attachments are sent and known unsupported attachments are omitted with visible reason text.",
+                        "Missing or unknown capability metadata attempts delivery.",
+                        "A classified media rejection retries exactly once without rejected attachments and notifies the user.",
+                        "Authentication, network, safety, and unrelated provider errors are never misclassified for retry."
+                    ],
+                    "verify": [
+                        "go test ./internal/chat ./internal/chat/provider ./internal/app"
+                    ]
+                },
+                {
+                    "number": "3.3",
+                    "name": "Verify GoAI provider media compatibility",
+                    "type": "test",
+                    "what": "Add adapter contract tests covering image and document conversion for every configured GoAI provider dialect and explicitly record unsupported combinations.",
+                    "why": "GoAI capability flags and generic parts do not guarantee each wire adapter serializes every media kind.",
+                    "files": [
+                        "+ internal/chat/provider/media_contract_test.go",
+                        "~ internal/chat/context_test.go",
+                        "~ internal/chat/provider/models.go"
+                    ],
+                    "snippet": [
+                        "type MediaContractCase struct {\n    Provider string\n    Dialect string\n    Kind media.Kind\n    Expected Support\n}"
+                    ],
+                    "acceptance": [
+                        "Tests cover OpenAI Responses, OpenAI-compatible Chat Completions, Anthropic, Gemini, Bedrock, and configured local dialects.",
+                        "OpenAI-compatible file-part omission is represented as unsupported rather than silently accepted.",
+                        "Images and PDFs are promised only for adapter-model combinations with verified serialization.",
+                        "Audio and video remain storable but are not advertised as direct GoAI input until generic parts exist."
+                    ],
+                    "verify": [
+                        "go test ./internal/chat/provider ./internal/chat"
+                    ]
+                },
+                {
+                    "number": "3.4",
+                    "name": "Account for attachment input costs",
+                    "type": "feature",
+                    "what": "Extend message and tool-result token accounting with media-aware estimates and bounded extracted-text costs.",
+                    "why": "Context limits and analytics must include attachment input rather than counting base64 bytes as ordinary text or ignoring media.",
+                    "files": [
+                        "~ internal/chat/context.go",
+                        "~ internal/chat/token_tally.go",
+                        "~ internal/chat/tool_exec.go",
+                        "~ internal/config/session.go"
+                    ],
+                    "snippet": [
+                        "type AttachmentUsage struct {\n    ID string\n    Kind media.Kind\n    Bytes int64\n    EstimatedTokens int\n}\n\nfunc EstimateAttachmentTokens(a media.Attachment, model string) int"
+                    ],
+                    "acceptance": [
+                        "User attachment estimates contribute to context input totals without tokenizing base64 payloads.",
+                        "Text extracted or returned through inspect_media contributes to user or tool-execution accounting as appropriate.",
+                        "Unknown media costs use documented conservative estimates and remain distinguishable from exact text counts.",
+                        "Compaction and reload preserve consistent next-request totals."
+                    ],
+                    "verify": [
+                        "go test ./internal/chat ./internal/config"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "4",
+            "name": "Autonomous Media Inspection",
+            "pattern": [
+                "Application Service; Shared Kernel; Text Result Adapter"
+            ],
+            "objective": "Allow assistants to inspect session media, external paths, and URLs autonomously without duplicating ingestion or requiring multimodal tool-result payloads.",
+            "success": "inspect_media uses the shared workspace and a media-capable inference path, returning bounded text with proper authorization and accounting.",
+            "diagram": "flowchart LR\n    A[Assistant Tool Call] --> T[inspect_media]\n    T --> I[Shared Attachment Service]\n    I --> W[Session Workspace]\n    W --> M[Inspection Model]\n    M --> X[Bounded Text Tool Result]",
+            "tasks": [
+                {
+                    "number": "4.1",
+                    "name": "Add reusable media inspection service",
+                    "type": "feature",
+                    "what": "Create an inspection application service that resolves or ingests media through the shared attachment workspace and queries a configured media-capable model.",
+                    "why": "The tool and future media workflows need one inference contract independent of composer and provider details.",
+                    "files": [
+                        "+ internal/media/inspect.go",
+                        "~ internal/chat/engine.go",
+                        "~ internal/config/settings.go",
+                        "~ internal/runtime/runtime.go"
+                    ],
+                    "snippet": [
+                        "type Inspector interface {\n    Inspect(ctx context.Context, request InspectRequest) (InspectResult, error)\n}\n\ntype InspectRequest struct {\n    Source string\n    Query string\n    SessionDir string\n}\n\ntype InspectResult struct {\n    Text string\n    AttachmentID string\n    InputTokens int\n}"
+                    ],
+                    "acceptance": [
+                        "Inspection accepts canonical session references, local paths, and HTTP or HTTPS URLs.",
+                        "All non-session sources pass through normal ingestion limits and security policy.",
+                        "Inspection selects a configured media-capable model or returns a clear unsupported error.",
+                        "Inspection output is bounded text suitable for current GoAI tool-result representation."
+                    ],
+                    "verify": [
+                        "go test ./internal/media ./internal/chat ./internal/runtime ./internal/config"
+                    ]
+                },
+                {
+                    "number": "4.2",
+                    "name": "Expose inspect_media tool",
+                    "type": "feature",
+                    "what": "Register inspect_media with path_or_url and query arguments, session runtime context, authorization behavior, and text-only results.",
+                    "why": "Assistants need an autonomous, auditable path to understand media during tool loops.",
+                    "files": [
+                        "+ internal/tools/media.go",
+                        "~ internal/tools/tools.go",
+                        "~ internal/chat/session.go",
+                        "~ internal/chat/tool_exec.go",
+                        "~ internal/runtime/runtime.go"
+                    ],
+                    "snippet": [
+                        "var InspectMediaTool = Tool{\n    Name: \"inspect_media\",\n    // path_or_url, query\n}\n\ntype RuntimeContext struct {\n    // existing fields\n    MediaInspector media.Inspector\n}"
+                    ],
+                    "acceptance": [
+                        "The tool schema requires path_or_url and query strings.",
+                        "Local and remote sources follow existing tool authorization semantics before reading or downloading.",
+                        "Successful execution returns inspection text and records attachment and token usage.",
+                        "Tool execution never embeds binary or image content in ToolOutput."
+                    ],
+                    "verify": [
+                        "go test ./internal/tools ./internal/chat ./internal/runtime"
+                    ]
+                }
+            ]
+        },
+        {
+            "number": "5",
+            "name": "Compatibility and Release Confidence",
+            "pattern": [
+                "Characterization Test; Schema Evolution; Executable Specification"
+            ],
+            "objective": "Protect legacy sessions and verify complete attachment workflows across save modes, model switches, and tool use.",
+            "success": "Legacy and new sessions load safely, agreed behavior is documented, and end-to-end tests cover critical workflows and failures.",
+            "diagram": "flowchart TD\n    L[Legacy Session] --> M[Compatibility Load]\n    N[New Attachment Flow] --> E[End to End Tests]\n    M --> E\n    E --> D[Updated Attachment Specification]\n    D --> R[Release Ready]",
+            "tasks": [
+                {
+                    "number": "5.1",
+                    "name": "Cover end-to-end attachment lifecycles",
+                    "type": "test",
+                    "what": "Add integration tests for composer ingestion, unsaved save migration, incognito cleanup, fork, model switching, retry, reload, and inspect_media.",
+                    "why": "Attachment behavior crosses storage, UI, context construction, providers, and tools where isolated tests cannot catch contract gaps.",
+                    "files": [
+                        "+ internal/app/attachment_integration_test.go",
+                        "+ internal/chat/attachment_integration_test.go",
+                        "~ internal/config/session_test.go",
+                        "~ internal/run/session_bootstrap_test.go"
+                    ],
+                    "snippet": [
+                        "type AttachmentLifecycleCase struct {\n    Source string\n    SaveMode string\n    ModelCapability string\n    ExpectedDelivery string\n}"
+                    ],
+                    "acceptance": [
+                        "Tests prove autosave-off does not write persistent media before explicit save.",
+                        "Saved, forked, reloaded, and historical references resolve to valid media.",
+                        "Known unsupported and provider-rejected media produce omission and retry behavior without losing message history.",
+                        "Incognito cleanup and stale startup cleanup are bounded and safe.",
+                        "Legacy ImagePath sessions remain usable."
+                    ],
+                    "verify": [
+                        "go test ./internal/app ./internal/chat ./internal/config ./internal/run ./internal/tools ./internal/media"
+                    ]
+                },
+                {
+                    "number": "5.2",
+                    "name": "Update attachment specification and operator guidance",
+                    "type": "doc",
+                    "what": "Rewrite the attachment design document with the final contracts, supported tiers, limits, capability policy, temporary storage lifecycle, search roots, paste behavior, and inspection flow.",
+                    "why": "The plan and implementation need one concise source of truth for future provider and media expansion.",
+                    "files": [
+                        "~ .squid-os/plans/attachment.md",
+                        "~ docs/README.md"
+                    ],
+                    "snippet": [
+                        "## Supported tiers\n## Shared attachment contract\n## Search and paste behavior\n## Capability and retry policy\n## Temporary, saved, forked, and incognito lifecycle\n## inspect_media contract"
+                    ],
+                    "acceptance": [
+                        "Specification states images and verified PDFs as the initial direct-provider baseline.",
+                        "Specification records unknown capability attempt, known unsupported omission, and one classified retry.",
+                        "Specification records configurable search roots with working directory as the only default.",
+                        "Specification records Ctrl+V, Shift+Insert, and configurable 32 KiB large-text ingestion.",
+                        "Documentation matches implemented storage and fork behavior."
+                    ],
+                    "verify": [
+                        "git diff --check"
+                    ]
+                }
+            ]
+        }
+    ]
+}

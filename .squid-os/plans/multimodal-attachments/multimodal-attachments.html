@@ -230,8 +230,8 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
                     <span class="ms-name">Attachment Workspace</span>
                 </div>
                 <span class="pattern-tag">Port and Adapter; Repository; Transactional Workspace</span> 
-                <p class="ms-count">4 Task(s)</p>
-                <ul class="ms-task-list"><li>1.1 - Define attachment registry and workspace contract</li><li>1.2 - Implement safe reusable ingestion</li><li>1.3 - Migrate and fork complete attachment workspaces</li><li>1.4 - Manage incognito attachment lifecycle</li></ul>
+                <p class="ms-count">5 Task(s)</p>
+                <ul class="ms-task-list"><li>1.1 - Define attachment registry and workspace contract</li><li>1.2 - Implement safe reusable ingestion</li><li>1.3 - Migrate and fork complete attachment workspaces</li><li>1.4 - Manage incognito attachment lifecycle</li><li>1.5 - Remove legacy single-image support</li></ul>
             </div>
         </a>
         <a href="#attachment-composer" class="milestone-card-link">
@@ -358,7 +358,7 @@ type Workspace interface {
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Session documents persist a top-level attachments collection and messages can retain multiple @file references.</li><li>All stored paths are session-relative and traversal-safe.</li><li>Legacy ImagePath messages remain loadable through migration or compatibility projection.</li><li>Unsaved and incognito sessions resolve attachments without writing under persistent session storage.</li></ul>
+                    <ul class="acceptance-list"><li>Session documents persist a top-level attachments collection and messages can retain multiple @file references.</li><li>All stored paths are session-relative and traversal-safe.</li><li>Unsaved and incognito sessions resolve attachments without writing under persistent session storage.</li></ul>
                 </div>
                 </div>
                 <div class="task-footer"><span class="task-verify">✔ go test ./internal/media ./internal/config ./internal/chat</span> </div>
@@ -448,7 +448,7 @@ func CopyWorkspace(ctx context.Context, srcDir, destinationDir string) error</co
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Autosave-off attachment ingestion writes only to a runtime temp directory until explicit save.</li><li>First save publishes chat metadata and media as one recoverable operation and updates runtime resolution.</li><li>Fork copies attachments and media unchanged while retaining session-local identity.</li><li>A failed move or copy does not leave a session document referencing missing media.</li></ul>
+                    <ul class="acceptance-list"><li>Autosave-off attachment ingestion writes only to a runtime temp directory until explicit save.</li><li>First save publishes chat metadata and media as one recoverable operation and updates runtime resolution.</li><li>After first save, all new attachments ingest directly into the session media folder without temp indirection — autosave and manual saves only update chat.json.</li><li>Fork copies attachments and media unchanged while retaining session-local identity.</li><li>A failed move or copy does not leave a session document referencing missing media.</li></ul>
                 </div>
                 </div>
                 <div class="task-footer"><span class="task-verify">✔ go test ./internal/media ./internal/config ./internal/app ./internal/chat</span> </div>
@@ -493,6 +493,37 @@ func CleanupStale(policy CleanupPolicy) error</code></pre>
                 </div>
                 </div>
                 <div class="task-footer"><span class="task-verify">✔ go test ./internal/media ./internal/app ./internal/run</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 1.5</span>
+                        <span class="task-name">Remove legacy single-image support</span>
+                        <span class="layer-badge" style="background:#c586c0">refactor</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">Delete ImagePath from Message, remove image.go multimodal builders, and strip all image-specific code from context.go, engine.go, and stream.go. Replace with the new Attachments collection from 1.1.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Eliminates the dual-path maintenance burden. One attachment model, one ingestion path, one delivery path.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/config/session.go</li><li class="file-rm"><span class="action-sym">-</span>  internal/chat/image.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/context.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/engine.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/stream.go</li></ul>
+                </div>
+                    
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>Message struct has no ImagePath field.</li><li>BuildMultimodalContent is removed or unused.</li><li>Context building uses Attachments exclusively.</li><li>Existing sessions with ImagePath are migrated to Attachments on load — one-time conversion.</li><li>Tests pass with no image-specific code paths.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/chat ./internal/config</span> </div>
             </div></div>
         </section>
         <section id="attachment-composer" class="milestone-section">
@@ -610,7 +641,7 @@ type ClipboardPayload struct {
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Ctrl+V and Shift+Insert invoke the same attachment-aware paste behavior.</li><li>Text below the threshold is inserted directly without changing ordinary terminal paste behavior.</li><li>Text above the default 32 KiB configurable threshold is stored as a text attachment and inserts @file reference text.</li><li>Notifications identify clipboard, local-file, or URL origin and the resulting workspace media path.</li></ul>
+                    <ul class="acceptance-list"><li>Ctrl+V and Shift+Insert invoke the same attachment-aware paste behavior.</li><li>Text below the threshold is inserted directly without changing ordinary terminal paste behavior.</li><li>Text above the default 32 KiB configurable threshold is stored as a text attachment and inserts @file reference text.</li><li>Notifications identify clipboard, local-file, or URL origin and the resulting workspace media path.</li><li>Clipboard access works on macOS, WSL2, X11, and Wayland — research and select a library or shim that covers all four. If no single library works, implement a fallback chain that detects the environment and uses the correct tool (pbcopy/xclip/wl-clipboard). Gracefully degrade with a warning if none are available.</li></ul>
                 </div>
                 </div>
                 <div class="task-footer"><span class="task-verify">✔ go test ./internal/app ./internal/ui ./internal/config</span> </div>

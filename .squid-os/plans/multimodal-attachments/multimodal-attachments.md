@@ -68,7 +68,6 @@ type Workspace interface {
 
 - [ ] Session documents persist a top-level attachments collection and messages can retain multiple @file references.
 - [ ] All stored paths are session-relative and traversal-safe.
-- [ ] Legacy ImagePath messages remain loadable through migration or compatibility projection.
 - [ ] Unsaved and incognito sessions resolve attachments without writing under persistent session storage.
 
 **Verify:**
@@ -156,6 +155,7 @@ func CopyWorkspace(ctx context.Context, srcDir, destinationDir string) error
 
 - [ ] Autosave-off attachment ingestion writes only to a runtime temp directory until explicit save.
 - [ ] First save publishes chat metadata and media as one recoverable operation and updates runtime resolution.
+- [ ] After first save, all new attachments ingest directly into the session media folder without temp indirection — autosave and manual saves only update chat.json.
 - [ ] Fork copies attachments and media unchanged while retaining session-local identity.
 - [ ] A failed move or copy does not leave a session document referencing missing media.
 
@@ -203,6 +203,36 @@ func CleanupStale(policy CleanupPolicy) error
 
 ```bash
 go test ./internal/media ./internal/app ./internal/run
+```
+
+### 1.5. Remove legacy single-image support
+
+**Type:** refactor
+
+**What:** Delete ImagePath from Message, remove image.go multimodal builders, and strip all image-specific code from context.go, engine.go, and stream.go. Replace with the new Attachments collection from 1.1.
+
+**Why:** Eliminates the dual-path maintenance burden. One attachment model, one ingestion path, one delivery path.
+
+**Files:**
+
+- ~ internal/config/session.go
+- - internal/chat/image.go
+- ~ internal/chat/context.go
+- ~ internal/chat/engine.go
+- ~ internal/chat/stream.go
+
+**Acceptance Criteria:**
+
+- [ ] Message struct has no ImagePath field.
+- [ ] BuildMultimodalContent is removed or unused.
+- [ ] Context building uses Attachments exclusively.
+- [ ] Existing sessions with ImagePath are migrated to Attachments on load — one-time conversion.
+- [ ] Tests pass with no image-specific code paths.
+
+**Verify:**
+
+```bash
+go test ./internal/chat ./internal/config
 ```
 
 ---
@@ -306,6 +336,7 @@ type ClipboardPayload struct {
 - [ ] Text below the threshold is inserted directly without changing ordinary terminal paste behavior.
 - [ ] Text above the default 32 KiB configurable threshold is stored as a text attachment and inserts @file reference text.
 - [ ] Notifications identify clipboard, local-file, or URL origin and the resulting workspace media path.
+- [ ] Clipboard access works on macOS, WSL2, X11, and Wayland — research and select a library or shim that covers all four. If no single library works, implement a fallback chain that detects the environment and uses the correct tool (pbcopy/xclip/wl-clipboard). Gracefully degrade with a warning if none are available.
 
 **Verify:**
 

@@ -65,7 +65,7 @@ func (m *Model) setAuthMode() tea.Cmd {
 	}
 
 	m.setComponent(q)
-	m.refreshViewportFollowing()
+	m.refreshViewportAtBottom()
 	return q.BlinkCmd()
 }
 
@@ -261,7 +261,6 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 			}
 			m.session.UIStream.MsgIdx = result.MsgIdx
 			m.setAuthMode()
-			m.refreshViewportFollowing()
 			return m, nil
 
 		case chat.ToolExecContinue:

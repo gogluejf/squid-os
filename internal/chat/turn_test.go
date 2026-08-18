@@ -17,7 +17,7 @@ func TestPrepareTurnCommitsPendingInference(t *testing.T) {
 	s := &Session{Doc: config.NewSessionDoc(cfg)}
 	next := config.InferenceConfig{Provider: "openai", Model: "gpt"}
 	s.SetPendingInference(next)
-	s.Append(NewUserMessage("u", "hello", ""))
+	s.Append(NewUserMessage("u", "hello"))
 	if err := PrepareTurn(s); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestSyntheticMessagesUseInputTokensOnly(t *testing.T) {
 func TestPrepareTurnTransitionPlacement(t *testing.T) {
 	cfg := config.SessionConfig{Inference: config.InferenceConfig{Provider: "p", Model: "a"}, Tools: []string{"read"}}
 	s := &Session{Doc: config.NewSessionDoc(cfg)}
-	s.Append(NewUserMessage("u", "hello", ""))
+	s.Append(NewUserMessage("u", "hello"))
 	s.SetPendingInference(config.InferenceConfig{Provider: "p", Model: "b"})
 	s.Doc.Pending.Tools = &[]string{"bash"}
 	err := PrepareTurn(s)
@@ -82,7 +82,7 @@ func TestPrepareTurnSkillChangeIncludesBodyIDAndTokens(t *testing.T) {
 
 	cfg := config.SessionConfig{Inference: config.InferenceConfig{Provider: "p", Model: "m"}}
 	s := &Session{Doc: config.NewSessionDoc(cfg), Catalog: runtimeconfig.Catalog{Skills: registry}}
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 	s.SetPendingSkill("review")
 	if err := PrepareTurn(s); err != nil {
 		t.Fatal(err)
@@ -117,7 +117,7 @@ func TestPrepareTurnCapabilityChangeIsSyntheticAndVisible(t *testing.T) {
 	}
 	s := &Session{Doc: config.NewSessionDoc(cfg), Catalog: runtimeconfig.Catalog{Skills: registry}}
 	s.Doc.Pending = &config.PendingConfig{Skills: &next}
-	s.Append(NewUserMessage("u", "hello", ""))
+	s.Append(NewUserMessage("u", "hello"))
 
 	if err := PrepareTurn(s); err != nil {
 		t.Fatal(err)
@@ -137,7 +137,7 @@ func TestPrepareTurnCapabilityChangeIsSyntheticAndVisible(t *testing.T) {
 func TestPrepareTurnSkillChangeIsSynthetic(t *testing.T) {
 	cfg := config.SessionConfig{Inference: config.InferenceConfig{Provider: "p", Model: "m"}}
 	s := &Session{Doc: config.NewSessionDoc(cfg)}
-	s.Append(NewUserMessage("u", "hello", ""))
+	s.Append(NewUserMessage("u", "hello"))
 	s.SetPendingSkill("review")
 	if err := PrepareTurn(s); err != nil {
 		t.Fatal(err)

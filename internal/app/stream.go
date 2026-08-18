@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -105,7 +106,6 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 		Role:        config.RoleUser,
 		CreatedAt:   time.Now(),
 		Text:        text,
-		ImagePath:   m.attachedImage,
 		InputTokens: countTokensApprox(text),
 	}
 
@@ -120,7 +120,6 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 
 	m.textarea.SetValue("")
 	m.textarea.Blur()
-	m.attachedImage = ""
 	(&m).clearNotification()
 
 	return (&m).startStream()
@@ -139,12 +138,11 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			msg = result.Error.Error()
 		}
 
-		text, image, truncated := m.session.CancelTruncate()
+		text, truncated := m.session.CancelTruncate()
 		if truncated {
 			m.session.invalidateRenderFrom(len(m.session.Doc.Messages))
 			if text != "" {
 				m.textarea.SetValue(text)
-				m.attachedImage = image
 			}
 		}
 
@@ -175,12 +173,11 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	case chat.LoopDone:
 		_ = config.PersistRefreshedProvider(m.paths, m.endpoints, m.session.CurrentInference().Provider)
 		if result.Cancelled {
-			text, image, truncated := m.session.CancelTruncate()
+			text, truncated := m.session.CancelTruncate()
 			if truncated {
 				m.session.invalidateRenderFrom(len(m.session.Doc.Messages))
 				if text != "" {
 					m.textarea.SetValue(text)
-					m.attachedImage = image
 				}
 			} else {
 				result.MsgIdx = chat.AppendStreamCancelledMessage(m.session.Session)
@@ -194,6 +191,11 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		return nm, autoSaveCmd
 
 	case chat.LoopContinue:
+		// Notify user about media-related events (omissions, retries)
+		if event.Text != "" && strings.HasPrefix(event.Text, "Retrying without attachments") {
+			(&m).setNotification(ui.NotificationInfo, event.Text)
+		}
+
 		if event.ToolCallDelta != "" {
 			m.refreshViewportFollowing()
 			return m, waitForStreamEvent(m.session.UIStream.Ch)
@@ -289,7 +291,7 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 func (m *Model) startStream() (tea.Model, tea.Cmd) {
 	m.setStreamMode()
 
-	ch := chat.StartStream(m.session.Session, m.endpoints)
+	ch := chat.StartStream(context.Background(), m.session.Session, m.endpoints)
 	m.session.UIStream.Ch = ch
 
 	m.refreshViewportAtBottom() // should it be following ? refreshViewportFollowing ? only sendmessage to gotobottom ??

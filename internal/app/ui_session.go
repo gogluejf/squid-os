@@ -35,28 +35,28 @@ func LoadRootUISession(sd config.SessionDoc, sourceName string, paths config.Pat
 	return &UISession{Session: session}, nil
 }
 
-func (u *UISession) destroyLastSequence() (userText, userImage string) {
+func (u *UISession) destroyLastSequence() (userText string) {
 	n := len(u.Doc.Messages)
 	if n == 0 {
-		return "", ""
+		return ""
 	}
 	for i := n - 1; i >= 0; i-- {
 		if u.Doc.Messages[i].Role == config.RoleUser {
 			seq := make([]config.Message, n-i)
 			copy(seq, u.Doc.Messages[i:])
 			u.undoStack = append(u.undoStack, seq)
-			userText, userImage = u.Doc.Messages[i].Text, u.Doc.Messages[i].ImagePath
+			userText = u.Doc.Messages[i].Text
 			u.TruncateTo(i)
 			u.invalidateRenderFrom(i)
-			return userText, userImage
+			return userText
 		}
 	}
-	return "", ""
+	return ""
 }
 
-func (u *UISession) undoDestroy() (textarea, image string, ok bool) {
+func (u *UISession) undoDestroy() (textarea string, ok bool) {
 	if len(u.undoStack) == 0 {
-		return "", "", false
+		return "", false
 	}
 	entry := u.undoStack[len(u.undoStack)-1]
 	u.undoStack = u.undoStack[:len(u.undoStack)-1]
@@ -69,11 +69,11 @@ func (u *UISession) undoDestroy() (textarea, image string, ok bool) {
 		next := u.undoStack[len(u.undoStack)-1]
 		for _, msg := range next {
 			if msg.Role == config.RoleUser {
-				return msg.Text, msg.ImagePath, true
+				return msg.Text, true
 			}
 		}
 	}
-	return "", "", true
+	return "", true
 }
 
 func (u *UISession) invalidateRenderFrom(i int) {

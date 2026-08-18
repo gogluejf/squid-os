@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -9,6 +10,7 @@ import (
 
 	"squid-os/internal/app"
 	"squid-os/internal/config"
+	"squid-os/internal/media"
 	runtimeconfig "squid-os/internal/runtime"
 )
 
@@ -111,6 +113,13 @@ func launchTUI(opts *TUIOptions) error {
 	if err != nil {
 		return err
 	}
+
+	// Clean up stale temporary workspaces from crashed or abandoned sessions.
+	_ = media.CleanupStale(media.CleanupPolicy{
+		Root:      cfg.paths.TempFolder,
+		OlderThan: 24 * time.Hour,
+		MaxEntries: 100,
+	})
 
 	var existing *config.SessionDoc
 	sessionName := opts.SessionName

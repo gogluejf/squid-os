@@ -47,7 +47,7 @@ func BenchmarkBuildContext_small(b *testing.B) {
 	messages := generateBuildContextSession(100, 5)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = BuildContext(messages, true)
+		_ = BuildContext(messages, true, "", nil, nil)
 	}
 }
 
@@ -57,7 +57,7 @@ func BenchmarkBuildContext_medium(b *testing.B) {
 	messages := generateBuildContextSession(500, 20)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = BuildContext(messages, true)
+		_ = BuildContext(messages, true, "", nil, nil)
 	}
 }
 
@@ -67,7 +67,7 @@ func BenchmarkBuildContext_large(b *testing.B) {
 	messages := generateBuildContextSession(2000, 50)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = BuildContext(messages, true)
+		_ = BuildContext(messages, true, "", nil, nil)
 	}
 }
 
@@ -77,7 +77,7 @@ func BenchmarkBuildContext_xlarge(b *testing.B) {
 	messages := generateBuildContextSession(10000, 100)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = BuildContext(messages, true)
+		_ = BuildContext(messages, true, "", nil, nil)
 	}
 }
 
@@ -87,7 +87,7 @@ func BenchmarkBuildContextDisabled(b *testing.B) {
 	messages := generateBuildContextSession(500, 20)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = BuildContext(messages, false)
+		_ = BuildContext(messages, false, "", nil, nil)
 	}
 }
 

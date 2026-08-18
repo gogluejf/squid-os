@@ -96,8 +96,12 @@ func (m Model) toggleIncognito() (Model, tea.Cmd) {
 	if m.incognito {
 		m.settings.LastSessionName = ""
 		_ = config.SaveSettings(m.paths, m.settings)
+		m.session.SetIncognito(true)
 		(&m).setNotification(ui.NotificationInfo, "incognito is on")
 	} else {
+		// Clean up the incognito workspace before switching back.
+		_ = m.session.CleanupWorkspace()
+
 		// Resume from this session's canonical location, whether root or child.
 		if doc, err := config.LoadSessionDoc(m.session.SessionDir); err == nil {
 			loaded, loadErr := chat.LoadSession(doc, m.session.SessionDir, m.paths, m.session.Catalog)

@@ -1,13 +1,19 @@
 package chat
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"squid-os/internal/config"
+	"squid-os/internal/media"
 	runtimeconfig "squid-os/internal/runtime"
+
+	goai_provider "github.com/zendev-sh/goai/provider"
 )
 
 // ---------------------------------------------------------------------------
@@ -74,7 +80,7 @@ func TestCalculateTokenTallySystemPromptBreakdown(t *testing.T) {
 
 func TestCalculateTokenTallyUserMessage(t *testing.T) {
 	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	session.Append(NewUserMessage("msg_1", "hello world", ""))
+	session.Append(NewUserMessage("msg_1", "hello world"))
 	tally := session.CalculateTokenTally()
 
 	if tally.Lifetime.Input.User <= 0 {
@@ -88,7 +94,7 @@ func TestCalculateTokenTallyUserMessage(t *testing.T) {
 
 func TestCalculateTokenTallyAssistantWithThinking(t *testing.T) {
 	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	session.Append(NewUserMessage("msg_1", "hello", ""))
+	session.Append(NewUserMessage("msg_1", "hello"))
 	session.Append(config.Message{
 		ID:              "msg_2",
 		Role:            config.RoleAssistant,
@@ -117,7 +123,7 @@ func TestCalculateTokenTallyAssistantWithThinking(t *testing.T) {
 
 func TestCalculateTokenTallyToolExecutionInput(t *testing.T) {
 	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	session.Append(NewUserMessage("msg_1", "hello", ""))
+	session.Append(NewUserMessage("msg_1", "hello"))
 	session.Append(config.Message{
 		ID:          "msg_2",
 		Role:        config.RoleAssistant,
@@ -158,7 +164,7 @@ func TestCalculateTokenTallySynthetic(t *testing.T) {
 
 func TestCalculateTokenTallyInputConsistency(t *testing.T) {
 	session := NewRootSession(config.SessionConfig{Tools: []string{"read_file"}}, config.Paths{}, runtimeconfig.Catalog{})
-	session.Append(NewUserMessage("msg_1", "hello world", ""))
+	session.Append(NewUserMessage("msg_1", "hello world"))
 	session.Append(config.Message{
 		ID:              "msg_2",
 		Role:            config.RoleAssistant,
@@ -210,7 +216,7 @@ func TestCalculateTokenTallyContextProjectionAlways(t *testing.T) {
 	// Even with compaction disabled, the context tally should project
 	// potential savings because BuildContext always computes the plan.
 	session := NewRootSession(config.SessionConfig{ContextCompaction: false}, config.Paths{}, runtimeconfig.Catalog{})
-	session.Append(NewUserMessage("msg_1", "hello", ""))
+	session.Append(NewUserMessage("msg_1", "hello"))
 	tally := session.CalculateTokenTally()
 
 	// A simple session with no file tools — no compaction opportunities
@@ -365,7 +371,7 @@ func TestCalculateTokenTallyFullSession(t *testing.T) {
 	session := NewRootSession(cfg, config.Paths{}, runtimeconfig.Catalog{})
 
 	// Add user message
-	session.Append(NewUserMessage("msg_1", "read this file", ""))
+	session.Append(NewUserMessage("msg_1", "read this file"))
 
 	// Add assistant with tool call (large execution result for compaction savings)
 	longContent := strings.Repeat("line of code content\n", 500)
@@ -431,7 +437,7 @@ func TestCalculateTokenTallyFullSession(t *testing.T) {
 
 func TestCalculateTokenTallyJSONRoundTrip(t *testing.T) {
 	session := NewRootSession(config.SessionConfig{Tools: []string{"read_file"}}, config.Paths{}, runtimeconfig.Catalog{})
-	session.Append(NewUserMessage("msg_1", "test", ""))
+	session.Append(NewUserMessage("msg_1", "test"))
 	tally := session.CalculateTokenTally()
 
 	// Marshal and unmarshal to verify JSON structure
@@ -485,7 +491,7 @@ func TestContextSavedCanBeNegative(t *testing.T) {
 			}(),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// Saved = Raw - Compacted; with tiny results, compacted may exceed raw
 	// The key invariant is that Saved is exactly Raw - Compacted, never clamped.
@@ -604,5 +610,233 @@ func TestSessionDocLegacyTotalTokensClearOnSave(t *testing.T) {
 	}
 	if savedDoc.TokenTally == nil {
 		t.Error("TokenTally should be present after save")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Attachment tokens: user messages with attachments contribute to
+// InputTokenTally.Attachment, not InputTokenTally.User
+// ---------------------------------------------------------------------------
+
+func TestCalculateTokenTallyAttachmentTokens(t *testing.T) {
+	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
+
+	// Add attachments to the session registry
+	session.Doc.Attachments = []media.Attachment{
+		{ID: "img1", Kind: media.KindImage, Size: 4000, MIME: "image/png"},
+	}
+
+	// Append a user message referencing the attachment
+	// Session.Append will compute AttachmentTokens automatically
+	msg := NewUserMessage("msg_1", "analyze @file:img1")
+	session.Append(msg)
+
+	tally := session.CalculateTokenTally()
+
+	// The message should have Attachments with tokens
+	lastMsg := session.Doc.Messages[len(session.Doc.Messages)-1]
+	var attTokens int
+	for _, ref := range lastMsg.Attachments {
+		attTokens += ref.Tokens
+	}
+	if attTokens != 1000 {
+		t.Errorf("message attachment tokens = %d, want 1000", attTokens)
+	}
+
+	// Attachment tokens should be in the tally
+	if tally.Lifetime.Input.Attachment != 1000 {
+		t.Errorf("attachment input = %d, want 1000", tally.Lifetime.Input.Attachment)
+	}
+
+	// User tokens should still be > 0 (text portion)
+	if tally.Lifetime.Input.User <= 0 {
+		t.Errorf("user input should be > 0, got %d", tally.Lifetime.Input.User)
+	}
+}
+
+func TestCalculateTokenTallyMultipleAttachmentTokens(t *testing.T) {
+	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
+
+	session.Doc.Attachments = []media.Attachment{
+		{ID: "img1", Kind: media.KindImage, Size: 4000, MIME: "image/png"},
+		{ID: "pdf1", Kind: media.KindPDF, Size: 8000, MIME: "application/pdf"},
+	}
+
+	// Message references both attachments
+	msg := NewUserMessage("msg_1", "compare @file:img1 and @file:pdf1")
+	session.Append(msg)
+
+	tally := session.CalculateTokenTally()
+
+	// img1: 4000/4=1000, pdf1: 8000/4=2000
+	if tally.Lifetime.Input.Attachment != 3000 {
+		t.Errorf("attachment input = %d, want 3000", tally.Lifetime.Input.Attachment)
+	}
+}
+
+func TestCalculateTokenTallyInputTotalIncludesAttachment(t *testing.T) {
+	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
+
+	session.Doc.Attachments = []media.Attachment{
+		{ID: "img1", Kind: media.KindImage, Size: 4000, MIME: "image/png"},
+	}
+
+	msg := NewUserMessage("msg_1", "hello @file:img1")
+	session.Append(msg)
+
+	tally := session.CalculateTokenTally()
+
+	// Input total should include attachment tokens
+	expectedTotal := tally.Lifetime.Input.User +
+		tally.Lifetime.Input.Attachment +
+		tally.Lifetime.Input.ToolExecution +
+		tally.Lifetime.Input.SystemPrompt +
+		tally.Lifetime.Input.ToolDefinitions +
+		tally.Lifetime.Input.Synthetic
+
+	if tally.Lifetime.Input.Total != expectedTotal {
+		t.Errorf("input total %d != sum of parts %d (attachment=%d)",
+			tally.Lifetime.Input.Total, expectedTotal, tally.Lifetime.Input.Attachment)
+	}
+}
+
+func TestCalculateTokenTallyNoAttachmentTokens(t *testing.T) {
+	session := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
+	session.Append(NewUserMessage("msg_1", "hello world"))
+	tally := session.CalculateTokenTally()
+
+	if tally.Lifetime.Input.Attachment != 0 {
+		t.Errorf("attachment input should be 0 for text-only message, got %d",
+			tally.Lifetime.Input.Attachment)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Context tally: media parts use conservative estimates, not base64 tokenization
+// ---------------------------------------------------------------------------
+
+func TestTallyAPIMessagesTokensMediaPartEstimate(t *testing.T) {
+	// Create a message with a PartImage that has a base64 data URI
+	// The old code would tokenize the entire base64 string as text,
+	// massively overcounting. The new code uses conservative estimates.
+	imgData := make([]byte, 4000) // 4KB image
+	for i := range imgData {
+		imgData[i] = byte(i % 256)
+	}
+	b64 := "data:image/png;base64," + base64.StdEncoding.EncodeToString(imgData)
+
+	msgs := []goai_provider.Message{
+		{
+			Role: goai_provider.RoleUser,
+			Content: []goai_provider.Part{
+				{Type: goai_provider.PartText, Text: "hello"},
+				{Type: goai_provider.PartImage, URL: b64, MediaType: "image/png"},
+			},
+		},
+	}
+
+	tally := tallyAPIMessagesTokens(msgs)
+
+	// The base64 URI is ~5.3KB (4KB * 1.33). If tokenized as text,
+	// it would be ~1300+ tokens. With conservative estimate, ~1000.
+	// Verify the tally is reasonable (not orders of magnitude too high).
+	textTokens := CountTokensApproxString("hello")
+	if tally.Input < textTokens {
+		t.Fatalf("input tokens should be at least text tokens")
+	}
+	// The total should be roughly textTokens + 1000 (image estimate)
+	expectedUpper := textTokens + 1200 // allow some margin
+	if tally.Input > expectedUpper {
+		t.Errorf("media part tokens too high: %d (base64 would be ~1400+)", tally.Input)
+	}
+	if tally.Input < textTokens+800 {
+		t.Errorf("media part tokens too low: %d", tally.Input)
+	}
+}
+
+func TestTallyAPIMessagesTokensFilePartEstimate(t *testing.T) {
+	// Similar test for PartFile (PDF)
+	pdfData := make([]byte, 8000) // 8KB PDF
+	for i := range pdfData {
+		pdfData[i] = byte(i % 256)
+	}
+	b64 := "data:application/pdf;base64," + base64.StdEncoding.EncodeToString(pdfData)
+
+	msgs := []goai_provider.Message{
+		{
+			Role: goai_provider.RoleUser,
+			Content: []goai_provider.Part{
+				{Type: goai_provider.PartText, Text: "review this"},
+				{Type: goai_provider.PartFile, URL: b64, MediaType: "application/pdf", Filename: "doc.pdf"},
+			},
+		},
+	}
+
+	tally := tallyAPIMessagesTokens(msgs)
+
+	// Should estimate ~2000 tokens for the PDF (8000/4), not ~2700 (base64 text)
+	expectedUpper := 100 + 2400 // allow some margin
+	if tally.Input > expectedUpper {
+		t.Errorf("file part tokens too high: %d", tally.Input)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Compaction and reload preserve consistent next-request totals
+// ---------------------------------------------------------------------------
+
+func TestTokenTallyCompactionPreservesAttachmentTotals(t *testing.T) {
+	// Build a session with attachments and verify that BuildContext
+	// produces consistent totals regardless of compaction state.
+	tmpDir := t.TempDir()
+	mediaDir := filepath.Join(tmpDir, "media")
+	if err := os.MkdirAll(mediaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a test image file
+	imgPath := filepath.Join(mediaDir, "test.png")
+	imgData := make([]byte, 4000)
+	for i := range imgData {
+		imgData[i] = byte(i % 256)
+	}
+	if err := os.WriteFile(imgPath, imgData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	attachments := []media.Attachment{
+		{ID: "img1", FileName: "test.png", DisplayName: "test.png", MIME: "image/png", Kind: media.KindImage, Size: 4000, CreatedAt: time.Now().UTC().Format(time.RFC3339)},
+	}
+
+	// Build a session with the attachment
+	doc := config.NewSessionDoc(config.SessionConfig{ContextCompaction: true})
+	doc.Attachments = attachments
+	msg := config.Message{
+		ID:   "u1",
+		Role: config.RoleUser,
+		Text: "analyze @file:test.png",
+	}
+	msgTokens := EstimateAttachmentTokens(attachments[0])
+	msg.Attachments = []config.AttachmentRef{{File: "test.png", Tokens: msgTokens}}
+	msg.InputTokens = CountTokensApproxString(msg.Text)
+	doc.Messages = append(doc.Messages, msg)
+
+	s := &Session{Doc: doc, Workspace: media.NewTempWorkspace(tmpDir)}
+
+	// Calculate lifetime tally
+	tally := s.CalculateTokenTally()
+	if tally.Lifetime.Input.Attachment != 1000 {
+		t.Errorf("attachment input = %d, want 1000", tally.Lifetime.Input.Attachment)
+	}
+
+	// Build context — should include media token estimates in context tally
+	ctx := s.BuildContext()
+	if ctx.Tokens.Raw <= 0 {
+		t.Error("context raw should be > 0")
+	}
+	// Context tally should include the image estimate
+	if ctx.Tokens.RawInput <= tally.Lifetime.Input.User {
+		t.Errorf("context raw input(%d) should exceed text-only user tokens(%d)",
+			ctx.Tokens.RawInput, tally.Lifetime.Input.User)
 	}
 }

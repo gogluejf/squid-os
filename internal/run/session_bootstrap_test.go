@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"squid-os/internal/config"
+	"squid-os/internal/media"
 	runtimeconfig "squid-os/internal/runtime"
 )
 
@@ -122,5 +123,74 @@ func TestBootstrapContinuedRootUsesLoadedNameDirectory(t *testing.T) {
 	want := filepath.Join(paths.Sessions, "continued")
 	if session.SessionDir != want {
 		t.Fatalf("SessionDir = %q, want %q", session.SessionDir, want)
+	}
+}
+
+// --- Task 5.1: Attachment workspace initialization on bootstrap ---
+
+func TestBootstrapFreshRootInitializesTempWorkspace(t *testing.T) {
+	paths := config.Paths{
+		Sessions:   t.TempDir(),
+		TempFolder: t.TempDir(),
+	}
+	session, _, err := bootstrapSession(Request{Session: runtimeconfig.SessionRequest{
+		Paths:  paths,
+		Config: config.SessionConfig{Autosave: config.SessionAutosave{Enabled: false}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Initialize workspace
+	session.InitWorkspace()
+	if session.Workspace == nil {
+		t.Fatal("workspace should be initialized")
+	}
+
+	// Verify it's a temp workspace
+	if _, ok := session.Workspace.(*media.PersistentWorkspace); ok {
+		t.Fatal("fresh unsaved session should have a TempWorkspace")
+	}
+
+	// Verify the workspace media dir is NOT under the session dir
+	if session.Workspace.Dir() == filepath.Join(session.SessionDir, "media") {
+		t.Fatal("temp workspace media should not be in session dir")
+	}
+
+	// Cleanup
+	if err := session.CleanupWorkspace(); err != nil {
+		t.Fatalf("cleanup: %v", err)
+	}
+}
+
+func TestBootstrapIncognitoSessionUsesIncognitoWorkspace(t *testing.T) {
+	paths := config.Paths{
+		Sessions:   t.TempDir(),
+		TempFolder: t.TempDir(),
+	}
+	session, _, err := bootstrapSession(Request{Session: runtimeconfig.SessionRequest{
+		Paths:  paths,
+		Config: config.SessionConfig{Autosave: config.SessionAutosave{Enabled: false}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	session.SetIncognito(true)
+	session.InitWorkspace()
+	if session.Workspace == nil {
+		t.Fatal("incognito session should have a workspace")
+	}
+
+	// Verify workspace dir is incognito
+	wsDir := filepath.Dir(session.Workspace.Dir())
+	baseName := filepath.Base(wsDir)
+	if !media.IsIncognitoDir(baseName) {
+		t.Fatalf("incognito workspace dir %q should have incognito prefix", baseName)
+	}
+
+	// Cleanup
+	if err := session.CleanupWorkspace(); err != nil {
+		t.Fatalf("cleanup: %v", err)
 	}
 }

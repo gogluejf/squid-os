@@ -17,6 +17,7 @@ type keyMap struct {
 	Thinking      key.Binding
 	Skill         key.Binding
 	Quit          key.Binding
+	Paste         key.Binding
 	Up            key.Binding
 	Down          key.Binding
 	Left          key.Binding
@@ -87,6 +88,10 @@ var keys = keyMap{
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c"),
 		key.WithHelp("ctrl+c", "quit"),
+	),
+	Paste: key.NewBinding(
+		key.WithKeys("ctrl+v"),
+		key.WithHelp("ctrl+v", "paste"),
 	),
 	Up: key.NewBinding(
 		key.WithKeys("up"),

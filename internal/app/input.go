@@ -93,18 +93,16 @@ func (m Model) handleComponent(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Destroy):
-		userText, userImage := m.session.destroyLastSequence()
+		userText := m.session.destroyLastSequence()
 		m.textarea.SetValue(userText)
-		m.attachedImage = userImage
 		(&m).setNotification(ui.NotificationInfo, "last message removed  ·  ctrl+u to restore")
 		m.autoSave()
 		m.refreshViewportFollowing()
 		return m, nil
 
 	case key.Matches(msg, keys.UndoDestroy):
-		if textarea, image, ok := m.session.undoDestroy(); ok {
+		if textarea, ok := m.session.undoDestroy(); ok {
 			m.textarea.SetValue(textarea)
-			m.attachedImage = image
 			remaining := len(m.session.undoStack)
 			if remaining > 0 {
 				(&m).setNotification(ui.NotificationInfo, fmt.Sprintf("message restored  ·  %d more in buffer", remaining))
@@ -121,7 +119,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.textarea.SetValue("")
 			m.autoSizeTextarea()
 		} else {
-			return m, tea.Quit
+			return m, m.quitCmd
 		}
 		return m, nil
 
@@ -144,6 +142,9 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.HistorySearch):
 		return m.startHistorySearch()
+
+	case key.Matches(msg, keys.Paste) || msg.Type == tea.KeyInsert:
+		return m.handlePaste()
 
 	case key.Matches(msg, keys.Send):
 		if completion, ok := m.activeCapabilityCompletion(); ok {

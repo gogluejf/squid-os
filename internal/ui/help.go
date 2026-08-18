@@ -97,6 +97,7 @@ func RenderHelp(width, height int) string {
 		keyRow("tab", "Numberize / next item"),
 		keyRow("enter", "Send message"),
 		keyRow("left alt+enter", "New line"),
+		keyRow("ctrl+v", "Paste (text, images, large pastes auto-attach)"),
 		keyRow("ctrl+c", "Clear input / quit app"),
 		keyRow("ctrl+d", "Destroy last message pair"),
 		keyRow("ctrl+u", "Undo last destroy"),

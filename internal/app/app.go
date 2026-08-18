@@ -63,9 +63,8 @@ type Model struct {
 	completionWindow    int
 
 	// Misc
-	attachedImage string
-	notification  ui.Notification
-	incognito     bool
+	notification ui.Notification
+	incognito    bool
 
 	// Global expand/collapse state for thinking and tool results (NOT persisted)
 	expanded bool
@@ -150,6 +149,15 @@ func (m *Model) setNotification(level ui.NotificationLevel, msg string) {
 }
 
 func (m *Model) clearNotification() { m.notification = ui.Notification{} }
+
+// quitCmd returns a command that cleans up the session workspace (including
+// incognito temp directories) and then quits the TUI.
+func (m *Model) quitCmd() tea.Msg {
+	if m.session != nil {
+		_ = m.session.CleanupWorkspace()
+	}
+	return tea.Quit()
+}
 
 // setComponent replaces the active overlay component and sets mode.
 func (m *Model) setComponent(c component.Component) {

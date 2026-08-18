@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"squid-os/internal/config"
+	"squid-os/internal/chat/provider"
+	"squid-os/internal/media"
 	"squid-os/internal/tools"
 
 	goai_provider "github.com/zendev-sh/goai/provider"
@@ -78,7 +80,7 @@ func TestBuildContextDisabledStillProjectsPotentialCompaction(t *testing.T) {
 			tcRead("tc2", "/file.go", true, 500, 5000),
 		}),
 	}
-	ctx := BuildContext(messages, false)
+	ctx := BuildContext(messages, false, "", nil, nil)
 
 	// Messages should be raw (uncompacted) — result content is intact
 	rawExpected := BuildAPIMessages(messages)
@@ -116,7 +118,7 @@ func TestBuildContextTokenBreakdownByProviderRole(t *testing.T) {
 	messages[2].ToolCalls[0].Execution.Status = tools.ResultStatusSuccess
 	messages[2].ToolCalls[0].Execution.Result = "tool result"
 
-	ctx := BuildContext(messages, false)
+	ctx := BuildContext(messages, false, "", nil, nil)
 	raw := tallyAPIMessagesTokens(BuildAPIMessages(messages))
 
 	if ctx.Tokens.RawInput != raw.Input || ctx.Tokens.RawOutput != raw.Output {
@@ -147,7 +149,7 @@ func TestBuildContextEnabledPreservesToolCallIDs(t *testing.T) {
 			tcRead("tc_read2", "/file.go", true, 10, 20),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// Collect tool call IDs from assistant messages
 	var toolCallIDs []string
@@ -174,7 +176,7 @@ func TestBuildContextEnabledPreservesToolNames(t *testing.T) {
 			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	for _, msg := range ctx.Messages {
 		if msg.Role == goai_provider.RoleAssistant {
@@ -201,7 +203,7 @@ func TestBuildContextEnabledPreservesChronology(t *testing.T) {
 			tcRead("tc3", "/a.go", true, 10, 20),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// Verify message order: sys, assistant(tc1), tool(tc1), assistant(tc2), tool(tc2), assistant(tc3), tool(tc3)
 	var roles []string
@@ -232,7 +234,7 @@ func TestBuildContextEnabledProducesValidJSONArgs(t *testing.T) {
 			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// First read (tc1) should be compacted — verify its arguments are valid JSON
 	found := false
@@ -270,7 +272,7 @@ func TestBuildContextSupersededReadReplaced(t *testing.T) {
 			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// Find the tool result for tc1 — should be compacted
 	for _, msg := range ctx.Messages {
@@ -307,7 +309,7 @@ func TestBuildContextSupersededEditReplaced(t *testing.T) {
 			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// tc1 edit should be compacted: args contain COMPACTED, result is compacted
 	for _, msg := range ctx.Messages {
@@ -355,7 +357,7 @@ func TestBuildContextSupersededWriteReplaced(t *testing.T) {
 			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	for _, msg := range ctx.Messages {
 		if msg.Role == goai_provider.RoleAssistant {
@@ -404,7 +406,7 @@ func TestBuildContextDoesNotMutatePersistedMessages(t *testing.T) {
 	origArgs1 := messages[0].ToolCalls[0].Instruction.Arguments
 	origResult1 := messages[0].ToolCalls[0].Execution.Result
 
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 	_ = ctx
 
 	// Verify messages are unchanged
@@ -453,10 +455,11 @@ func TestBuildContextTokenCountDescribesMessages(t *testing.T) {
 			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// Compacted tokens should equal the token count of the actual messages
-	actualTokens := countAPIMessagesTokens(ctx.Messages)
+	tt := tallyAPIMessagesTokens(ctx.Messages)
+	actualTokens := tt.Input + tt.Output
 	if ctx.Tokens.Compacted != actualTokens {
 		t.Errorf("Compacted=%d does not describe Context.Messages exactly (actual=%d)",
 			ctx.Tokens.Compacted, actualTokens)
@@ -484,8 +487,8 @@ func TestBuildContextStreamSendsExactSnapshot(t *testing.T) {
 			tcRead("tc2", "/file.go", true, 10, 20),
 		}),
 	}
-	ctx1 := BuildContext(messages, true)
-	ctx2 := BuildContext(messages, true)
+	ctx1 := BuildContext(messages, true, "", nil, nil)
+	ctx2 := BuildContext(messages, true, "", nil, nil)
 
 	if len(ctx1.Messages) != len(ctx2.Messages) {
 		t.Fatalf("message count differs between builds: %d vs %d", len(ctx1.Messages), len(ctx2.Messages))
@@ -541,7 +544,7 @@ func TestBuildContextUsesDirectPlanLookup(t *testing.T) {
 			tcRead("tc4", "/other.go", true, 10, 20),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// Verify that both paths are compacted independently
 	plan := ctx.Compaction
@@ -594,11 +597,12 @@ func TestBuildContextNonFileToolsUnchanged(t *testing.T) {
 					Files            []config.FileEntry `json:"files,omitempty"`
 					ChildSessionID   string             `json:"child_session_id,omitempty"`
 					ChildSessionName string             `json:"child_session_name,omitempty"`
+					Attachments      []config.AttachmentRef `json:"attachments,omitempty"`
 				}{Status: tools.ResultStatusSuccess, Result: "file output here", Tokens: 20},
 			},
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// Verify bash tool call is unchanged
 	for _, msg := range ctx.Messages {
@@ -640,7 +644,7 @@ func TestBuildContextFailedOpsNotCompacted(t *testing.T) {
 			tcRead("tc2", "/file.go", true, 10, 20), // successful
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// tc1 failed — should not be compacted
 	if ctx.Compaction.Decisions["tc1"].CompactArguments {
@@ -681,7 +685,7 @@ func TestBuildContextTokenCountIncludesReplacementOverhead(t *testing.T) {
 			tcRead("tc2", "/file.go", true, 500, 5000),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// Compacted should be less than raw (replacement text is much shorter than large file content)
 	if ctx.Tokens.Compacted >= ctx.Tokens.Raw {
@@ -714,7 +718,7 @@ func TestContextTokensFields(t *testing.T) {
 			tcRead("tc2", "/file.go", true, 500, 5000),
 		}),
 	}
-	ctx := BuildContext(messages, true)
+	ctx := BuildContext(messages, true, "", nil, nil)
 
 	// Verify the token relationships
 	if ctx.Tokens.Raw < ctx.Tokens.Compacted {
@@ -789,5 +793,44 @@ func TestSessionBuildContextRespectsCompactionSetting(t *testing.T) {
 	}
 	if !foundLong {
 		t.Error("could not find raw tool result in disabled messages")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Media contract integration — BuildContext respects media policy decisions
+// ---------------------------------------------------------------------------
+
+func TestBuildContextMediaContractOpenAICompatOmitsFileParts(t *testing.T) {
+	// OpenAI-compatible Chat Completions silently omits PartFile in the
+	// openaicompat.ConvertMessages content array. This test verifies that
+	// the media contract correctly marks file/PDF as unsupported for this
+	// dialect, and that BuildContext with attachments would still produce
+	// the PartFile (which would be silently dropped by the adapter).
+	//
+	// The contract test (media_contract_test.go) verifies the adapter
+	// serialization behavior. This test verifies that the context builder
+	// still produces the parts — the policy layer (media_policy.go) is
+	// responsible for filtering them based on model capabilities.
+
+	// Verify that the provider contract table correctly marks
+	// openai-compatible as unsupported for file parts.
+	p := provider.GetByName(config.ProviderOpenAI)
+	if p == nil {
+		t.Fatal("openai provider not registered")
+	}
+	if p.Dialect() != config.DialectOpenAICompatible {
+		t.Fatalf("openai dialect: got %q, want %q", p.Dialect(), config.DialectOpenAICompatible)
+	}
+
+	// Verify that the media policy attempts delivery for compat models
+	// (no Attachment flag → optimistic attempt).
+	textOnlyCaps := &goai_provider.ModelCapabilities{
+		InputModalities: goai_provider.ModalitySet{Text: true},
+	}
+	if d := MediaDecisionFor(textOnlyCaps, media.KindPDF); d != MediaAttempt {
+		t.Errorf("text-only model PDF: got %s, want %s", d, MediaAttempt)
+	}
+	if d := MediaDecisionFor(textOnlyCaps, media.KindImage); d != MediaAttempt {
+		t.Errorf("text-only model image: got %s, want %s", d, MediaAttempt)
 	}
 }

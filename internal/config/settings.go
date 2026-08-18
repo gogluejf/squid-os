@@ -54,6 +54,15 @@ type ThinkingConfig struct {
 	ParseReasoningFromText bool `json:"parse_reasoning_from_text"`
 }
 
+// FileSearchConfig controls bounded filesystem searches for file completion.
+// Default roots are the working directory only.
+type FileSearchConfig struct {
+	Roots      []string `json:"roots"`       // directories to search (default: working directory)
+	MaxDepth   int      `json:"max_depth"`   // max directory depth from each root (default: 3)
+	MaxResults int      `json:"max_results"` // max files returned (default: 50)
+	Ignore     []string `json:"ignore"`      // directory names to skip
+}
+
 type Settings struct {
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
@@ -75,6 +84,23 @@ type Settings struct {
 	ProjectDir string `json:"project_dir"` // default: "src"
 	MemoryDir  string `json:"memory_dir"`  // default: "memory"
 	TempFolder string `json:"temp_folder"` // default: "tmp"
+	// FileSearch configures file completion in the composer.
+	FileSearch FileSearchConfig `json:"file_search"`
+
+	// Paste configures paste behavior in the composer.
+	PasteConfig PasteConfig `json:"paste"`
+
+	// MediaModel is the provider/model used for autonomous media inspection
+	// (e.g. "openai/gpt-4o"). Empty means inspection is not available.
+	MediaModel string `json:"media_model"`
+}
+
+// PasteConfig controls paste behavior in the composer.
+type PasteConfig struct {
+	// LargeTextBytes is the byte threshold above which pasted text is
+	// stored as a text attachment instead of being inserted directly.
+	// Default: 32 KiB (32768 bytes).
+	LargeTextBytes int `json:"large_text_bytes"`
 }
 
 // LoadSettings loads settings.json from the given config directory.

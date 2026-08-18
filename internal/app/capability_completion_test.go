@@ -84,8 +84,8 @@ func TestCapabilityCompletionUsesLongestCommonPrefixThenUniqueName(t *testing.T)
 	}
 	updated, _ = (&m).applyCapabilityCompletion(completion)
 	m = *updated.(*Model)
-	if got := m.textarea.Value(); got != "use @skill/sop-chain " {
-		t.Fatalf("second Tab = %q, want %q", got, "use @skill/sop-chain ")
+	if got := m.textarea.Value(); got != "use @skill:sop-chain " {
+		t.Fatalf("second Tab = %q, want %q", got, "use @skill:sop-chain ")
 	}
 	if _, ok := m.activeCapabilityCompletion(); ok {
 		t.Fatal("completed exact reference should close suggestions")
@@ -103,7 +103,7 @@ func TestUniqueCompletionAddsExactlyOneTrailingSpace(t *testing.T) {
 	}
 	updated, _ := (&m).applyCapabilityCompletion(completion)
 	got := updated.(*Model).textarea.Value()
-	if got != "ask @agent/trader next" {
+	if got != "ask @agent:trader next" {
 		t.Fatalf("completion spacing = %q", got)
 	}
 }
@@ -141,7 +141,7 @@ func TestToolCompletionUsesEnabledSessionTools(t *testing.T) {
 		t.Fatalf("tool completion = %+v, active = %v", completion, ok)
 	}
 	updated, _ := (&m).applyCapabilityCompletion(completion)
-	if got := updated.(*Model).textarea.Value(); got != "use @tool/read_file " {
+	if got := updated.(*Model).textarea.Value(); got != "use @tool:read_file " {
 		t.Fatalf("tool completion text = %q", got)
 	}
 }
@@ -155,6 +155,9 @@ func TestCategoryStylesUseExistingPalette(t *testing.T) {
 	}
 	if got := capabilityCandidateStyle("agent").GetForeground(); got != lipgloss.Color(style.P.TextAgent) {
 		t.Fatalf("agent color = %v", got)
+	}
+	if got := capabilityCandidateStyle("file").GetForeground(); got != lipgloss.Color(style.P.TextAttachment) {
+		t.Fatalf("file color = %v", got)
 	}
 }
 
@@ -189,7 +192,7 @@ func TestSameNameSkillAndAgentRemainAmbiguousAndLabeled(t *testing.T) {
 		t.Fatalf("collision Tab guessed %q", got)
 	}
 	suggestion := m.renderCapabilitySuggestion()
-	if !strings.Contains(suggestion, "skill/") || !strings.Contains(suggestion, "agent/") || !strings.Contains(suggestion, "reviewer") {
+	if !strings.Contains(suggestion, "skill:") || !strings.Contains(suggestion, "agent:") || !strings.Contains(suggestion, "reviewer") {
 		t.Fatalf("collision labels missing from %q", suggestion)
 	}
 }
@@ -225,7 +228,7 @@ func TestEnterAcceptsUniqueCompletionBeforeSend(t *testing.T) {
 
 	updated, _ := m.handleChatKey(tea.KeyMsg{Type: tea.KeyEnter})
 	got := updated.(Model).textarea.Value()
-	if got != "ask @agent/trader " {
+	if got != "ask @agent:trader " {
 		t.Fatalf("Enter did not accept unique completion: %q", got)
 	}
 }
@@ -256,7 +259,7 @@ func TestArrowSelectionAndTabAccept(t *testing.T) {
 		t.Fatalf("second right index = %d", m.completionSelected)
 	}
 	updated, _ = m.handleChatKey(tea.KeyMsg{Type: tea.KeyTab})
-	if got := updated.(*Model).textarea.Value(); got != "use @skill/beta " {
+	if got := updated.(*Model).textarea.Value(); got != "use @skill:beta " {
 		t.Fatalf("selected Tab = %q", got)
 	}
 }
@@ -315,7 +318,7 @@ func TestSelectedEnterAcceptsAmbiguousCandidate(t *testing.T) {
 	m = updated.(Model)
 
 	updated, _ = m.handleChatKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if got := updated.(Model).textarea.Value(); got != "use @skill/alpha " {
+	if got := updated.(Model).textarea.Value(); got != "use @skill:alpha " {
 		t.Fatalf("selected Enter = %q", got)
 	}
 }

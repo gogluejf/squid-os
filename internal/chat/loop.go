@@ -188,13 +188,9 @@ func FlushToolMessage(s *Session, msgIdx int) {
 	s.RefreshTokenTally()
 }
 
-// StartStream builds API messages from session state and starts provider streaming.
-func StartStream(s *Session, endpoints config.EndpointsConfig) <-chan StreamEvent {
-	return StartStreamWithContext(context.Background(), s, endpoints)
-}
-
-// StartStreamWithContext builds API messages from session state and starts provider streaming using ctx.
-func StartStreamWithContext(ctx context.Context, s *Session, endpoints config.EndpointsConfig) <-chan StreamEvent {
+// StartStream builds API messages from session state and starts provider
+// streaming. Cancel via ctx.
+func StartStream(ctx context.Context, s *Session, endpoints config.EndpointsConfig) <-chan StreamEvent {
 	s.Stream.Begin()
 	inf := s.CurrentInference()
 	providerSettings := config.ResolveProviderSettings(endpoints, inf.Provider)
@@ -244,7 +240,7 @@ func RunLoop(ctx context.Context, s *Session, paths config.Paths, endpoints conf
 				out <- LoopEvent{Type: LoopEventError, Error: fmt.Errorf("maximum steps exceeded")}
 				return
 			}
-			streamCh := StartStreamWithContext(ctx, s, endpoints)
+			streamCh := StartStream(ctx, s, endpoints)
 			restart := false
 			for event := range streamCh {
 				if event.Text != "" {
@@ -305,7 +301,7 @@ func RunLoop(ctx context.Context, s *Session, paths config.Paths, endpoints conf
 							continue
 						case ToolExecDone:
 							if toolRes.CapturedUserText != "" {
-								s.Append(NewUserMessage(nextMessageID(s), toolRes.CapturedUserText, ""))
+								s.Append(NewUserMessage(nextMessageID(s), toolRes.CapturedUserText))
 							}
 							s.Stream.Reset()
 							restart = true

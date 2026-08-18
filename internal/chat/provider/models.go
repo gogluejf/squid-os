@@ -192,3 +192,25 @@ func isAuthError(err error) bool {
 		strings.Contains(msg, "unauthorized") ||
 		strings.Contains(msg, "no credentials")
 }
+
+// ---------------------------------------------------------------------------
+// Media support lookup (used by contract tests and media policy)
+// ---------------------------------------------------------------------------
+
+// MediaSupport describes the expected serialization support for a media kind
+// in a given provider/dialect combination.
+type MediaSupport string
+
+const (
+	// Supported means the GoAI adapter serializes the part correctly for
+	// the provider's wire format and the target API accepts it.
+	Supported MediaSupport = "supported"
+	// Unsupported means the GoAI adapter does not serialize the part
+	// (e.g. openaicompat silently omits PartFile) or the target API
+	// rejects it.
+	Unsupported MediaSupport = "unsupported"
+	// Storable means the attachment can be stored in the workspace but
+	// is not advertised as direct GoAI input until generic parts exist
+	// for that modality (audio, video).
+	Storable MediaSupport = "storable"
+)

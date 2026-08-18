@@ -81,6 +81,7 @@ func Resolve(in Inputs) (Resolved, error) {
 		WorkingDir:        workingDir,
 		AuthMode:          in.Settings.ValidateAuthorization(),
 		ContextCompaction: in.Settings.ContextCompaction,
+		MediaModel:        in.Settings.MediaModel,
 		Limits: config.SessionLimits{
 			MaxToolResultTokens: in.Settings.MaxToolResultTokens,
 			MaxAgentDepth:       DefaultMaxAgentDepth,

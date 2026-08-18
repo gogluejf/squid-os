@@ -9,6 +9,7 @@ import (
 
 	"squid-os/internal/agent"
 	"squid-os/internal/config"
+	"squid-os/internal/media"
 	"squid-os/internal/skills"
 	"squid-os/internal/style"
 )
@@ -45,6 +46,9 @@ type RuntimeContext struct {
 	// ChildRef is the preallocated child session reference for agent delegation.
 	// Empty for non-agent tools.
 	ChildRef ChildSessionRef
+	// IngestService handles media ingestion through the session's workspace.
+	// May be nil for tools that don't need it.
+	IngestService *media.IngestService
 }
 
 // ChildSessionRef holds the preallocated identity of a delegated child session.
@@ -90,6 +94,7 @@ func init() {
 		CallAgent,
 		InlineAgent,
 		SetWorkingDirTool,
+		InspectMediaTool,
 	}
 	for i := range list {
 		if err := validateSchema(list[i]); err != nil {

@@ -347,61 +347,58 @@
             "number": "4",
             "name": "Autonomous Media Inspection",
             "pattern": [
-                "Application Service; Shared Kernel; Text Result Adapter"
+                "Application Service; Shared Kernel; Synthetic Multimodal Message"
             ],
-            "objective": "Allow assistants to inspect session media, external paths, and URLs autonomously without duplicating ingestion or requiring multimodal tool-result payloads.",
-            "success": "inspect_media uses the shared workspace and a media-capable inference path, returning bounded text with proper authorization and accounting.",
-            "diagram": "flowchart LR\n    A[Assistant Tool Call] --> T[inspect_media]\n    T --> I[Shared Attachment Service]\n    I --> W[Session Workspace]\n    W --> M[Inspection Model]\n    M --> X[Bounded Text Tool Result]",
+            "objective": "Allow assistants to load media (session attachments, local paths, URLs) so the current chat model receives it as multimodal content in the next inference — reusing the exact same pipeline as user-attached images.",
+            "success": "inspect_media resolves and ingests media, returns a tiny auditable tool result (attachment handle), and the context builder generates a synthetic user multimodal message live at API-build time — no separate media model call, no binary in logs, full reuse of the user-attachment pipeline.",
+            "diagram": "flowchart LR\n    A[Assistant Tool Call] --> T[inspect_media]\n    T --> I[Shared Attachment Service]\n    I --> W[Session Workspace]\n    W --> R[@file:id Tool Result]\n    R --> B[Context Builder at API Time]\n    B --> S[Synthetic User Message: query + image]\n    S --> M[Current Chat Model]",
             "tasks": [
                 {
                     "number": "4.1",
-                    "name": "Add reusable media inspection service",
+                    "name": "Implement inspect_media as a media loader tool",
                     "type": "feature",
-                    "what": "Create an inspection application service that resolves or ingests media through the shared attachment workspace and queries a configured media-capable model.",
-                    "why": "The tool and future media workflows need one inference contract independent of composer and provider details.",
-                    "files": [
-                        "+ internal/media/inspect.go",
-                        "~ internal/chat/engine.go",
-                        "~ internal/config/settings.go",
-                        "~ internal/runtime/runtime.go"
-                    ],
-                    "snippet": [
-                        "type Inspector interface {\n    Inspect(ctx context.Context, request InspectRequest) (InspectResult, error)\n}\n\ntype InspectRequest struct {\n    Source string\n    Query string\n    SessionDir string\n}\n\ntype InspectResult struct {\n    Text string\n    AttachmentID string\n    InputTokens int\n}"
-                    ],
-                    "acceptance": [
-                        "Inspection accepts canonical session references, local paths, and HTTP or HTTPS URLs.",
-                        "All non-session sources pass through normal ingestion limits and security policy.",
-                        "Inspection selects a configured media-capable model or returns a clear unsupported error.",
-                        "Inspection output is bounded text suitable for current GoAI tool-result representation."
-                    ],
-                    "verify": [
-                        "go test ./internal/media ./internal/chat ./internal/runtime ./internal/config"
-                    ]
-                },
-                {
-                    "number": "4.2",
-                    "name": "Expose inspect_media tool",
-                    "type": "feature",
-                    "what": "Register inspect_media with path_or_url and query arguments, session runtime context, authorization behavior, and text-only results.",
-                    "why": "Assistants need an autonomous, auditable path to understand media during tool loops.",
+                    "what": "inspect_media(path_or_url, query) resolves the source, ingests it through the shared attachment workspace, and returns a minimal tool result containing only the canonical attachment reference (@file:<id>). The query is preserved in the tool instruction arguments for later use by the context builder.",
+                    "why": "The tool's job is purely media resolution and ingestion. It does not call any model. The next inference step delivers the resolved media to the current chat model as a synthetic user multimodal message — identical to a user-pasted image.",
                     "files": [
                         "+ internal/tools/media.go",
-                        "~ internal/tools/tools.go",
-                        "~ internal/chat/session.go",
-                        "~ internal/chat/tool_exec.go",
-                        "~ internal/runtime/runtime.go"
+                        "~ internal/tools/tools.go"
                     ],
                     "snippet": [
-                        "var InspectMediaTool = Tool{\n    Name: \"inspect_media\",\n    // path_or_url, query\n}\n\ntype RuntimeContext struct {\n    // existing fields\n    MediaInspector media.Inspector\n}"
+                        "var InspectMediaTool = Tool{\n    Name: \"inspect_media\",\n    Description: \"Load a media file so the model can inspect it. Returns an attachment reference that will be delivered as multimodal content in the next inference.\",\n    Schema: `{...}` // path_or_url, query\n    Execute: func(args, rt) ToolResult {\n        // 1. Resolve path/URL\n        // 2. Ingest via workspace → @file:<id>\n        // 3. Return ToolResult{Result: \"@file:<id>\"}\n        // The query remains in Instruction.Arguments for the context builder.\n    }\n}"
                     ],
                     "acceptance": [
                         "The tool schema requires path_or_url and query strings.",
                         "Local and remote sources follow existing tool authorization semantics before reading or downloading.",
-                        "Successful execution returns inspection text and records attachment and token usage.",
+                        "Successful execution returns only the @file:<id> reference — no binary, no base64, no model call.",
+                        "Failed ingestion (missing file, network error, limit exceeded) returns a clear error string.",
                         "Tool execution never embeds binary or image content in ToolOutput."
                     ],
                     "verify": [
-                        "go test ./internal/tools ./internal/chat ./internal/runtime"
+                        "go test ./internal/tools ./internal/media"
+                    ]
+                },
+                {
+                    "number": "4.2",
+                    "name": "Generate synthetic user multimodal message at context-build time",
+                    "type": "feature",
+                    "what": "When building API messages, detect inspect_media tool results that contain @file:<id> references. Extract the query from the tool instruction arguments, resolve the attachment, and generate a synthetic user message with [text: query, image: resolved] inserted immediately after the tool result in the API message array. This synthetic message is not persisted — it exists only for the API request.",
+                    "why": "Reuses the exact same multimodal pipeline as user attachments. No provider-specific tool-result media support needed. No separate media model call. The session log stays clean with just the attachment handle.",
+                    "files": [
+                        "~ internal/chat/context.go",
+                        "~ internal/chat/tool_exec.go"
+                    ],
+                    "snippet": [
+                        "// In context builder, after building the tool result message:\nif toolName == \"inspect_media\" && execution.Status == \"success\" {\n    query := extractQueryFromArgs(entry.Instruction.Arguments)\n    attachmentRef := entry.Execution.Result  // \"@file:<id>\"\n    // Resolve attachment → PartImage (same as user attachment pipeline)\n    // Append synthetic user message: [text: query, PartImage: resolved]\n    // Estimate tokens: query text + attachment token estimate\n}"
+                    ],
+                    "acceptance": [
+                        "Synthetic user message is generated only at API-build time — not appended to session messages.",
+                        "The synthetic message reuses the same attachment resolution and provider-part-building as user messages.",
+                        "Token accounting includes both the tool result tokens (handle text) and the synthetic user message tokens (query + attachment estimate).",
+                        "Model capability filtering (media policy) applies to synthetic messages the same way as user messages.",
+                        "The session log shows only the assistant tool call and the tool result with the attachment handle — no synthetic message in persisted history."
+                    ],
+                    "verify": [
+                        "go test ./internal/chat ./internal/tools"
                     ]
                 }
             ]

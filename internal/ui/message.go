@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"squid-os/internal/config"
+	"squid-os/internal/media"
 	"squid-os/internal/style"
 	"squid-os/internal/tools"
 	"squid-os/internal/util"
@@ -25,7 +26,7 @@ func orderedParams(msg config.Message) []string {
 }
 
 // RenderMessage dispatches to the correct renderer by role.
-func RenderMessage(msg config.Message, width int, expanded bool) string {
+func RenderMessage(msg config.Message, width int, expanded bool, attachments []media.Attachment) string {
 	switch msg.Role {
 	case config.RoleSystem:
 		return renderSystemMessage(msg, width, expanded)
@@ -34,7 +35,7 @@ func RenderMessage(msg config.Message, width int, expanded bool) string {
 	case config.RoleSynthetic:
 		return renderSyntheticMessage(msg, width, expanded)
 	case config.RoleUser:
-		return renderUserMessage(msg, width)
+		return renderUserMessage(msg, width, attachments)
 	case config.RoleAssistant:
 		return renderAssistantMessage(msg, width, expanded)
 	default:
@@ -141,16 +142,13 @@ func renderSyntheticMessage(msg config.Message, width int, expanded bool) string
 // renderUserMessage renders a user message as a single UserBox containing
 // the header line + body text.  The header is content inside the box
 // (not a DrawCanvas title part) since it has no ↳ prefix.
-func renderUserMessage(msg config.Message, width int) string {
+func renderUserMessage(msg config.Message, width int, attachments []media.Attachment) string {
 	s := style.UserStyleLabel()
 	boxWidth := style.BoxWidth(width)
 	inner := style.ContentWidth(width)
 
 	leftStr := s.Dim.Render(msg.CreatedAt.Format("15:04:05"))
 	var right []string
-	if msg.ImagePath != "" {
-		right = append(right, style.UserHeaderAttStyle.Render(msg.ImagePath))
-	}
 	if msg.InputTokens > 0 {
 		right = append(right, s.Dim.Render(tokenChipInput(msg.InputTokens, nil)))
 	}
@@ -161,7 +159,8 @@ func renderUserMessage(msg config.Message, width int) string {
 	}
 	headerLine := leftStr + s.Dim.Render(strings.Repeat(" ", gap)) + rightStr
 
-	return drawUserBox(nil, []string{"\n" + headerLine, msg.Text}, s, boxWidth)
+	body := RenderReferences(msg.Text, style.P.BgUser, attachments)
+	return drawUserBox(nil, []string{"\n" + headerLine, body}, s, boxWidth)
 }
 
 // RenderAssistantHeader emits the assistant header as a bare canvas line

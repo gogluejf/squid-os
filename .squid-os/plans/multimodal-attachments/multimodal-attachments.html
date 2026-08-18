@@ -262,9 +262,9 @@ pre { margin:5px 0 0 0; font-family:Consolas,monospace; color:#ce9178; font-size
                     <span class="ms-num">4</span>
                     <span class="ms-name">Autonomous Media Inspection</span>
                 </div>
-                <span class="pattern-tag">Application Service; Shared Kernel; Text Result Adapter</span> 
+                <span class="pattern-tag">Application Service; Shared Kernel; Synthetic Multimodal Message</span> 
                 <p class="ms-count">2 Task(s)</p>
-                <ul class="ms-task-list"><li>4.1 - Add reusable media inspection service</li><li>4.2 - Expose inspect_media tool</li></ul>
+                <ul class="ms-task-list"><li>4.1 - Implement inspect_media as a media loader tool</li><li>4.2 - Generate synthetic user multimodal message at context-build time</li></ul>
             </div>
         </a>
         <a href="#compatibility-and-release-confidence" class="milestone-card-link">
@@ -902,17 +902,17 @@ func EstimateAttachmentTokens(a media.Attachment, model string) int</code></pre>
             <div class="section-header">
                 <span class="section-num">4</span>
                 <h2>Autonomous Media Inspection</h2>
-                <span class="pattern-badge">Application Service; Shared Kernel; Text Result Adapter</span> 
+                <span class="pattern-badge">Application Service; Shared Kernel; Synthetic Multimodal Message</span> 
             </div>
             
             <div class="ms-overview-box">
                 <span class="cell-label">Objective</span>
-                <div class="cell-value">Allow assistants to inspect session media, external paths, and URLs autonomously without duplicating ingestion or requiring multimodal tool-result payloads.</div>
+                <div class="cell-value">Allow assistants to load media (session attachments, local paths, URLs) so the current chat model receives it as multimodal content in the next inference — reusing the exact same pipeline as user-attached images.</div>
             </div>
             
             <div class="ms-success-box">
                 <span class="cell-label success">Success Criteria</span>
-                <div class="cell-value">inspect_media uses the shared workspace and a media-capable inference path, returning bounded text with proper authorization and accounting.</div>
+                <div class="cell-value">inspect_media resolves and ingests media, returns a tiny auditable tool result (attachment handle), and the context builder generates a synthetic user multimodal message live at API-build time — no separate media model call, no binary in logs, full reuse of the user-attachment pipeline.</div>
             </div>
             
             <div class="diagram-canvas">
@@ -924,101 +924,98 @@ func EstimateAttachmentTokens(a media.Attachment, model string) int</code></pre>
     A[Assistant Tool Call] --> T[inspect_media]
     T --> I[Shared Attachment Service]
     I --> W[Session Workspace]
-    W --> M[Inspection Model]
-    M --> X[Bounded Text Tool Result]</pre>
+    W --> R[@file:id Tool Result]
+    R --> B[Context Builder at API Time]
+    B --> S[Synthetic User Message: query + image]
+    S --> M[Current Chat Model]</pre>
             </div>
             <div class="task-list">
             <div class="task-card">
                 <div class="task-header">
                     <div class="task-title-row">
                         <span class="task-num"># 4.1</span>
-                        <span class="task-name">Add reusable media inspection service</span>
+                        <span class="task-name">Implement inspect_media as a media loader tool</span>
                         <span class="layer-badge" style="background:#569cd6">feature</span>
                     </div>
                 </div>
                 <div class="task-grid">
                     <div class="task-cell">
                         <span class="cell-label">What</span>
-                        <span class="cell-value">Create an inspection application service that resolves or ingests media through the shared attachment workspace and queries a configured media-capable model.</span>
+                        <span class="cell-value">inspect_media(path_or_url, query) resolves the source, ingests it through the shared attachment workspace, and returns a minimal tool result containing only the canonical attachment reference (@file:&lt;id&gt;). The query is preserved in the tool instruction arguments for later use by the context builder.</span>
                     </div>
                     <div class="task-cell">
                         <span class="cell-label">Why</span>
-                        <span class="cell-value">The tool and future media workflows need one inference contract independent of composer and provider details.</span>
+                        <span class="cell-value">The tool&#x27;s job is purely media resolution and ingestion. It does not call any model. The next inference step delivers the resolved media to the current chat model as a synthetic user multimodal message — identical to a user-pasted image.</span>
                     </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/media/inspect.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/engine.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/config/settings.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/runtime/runtime.go</li></ul>
-                </div>
-                    
-                <div class="task-cell full-width snippet-block">
-                    <span class="cell-label">Snippet</span>
-                    <pre><code class="language-go">type Inspector interface {
-    Inspect(ctx context.Context, request InspectRequest) (InspectResult, error)
-}
-
-type InspectRequest struct {
-    Source string
-    Query string
-    SessionDir string
-}
-
-type InspectResult struct {
-    Text string
-    AttachmentID string
-    InputTokens int
-}</code></pre>
-                </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>Inspection accepts canonical session references, local paths, and HTTP or HTTPS URLs.</li><li>All non-session sources pass through normal ingestion limits and security policy.</li><li>Inspection selects a configured media-capable model or returns a clear unsupported error.</li><li>Inspection output is bounded text suitable for current GoAI tool-result representation.</li></ul>
-                </div>
-                </div>
-                <div class="task-footer"><span class="task-verify">✔ go test ./internal/media ./internal/chat ./internal/runtime ./internal/config</span> </div>
-            </div>
-            <div class="task-card">
-                <div class="task-header">
-                    <div class="task-title-row">
-                        <span class="task-num"># 4.2</span>
-                        <span class="task-name">Expose inspect_media tool</span>
-                        <span class="layer-badge" style="background:#569cd6">feature</span>
-                    </div>
-                </div>
-                <div class="task-grid">
-                    <div class="task-cell">
-                        <span class="cell-label">What</span>
-                        <span class="cell-value">Register inspect_media with path_or_url and query arguments, session runtime context, authorization behavior, and text-only results.</span>
-                    </div>
-                    <div class="task-cell">
-                        <span class="cell-label">Why</span>
-                        <span class="cell-value">Assistants need an autonomous, auditable path to understand media during tool loops.</span>
-                    </div>
-                    
-                <div class="task-cell full-width">
-                    <span class="cell-label">Files</span>
-                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/tools/media.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/tools/tools.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/session.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/tool_exec.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/runtime/runtime.go</li></ul>
+                    <ul class="files-list"><li class="file-add"><span class="action-sym">+</span>  internal/tools/media.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/tools/tools.go</li></ul>
                 </div>
                     
                 <div class="task-cell full-width snippet-block">
                     <span class="cell-label">Snippet</span>
                     <pre><code class="language-go">var InspectMediaTool = Tool{
     Name: &quot;inspect_media&quot;,
-    // path_or_url, query
-}
-
-type RuntimeContext struct {
-    // existing fields
-    MediaInspector media.Inspector
+    Description: &quot;Load a media file so the model can inspect it. Returns an attachment reference that will be delivered as multimodal content in the next inference.&quot;,
+    Schema: `{...}` // path_or_url, query
+    Execute: func(args, rt) ToolResult {
+        // 1. Resolve path/URL
+        // 2. Ingest via workspace → @file:&lt;id&gt;
+        // 3. Return ToolResult{Result: &quot;@file:&lt;id&gt;&quot;}
+        // The query remains in Instruction.Arguments for the context builder.
+    }
 }</code></pre>
                 </div>
                     
                 <div class="task-cell full-width">
                     <span class="cell-label">Acceptance Criteria</span>
-                    <ul class="acceptance-list"><li>The tool schema requires path_or_url and query strings.</li><li>Local and remote sources follow existing tool authorization semantics before reading or downloading.</li><li>Successful execution returns inspection text and records attachment and token usage.</li><li>Tool execution never embeds binary or image content in ToolOutput.</li></ul>
+                    <ul class="acceptance-list"><li>The tool schema requires path_or_url and query strings.</li><li>Local and remote sources follow existing tool authorization semantics before reading or downloading.</li><li>Successful execution returns only the @file:&lt;id&gt; reference — no binary, no base64, no model call.</li><li>Failed ingestion (missing file, network error, limit exceeded) returns a clear error string.</li><li>Tool execution never embeds binary or image content in ToolOutput.</li></ul>
                 </div>
                 </div>
-                <div class="task-footer"><span class="task-verify">✔ go test ./internal/tools ./internal/chat ./internal/runtime</span> </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/tools ./internal/media</span> </div>
+            </div>
+            <div class="task-card">
+                <div class="task-header">
+                    <div class="task-title-row">
+                        <span class="task-num"># 4.2</span>
+                        <span class="task-name">Generate synthetic user multimodal message at context-build time</span>
+                        <span class="layer-badge" style="background:#569cd6">feature</span>
+                    </div>
+                </div>
+                <div class="task-grid">
+                    <div class="task-cell">
+                        <span class="cell-label">What</span>
+                        <span class="cell-value">When building API messages, detect inspect_media tool results that contain @file:&lt;id&gt; references. Extract the query from the tool instruction arguments, resolve the attachment, and generate a synthetic user message with [text: query, image: resolved] inserted immediately after the tool result in the API message array. This synthetic message is not persisted — it exists only for the API request.</span>
+                    </div>
+                    <div class="task-cell">
+                        <span class="cell-label">Why</span>
+                        <span class="cell-value">Reuses the exact same multimodal pipeline as user attachments. No provider-specific tool-result media support needed. No separate media model call. The session log stays clean with just the attachment handle.</span>
+                    </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Files</span>
+                    <ul class="files-list"><li class="file-mod"><span class="action-sym">~</span>  internal/chat/context.go</li><li class="file-mod"><span class="action-sym">~</span>  internal/chat/tool_exec.go</li></ul>
+                </div>
+                    
+                <div class="task-cell full-width snippet-block">
+                    <span class="cell-label">Snippet</span>
+                    <pre><code class="language-go">// In context builder, after building the tool result message:
+if toolName == &quot;inspect_media&quot; &amp;&amp; execution.Status == &quot;success&quot; {
+    query := extractQueryFromArgs(entry.Instruction.Arguments)
+    attachmentRef := entry.Execution.Result  // &quot;@file:&lt;id&gt;&quot;
+    // Resolve attachment → PartImage (same as user attachment pipeline)
+    // Append synthetic user message: [text: query, PartImage: resolved]
+    // Estimate tokens: query text + attachment token estimate
+}</code></pre>
+                </div>
+                    
+                <div class="task-cell full-width">
+                    <span class="cell-label">Acceptance Criteria</span>
+                    <ul class="acceptance-list"><li>Synthetic user message is generated only at API-build time — not appended to session messages.</li><li>The synthetic message reuses the same attachment resolution and provider-part-building as user messages.</li><li>Token accounting includes both the tool result tokens (handle text) and the synthetic user message tokens (query + attachment estimate).</li><li>Model capability filtering (media policy) applies to synthetic messages the same way as user messages.</li><li>The session log shows only the assistant tool call and the tool result with the attachment handle — no synthetic message in persisted history.</li></ul>
+                </div>
+                </div>
+                <div class="task-footer"><span class="task-verify">✔ go test ./internal/chat ./internal/tools</span> </div>
             </div></div>
         </section>
         <section id="compatibility-and-release-confidence" class="milestone-section">

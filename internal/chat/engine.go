@@ -59,18 +59,6 @@ type ChatMessage struct {
 	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
 }
 
-// ContentPart for multimodal messages
-type ContentPart struct {
-	Type     string    `json:"type"`
-	Text     string    `json:"text,omitempty"`
-	ImageURL *ImageURL `json:"image_url,omitempty"`
-}
-
-// ImageURL for image content parts
-type ImageURL struct {
-	URL string `json:"url"`
-}
-
 // toolDefinition is the OpenAI-compatible tool definition sent in the request.
 type toolDefinition struct {
 	Type     string      `json:"type"`
@@ -164,6 +152,16 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 
 	go func() {
 		defer close(ch)
+		e.runStream(ctx, ch, messages, toolDefs, false)
+	}()
+
+	return ch
+}
+
+// runStream performs one streaming attempt, forwarding events to ch. If a
+// media rejection occurs and this is the first attempt, it strips media parts
+// and retries once (retrying=true prevents recursion).
+func (e *Engine) runStream(ctx context.Context, ch chan<- StreamEvent, messages []goai_provider.Message, toolDefs []tools.Tool, retrying bool) {
 
 		// Build GoAI LanguageModel from provider
 		langModel, parseThinking, err := e.provider.BuildGoAIModel(e.Model)
@@ -328,6 +326,18 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 				return
 
 			case goai_provider.ChunkError:
+				// If this is the first attempt and the error is a classified
+				// media rejection, retry once without media parts.
+				if !retrying && isMediaRejection(chunk.Error) {
+					// Strip media parts from messages and retry.
+					stripped := stripMediaParts(messages)
+					ch <- StreamEvent{
+						Text: "Retrying without attachments: model does not support this media type",
+					}
+					// Recurse with stripped messages and retrying=true.
+					e.runStream(ctx, ch, stripped, toolDefs, true)
+					return
+				}
 				ch <- StreamEvent{Error: chunk.Error, IsAuthError: isAuthFailure(chunk.Error)}
 				return
 			}
@@ -345,14 +355,13 @@ func (e *Engine) Stream(ctx context.Context, messages []goai_provider.Message, t
 			Done:       true,
 			StopReason: stopReason,
 		}
-	}()
-
-	return ch
-}
+	}
 
 // BuildAPIMessages converts config.Message history to GoAI provider.Message.
+// Attachment references in user messages are not resolved — pass a workspace
+// and attachments via BuildContext to include them.
 func BuildAPIMessages(messages []config.Message) []goai_provider.Message {
-	return buildProviderMessages(messages, nil)
+	return buildProviderMessages(messages, nil, nil, "", nil)
 }
 
 // goaiToInternalToolCall converts a GoAI StreamChunk tool call to our internal format.
@@ -394,3 +403,33 @@ func RepairArgs(args string) (string, bool) {
 	}
 	return `{"_error": "malformed JSON from model, original args discarded"}`, false
 }
+
+// stripMediaParts removes non-text parts (images, files) from messages,
+// preserving text, reasoning, tool-call, and tool-result parts.
+func stripMediaParts(messages []goai_provider.Message) []goai_provider.Message {
+	stripped := make([]goai_provider.Message, len(messages))
+	for i, msg := range messages {
+		stripped[i] = goai_provider.Message{
+			Role:            msg.Role,
+			ProviderOptions: msg.ProviderOptions,
+		}
+		for _, part := range msg.Content {
+			switch part.Type {
+			case goai_provider.PartImage, goai_provider.PartFile:
+				// Skip media parts
+				continue
+			default:
+				stripped[i].Content = append(stripped[i].Content, part)
+			}
+		}
+		// If all parts were stripped, leave a text part with empty content
+		// to keep the message valid.
+		if len(stripped[i].Content) == 0 {
+			stripped[i].Content = []goai_provider.Part{{Type: goai_provider.PartText, Text: ""}}
+		}
+	}
+	return stripped
+}
+
+// collectOmitted examines messages to find attachments that were omitted
+// due to known-unsupported modalities. This is used for user notifications.

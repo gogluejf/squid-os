@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"squid-os/internal/media"
 )
 
 // CapabilityScope identifies where an effective capability was discovered.
@@ -63,6 +66,8 @@ type LifetimeTokenTally struct {
 // InputTokenTally breaks down input tokens by source.
 type InputTokenTally struct {
 	User            int `json:"user"`
+	Attachment      int `json:"attachment"`       // media attachment estimates on user messages (images, PDFs, etc.)
+	ToolAttachment  int `json:"tool_attachment"`  // media produced by tools (e.g. inspect_media)
 	ToolExecution   int `json:"tool_execution"`
 	SystemPrompt    int `json:"system_prompt"`
 	ToolDefinitions int `json:"tool_definitions"`
@@ -112,6 +117,7 @@ type SessionDoc struct {
 	Config      SessionConfig             `json:"config"`
 	Pending     *PendingConfig            `json:"pending,omitempty"`
 	Messages    []Message                 `json:"messages"`
+	Attachments []media.Attachment        `json:"attachments,omitempty"`
 	TotalTokens int                       `json:"total_tokens,omitempty"` // legacy, kept for backward compat on load
 	TokenTally  *TokenTally               `json:"token_tally,omitempty"`
 	FileState   map[string]FileStateEntry `json:"file_state,omitempty"`
@@ -144,6 +150,7 @@ type SessionConfig struct {
 	Limits            SessionLimits     `json:"limits,omitempty"`
 	DebugEnabled      bool              `json:"debug_enabled,omitempty"`
 	ContextCompaction bool              `json:"context_compaction"`
+	MediaModel        string            `json:"media_model,omitempty"` // provider/model for media inspection
 }
 
 // PendingConfig holds desired next-state changes. Non-nil fields are pending.
@@ -239,7 +246,20 @@ type ToolCallEntry struct {
 		// Empty for non-agent tools.
 		ChildSessionID   string `json:"child_session_id,omitempty"`
 		ChildSessionName string `json:"child_session_name,omitempty"`
+
+		// Attachments lists media this tool result produced (e.g. inspect_media).
+		// BuildContext uses this to emit the synthetic multimodal message.
+		Attachments []AttachmentRef `json:"attachments,omitempty"`
 	} `json:"execution,omitempty"`
+}
+
+// AttachmentRef is a minimal reference to a session attachment stored on a
+// message or tool result. It records which file is referenced and its estimated
+// token cost. File facts (kind, mime, size, id) live in the session's
+// Attachment registry (Doc.Attachments), keyed by the relative path.
+type AttachmentRef struct {
+	File   string `json:"file"`   // session-relative path, e.g. "media/abc123.png"
+	Tokens int    `json:"tokens"` // estimated token cost for accounting
 }
 
 type Message struct {
@@ -252,8 +272,12 @@ type Message struct {
 	TimeToFirstTokenMs int64   `json:"time_to_first_token_ms,omitempty"`
 	TokensPerSecond    float64 `json:"tok_per_sec,omitempty"`
 
-	ImagePath   string `json:"image_path,omitempty"`
-	InputTokens int    `json:"input_tokens"` // user message and execution tokens
+	InputTokens int `json:"input_tokens"` // user message and execution tokens
+
+	// Attachments lists the attachment references resolved for this message
+	// at creation time. Populated for user messages that reference @file
+	// attachments. BuildContext reads this instead of scanning message text.
+	Attachments []AttachmentRef `json:"attachments,omitempty"`
 
 	Text            string         `json:"text"`
 	TextMetrics     ContentMetrics `json:"text_metrics,omitempty"`
@@ -311,7 +335,7 @@ func NewSessionDoc(cfg SessionConfig) SessionDoc {
 func NewSessionDocWithIdentity(cfg SessionConfig, identity SessionIdentity) SessionDoc {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return SessionDoc{
-		Version:  1,
+		Version:  2,
 		Identity: identity,
 		Meta: SessionMeta{
 			CreatedAt: now,
@@ -759,7 +783,17 @@ func ForkSessionTree(sourceDir string, destinationDir string) (SessionTreeForkRe
 		}
 	}
 
-	// 10. Validate the forked tree has no duplicate new IDs.
+	// 10. Copy media directories for all session nodes.
+	for _, n := range nodes {
+		sourceSessionDir := filepath.Dir(filepath.Join(sourceDir, n.relPath))
+		destSessionDir := filepath.Dir(filepath.Join(tempDir, n.relPath))
+
+		if err := media.CopyWorkspace(context.Background(), sourceSessionDir, destSessionDir); err != nil {
+			return SessionTreeForkResult{}, fmt.Errorf("copy media for %s: %w", n.relPath, err)
+		}
+	}
+
+	// 11. Validate the forked tree has no duplicate new IDs.
 	seenNewIDs := make(map[string]bool, len(idMap))
 	for _, newID := range idMap {
 		if seenNewIDs[newID] {

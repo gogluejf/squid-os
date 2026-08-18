@@ -7,6 +7,7 @@ import (
 
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
+	"squid-os/internal/media"
 	runtimeconfig "squid-os/internal/runtime"
 )
 
@@ -58,12 +59,22 @@ func bootstrapSession(request Request) (*chat.Session, config.SessionConfig, err
 
 func Execute(ctx context.Context, request Request) (Result, error) {
 	sessionRequest := request.Session
+
+	// Clean up stale temporary workspaces from crashed or abandoned sessions.
+	// This is bounded: only removes Squid-owned temp dirs older than 24h,
+	// capped at 100 entries per startup.
+	_ = media.CleanupStale(media.CleanupPolicy{
+		Root:      sessionRequest.Paths.TempFolder,
+		OlderThan: 24 * time.Hour,
+		MaxEntries: 100,
+	})
+
 	session, cfg, err := bootstrapSession(request)
 	if err != nil {
 		return Result{}, err
 	}
 
-	session.Append(chat.NewUserMessage(fmt.Sprintf("msg_%d", len(session.Doc.Messages)+1), sessionRequest.Prompt, ""))
+	session.Append(chat.NewUserMessage(fmt.Sprintf("msg_%d", len(session.Doc.Messages)+1), sessionRequest.Prompt))
 	if err := chat.PrepareTurn(session); err != nil {
 		return Result{}, err
 	}

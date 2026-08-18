@@ -84,7 +84,7 @@ var P = Palette{
 	TextAgent:          "207", // agent tool label (pink-orange)
 	TextAgentParam:     "205", // darker pink-orange for agent param
 	TextSpinner:        "205", // pink
-	TextAttachment:     "214", // orange
+	TextAttachment:     "70",  // green
 
 	CtxBarUsed:  "255",
 	CtxBarEmpty: "237",
@@ -454,3 +454,4 @@ func AgentStyle() StyleLabel {
 		}
 	})
 }
+

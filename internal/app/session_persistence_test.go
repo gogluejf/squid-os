@@ -41,7 +41,7 @@ func TestAutoSaveWritesCurrentDirectoryInPlace(t *testing.T) {
 	m := testRootModel(t, "autosaved", true)
 	originalDir := m.session.SessionDir
 	originalID := m.session.Doc.Identity.ID
-	m.session.Append(chat.NewUserMessage("msg_1", "hello", ""))
+	m.session.Append(chat.NewUserMessage("msg_1", "hello"))
 
 	m, _ = m.autoSave()
 
@@ -82,7 +82,7 @@ func TestSaveToDifferentUnpersistedDirectoryIsFirstSave(t *testing.T) {
 
 func TestSaveToDifferentPersistedDirectoryForksAndReloads(t *testing.T) {
 	m := testRootModel(t, "source", true)
-	m.session.Append(chat.NewUserMessage("msg_1", "hello", ""))
+	m.session.Append(chat.NewUserMessage("msg_1", "hello"))
 	if err := m.session.Save(); err != nil {
 		t.Fatalf("save source: %v", err)
 	}

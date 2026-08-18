@@ -1,6 +1,7 @@
 package app
 
 import (
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,11 +14,16 @@ import (
 )
 
 type capabilityCandidate struct {
-	kind string // "skill" or "agent"
-	name string
+	kind   string // "skill", "agent", "tool", or "file"
+	name   string
+	source string // absolute file path for "file" kind; empty for others
 }
 
-func (c capabilityCandidate) qualified() string { return c.kind + "/" + c.name }
+// qualified renders the reference text inserted on completion: @skill/name,
+// @agent/name, @tool/name, or @file/path.
+func (c capabilityCandidate) qualified() string {
+	return c.kind + ":" + c.name
+}
 func (c capabilityCandidate) label() string     { return c.kind + "  " + c.name }
 
 type capabilityCompletion struct {
@@ -61,6 +67,9 @@ func (m Model) capabilityCandidates() []capabilityCandidate {
 		candidates = append(candidates, capabilityCandidate{kind: "tool", name: tool.Name})
 	}
 
+	// File search: bounded by configured roots and limits.
+	candidates = append(candidates, m.fileCandidates()...)
+
 	sort.Slice(candidates, func(i, j int) bool {
 		rank := func(kind string) int {
 			switch kind {
@@ -68,8 +77,10 @@ func (m Model) capabilityCandidates() []capabilityCandidate {
 				return 0
 			case "agent":
 				return 1
-			default: // tool
+			case "tool":
 				return 2
+			default: // file
+				return 3
 			}
 		}
 		ri, rj := rank(candidates[i].kind), rank(candidates[j].kind)
@@ -109,7 +120,11 @@ func (m Model) capabilityCompletionAtCursor() (capabilityCompletion, bool) {
 	query := string(line[start+1 : cursor])
 	var candidates []capabilityCandidate
 	for _, candidate := range m.capabilityCandidates() {
-		if strings.HasPrefix(candidate.name, query) {
+		match := candidate.name
+		if candidate.kind == "file" {
+			match = filepath.Base(candidate.name)
+		}
+		if strings.HasPrefix(match, query) {
 			candidates = append(candidates, candidate)
 		}
 	}
@@ -277,6 +292,8 @@ func capabilityCandidateStyle(kind string) lipgloss.Style {
 		color = style.P.TextSkill
 	case "agent":
 		color = style.P.TextAgent
+	case "file":
+		color = style.P.TextAttachment
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
 }

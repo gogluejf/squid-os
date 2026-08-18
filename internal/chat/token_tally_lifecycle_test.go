@@ -32,7 +32,7 @@ func TestLifecycleNewSessionHasTally(t *testing.T) {
 func TestLifecycleLoadSessionHasTally(t *testing.T) {
 	// Build a session, then simulate loading it
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 
 	// Simulate load by wrapping the doc
 	loaded, err := LoadRootSession(s.Doc, "test", config.Paths{}, runtimeconfig.Catalog{})
@@ -56,7 +56,7 @@ func TestLifecycleAppendUserUpdatesLifetime(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
 	before := s.Doc.TokenTally.Lifetime.Input.User
 
-	s.Append(NewUserMessage("msg_1", "hello world", ""))
+	s.Append(NewUserMessage("msg_1", "hello world"))
 
 	if s.Doc.TokenTally == nil {
 		t.Fatal("TokenTally should not be nil after append")
@@ -73,7 +73,7 @@ func TestLifecycleAppendUserUpdatesLifetime(t *testing.T) {
 
 func TestLifecycleAppendAssistantUpdatesOutput(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 
 	before := s.Doc.TokenTally.Lifetime.Output.Total
 	s.Append(config.Message{
@@ -124,8 +124,8 @@ func TestLifecycleAppendSyntheticUpdatesTally(t *testing.T) {
 
 func TestLifecycleTruncateUpdatesTally(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello world this is a longer message", ""))
-	s.Append(NewUserMessage("msg_2", "another message", ""))
+	s.Append(NewUserMessage("msg_1", "hello world this is a longer message"))
+	s.Append(NewUserMessage("msg_2", "another message"))
 
 	tokensBefore := s.Doc.TokenTally.Lifetime.Input.User
 
@@ -143,7 +143,7 @@ func TestLifecycleTruncateUpdatesTally(t *testing.T) {
 
 func TestLifecycleSaveAssistantMsgUpdatesTally(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 	before := s.Doc.TokenTally.Lifetime.Total
 
 	idx := AppendAssistantMsg(s, config.Message{
@@ -172,7 +172,7 @@ func TestLifecycleSaveAssistantMsgUpdatesTally(t *testing.T) {
 
 func TestLifecycleFlushToolMessageUpdatesTally(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 
 	// Save an assistant message with tool calls (pending execution)
 	msgIdx := AppendAssistantMsg(s, config.Message{
@@ -197,6 +197,7 @@ func TestLifecycleFlushToolMessageUpdatesTally(t *testing.T) {
 					Files            []config.FileEntry `json:"files,omitempty"`
 					ChildSessionID   string             `json:"child_session_id,omitempty"`
 					ChildSessionName string             `json:"child_session_name,omitempty"`
+					Attachments      []config.AttachmentRef `json:"attachments,omitempty"`
 				}{Status: "success", Result: "file content here", Tokens: 15},
 			},
 		},
@@ -218,7 +219,7 @@ func TestLifecycleFlushToolMessageUpdatesTally(t *testing.T) {
 
 func TestLifecycleBuildContextUpdatesContextTally(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{ContextCompaction: true}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 	ctx := s.BuildContext()
 
 	if s.Doc.TokenTally.Context.Raw != ctx.Tokens.Raw {
@@ -278,7 +279,7 @@ func TestLifecycleBuildContextCompactionSavings(t *testing.T) {
 
 func TestLifecycleBuildContextNoRecursion(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{ContextCompaction: true}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 
 	// Capture lifetime before BuildContext
 	lifetimeBefore := s.Doc.TokenTally.Lifetime.Total
@@ -303,7 +304,7 @@ func TestLifecycleMultipleMutationsStayLive(t *testing.T) {
 	initialTotal := s.Doc.TokenTally.Lifetime.Total
 
 	// Append user
-	s.Append(NewUserMessage("msg_1", "first message", ""))
+	s.Append(NewUserMessage("msg_1", "first message"))
 	afterUser := s.Doc.TokenTally.Lifetime.Total
 	if afterUser <= initialTotal {
 		t.Error("tally should increase after user message")
@@ -347,7 +348,7 @@ func TestLifecycleMultipleMutationsStayLive(t *testing.T) {
 
 func TestLifecyclePrepareTurnUpdatesTally(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 
 	// Set a pending inference change to trigger transition messages
 	cfg := config.InferenceConfig{Provider: "test", Model: "test-model"}
@@ -394,7 +395,7 @@ func TestLifecycleAppendSyntheticMessageUpdatesTally(t *testing.T) {
 
 func TestLifecycleNoDirtyState(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello world", ""))
+	s.Append(NewUserMessage("msg_1", "hello world"))
 
 	// The persisted tally and a fresh calculation should match on lifetime
 	fresh := s.CalculateTokenTally()
@@ -429,7 +430,7 @@ func TestLifecycleTokenTallyNeverNil(t *testing.T) {
 		t.Error("TokenTally should not be nil after NewSession")
 	}
 
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 	if s.Doc.TokenTally == nil {
 		t.Error("TokenTally should not be nil after Append")
 	}
@@ -439,7 +440,7 @@ func TestLifecycleTokenTallyNeverNil(t *testing.T) {
 		t.Error("TokenTally should not be nil after TruncateTo")
 	}
 
-	s.Append(NewUserMessage("msg_2", "new message", ""))
+	s.Append(NewUserMessage("msg_2", "new message"))
 	if s.Doc.TokenTally == nil {
 		t.Error("TokenTally should not be nil after re-append")
 	}
@@ -453,7 +454,7 @@ func TestLifecycleContextChangesImmediatelyAfterAppendAndTruncate(t *testing.T) 
 	s := NewRootSession(config.SessionConfig{ContextCompaction: true}, config.Paths{}, runtimeconfig.Catalog{})
 	initial := s.Doc.TokenTally.Context.Raw
 
-	s.Append(NewUserMessage("msg_1", "hello world with enough text", ""))
+	s.Append(NewUserMessage("msg_1", "hello world with enough text"))
 	if s.Doc.TokenTally.Context.Raw <= initial {
 		t.Fatalf("context raw should increase after append: before=%d after=%d", initial, s.Doc.TokenTally.Context.Raw)
 	}
@@ -467,7 +468,7 @@ func TestLifecycleContextChangesImmediatelyAfterAppendAndTruncate(t *testing.T) 
 
 func TestLifecycleContextChangesImmediatelyAfterToolCompletion(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "read file", ""))
+	s.Append(NewUserMessage("msg_1", "read file"))
 	tc := tcRead("tc1", "/file.go", true, 10, 50)
 	tc.Execution.Status = ""
 	tc.Execution.Result = ""
@@ -490,7 +491,7 @@ func TestLifecycleContextChangesImmediatelyAfterToolCompletion(t *testing.T) {
 
 func TestLifecycleLoadRefreshesContextBeforeStream(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 	s.Doc.TokenTally.Context.Raw = 0
 
 	loaded, err := LoadRootSession(s.Doc, "test", config.Paths{}, runtimeconfig.Catalog{})
@@ -504,7 +505,7 @@ func TestLifecycleLoadRefreshesContextBeforeStream(t *testing.T) {
 
 func TestLifecycleSaveRefreshesContextBeforeStream(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 	s.Doc.TokenTally.Context.Raw = 0
 
 	tally := s.CalculateTokenTally()
@@ -535,7 +536,7 @@ func TestLifecycleRealisticSessionFlow(t *testing.T) {
 	}
 
 	// 2. User sends message
-	s.Append(NewUserMessage("msg_1", "read this file", ""))
+	s.Append(NewUserMessage("msg_1", "read this file"))
 	if s.Doc.TokenTally.Lifetime.Input.User <= 0 {
 		t.Error("user tokens should be > 0 after user message")
 	}
@@ -574,7 +575,7 @@ func TestLifecycleRealisticSessionFlow(t *testing.T) {
 
 func TestRefreshTokenTallyZeroesOnEmpty(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello", ""))
+	s.Append(NewUserMessage("msg_1", "hello"))
 
 	// Tally should reflect the user message
 	if s.Doc.TokenTally.Lifetime.Input.User <= 0 {
@@ -594,7 +595,7 @@ func TestRefreshTokenTallyZeroesOnEmpty(t *testing.T) {
 // Test that RefreshTokenTally is idempotent — calling it twice produces same result
 func TestRefreshTokenTallyIdempotent(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "hello world", ""))
+	s.Append(NewUserMessage("msg_1", "hello world"))
 	s.Append(config.Message{
 		ID:          "msg_2",
 		Role:        config.RoleAssistant,
@@ -614,7 +615,7 @@ func TestRefreshTokenTallyIdempotent(t *testing.T) {
 // Test that time.Now() in messages doesn't affect tally determinism
 func TestRefreshTokenTallyDeterministic(t *testing.T) {
 	s := NewRootSession(config.SessionConfig{}, config.Paths{}, runtimeconfig.Catalog{})
-	s.Append(NewUserMessage("msg_1", "test", ""))
+	s.Append(NewUserMessage("msg_1", "test"))
 
 	time.Sleep(1 * time.Millisecond)
 	s.RefreshTokenTally()

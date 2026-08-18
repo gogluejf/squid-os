@@ -46,11 +46,15 @@ func (m Model) saveTo(destinationDir string) (Model, tea.Cmd) {
 			m.session.Doc = forkedDoc
 			m.session.SessionDir = destinationDir
 			m.session.Doc.Config.Autosave.Name = name
+			// Re-initialize the workspace for the forked session (persistent).
+			m.session.InitWorkspace()
 			if err := m.session.Save(); err != nil {
 				(&m).setNotification(ui.NotificationError, "couldn't update forked session: "+err.Error())
 				return m, nil
 			}
 		case os.IsNotExist(sourceErr):
+			// First explicit save — migrate any temp workspace media into
+			// the destination session directory alongside the chat document.
 			m.session.SessionDir = destinationDir
 			if err := m.session.Save(); err != nil {
 				(&m).setNotification(ui.NotificationError, "couldn't save session: "+err.Error())

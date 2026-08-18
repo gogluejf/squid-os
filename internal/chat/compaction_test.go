@@ -215,6 +215,7 @@ func TestCompactionNonFileTools(t *testing.T) {
 					Files            []config.FileEntry `json:"files,omitempty"`
 					ChildSessionID   string             `json:"child_session_id,omitempty"`
 					ChildSessionName string             `json:"child_session_name,omitempty"`
+					Attachments      []config.AttachmentRef `json:"attachments,omitempty"`
 				}{Status: tools.ResultStatusSuccess, Result: "output", Tokens: 20},
 			},
 		}),

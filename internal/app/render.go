@@ -72,14 +72,10 @@ func (m Model) View() string {
 		}
 	}
 
-	// Status line: notification (left) + attachment chip (right)
+	// Status line: notification (left)
 	// Skip notification when in history search mode (the search overlay replaces it)
 	if m.mode != ModeHistorySearch {
-		attachChip := ""
-		if m.attachedImage != "" {
-			attachChip = style.AttachmentStyle.Render("attached: " + m.attachedImage)
-		}
-		sections = append(sections, ui.RenderStatusLine(m.notification, attachChip, m.width))
+		sections = append(sections, ui.RenderStatusLine(m.notification, "", m.width))
 	}
 
 	// Textarea (shown for all modes except component overlay which replaces it)
@@ -108,7 +104,7 @@ func (m *Model) updateViewportContent() {
 	// Render only new messages, reuse cache for existing ones
 	for i := len(m.session.renderedMessages); i < len(m.session.Doc.Messages); i++ {
 		msg := m.session.Doc.Messages[i]
-		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, m.expanded))
+		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, m.expanded, m.session.Doc.Attachments))
 	}
 
 	var liveSeqStat *config.SequenceStat

@@ -1,8 +1,11 @@
 package chat
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -11,6 +14,8 @@ import (
 
 	"squid-os/internal/config"
 	"squid-os/internal/environment"
+	"squid-os/internal/media"
+	"squid-os/internal/chat/provider"
 	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/tools"
 )
@@ -25,6 +30,19 @@ type Session struct {
 	// SessionDir is the canonical or provisional directory that would contain
 	// chat.json. It is always set, even before the session has been persisted.
 	SessionDir string
+	// Workspace manages session-local media files. May be nil for sessions
+	// that haven't initialized attachment support yet.
+	Workspace media.Workspace
+	// tempWorkspaceDir holds the path to the temporary workspace directory
+	// for unsaved sessions. After the first explicit save, this is cleared.
+	tempWorkspaceDir string
+	// isIncognito indicates whether this session is running in incognito mode.
+	// Incognito sessions use isolated temporary workspaces that are removed
+	// on normal exit and never become visible as saved sessions.
+	isIncognito bool
+	// capsCache / capsCacheKey cache ModelCapabilities per (provider, model).
+	capsCache  goai_provider.ModelCapabilities
+	capsCacheKey string
 }
 
 // NewRootSession creates a root session with a canonical directory. Persistence
@@ -141,6 +159,7 @@ func LoadSession(sd config.SessionDoc, sessionDir string, paths config.Paths, ca
 		}
 	}
 	s := &Session{Doc: sd, Info: info, Paths: paths, Catalog: catalog, SessionDir: sessionDir}
+	s.InitWorkspace()
 	if locationChanged {
 		if err := s.Save(); err != nil {
 			return nil, fmt.Errorf("persist fork destination config: %w", err)
@@ -195,13 +214,42 @@ func (s *Session) repairInterruptedTools() (int, bool) {
 
 // Save persists the session in its canonical directory.
 func (s *Session) Save() error {
+	if s.tempWorkspaceDir != "" && s.Workspace != nil {
+		result, err := media.MigrateTempWorkspace(context.Background(), s.Workspace, s.SessionDir)
+		if err != nil {
+			return fmt.Errorf("migrate temp workspace: %w", err)
+		}
+		s.Workspace = result.Workspace
+		s.tempWorkspaceDir = ""
+	}
+
 	s.RefreshTokenTally()
 	return config.SaveSessionDoc(s.SessionDir, s.Doc, s.Doc.TokenTally)
 }
 
 func (s *Session) Append(msg config.Message) {
+	if msg.Role == config.RoleUser {
+		msg.Text = s.resolveFileReferences(msg.Text)
+		msg.Attachments = s.resolveAttachmentRefs(msg.Text)
+	}
 	s.Doc.Messages = append(s.Doc.Messages, msg)
 	s.RefreshTokenTally()
+}
+
+// resolveAttachmentRefs returns an AttachmentRef for each attachment whose
+// canonical reference appears in the message text. This is stored on the
+// message at creation time so BuildContext doesn't re-scan the text.
+func (s *Session) resolveAttachmentRefs(text string) []config.AttachmentRef {
+	var refs []config.AttachmentRef
+	for _, a := range s.Doc.Attachments {
+		if strings.Contains(text, a.CanonicalRef()) {
+			refs = append(refs, config.AttachmentRef{
+				File:   a.FileName,
+				Tokens: EstimateAttachmentTokens(a),
+			})
+		}
+	}
+	return refs
 }
 
 func (s *Session) TruncateTo(n int) {
@@ -215,26 +263,26 @@ func (s *Session) TruncateTo(n int) {
 	s.RefreshTokenTally()
 }
 
-func (s *Session) TruncateToUser() (userText, userImage string) {
+func (s *Session) TruncateToUser() (userText string) {
 	n := len(s.Doc.Messages)
 	for i := n - 1; i >= 0; i-- {
 		if s.Doc.Messages[i].Role == config.RoleUser {
-			userText, userImage = s.Doc.Messages[i].Text, s.Doc.Messages[i].ImagePath
+			userText = s.Doc.Messages[i].Text
 			s.TruncateTo(i)
-			return userText, userImage
+			return userText
 		}
 	}
-	return "", ""
+	return ""
 }
 
-func (s *Session) CancelTruncate() (userText, userImage string, truncated bool) {
+func (s *Session) CancelTruncate() (userText string, truncated bool) {
 	n := len(s.Doc.Messages)
 	if n == 0 {
-		return "", "", false
+		return "", false
 	}
 	for i := n - 1; i >= 0; i-- {
 		if s.Doc.Messages[i].Role == config.RoleUser {
-			userText, userImage = s.Doc.Messages[i].Text, s.Doc.Messages[i].ImagePath
+			userText = s.Doc.Messages[i].Text
 			break
 		}
 	}
@@ -242,7 +290,7 @@ func (s *Session) CancelTruncate() (userText, userImage string, truncated bool) 
 		s.TruncateTo(n - 1)
 		truncated = true
 	}
-	return userText, userImage, truncated
+	return userText, truncated
 }
 
 func (s *Session) HasUserMessage() bool {
@@ -260,7 +308,8 @@ func (s *Session) BuildMessages() []goai_provider.Message { return BuildAPIMessa
 
 // BuildContext returns the next provider-message snapshot and refreshes its context tally.
 func (s *Session) BuildContext() Context {
-	ctx := BuildContext(s.Doc.Messages, s.Doc.Config.ContextCompaction)
+	caps := s.ModelCaps()
+	ctx := BuildContext(s.Doc.Messages, s.Doc.Config.ContextCompaction, s.mediaBaseDir(), s.Doc.Attachments, &caps)
 
 	if s.Doc.TokenTally == nil {
 		s.Doc.TokenTally = &config.TokenTally{}
@@ -271,13 +320,22 @@ func (s *Session) BuildContext() Context {
 }
 
 func (s *Session) ToolContext(toolCallID string, childRef tools.ChildSessionRef) tools.RuntimeContext {
+	s.EnsureWorkspace()
+	var ingestSvc *media.IngestService
+	if s.Workspace != nil {
+		ingestSvc = media.NewIngestService(s.Workspace, media.DefaultLimits,
+			func() []media.Attachment { return s.Doc.Attachments },
+			func(a media.Attachment) { s.AddAttachment(a) },
+		)
+	}
 	return tools.RuntimeContext{
-		Config:     s.Doc.Config,
-		Catalog:    s.Catalog,
-		Identity:   s.Doc.Identity,
-		SessionDir: s.SessionDir,
-		ToolCallID: toolCallID,
-		ChildRef:   childRef,
+		Config:        s.Doc.Config,
+		Catalog:       s.Catalog,
+		Identity:      s.Doc.Identity,
+		SessionDir:    s.SessionDir,
+		ToolCallID:    toolCallID,
+		ChildRef:      childRef,
+		IngestService: ingestSvc,
 	}
 }
 
@@ -445,6 +503,7 @@ func (s *Session) SetInference(cfg config.InferenceConfig) {
 	if s.Doc.Pending != nil {
 		s.Doc.Pending.Inference = nil
 	}
+	s.InvalidateCaps()
 }
 
 func (s *Session) PushConfigChange(cfg config.InferenceConfig) bool {
@@ -507,6 +566,7 @@ func (s *Session) PushModelSwitch(oldModel, newModel string) {
 		Label:  "Model Switched",
 		Params: map[string]string{"from": oldModel, "to": newModel},
 	})
+	s.InvalidateCaps()
 }
 
 func BuildConfigMsg(inf config.InferenceConfig, target string) config.Message {
@@ -555,13 +615,266 @@ func CountTokensApproxString(s string) int {
 	return n
 }
 
-func NewUserMessage(id, text, imagePath string) config.Message {
+func NewUserMessage(id, text string) config.Message {
 	return config.Message{
-		ID:          id,
-		Role:        config.RoleUser,
-		CreatedAt:   time.Now(),
-		Text:        text,
-		ImagePath:   imagePath,
-		InputTokens: CountTokensApproxString(text),
+		ID:               id,
+		Role:             config.RoleUser,
+		CreatedAt:        time.Now(),
+		Text:             text,
+		InputTokens:      CountTokensApproxString(text),
 	}
+}
+
+// --- Attachment Methods ---
+
+// sessionExists checks whether the session's chat.json has been persisted.
+func (s *Session) sessionExists() bool {
+	_, err := os.Stat(filepath.Join(s.SessionDir, "chat.json"))
+	return err == nil
+}
+
+// InitWorkspace initializes the session's media workspace based on its
+// incognito state and persistence status.
+func (s *Session) InitWorkspace() {
+	if s.Workspace != nil {
+		return
+	}
+
+	// Ensure Attachments slice is initialized so the workspace and session
+	// share the same underlying array. Appending to s.Doc.Attachments will
+	// be visible through the workspace's Registry.
+	if s.Doc.Attachments == nil {
+		s.Doc.Attachments = make([]media.Attachment, 0)
+	}
+
+	// Incognito sessions always use a temp workspace.
+	if s.isIncognito {
+		tempDir, err := os.MkdirTemp(s.Paths.TempFolder, "squid-incognito-*")
+		if err != nil {
+			return
+		}
+		s.Workspace = media.NewTempWorkspace(tempDir)
+		s.tempWorkspaceDir = tempDir
+		return
+	}
+
+	// Unsaved session: temp workspace. Persisted sessions get a persistent workspace.
+	if !s.sessionExists() {
+		tempDir, err := os.MkdirTemp(s.Paths.TempFolder, "squid-session-*")
+		if err != nil {
+			// Fallback to persistent workspace if temp creation fails.
+			s.Workspace = media.NewPersistentWorkspace(s.SessionDir)
+			return
+		}
+		s.Workspace = media.NewTempWorkspace(tempDir)
+		s.tempWorkspaceDir = tempDir
+		return
+	}
+
+	// Saved session: persistent workspace.
+	s.Workspace = media.NewPersistentWorkspace(s.SessionDir)
+}
+
+// EnsureWorkspace returns the workspace, initializing it if needed.
+func (s *Session) EnsureWorkspace() media.Workspace {
+	if s.Workspace == nil {
+		s.InitWorkspace()
+	}
+	return s.Workspace
+}
+
+// AddAttachment registers a new attachment in the session document.
+func (s *Session) AddAttachment(a media.Attachment) {
+	for _, existing := range s.Doc.Attachments {
+		if existing.ID == a.ID {
+			return
+		}
+	}
+	s.Doc.Attachments = append(s.Doc.Attachments, a)
+}
+
+// GetAttachment resolves an attachment by ID or file name.
+func (s *Session) GetAttachment(id string) (media.Attachment, string, error) {
+	ws := s.EnsureWorkspace()
+	if ws == nil {
+		return media.Attachment{}, "", fmt.Errorf("workspace not initialized")
+	}
+	a, found := media.ResolveRef(s.Doc.Attachments, id)
+	if !found {
+		return media.Attachment{}, "", fmt.Errorf("attachment not found: %s", id)
+	}
+	return a, filepath.Join(ws.Dir(), a.FileName), nil
+}
+
+// mediaBaseDir returns the directory where session media files are stored.
+// Before the first save this is the temporary workspace dir; after save
+// (or on load) it is the session media dir.
+func (s *Session) mediaBaseDir() string {
+	if ws := s.EnsureWorkspace(); ws != nil {
+		return ws.Dir()
+	}
+	return ""
+}
+
+// ModelCaps returns the capability set for the session's current model.
+// Results are cached per (provider, model). Invalidate by calling
+// InvalidateCaps() after a model switch.
+func (s *Session) ModelCaps() goai_provider.ModelCapabilities {
+	inf := s.CurrentInference()
+	key := inf.Provider + "/" + inf.Model
+	if s.capsCacheKey == key {
+		return s.capsCache
+	}
+	s.capsCacheKey = key
+	s.capsCache = goai_provider.ModelCapabilities{}
+	// Capabilities are a pure function of (provider, model) — no credentials needed.
+	// Lookup with nil settings constructs the provider shell; BuildGoAIModel
+	// returns a GoAI model whose Capabilities() only inspects the model ID.
+	prov := provider.Lookup(inf.Provider, nil)
+	if prov == nil {
+		return s.capsCache
+	}
+	langModel, _, err := prov.BuildGoAIModel(inf.Model)
+	if err != nil {
+		return s.capsCache
+	}
+	s.capsCache = goai_provider.ModelCapabilitiesOf(langModel)
+	return s.capsCache
+}
+
+// InvalidateCaps clears the cached model capabilities. Call after a model switch.
+func (s *Session) InvalidateCaps() {
+	s.capsCacheKey = ""
+	s.capsCache = goai_provider.ModelCapabilities{}
+}
+
+// attachmentByFile returns the attachment for a bare file name.
+func (s *Session) attachmentByFile(fileName string) (media.Attachment, bool) {
+	for _, a := range s.Doc.Attachments {
+		if a.FileName == fileName {
+			return a, true
+		}
+	}
+	return media.Attachment{}, false
+}
+
+// HasAttachments returns true if the session has any persisted attachments.
+func (s *Session) HasAttachments() bool {
+	return len(s.Doc.Attachments) > 0
+}
+
+// SetIncognito toggles incognito mode for this session.
+func (s *Session) SetIncognito(v bool) {
+	s.isIncognito = v
+	if v && s.Workspace != nil {
+		// Switch to incognito temp workspace.
+		tempDir, err := os.MkdirTemp(s.Paths.TempFolder, "squid-incognito-*")
+		if err == nil {
+			s.Workspace = media.NewTempWorkspace(tempDir)
+			s.tempWorkspaceDir = tempDir
+		}
+	}
+}
+
+// CleanupWorkspace removes temporary workspace directories for incognito
+// or unsaved sessions.
+func (s *Session) CleanupWorkspace() error {
+	if s.tempWorkspaceDir != "" {
+		return os.RemoveAll(s.tempWorkspaceDir)
+	}
+	return nil
+}
+
+// resolveFileReferences scans message text for @file/path patterns and
+// @file:<url> patterns, ingests them through the workspace, and replaces
+// them with canonical @file:<id> references.
+var fileURLPattern = regexp.MustCompile(`@file:https?://\S+`)
+var bareURLPattern = regexp.MustCompile(`@https?://\S+`)
+var fileRefPattern = regexp.MustCompile(`@file:\S+`)
+var barePathPattern = regexp.MustCompile(`@([^\s@]+[./][^\s@]*)`)
+
+func (s *Session) resolveFileReferences(text string) string {
+	s.EnsureWorkspace()
+	if s.Workspace == nil {
+		return text
+	}
+
+	ingestSvc := media.NewIngestService(s.Workspace, media.DefaultLimits,
+		func() []media.Attachment { return s.Doc.Attachments },
+		func(a media.Attachment) { s.AddAttachment(a) },
+	)
+
+		// Resolve bare @https://<url> references (no file: prefix)
+		text = bareURLPattern.ReplaceAllStringFunc(text, func(match string) string {
+			urlStr := strings.TrimPrefix(match, "@")
+			attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
+				Kind: media.IngestSourceKindURL,
+				URL:  urlStr,
+			})
+			if err != nil {
+				return match
+			}
+			return attach.CanonicalRef()
+		})
+
+		// Resolve @file:<url> references (explicit file: prefix)
+		text = fileURLPattern.ReplaceAllStringFunc(text, func(match string) string {
+			urlStr := strings.TrimPrefix(match, "@file:")
+			attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
+				Kind: media.IngestSourceKindURL,
+				URL:  urlStr,
+			})
+			if err != nil {
+				return match
+			}
+			return attach.CanonicalRef()
+		})
+
+		// Resolve @file:<path> references (absolute or relative to working dir)
+		text = fileRefPattern.ReplaceAllStringFunc(text, func(match string) string {
+			relPath := strings.TrimPrefix(match, "@file:")
+			var absPath string
+			if filepath.IsAbs(relPath) {
+				absPath = relPath
+			} else {
+				absPath = filepath.Join(s.Doc.Config.WorkingDir, relPath)
+			}
+			attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
+				Kind: media.IngestSourceKindFile,
+				Path: absPath,
+			})
+			if err != nil {
+				return match // leave original reference on error
+			}
+			return attach.CanonicalRef()
+		})
+
+		// Resolve bare @<path> references (e.g. @website/architecture.png)
+		// Runs last so it only catches refs not already handled by the patterns above.
+		text = barePathPattern.ReplaceAllStringFunc(text, func(match string) string {
+			relPath := strings.TrimPrefix(match, "@")
+			// Skip if it looks like a capability ref (skill:, agent:, tool:, file:)
+			// Those would have been handled already, but guard against edge cases.
+			for _, prefix := range []string{"skill:", "agent:", "tool:", "file:"} {
+				if strings.HasPrefix(relPath, prefix) {
+					return match
+				}
+			}
+			var absPath string
+			if filepath.IsAbs(relPath) {
+				absPath = relPath
+			} else {
+				absPath = filepath.Join(s.Doc.Config.WorkingDir, relPath)
+			}
+			attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
+				Kind: media.IngestSourceKindFile,
+				Path: absPath,
+			})
+			if err != nil {
+				return match // leave original reference on error
+			}
+			return attach.CanonicalRef()
+		})
+
+	return text
 }

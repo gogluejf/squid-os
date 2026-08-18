@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"squid-os/internal/config"
+	"squid-os/internal/media"
 	"squid-os/internal/tools"
 )
 
@@ -294,6 +295,22 @@ doExecute:
 	}
 	entries[i].Execution.Tokens = CountTokensApproxString(content)
 	entries[i].Execution.DurationMs = time.Since(resultStart).Milliseconds()
+
+	// For inspect_media, register the resolved attachment on the session
+	// and store a ref on the tool result so the context builder can generate
+	// a synthetic user multimodal message.
+	if toolName == "inspect_media" && result.Status == tools.ResultStatusSuccess {
+		attachmentRef := result.Result
+		if strings.HasPrefix(attachmentRef, "@file:") {
+			attachID := strings.TrimPrefix(attachmentRef, "@file:")
+			if attach, found := media.ResolveRef(s.Doc.Attachments, attachID); found {
+				entries[i].Execution.Attachments = append(entries[i].Execution.Attachments, config.AttachmentRef{
+					File:   attach.FileName,
+					Tokens: EstimateAttachmentTokens(attach),
+				})
+			}
+		}
+	}
 	for j := range result.Files {
 		result.Files[j].ToolCallID = entry.ID
 	}
@@ -394,3 +411,5 @@ func shouldAuthorize(mode config.AuthorizationMode, tool *tools.Tool, args map[s
 		return false
 	}
 }
+
+

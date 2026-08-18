@@ -92,7 +92,7 @@ var AllCommands = []SlashCommand{
 		Name:        "exit",
 		Description: "Exit squid-os",
 		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
-			return m, tea.Quit
+			return m, m.quitCmd
 		},
 	},
 	{

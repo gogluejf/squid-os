@@ -1,6 +1,8 @@
 package chat
 
-import "squid-os/internal/config"
+import (
+	"squid-os/internal/config"
+)
 
 // RefreshTokenTally stores the current full token tally on the session doc.
 func (s *Session) RefreshTokenTally() {
@@ -26,6 +28,9 @@ func (s *Session) calculateLifetimeTally() config.LifetimeTokenTally {
 		switch msg.Role {
 		case config.RoleUser:
 			input.User += msg.InputTokens
+			for _, ref := range msg.Attachments {
+				input.Attachment += ref.Tokens
+			}
 		case config.RoleSystem:
 			input.SystemPrompt += msg.InputTokens
 		case config.RoleInternal:
@@ -38,6 +43,14 @@ func (s *Session) calculateLifetimeTally() config.LifetimeTokenTally {
 			// Input tokens on assistant messages come from tool execution results
 			input.ToolExecution += msg.InputTokens
 
+			// Media produced by tools (e.g. inspect_media) is tracked separately
+			// so lifetime accounting includes the synthetic multimodal cost.
+			for _, tc := range msg.ToolCalls {
+				for _, ref := range tc.Execution.Attachments {
+					input.ToolAttachment += ref.Tokens
+				}
+			}
+
 			// Output tokens
 			output.Thinking += msg.ThinkingMetrics.Tokens
 			output.ToolCalls += msg.ToolCallMetrics.Tokens
@@ -45,7 +58,7 @@ func (s *Session) calculateLifetimeTally() config.LifetimeTokenTally {
 		}
 	}
 
-	input.Total = input.User + input.ToolExecution + input.SystemPrompt + input.ToolDefinitions + input.Synthetic
+	input.Total = input.User + input.Attachment + input.ToolAttachment + input.ToolExecution + input.SystemPrompt + input.ToolDefinitions + input.Synthetic
 	output.Total = output.Assistant + output.Thinking + output.ToolCalls
 
 	total := input.Total + output.Total
@@ -58,5 +71,6 @@ func (s *Session) calculateLifetimeTally() config.LifetimeTokenTally {
 }
 
 func (s *Session) calculateContextTally() config.ContextTokenTally {
-	return BuildContext(s.Doc.Messages, s.Doc.Config.ContextCompaction).TokenTally()
+	caps := s.ModelCaps()
+	return BuildContext(s.Doc.Messages, s.Doc.Config.ContextCompaction, s.mediaBaseDir(), s.Doc.Attachments, &caps).TokenTally()
 }

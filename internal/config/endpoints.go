@@ -28,6 +28,7 @@ const (
 // Known provider name constants.
 const (
 	ProviderVLLM        = "vllm"
+	ProviderNInfer      = "ninfer"
 	ProviderOllama      = "ollama"
 	ProviderOpenAI      = "openai"
 	ProviderOpenAICodex = "openai-codex"

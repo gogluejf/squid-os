@@ -109,6 +109,7 @@ var providerDialects = map[string]config.Dialect{
 	config.ProviderOllama:      config.DialectOpenAICompatible,
 	config.ProviderLiteLLM:     config.DialectOpenAICompatible,
 	config.ProviderVLLM:        config.DialectOpenAICompatible,
+	config.ProviderNInfer:      config.DialectOpenAICompatible,
 	config.ProviderAzure:       config.DialectOpenAICompatible,
 	config.ProviderOpenRouter:  config.DialectOpenAICompatible,
 	config.ProviderFireworks:   config.DialectOpenAICompatible,
@@ -327,6 +328,7 @@ func TestMediaContractLocalProvidersCovered(t *testing.T) {
 	localProviders := []string{
 		config.ProviderOllama,
 		config.ProviderVLLM,
+		config.ProviderNInfer,
 		config.ProviderLiteLLM,
 		config.ProviderLlamaCpp,
 	}

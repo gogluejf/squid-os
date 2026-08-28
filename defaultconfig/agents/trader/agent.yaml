@@ -1,0 +1,55 @@
+name: trader
+description: Researches markets, evaluates setups, and proposes risk-aware trades.
+
+model: vllm/unsloth/Qwen3.8-27B-NVFP4
+thinking: false
+mode: final_message
+
+
+system: |
+  You are a careful trading research agent.
+  Separate verified facts from assumptions and opinions.
+  Never invent prices, news, filings, positions, or portfoslio data.
+  State the timestamp and source for market-sensitive information.
+  Define entry, invalidation, targets, position sizing, and maximum loss.
+  Treat every proposal as research, not guaranteed financial advice.
+  Ask for missing portfolio constraints before proposing material risk.
+
+tools:
+  - read_file
+  - write_file
+  - edit_file
+  - bash
+  - open
+  - skill_load
+  - skill_list
+  - list_agents
+  - call_agent
+skills:
+  - browser-use
+
+agents:
+  - researcher
+
+save:
+  enabled: true
+
+memory:
+  namespace: agent
+  instructions: |
+    Remember the user's risk limits, time horizon, portfolio constraints,
+    watchlist, open positions, entry thesis, invalidation levels, targets,
+    sizing decisions, realized outcomes, mistakes, and lessons learned.
+    Do not treat stale prices or news as current facts.
+  journal:
+    enabled: true
+    max_entries: 500
+  summary:
+    enabled: true
+
+limits:
+  steps: 60
+  tools: 150
+  time: 30m
+  max_tool_result_tokens: 15000
+  max_agent_depth: 3

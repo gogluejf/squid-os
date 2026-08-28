@@ -13,9 +13,6 @@ Usage:
     progress.py mark-done --progress <progress.json> --task-id <number>
     progress.py mark-failed --progress <progress.json> --task-id <number>
     progress.py status --progress <progress.json>
-    progress.py full-plan --progress <progress.json>
-    progress.py all-done --progress <progress.json>
-    progress.py final-summary --progress <progress.json>
 """
 import sys
 import json
@@ -194,80 +191,6 @@ def cmd_status(args):
     print(f"Total: {total} | Done: {done} | In Progress: {in_progress} | Not Started: {not_started} | Failed: {failed}")
 
 
-def cmd_full_plan(args):
-    progress = load_json(args.progress)
-    plan = load_plan_for_progress(args.progress)
-    tasks = progress.get("tasks", {})
-
-    for m in plan.get("milestones", []):
-        m_num = m["number"]
-        m_name = m["name"]
-        m_tasks = m.get("tasks", [])
-        total = len(m_tasks)
-        done = 0
-        for t in m_tasks:
-            t_data = tasks.get(t["number"], {})
-            if t_data.get("status") == "done":
-                done += 1
-        print(f"## Milestone {m_num}: {m_name} ({done}/{total})")
-        for t in m_tasks:
-            t_num = t["number"]
-            t_data = tasks.get(t_num, {})
-            status = t_data.get("status", "not_started")
-            if status == "done":
-                mark = "✓"
-            elif status == "in_progress":
-                mark = "◷"
-            elif status == "failed":
-                mark = "✗"
-            else:
-                mark = "◯"
-            print(f"- {mark} **{t_num}** {t['name']}")
-        print()
-
-
-def cmd_all_done(args):
-    progress = load_json(args.progress)
-    tasks = progress.get("tasks", {})
-    for t in tasks.values():
-        if t["status"] != "done" and t["status"] != "failed":
-            print("no")
-            return
-    print("yes")
-
-
-def cmd_final_summary(args):
-    progress = load_json(args.progress)
-    plan = load_plan_for_progress(args.progress)
-    tasks = progress.get("tasks", {})
-
-    lessons = []
-    tradeoffs = []
-
-    for m in plan.get("milestones", []):
-        for t in m.get("tasks", []):
-            t_num = t["number"]
-            t_data = tasks.get(t_num, {})
-            s = t_data.get("summary", {})
-            lesson = strip_none(s.get("lessons_learned"))
-            tradeoff = strip_none(s.get("tradeoffs"))
-            if lesson:
-                lessons.append(f"- **{t_num} {t['name']}:** {lesson}")
-            if tradeoff:
-                tradeoffs.append(f"- **{t_num} {t['name']}:** {tradeoff}")
-
-    if lessons:
-        print("### Lessons Learned")
-        for l in lessons:
-            print(l)
-        print()
-    if tradeoffs:
-        print("### Key Tradeoffs")
-        for t in tradeoffs:
-            print(t)
-        print()
-
-
 def main():
     parser = argparse.ArgumentParser(description="Plan progress tracker")
     subparsers = parser.add_subparsers(dest="command")
@@ -302,15 +225,6 @@ def main():
     p.add_argument("--task-id", required=True)
 
     p = subparsers.add_parser("status")
-    p.add_argument("--progress", required=True)
-
-    p = subparsers.add_parser("full-plan")
-    p.add_argument("--progress", required=True)
-
-    p = subparsers.add_parser("all-done")
-    p.add_argument("--progress", required=True)
-
-    p = subparsers.add_parser("final-summary")
     p.add_argument("--progress", required=True)
 
     p = subparsers.add_parser("get-summary")
@@ -365,12 +279,6 @@ def main():
             sys.exit(1)
     elif args.command == "status":
         cmd_status(args)
-    elif args.command == "full-plan":
-        cmd_full_plan(args)
-    elif args.command == "all-done":
-        cmd_all_done(args)
-    elif args.command == "final-summary":
-        cmd_final_summary(args)
     elif args.command == "get-summary":
         cmd_get_summary(args)
     elif args.command == "get-milestone-summary":

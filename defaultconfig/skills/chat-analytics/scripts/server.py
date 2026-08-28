@@ -47,8 +47,8 @@ def time_ago(dt_str):
     except:
         return "unknown"
 
-def load_session(session_name):
-    path = os.path.join(SESSIONS_DIR, session_name, "chat.json")
+def load_session(filename):
+    path = os.path.join(SESSIONS_DIR, filename)
     with open(path, 'r') as f:
         return json.load(f)
 
@@ -56,7 +56,6 @@ def parse_session_data(data):
     """Parse a session JSON and extract analytics."""
     session = data.get('session', {})
     messages = data.get('messages', [])
-    session_total_tokens = data.get('total_tokens')  # authoritative billing total from provider
 
     # Counts
     total_messages = len(messages)
@@ -75,51 +74,13 @@ def parse_session_data(data):
     user_input_tokens = sum(m.get('input_tokens', 0) for m in user_messages)
     assistant_output_tokens = sum(m.get('output_tokens', 0) for m in assistant_messages)
 
-    # Thinking tokens (from nested metrics, top-level may be None)
-    total_thinking_tokens = 0
-    total_text_tokens = 0
-    total_tool_call_tokens = 0
-    for m in messages:
-        # Try top-level first, fall back to nested metrics
-        if m.get('thinking_tokens'):
-            total_thinking_tokens += m['thinking_tokens']
-        elif m.get('thinking_metrics', {}).get('tokens'):
-            total_thinking_tokens += m['thinking_metrics']['tokens']
-        if m.get('text_tokens'):
-            total_text_tokens += m['text_tokens']
-        elif m.get('text_metrics', {}).get('tokens'):
-            total_text_tokens += m['text_metrics']['tokens']
-        if m.get('tool_call_tokens'):
-            total_tool_call_tokens += m['tool_call_tokens']
-        elif m.get('tool_call_metrics', {}).get('tokens'):
-            total_tool_call_tokens += m['tool_call_metrics']['tokens']
+    # Thinking tokens
+    total_thinking_tokens = sum(m.get('thinking_tokens', 0) for m in messages)
+    total_text_tokens = sum(m.get('text_tokens', 0) for m in messages)
+    total_tool_call_tokens = sum(m.get('tool_call_tokens', 0) for m in messages)
 
-    # Aborted messages (synthetic with label='aborted')
-    aborted_messages = len([m for m in messages if m.get('label') == 'aborted'])
-
-    # Tool-enabled messages
-    tool_enabled_count = len([m for m in messages if m.get('label') == 'tool_enabled'])
-
-    # Tool call execution tokens (from tool_calls[].execution.tokens — these are instruction tokens)
-    total_tool_instruction_tokens = 0
-    total_tool_execution_tokens = 0
-    for m in messages:
-        for tc in m.get('tool_calls', []):
-            inst = tc.get('instruction', {})
-            if inst.get('tokens'):
-                total_tool_instruction_tokens += inst['tokens']
-            exe = tc.get('execution', {})
-            if exe.get('tokens'):
-                total_tool_execution_tokens += exe['tokens']
-
-    # System prompt tokens (from system messages only: sys0, env0)
+    # System prompt tokens (from system messages)
     system_prompt_tokens = sum(m.get('input_tokens', 0) + m.get('output_tokens', 0) for m in system_messages)
-
-    # Tool definition tokens (from tools0)
-    tool_definition_tokens = 0
-    tools0 = next((m for m in messages if m.get('id') == 'tools0'), None)
-    if tools0:
-        tool_definition_tokens = (tools0.get('input_tokens', 0) or 0) + (tools0.get('output_tokens', 0) or 0)
 
     # Synthetic tokens
     synthetic_tokens = sum(m.get('input_tokens', 0) + m.get('output_tokens', 0) for m in synthetic_messages)
@@ -137,115 +98,36 @@ def parse_session_data(data):
     for tc in all_tool_calls:
         name = tc.get('name') or (tc.get('instruction', {}) or {}).get('name') or 'unknown'
         if name not in tool_usage:
-            tool_usage[name] = {'calls': 0, 'tokens_in': 0, 'tokens_out': 0, 'inference_ms': 0, 'execution_ms': 0}
+            tool_usage[name] = {'calls': 0, 'tokens_in': 0, 'tokens_out': 0}
         tool_usage[name]['calls'] += 1
         # Get tokens from instruction/execution
         inst = tc.get('instruction', {})
         exec_ = tc.get('execution', {})
         tool_usage[name]['tokens_in'] += inst.get('tokens', 0) + tc.get('call_tokens', 0)
         tool_usage[name]['tokens_out'] += exec_.get('tokens', 0) + tc.get('result_tokens', 0)
-        tool_usage[name]['inference_ms'] += inst.get('duration_ms', 0) or 0
-        tool_usage[name]['execution_ms'] += exec_.get('duration_ms', 0) or 0
 
-    # Skills loaded — only from actual skill_load events (synthetic messages or tool calls)
+    # Skills loaded
     skills_data = {}
+    if session.get('skill'):
+        skill_info = session['skill']
+        if skill_info.get('current'):
+            name = skill_info['current']
+            if name not in skills_data:
+                skills_data[name] = {'loads': 0}
+            skills_data[name]['loads'] += 1
 
-    # Check for skill_load synthetic messages and tool calls
+    # Check messages for skill references
     for m in messages:
-        if m.get('label') == 'skill_load':
-            params = m.get('params', {})
-            skill_name = params.get('name', '')
-            if skill_name:
+        text = m.get('text', '')
+        if '[SKILL:' in text or '[SKILL ]' in text:
+            # Extract skill names from text
+            import re
+            found = re.findall(r'\[SKILL[ :]+([^\]\n]+)\]', text)
+            for skill_name in found:
+                skill_name = skill_name.strip()
                 if skill_name not in skills_data:
-                    skills_data[skill_name] = {'loads': 0, 'tokens': 0}
+                    skills_data[skill_name] = {'loads': 0}
                 skills_data[skill_name]['loads'] += 1
-                skills_data[skill_name]['tokens'] += (m.get('input_tokens') or 0)
-        for tc in m.get('tool_calls', []):
-            tc_name = tc.get('name', '') or (tc.get('instruction', {}) or {}).get('name', '')
-            if tc_name == 'skill_load':
-                args_raw = tc.get('arguments', '') or (tc.get('instruction', {}) or {}).get('arguments', '')
-                if args_raw:
-                    try:
-                        args = json.loads(args_raw)
-                        skill_name = args.get('name', args.get('skill', ''))
-                        if skill_name:
-                            if skill_name not in skills_data:
-                                skills_data[skill_name] = {'loads': 0, 'tokens': 0}
-                            skills_data[skill_name]['loads'] += 1
-                            skills_data[skill_name]['tokens'] += ((tc.get('execution') or {}).get('tokens') or 0)
-                    except:
-                        pass
-
-
-    # Build skill timeline
-    skill_timeline = []
-    not_skill_tokens = 0
-    for m in messages:
-        role = m.get('role', '')
-
-        # Synthetic skill_load message
-        if m.get('label') == 'skill_load':
-            params = m.get('params', {}) or {}
-            skill_name = params.get('name', '')
-            skill_tok = (m.get('input_tokens') or 0)
-            if skill_name and skill_tok > 0:
-                if not_skill_tokens > 0:
-                    skill_timeline.append({'type': 'not_skill', 'tokens': not_skill_tokens})
-                    not_skill_tokens = 0
-                skill_timeline.append({'type': 'skill', 'name': skill_name, 'tokens': skill_tok, 'id': m.get('id', '')})
-            continue
-
-        if role == 'assistant':
-            has_skill_tc = False
-            skill_segments = []
-            non_skill_tool_instr = 0
-            non_skill_tool_exec = 0
-
-            for tc in m.get('tool_calls', []):
-                tc_name = tc.get('name', '') or (tc.get('instruction', {}) or {}).get('name', '')
-                inst = tc.get('instruction', {}) or {}
-                exe = tc.get('execution', {}) or {}
-                if tc_name == 'skill_load':
-                    has_skill_tc = True
-                    skill_tok = (exe.get('tokens') or 0)
-                    args_raw = tc.get('arguments', '') or inst.get('arguments', '')
-                    skill_name = ''
-                    if args_raw:
-                        try:
-                            args = json.loads(args_raw)
-                            skill_name = args.get('name', args.get('skill', ''))
-                        except:
-                            pass
-                    if skill_name and skill_tok > 0:
-                        skill_segments.append({'type': 'skill', 'name': skill_name, 'tokens': skill_tok, 'id': m.get('id', '')})
-                else:
-                    non_skill_tool_instr += (inst.get('tokens') or 0)
-                    non_skill_tool_exec += (exe.get('tokens') or 0)
-
-            tm = m.get('text_metrics') or {}
-            thm = m.get('thinking_metrics') or {}
-            text_tok = (m.get('text_tokens') or tm.get('tokens')) or 0
-            think_tok = (m.get('thinking_tokens') or thm.get('tokens')) or 0
-
-            if skill_segments:
-                not_skill_tokens += text_tok + think_tok + non_skill_tool_instr + non_skill_tool_exec
-                if not_skill_tokens > 0:
-                    skill_timeline.append({'type': 'not_skill', 'tokens': not_skill_tokens})
-                    not_skill_tokens = 0
-                skill_timeline.extend(skill_segments)
-            else:
-                tcm = m.get('tool_call_metrics') or {}
-                instr_tok = (m.get('tool_call_tokens') or tcm.get('tokens')) or 0
-                exec_tok = sum((tc.get('execution') or {}).get('tokens') or 0 for tc in (m.get('tool_calls') or []))
-                not_skill_tokens += text_tok + think_tok + instr_tok + exec_tok
-        elif role in ('user', 'system', 'internal'):
-            not_skill_tokens += (m.get('input_tokens') or 0)
-
-    if not_skill_tokens > 0:
-        skill_timeline.append({'type': 'not_skill', 'tokens': not_skill_tokens})
-
-    if skill_timeline:
-        skills_data['timeline'] = skill_timeline
 
     # TTFT (time to first token)
     ttft_values = []
@@ -267,84 +149,44 @@ def parse_session_data(data):
             speeds.append(ss['avg_tok_per_sec'])
     avg_speed = sum(speeds) / len(speeds) if speeds else 0
 
-    # Duration — sum only actual processing time (not wall-clock idle)
-    def msg_processing_ms(m):
-        ttft = (m.get('time_to_first_token_ms') or 0)
-        tm = m.get('text_metrics') or {}
-        text = tm.get('inference_duration_ms') or 0
-        thm = m.get('thinking_metrics') or {}
-        thinking = thm.get('inference_duration_ms') or 0
-        tcm = m.get('tool_call_metrics') or {}
-        tool_call = tcm.get('inference_duration_ms') or 0
-        tool_exec = sum((tc.get('execution') or {}).get('duration_ms') or 0 for tc in (m.get('tool_calls') or []))
-        return ttft + text + thinking + tool_call + tool_exec
-    total_duration_ms = sum(msg_processing_ms(m) for m in messages)
+    # Duration
+    total_duration_ms = sum(m.get('duration_ms', 0) or m.get('duration_time_ms', 0) or m.get('response_time_ms', 0) or 0 for m in messages)
 
     # Turns (user + assistant = 1 turn)
     num_turns = len(user_messages)  # Each user message starts a turn
 
-    # Files touched — aggregate from tool_calls[].execution[].files[]
+    # Files touched (from sequence_stat.file_state)
     files_touched = {}
     for m in messages:
-        for tc in m.get('tool_calls', []):
-            exe = tc.get('execution', {}) or {}
-            inst = tc.get('instruction', {}) or {}
-            exec_files = exe.get('files', []) or []
-            for fi in exec_files:
-                filepath = fi.get('path', '')
-                if not filepath:
-                    continue
-                if filepath not in files_touched:
-                    files_touched[filepath] = {
-                        'path': filepath,
-                        'checksum': '',
-                        'traces': [],
-                        'reads': 0,
-                        'edits': 0,
-                        'creates': 0,
-                        'reads_tokens': 0,
-                        'edits_tokens': 0,
-                        'creates_tokens': 0,
-                        'total_tokens': 0,
-                        'last_updated': ''
-                    }
-                trace = fi.get('trace', 'unknown')
-                files_touched[filepath]['traces'].append(trace)
-                cs = fi.get('checksum', '')
-                if cs:
-                    files_touched[filepath]['checksum'] = cs
-                ts = fi.get('time', '')
-                if ts and ts > files_touched[filepath]['last_updated']:
-                    files_touched[filepath]['last_updated'] = ts
-                call_tokens = inst.get('tokens', 0) + exe.get('tokens', 0)
-                if trace == 'read':
-                    files_touched[filepath]['reads'] += 1
-                    files_touched[filepath]['reads_tokens'] += call_tokens
-                elif trace == 'edit':
-                    files_touched[filepath]['edits'] += 1
-                    files_touched[filepath]['edits_tokens'] += call_tokens
-                elif trace == 'create':
-                    files_touched[filepath]['creates'] += 1
-                    files_touched[filepath]['creates_tokens'] += call_tokens
-                files_touched[filepath]['total_tokens'] += call_tokens
-
-    # General info
-    system_prompt_file = session.get('system_prompt_file', '')
-    inference = session.get('inference', {}) or {}
-    inference_initial = inference.get('initial', {}) or {}
-    inference_current = inference.get('current', {}) or {}
-    thinking_enabled = inference_current.get('thinking', False)
+        ss = m.get('sequence_stat', {})
+        file_state = ss.get('file_state', {})
+        for filepath, info in file_state.items():
+            if filepath not in files_touched:
+                files_touched[filepath] = {
+                    'path': filepath,
+                    'checksum': info.get('checksum', ''),
+                    'traces': [],
+                    'reads': 0,
+                    'edits': 0,
+                    'creates': 0,
+                    'total_tokens': 0,
+                    'last_updated': info.get('updated_at', '')
+                }
+            trace = info.get('trace', 'unknown')
+            files_touched[filepath]['traces'].append(trace)
+            if trace == 'read':
+                files_touched[filepath]['reads'] += 1
+            elif trace == 'edit':
+                files_touched[filepath]['edits'] += 1
+            elif trace == 'create':
+                files_touched[filepath]['creates'] += 1
+            files_touched[filepath]['total_tokens'] += ss.get('output_tokens', 0)
+            if info.get('updated_at', '') > files_touched[filepath]['last_updated']:
+                files_touched[filepath]['last_updated'] = info['updated_at']
 
     # Timeline data
     timeline = []
     perf_timeline = []
-    initial_model = inference_initial.get('model', '')
-    initial_provider = inference_initial.get('provider', '')
-    current_model_label = initial_model
-    current_provider_label = initial_provider
-    ctx_in = 0
-    ctx_out = 0
-    last_user_tokens = 0
     for i, m in enumerate(messages):
         role = m.get('role', 'unknown')
         created = m.get('created_at', '')
@@ -353,11 +195,6 @@ def parse_session_data(data):
         thinking_tok = m.get('thinking_tokens', 0)
         text_tok = m.get('text_tokens', 0)
         duration = m.get('duration_ms', 0) or m.get('duration_time_ms', 0) or m.get('response_time_ms', 0) or 0
-
-        # Accumulate cumulative tokens
-        ctx_in += input_tok
-        ctx_out += output_tok
-        ctx_total = ctx_in + ctx_out
 
         # Tool count for this message
         msg_tools = len(m.get('tool_calls', []) or [])
@@ -368,26 +205,8 @@ def parse_session_data(data):
         for fp in ss.get('file_state', {}):
             msg_files.append(fp)
 
-        if role == 'user':
-            last_user_tokens = input_tok or 0
-
-        if m.get('label') == 'Model Switched':
-            params = m.get('params') or {}
-            to_model = params.get('to', '')
-            if to_model:
-                if '/' in to_model:
-                    current_provider_label, current_model_label = to_model.split('/', 1)
-                else:
-                    current_model_label = to_model
-
-        # Performance data
-        tps = m.get('tokens_per_second') or m.get('tok_per_sec')
-        ss_speed = ss.get('avg_tok_per_sec', 0)
-        speed = tps or ss_speed
-
         timeline.append({
             'index': i,
-            'id': m.get('id', ''),
             'role': role,
             'timestamp': created,
             'input_tokens': input_tok,
@@ -396,72 +215,24 @@ def parse_session_data(data):
             'text_tokens': text_tok,
             'duration_ms': duration,
             'tool_count': msg_tools,
-            'files': msg_files,
-            'current_model_label': current_model_label,
-            'current_provider_label': current_provider_label,
-            'tokens_per_second': speed if speed and speed > 0 else 0,
-            'ctx_in': ctx_in,
-            'ctx_out': ctx_out,
-            'ctx_total': ctx_total,
+            'files': msg_files
         })
 
-        # Duration breakdown for assistant messages
-        ttft_dur = 0
-        text_dur = 0
-        thinking_dur = 0
-        tool_call_dur = 0
-        tool_exec_dur = 0
-        # Token breakdown for assistant messages
-        text_tok_b = 0
-        think_tok_b = 0
-        tool_instr_tok = 0
-        tool_exec_tok = 0
-        if role == 'assistant':
-            user_tok_for_bar = last_user_tokens
-            last_user_tokens = 0
-            ttft_dur = m.get('time_to_first_token_ms') or 0
-            tm = m.get('text_metrics') or {}
-            text_dur = tm.get('inference_duration_ms') or 0
-            text_tok_b = (m.get('text_tokens') or tm.get('tokens')) or 0
-            thm = m.get('thinking_metrics') or {}
-            thinking_dur = thm.get('inference_duration_ms') or 0
-            think_tok_b = (m.get('thinking_tokens') or thm.get('tokens')) or 0
-            tcm = m.get('tool_call_metrics') or {}
-            tool_call_dur = tcm.get('inference_duration_ms') or 0
-            tool_instr_tok = (m.get('tool_call_tokens') or tcm.get('tokens')) or 0
-            # Sum execution duration across all tool calls
-            for tc in m.get('tool_calls') or []:
-                exe = tc.get('execution') or {}
-                tool_exec_dur += (exe.get('duration_ms') or 0)
-                tool_exec_tok += (exe.get('tokens') or 0)
-
-        # Performance data — combined speed + TTFT + duration breakdown
+        # Performance data
+        tps = m.get('tokens_per_second') or m.get('tok_per_sec')
+        ss_speed = ss.get('avg_tok_per_sec', 0)
+        speed = tps or ss_speed
         if speed and speed > 0:
-            entry = {
+            perf_timeline.append({
                 'index': i,
-                'id': m.get('id', ''),
                 'tokens_per_second': speed,
-                'ttft_ms': ttft_dur if ttft_dur > 0 else None,
                 'role': role,
-                'current_model_label': current_model_label,
-                'current_provider_label': current_provider_label,
-                'ctx_in': ctx_in,
-                'ctx_out': ctx_out,
-                'ctx_total': ctx_total,
-            }
-            # Always include duration breakdown on timeline
-            timeline[-1]['ttft_dur_ms'] = ttft_dur
-            timeline[-1]['text_dur_ms'] = text_dur
-            timeline[-1]['thinking_dur_ms'] = thinking_dur
-            timeline[-1]['tool_call_dur_ms'] = tool_call_dur
-            timeline[-1]['tool_exec_dur_ms'] = tool_exec_dur
-            # Token breakdown
-            timeline[-1]['text_tok_b'] = text_tok_b
-            timeline[-1]['think_tok_b'] = think_tok_b
-            timeline[-1]['tool_instr_tok'] = tool_instr_tok
-            timeline[-1]['tool_exec_tok'] = tool_exec_tok
-            timeline[-1]['user_input_tok'] = user_tok_for_bar if role == 'assistant' else 0
-            perf_timeline.append(entry)
+                'is_model_init': role == 'synthetic' or role == 'system'
+            })
+
+    # General info
+    system_prompt_file = session.get('system_prompt_file', '')
+    thinking_enabled = session.get('thinking', False)
 
     # Extract system prompt content
     system_prompt_text = ''
@@ -469,27 +240,19 @@ def parse_session_data(data):
         system_prompt_text = m.get('text', '')
         break
 
-    # Collect init message params (sys0, env0, tools0, config0)
+    # Init config params
     init_params = {}
-    for m in messages:
-        mid = m.get('id', '')
-        params = m.get('params') or {}
-        label = m.get('label', '')
-        if mid == 'sys0' and params:
-            init_params['system_prompt'] = params.get('file', label)
-        elif mid == 'env0' and params:
-            init_params['environment'] = params.get('sections', '')
-        elif mid == 'tools0' and params:
-            init_params['tools'] = params.get('tools', '')
-        elif mid == 'config0' and params:
-            init_params['config'] = params
+    for m in system_messages:
+        if m.get('params'):
+            init_params = m['params']
+            break
 
     return {
         'session_info': {
             'id': session.get('id', ''),
             'title': session.get('title', ''),
-            'model': inference_current.get('model', ''),
-            'provider': inference_current.get('provider', ''),
+            'model': session.get('model', ''),
+            'provider': session.get('provider', ''),
             'created_at': session.get('created_at', ''),
             'updated_at': session.get('updated_at', ''),
             'system_prompt_file': system_prompt_file,
@@ -506,13 +269,10 @@ def parse_session_data(data):
             'internal_messages': len(internal_messages),
             'turns': num_turns,
             'tool_calls': tool_call_count,
-            'aborted': aborted_messages,
-            'tool_enabled': tool_enabled_count,
         },
         'tokens': {
             'total_input': total_input_tokens,
             'total_output': total_output_tokens,
-            'session_total': session_total_tokens,
             'user_input': user_input_tokens,
             'assistant_output': assistant_output_tokens,
             'thinking': total_thinking_tokens,
@@ -520,9 +280,6 @@ def parse_session_data(data):
             'tool_call': total_tool_call_tokens,
             'system_prompt': system_prompt_tokens,
             'synthetic': synthetic_tokens,
-            'tool_instruction': total_tool_instruction_tokens,
-            'tool_execution': total_tool_execution_tokens,
-            'tool_definition': tool_definition_tokens,
         },
         'performance': {
             'avg_ttft_ms': round(avg_ttft, 1),
@@ -537,30 +294,18 @@ def parse_session_data(data):
         'general': {
             'system_prompt_file': system_prompt_file,
             'system_prompt_preview': system_prompt_text[:200] if system_prompt_text else '',
-            'thinking_enabled': thinking_enabled,
             'init_params': init_params,
-            'inference': {
-                'initial': {
-                    'provider': inference_initial.get('provider', ''),
-                    'model': inference_initial.get('model', ''),
-                    'thinking': inference_initial.get('thinking', False),
-                },
-                'current': {
-                    'provider': inference_current.get('provider', ''),
-                    'model': inference_current.get('model', ''),
-                    'thinking': inference_current.get('thinking', False),
-                },
-            },
+            'thinking_enabled': thinking_enabled,
         }
     }
 
 def get_session_list():
     """Get list of all sessions with metadata."""
-    pattern = os.path.join(SESSIONS_DIR, "*", "chat.json")
+    pattern = os.path.join(SESSIONS_DIR, "*.chat.json")
     files = glob.glob(pattern)
     sessions = []
     for filepath in files:
-        filename = os.path.basename(os.path.dirname(filepath))
+        filename = os.path.basename(filepath)
         try:
             stat = os.stat(filepath)
             data = load_session(filename)
@@ -569,14 +314,14 @@ def get_session_list():
                 'filename': filename,
                 'created_at': parsed['session_info']['created_at'],
                 'updated_at': parsed['session_info']['updated_at'],
-                'time_ago': time_ago(parsed['session_info']['updated_at']),
+                'time_ago': time_ago(parsed['session_info']['created_at']),
                 'model': parsed['session_info']['model'],
                 'provider': parsed['session_info']['provider'],
                 'messages': parsed['counts']['total_messages'],
                 'turns': parsed['counts']['turns'],
                 'input_tokens': parsed['tokens']['total_input'],
                 'output_tokens': parsed['tokens']['total_output'],
-                'total_tokens': parsed['tokens'].get('session_total') or 0,
+                'total_tokens': parsed['tokens']['total_input'] + parsed['tokens']['total_output'],
                 'tool_calls': parsed['counts']['tool_calls'],
                 'file_size': stat.st_size,
                 'mtime': stat.st_mtime,
@@ -585,7 +330,7 @@ def get_session_list():
             print(f"Error parsing {filename}: {e}", file=sys.stderr)
             continue
     # Sort by created_at descending
-    sessions.sort(key=lambda s: s['updated_at'], reverse=True)
+    sessions.sort(key=lambda s: s['created_at'], reverse=True)
     return sessions
 
 def get_dashboard_summary():
@@ -658,7 +403,6 @@ def get_dashboard_summary():
             'filename': s['filename'],
             'total_tokens': s['total_tokens'],
             'messages': s['messages'],
-            'turns': s['turns'],
             'model': s['model'],
             'created_at': s['created_at'],
         } for s in top_10],
@@ -710,232 +454,26 @@ def get_models_table():
     return result
 
 def get_activity_chart():
-    """Get sessions grouped by week for activity chart."""
+    """Get sessions grouped by day for activity chart."""
     sessions = get_session_list()
-    weekly = {}
+    daily = {}
     for s in sessions:
-        dt_str = s['created_at'][:10]  # YYYY-MM-DD
-        try:
-            dt = datetime.strptime(dt_str, '%Y-%m-%d')
-            iso = dt.isocalendar()
-            week_key = f"{iso[0]}-W{iso[1]:02d}"
-        except:
-            week_key = dt_str
-        if week_key not in weekly:
-            weekly[week_key] = {
-                'week': week_key,
+        day = s['created_at'][:10]  # YYYY-MM-DD
+        if day not in daily:
+            daily[day] = {
+                'date': day,
                 'sessions': 0,
                 'input_tokens': 0,
                 'output_tokens': 0,
-                'providers': {},
+                'total_tokens': 0,
             }
-        w = weekly[week_key]
-        w['sessions'] += 1
-        w['input_tokens'] += s['input_tokens']
-        w['output_tokens'] += s['output_tokens']
-        p = s['provider']
-        if p not in w['providers']:
-            w['providers'][p] = 0
-        w['providers'][p] += 1
+        daily[day]['sessions'] += 1
+        daily[day]['input_tokens'] += s['input_tokens']
+        daily[day]['output_tokens'] += s['output_tokens']
+        daily[day]['total_tokens'] += s['total_tokens'] + s['input_tokens']
 
-    all_providers = set()
-    for w in weekly.values():
-        all_providers.update(w['providers'].keys())
-
-    result = sorted(weekly.values(), key=lambda x: x['week'])
-    return {'weeks': result, 'providers': sorted(list(all_providers))}
-
-
-def get_skills_weekly():
-    """Get skill loads grouped by week. Skills appear via synthetic messages
-    with label='skill-load' and params.name, or via tool_calls named 'skill-load'.
-    Week assignment is based on the message timestamp, not the session updated_at."""
-    pattern = os.path.join(SESSIONS_DIR, "*", "chat.json")
-    files = glob.glob(pattern)
-    weekly = {}
-    all_skills = set()
-
-    for filepath in files:
-        filename = os.path.basename(os.path.dirname(filepath))
-        try:
-            data = load_session(filename)
-        except:
-            continue
-
-        messages = data.get('messages', [])
-
-        for m in messages:
-            # Use the message's own timestamp for week assignment
-            msg_time = m.get('created_at', '')[:10]
-            try:
-                dt = datetime.strptime(msg_time, '%Y-%m-%d')
-                iso = dt.isocalendar()
-                week_key = f"{iso[0]}-W{iso[1]:02d}"
-            except:
-                continue
-
-            if week_key not in weekly:
-                weekly[week_key] = {}
-            wk = weekly[week_key]
-
-            skill_name = None
-
-            # Check synthetic/system message with label='skill_load'
-            if m.get('label') == 'skill_load':
-                params = m.get('params', {})
-                skill_name = params.get('name', '')
-
-            # Check tool_calls for skill_load
-            if not skill_name:
-                for tc in m.get('tool_calls', []):
-                    tc_name = tc.get('name', '') or (tc.get('instruction', {}) or {}).get('name', '')
-                    if tc_name == 'skill_load':
-                        args_raw = tc.get('arguments', '') or (tc.get('instruction', {}) or {}).get('arguments', '')
-                        if args_raw:
-                            try:
-                                args = json.loads(args_raw)
-                                skill_name = args.get('name', args.get('skill', ''))
-                            except:
-                                pass
-
-            if skill_name:
-                all_skills.add(skill_name)
-                if skill_name not in wk:
-                    wk[skill_name] = 0
-                wk[skill_name] += 1
-
-    weekly_ordered = sorted(weekly.items(), key=lambda x: x[0])
-
-    return {
-        'weeks': [w[1] for w in weekly_ordered],
-        'week_keys': [w[0] for w in weekly_ordered],
-        'skills': sorted(list(all_skills)),
-    }
-
-
-def build_turn(messages, msg_id):
-    """Find the turn containing msg_id and return its messages in phone-conversation format.
-    
-    A turn is defined as: starting from the user message (or the target msg if it IS user),
-    then all subsequent assistant/tool/synthetic/internal messages until the next user message.
-    We find the enclosing turn by locating the nearest preceding user message.
-    """
-    if not messages:
-        return None
-    
-    # Find index of target message
-    target_idx = None
-    for i, m in enumerate(messages):
-        if m.get('id') == msg_id:
-            target_idx = i
-            break
-    if target_idx is None:
-        return None
-    
-    target = messages[target_idx]
-    
-    # Find the turn start: the nearest user message at or before target_idx
-    turn_start = None
-    for i in range(target_idx, -1, -1):
-        if messages[i]['role'] == 'user':
-            turn_start = i
-            break
-    
-    # If no user message found (shouldn't happen normally), use the target itself
-    if turn_start is None:
-        turn_start = target_idx
-    
-    # Find the turn end: the next user message after turn_start, or end of list
-    turn_end = len(messages)
-    for i in range(turn_start + 1, len(messages)):
-        if messages[i]['role'] == 'user':
-            turn_end = i
-            break
-    
-    # Extract the turn messages
-    turn_msgs = messages[turn_start:turn_end]
-    
-    # Build rich formatted output
-    rich_msgs = []
-    for m in turn_msgs:
-        rich = {
-            'id': m.get('id', ''),
-            'role': m.get('role', ''),
-            'label': m.get('label', ''),
-            'text': m.get('text', ''),
-            'thinking_text': m.get('thinking_text', ''),
-            'created_at': m.get('created_at', ''),
-            'input_tokens': m.get('input_tokens', 0) or 0,
-            'output_tokens': m.get('output_tokens', 0) or 0,
-            'time_to_first_token_ms': m.get('time_to_first_token_ms'),
-            'duration_ms': m.get('duration_ms') or m.get('duration_time_ms') or m.get('response_time_ms'),
-            'tok_per_sec': m.get('tokens_per_second') or m.get('tok_per_sec'),
-            'stop_reason': m.get('stop_reason', ''),
-            'text_metrics': m.get('text_metrics') or {},
-            'thinking_metrics': m.get('thinking_metrics') or {},
-            'tool_call_metrics': m.get('tool_call_metrics') or {},
-            'params': m.get('params') or {},
-            'sequence_stat': m.get('sequence_stat') or None,
-            'tool_calls': [],
-        }
-        
-        # Process tool calls — handle both flat and nested formats
-        for tc in m.get('tool_calls', []):
-            inst = tc.get('instruction') or {}
-            exe = tc.get('execution') or {}
-            tc_name = tc.get('name') or inst.get('name') or 'unknown'
-            tc_args = tc.get('arguments', '') or inst.get('arguments', '') or ''
-            tc_result = tc.get('result', '') or exe.get('result', '') or ''
-            tc_error = exe.get('error', '') or tc.get('error', '') or ''
-            tc_inst_dur = inst.get('duration_ms', 0) or tc.get('duration_ms', 0)
-            tc_exec_dur = exe.get('duration_ms', 0) or 0
-            tc_inst_tokens = inst.get('tokens', 0) or 0
-            tc_exec_tokens = exe.get('tokens', 0) or 0
-            tc_files = exe.get('files', []) or []
-            
-            rich['tool_calls'].append({
-                'id': tc.get('id', ''),
-                'name': tc_name,
-                'arguments': tc_args,
-                'result': tc_result,
-                'error': tc_error,
-                'instruction_duration_ms': tc_inst_dur or 0,
-                'execution_duration_ms': tc_exec_dur or 0,
-                'instruction_tokens': tc_inst_tokens,
-                'execution_tokens': tc_exec_tokens,
-                'files': tc_files,
-            })
-        
-        rich_msgs.append(rich)
-    
-    # Find prev/next turn user messages for navigation
-    # Prev turn: user message before turn_start
-    prev_msg_id = None
-    for i in range(turn_start - 1, -1, -1):
-        if messages[i]['role'] == 'user':
-            prev_msg_id = messages[i]['id']
-            break
-    
-    # Next turn: user message at turn_end (or after turn_end if turn_end points to the next user)
-    next_msg_id = None
-    if turn_end < len(messages):
-        # turn_end is the index of the next user message
-        if messages[turn_end]['role'] == 'user':
-            next_msg_id = messages[turn_end]['id']
-        else:
-            # Look ahead for the next user message
-            for i in range(turn_end, len(messages)):
-                if messages[i]['role'] == 'user':
-                    next_msg_id = messages[i]['id']
-                    break
-    
-    return {
-        'turn_start_msg_id': messages[turn_start]['id'],
-        'turn_end_idx': turn_end,
-        'prev_msg_id': prev_msg_id,
-        'next_msg_id': next_msg_id,
-        'messages': rich_msgs,
-    }
+    result = sorted(daily.values(), key=lambda x: x['date'])
+    return result
 
 
 class AnalyticsHandler(SimpleHTTPRequestHandler):
@@ -955,35 +493,15 @@ class AnalyticsHandler(SimpleHTTPRequestHandler):
         if path == '/api/dashboard/activity':
             return self.json_response(get_activity_chart())
 
-        if path == '/api/dashboard/skills':
-            return self.json_response(get_skills_weekly())
-
-        # Turn detail: /api/sessions/<session>/turn?msg_id=msg_X
+        # Per-session endpoints: /api/sessions/<filename>/<endpoint>
         import re
-        import urllib.parse
-        m_turn = re.match(r'^/api/sessions/([^/]+?)/turn', path)
-        if m_turn:
-            filename = m_turn.group(1)
-            # Extract msg_id from query string
-            parts = urllib.parse.urlparse(path)
-            qs = urllib.parse.parse_qs(parts.query)
-            msg_id = qs.get('msg_id', [''])[0]
-            if not msg_id:
-                return self.json_response({'error': 'msg_id parameter required'}, status=400)
-            try:
-                data = load_session(filename)
-                messages = data.get('messages', [])
-                turn = build_turn(messages, msg_id)
-                return self.json_response(turn if turn else {'error': f'No message found with id {msg_id}'}, status=200 if turn else 404)
-            except Exception as e:
-                return self.json_response({'error': str(e)}, status=500)
-
-        # Per-session endpoints: /api/sessions/<session>/<endpoint>
-        import re
-        m = re.match(r'^/api/sessions/([^/]+?)/(tally|timeline|performance|tools|skills|files|general)$', path)
+        m = re.match(r'^/api/sessions/([^/]+?)(?:\.chat\.json)?/(tally|timeline|performance|tools|skills|files|general)$', path)
         if m:
             filename = m.group(1)
             endpoint = m.group(2)
+            # Ensure filename has .chat.json extension
+            if not filename.endswith('.chat.json'):
+                filename = filename + '.chat.json'
 
             try:
                 data = load_session(filename)
@@ -994,7 +512,6 @@ class AnalyticsHandler(SimpleHTTPRequestHandler):
                         'filename': filename,
                         **parsed['tokens'],
                         **parsed['counts'],
-                        'total_tokens': parsed['tokens'].get('session_total') or 0,
                     })
                 elif endpoint == 'timeline':
                     return self.json_response({
@@ -1013,11 +530,9 @@ class AnalyticsHandler(SimpleHTTPRequestHandler):
                         'tools': parsed['tools'],
                     })
                 elif endpoint == 'skills':
-                    stl = parsed['skills'].pop('timeline', [])
                     return self.json_response({
                         'filename': filename,
                         'skills': parsed['skills'],
-                        'timeline': stl,
                     })
                 elif endpoint == 'files':
                     return self.json_response({
@@ -1035,10 +550,12 @@ class AnalyticsHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self.json_response({'error': str(e)}, status=500)
 
-        # Full session JSON: /api/sessions/<session>
-        m = re.match(r'^/api/sessions/([^/]+?)$', path)
+        # Full session JSON: /api/sessions/<filename>
+        m = re.match(r'^/api/sessions/([^/]+?)(?:\.chat\.json)?$', path)
         if m:
             filename = m.group(1)
+            if not filename.endswith('.chat.json'):
+                filename = filename + '.chat.json'
             try:
                 data = load_session(filename)
                 return self.json_response(data)
@@ -1058,15 +575,11 @@ class AnalyticsHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(content)
                 return
 
-        # Serve assets under /assets/...
-        if path.startswith('/assets/'):
-            rel_path = path[len('/assets/'):]
-            asset_path = os.path.join(ASSETS_DIR, rel_path)
-            if os.path.isfile(asset_path):
-                self.directory = ASSETS_DIR
-                self.path = '/' + rel_path
-                super().do_GET()
-                return
+        # Serve other assets
+        asset_path = os.path.join(ASSETS_DIR, path.lstrip('/'))
+        if os.path.isfile(asset_path):
+            super().do_GET()
+            return
         # Fallback to skill directory
         skill_path = os.path.join(SKILL_DIR, path.lstrip('/'))
         if os.path.isfile(skill_path):
@@ -1101,7 +614,7 @@ def main():
         sys.exit(1)
 
     # Count available sessions
-    count = len(glob.glob(os.path.join(SESSIONS_DIR, "*", "chat.json")))
+    count = len(glob.glob(os.path.join(SESSIONS_DIR, "*.chat.json")))
     print(f"Chat Analytics Server")
     print(f"Sessions directory: {SESSIONS_DIR}")
     print(f"Sessions found: {count}")

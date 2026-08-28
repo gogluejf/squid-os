@@ -232,6 +232,64 @@
             margin-bottom: 14px;
         }
 
+        /* ===== File Compaction Forecast ===== */
+        .compaction-summary {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 18px;
+            margin: 0 0 16px;
+        }
+        .compaction-summary-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 16px;
+            margin-bottom: 10px;
+        }
+        .compaction-summary-title { font-size: 12px; font-weight: bold; color: var(--text); }
+        .compaction-summary-value { font-size: 12px; color: var(--text-muted); }
+        .compaction-track {
+            display: flex;
+            width: 100%;
+            height: 12px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: var(--nav);
+        }
+        .compaction-retained { background: var(--accent); min-width: 0; }
+        .compaction-saved { background: #ffd700; min-width: 0; }
+        .compaction-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 16px;
+            margin-top: 10px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        .compaction-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+        .compaction-traces { margin-left: auto; }
+        .trace-chip {
+            display: inline-block;
+            padding: 2px 7px;
+            margin: 2px 3px 2px 0;
+            border-radius: 999px;
+            background: var(--nav);
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+        .file-compaction-cell { min-width: 190px; }
+        .file-compaction-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 5px;
+            font-size: 10px;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+        .file-compaction-cell .compaction-track { height: 8px; }
+
         /* ===== Token Tally Bars ===== */
         .tally-bar {
             display: flex;
@@ -957,8 +1015,9 @@
             <!-- Files Table -->
             <div class="section">
                 <h3>Files Touched</h3>
+                <div id="file-compaction-summary"></div>
                 <table id="files-table">
-                    <thead><tr><th>File</th><th>Reads</th><th>Edits</th><th>Creates</th><th>Tokens</th><th>Checksum</th><th>Last Updated</th></tr></thead>
+                    <thead><tr><th>File</th><th>Reads</th><th>Edits</th><th>Creates</th><th>Writes</th><th>Tokens</th><th>Compaction</th><th>Checksum</th><th>Last Updated</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -2225,19 +2284,67 @@
                 canvas.onmouseleave = function() { tooltipEl.style.display = 'none'; };
             }
 
+            const compaction = files.compaction || {};
+            const currentTokens = compaction.current_tokens || 0;
+            const retainedTokens = compaction.retained_tokens || 0;
+            const savedTokens = compaction.saved_tokens || 0;
+            const savedPct = currentTokens ? (savedTokens * 100 / currentTokens) : 0;
+            const retainedPct = Math.max(0, 100 - savedPct);
+            const traceOrder = ['read', 'edit', 'write', 'create'];
+            const compactedByTrace = compaction.compacted_by_trace || {};
+            const traceChips = traceOrder.map(trace => {
+                const item = compactedByTrace[trace] || {};
+                return item.events ? `<span class="trace-chip">${trace}: ${item.events} · ${fmtK(item.tokens || 0)}</span>` : '';
+            }).join('');
+            const compactionSummary = document.getElementById('file-compaction-summary');
+            compactionSummary.innerHTML = currentTokens ? `
+                <div class="compaction-summary">
+                    <div class="compaction-summary-head">
+                        <div class="compaction-summary-title">File instruction + execution compaction forecast</div>
+                        <div class="compaction-summary-value">Current ${fmtK(currentTokens)} · Retained ${fmtK(retainedTokens)} · Saved ${fmtK(savedTokens)} (${savedPct.toFixed(1)}%)</div>
+                    </div>
+                    <div class="compaction-track" title="Retained ${retainedTokens.toLocaleString()} · Saved ${savedTokens.toLocaleString()}">
+                        <div class="compaction-retained" style="width:${retainedPct}%"></div>
+                        <div class="compaction-saved" style="width:${savedPct}%"></div>
+                    </div>
+                    <div class="compaction-legend">
+                        <span><i class="compaction-dot" style="background:var(--accent)"></i>Retained ${fmtK(retainedTokens)}</span>
+                        <span><i class="compaction-dot" style="background:#ffd700"></i>Saved ${fmtK(savedTokens)}</span>
+                        <span>Saved args ${fmtK(compaction.saved_instruction_tokens || 0)} + results ${fmtK(compaction.saved_execution_tokens || 0)}</span>
+                        <span>${compaction.compacted_events || 0} of ${compaction.events || 0} file events compacted</span>
+                        <span class="compaction-traces">${traceChips || 'No superseded events'}</span>
+                    </div>
+                </div>
+            ` : '';
+
             const filesTbody = document.querySelector('#files-table tbody');
             const fileEntries = files.files || [];
-            filesTbody.innerHTML = fileEntries.length ? fileEntries.map(f => `
+            filesTbody.innerHTML = fileEntries.length ? fileEntries.map(f => {
+                const fc = f.compaction || {};
+                const fcCurrent = fc.current_tokens || 0;
+                const fcSaved = fc.saved_tokens || 0;
+                const fcRetained = fc.retained_tokens || 0;
+                const fcSavedPct = fcCurrent ? (fcSaved * 100 / fcCurrent) : 0;
+                const fcRetainedPct = Math.max(0, 100 - fcSavedPct);
+                return `
                 <tr>
                     <td class="mono" style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${f.path}">${f.path}</td>
                     <td>${f.reads ? f.reads + ' <span style="color:var(--success)">(' + fmtK(f.reads_tokens) + ')</span>' : '-'}</td>
                     <td>${f.edits ? f.edits + ' <span style="color:var(--success)">(' + fmtK(f.edits_tokens) + ')</span>' : '-'}</td>
                     <td>${f.creates ? f.creates + ' <span style="color:var(--success)">(' + fmtK(f.creates_tokens) + ')</span>' : '-'}</td>
-                    <td class="mono" style="color:var(--success)">${fmtK(f.total_tokens)}</td>
+                    <td>${f.writes ? f.writes + ' <span style="color:var(--success)">(' + fmtK(f.writes_tokens) + ')</span>' : '-'}</td>
+                    <td class="mono" style="color:var(--success)" title="Instruction + execution tokens">${fmtK(f.total_tokens)}</td>
+                    <td class="file-compaction-cell">
+                        <div class="file-compaction-meta"><span>keep ${fmtK(fcRetained)}</span><span>save ${fmtK(fcSaved)} · ${fcSavedPct.toFixed(0)}%</span></div>
+                        <div class="compaction-track" title="Current instruction + execution ${fcCurrent.toLocaleString()} · Retained ${fcRetained.toLocaleString()} · Saved ${fcSaved.toLocaleString()} (args ${(fc.saved_instruction_tokens || 0).toLocaleString()}, results ${(fc.saved_execution_tokens || 0).toLocaleString()})">
+                            <div class="compaction-retained" style="width:${fcRetainedPct}%"></div>
+                            <div class="compaction-saved" style="width:${fcSavedPct}%"></div>
+                        </div>
+                    </td>
                     <td class="mono" style="font-size:11px" title="${f.checksum}">${f.checksum ? f.checksum.slice(0, 12) + '…' : ''}</td>
                     <td style="font-size:11px">${f.last_updated ? fmtDate(f.last_updated) : ''}</td>
                 </tr>
-            `).join('') : '<tr><td colspan="7" style="color:var(--text-muted)">No files touched</td></tr>';
+            `}).join('') : '<tr><td colspan="9" style="color:var(--text-muted)">No files touched</td></tr>';
         }
 
         function rebuildDetailView() {
@@ -2307,7 +2414,7 @@
                 <div class="section"><h3>Tools Usage</h3><table id="tools-table"><thead><tr><th>Tool</th><th>Calls</th><th>Tokens In</th><th>Tokens Out</th><th>Inference Time</th><th>Exec Time</th></tr></thead><tbody></tbody></table></div>
                 <div class="section"><h3>Skills</h3><table id="skills-table"><thead><tr><th>Skill</th><th>Loads</th><th>Tokens</th></tr></thead><tbody></tbody></table></div>
                 <div class="section"><h3>Skill Timeline</h3><div class="chart-container"><canvas id="skilltimeline-chart" style="height:80px; width:100%; display:block;"></canvas></div></div>
-                <div class="section"><h3>Files Touched</h3><table id="files-table"><thead><tr><th>File</th><th>Reads</th><th>Edits</th><th>Creates</th><th>Tokens</th><th>Checksum</th><th>Last Updated</th></tr></thead><tbody></tbody></table></div>
+                <div class="section"><h3>Files Touched</h3><div id="file-compaction-summary"></div><table id="files-table"><thead><tr><th>File</th><th>Reads</th><th>Edits</th><th>Creates</th><th>Writes</th><th>Tokens</th><th>Compaction</th><th>Checksum</th><th>Last Updated</th></tr></thead><tbody></tbody></table></div>
             `;
             main.appendChild(div);
         }

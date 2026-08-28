@@ -6,7 +6,7 @@ allowed-tools: bash read_file write_file edit_file
 ---
 
 ## Overview
-Loads a plan, shows the full plan with status, executes tasks one at a time with commit after each, and loops until complete.
+Loads a plan, introduces milestones, delegates tasks to task-executor, and pauses at milestone boundaries for user commit confirmation.
 
 ## Variables
 - `<skill-folder>` — directory containing this SKILL.md
@@ -22,94 +22,85 @@ Loads a plan, shows the full plan with status, executes tasks one at a time with
 3. **Load or Init Progress**: Check for `<progress>`. If it doesn't exist, create it:
    `python3 <skill-folder>/scripts/progress.py init --plan <project-folder>/plans/<plan-name>/.plan.json`
 
-4. **Show Full Plan**: Run:
-   `python3 <skill-folder>/scripts/progress.py full-plan --progress <progress>`
-   Display the output so the user sees the entire plan with ✓/◯/◷/✗ per task.
+4. **Find Next Milestone**: Run:
+   `python3 <skill-folder>/scripts/progress.py next-milestone --progress <progress>`
+   - If `all_done`: show final summary and stop.
+   - Otherwise note the milestone number and name.
 
-5. **Check Completion**: Run:
-   `python3 <skill-folder>/scripts/progress.py all-done --progress <progress>`
-   - If `yes`: go to step 9 (final summary).
-   - If `no`: proceed to step 6.
+5. **Show Milestone Intro**: Run:
+   `python3 <skill-folder>/scripts/progress.py milestone-info --progress <progress> --milestone <milestone_number>`
+   Display the milestone info as shown in the example below, then ask `Start? (y/n)`. If n, stop.
 
-6. **Ask User**: Prompt `Start next task? (y/n)`. If `n`, stop.
-
-7. **Execute Task**:
+6. **Loop — Execute Tasks**:
    a. Run `python3 <skill-folder>/scripts/progress.py next-task --progress <progress>` to get `task_id task_name`.
    b. Mark in progress: `python3 <skill-folder>/scripts/progress.py mark-in-progress --progress <progress> --task-id <task_id>`.
    c. Display: `## ▸ Working on <task_name>`
-   d. Delegate to `task-executor` with the plan path and task id. Wait for completion.
+   d. Delegate to `task-executor` with the plan path and task id. Wait for completion. The executor will display the task summary.
    e. Mark done: `python3 <skill-folder>/scripts/progress.py mark-done --progress <progress> --task-id <task_id>`.
-   f. Show task summary: `python3 <skill-folder>/scripts/progress.py get-summary --progress <progress> --task-id <task_id>` and display the output.
+   f. Check milestone: `python3 <skill-folder>/scripts/progress.py milestone-complete --progress <progress> --milestone <milestone_number>`.
+      - If `no`: loop back to step 6a.
+      - If `yes`: proceed to step 7.
 
-8. **Commit & Loop**:
-   a. Ask `Commit? (y/n)`. If `y`, commit the changes.
-   b. Go back to step 4.
+7. **Milestone Complete**:
+   a. Run `python3 <skill-folder>/scripts/progress.py milestone-info --progress <progress> --milestone <milestone_number>`.
+   b. Run `python3 <skill-folder>/scripts/progress.py get-milestone-summary --progress <progress> --milestone <milestone_number>` and display the output (skips if empty).
+   c. Ask: `Commit? (y/n)`. If y, run `cd <project-folder> && git add -A && git commit`.
 
-9. **Final Summary**:
-   a. Run `python3 <skill-folder>/scripts/progress.py full-plan --progress <progress>` and display the completed plan.
-   b. Run `python3 <skill-folder>/scripts/progress.py final-summary --progress <progress>` and display key lessons and tradeoffs.
-   c. Show completion message and stop.
+8. **Next Milestone**: Loop back to step 4.
 
 ## Rules
-- **Always Show Full Plan**: The user always sees the entire plan with status before deciding what to do.
+- **Minimal Display**: Show task name during execution, summary after completion. No full task descriptions.
 - **No Commit Tracking**: progress.py only tracks task status. Git is the source of truth for commits.
 - **Delegation**: Never code yourself. Always delegate to `task-executor`.
-- **Graceful Resume**: Always check `<progress>` before starting — resume at the first incomplete task.
+- **Graceful Resume**: Always check `<progress>` before starting — resume at the first incomplete milestone.
 
 ## Output Format
 
-**Full plan display:**
+**Milestone intro:**
 ```
-## Milestone 1: Foundation (2/3)
-- ✓ **1.1** Create type definitions
-- ✓ **1.2** Implement parser
-- ◯ **1.3** Add validation
+## Milestone 3: Authorization Gate (6 tasks)
 
-## Milestone 2: Execution (0/4)
-- ◯ **2.1** Build executor
-- ◯ **2.2** Add error handling
-- ◯ **2.3** Support callbacks
-- ◯ **2.4** Add logging
+Getting ready to implement 6 tasks for this milestone.
 
-Start next task? (y/n)
+- ◯ **3.1** Add authorization types and authorization context
+- ◯ **3.2** Add authorization state to stream and Model.needsAuthorization
+- ◯ **3.3** Refactor executeTools to support authorization interruption
+- ◯ **3.4** Implement executeSingleTool and resolveAuthorization
+- ◯ **3.5** Implement continueAfterAuth and injectAndResume
+- ◯ **3.6** Wire authorization into handleStreamEvent tool_calls flow
+
+Start? (y/n)
 ```
 
-**Task execution:**
+**Task execution:** (Runner outputs the "Working on" line, executor outputs the summary)
 ```
-## ▸ Working on Add validation
-[Executor runs and outputs its summary]
+## ▸ Working on Add authorization types and authorization context
+[Executor outputs its summary here]
+```
 
-## 1.3: Add validation
-- **Done:** Validation logic implemented for all input types
-- **Tradeoffs:** Chose runtime validation over compile-time for flexibility
-- **Confidence:** High
+**Milestone complete:**
+```
+## Milestone 3: Authorization Gate (6 tasks)
+
+Milestone implementation complete.
+
+- ✓ **3.1** Add authorization types and authorization context
+- ✓ **3.2** Add authorization state to stream and Model.needsAuthorization
+- ✓ **3.3** Refactor executeTools to support authorization interruption
+- ✓ **3.4** Implement executeSingleTool and resolveAuthorization
+- ✓ **3.5** Implement continueAfterAuth and injectAndResume
+- ✓ **3.6** Wire authorization into handleStreamEvent tool_calls flow
+
+- **3.2 Add authorization state to stream and Model.needsAuthorization**
+  - **Lesson:** needsAuthorization is a simple switch on settings mode — no extra abstraction needed.
+
+- **3.3 Refactor executeTools to support authorization interruption**
+  - **Tradeoff:** Recursive iterative path could blow stack on huge batches — acceptable since tool calls are bounded.
 
 Commit? (y/n)
-```
-
-**Final summary:**
-```
-## Milestone 1: Foundation (3/3)
-- ✓ **1.1** Create type definitions
-- ✓ **1.2** Implement parser
-- ✓ **1.3** Add validation
-
-## Milestone 2: Execution (4/4)
-- ✓ **2.1** Build executor
-- ✓ **2.2** Add error handling
-- ✓ **2.3** Support callbacks
-- ✓ **2.4** Add logging
-
-### Lessons Learned
-- **1.2 Implement parser:** Recursive descent was simpler than token-based approach
-
-### Key Tradeoffs
-- **2.2 Add error handling:** Chose early return over try-catch for cleaner control flow
-
-All tasks complete!
 ```
 
 ## Resources
 
 ### Scripts
-- [progress.py](scripts/progress.py) — Task status tracking, full plan display, and summary queries.
+- [progress.py](scripts/progress.py) — Task status tracking and milestone queries.

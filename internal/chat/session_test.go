@@ -353,9 +353,3 @@ func TestSessionDocPreservesAttachmentsOnRoundTrip(t *testing.T) {
 	}
 }
 
-func TestSessionDocVersionIsTwo(t *testing.T) {
-	doc := config.NewSessionDoc(config.SessionConfig{})
-	if doc.Version != 2 {
-		t.Fatalf("SessionDoc.Version = %d, want 2", doc.Version)
-	}
-}

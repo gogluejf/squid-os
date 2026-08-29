@@ -110,7 +110,6 @@ type SessionIdentity struct {
 // Identity holds lineage. Meta holds timestamps. Initial holds provenance. Config holds current runtime state.
 // Pending holds desired next state (nil = nothing pending).
 type SessionDoc struct {
-	Version     int                       `json:"version"`
 	Identity    SessionIdentity           `json:"identity"`
 	Meta        SessionMeta               `json:"meta"`
 	Initial     SessionConfig             `json:"initial"`
@@ -118,7 +117,6 @@ type SessionDoc struct {
 	Pending     *PendingConfig            `json:"pending,omitempty"`
 	Messages    []Message                 `json:"messages"`
 	Attachments []media.Attachment        `json:"attachments,omitempty"`
-	TotalTokens int                       `json:"total_tokens,omitempty"` // legacy, kept for backward compat on load
 	TokenTally  *TokenTally               `json:"token_tally,omitempty"`
 	FileState   map[string]FileStateEntry `json:"file_state,omitempty"`
 }
@@ -335,7 +333,6 @@ func NewSessionDoc(cfg SessionConfig) SessionDoc {
 func NewSessionDocWithIdentity(cfg SessionConfig, identity SessionIdentity) SessionDoc {
 	now := time.Now().UTC().Format(time.RFC3339)
 	return SessionDoc{
-		Version:  2,
 		Identity: identity,
 		Meta: SessionMeta{
 			CreatedAt: now,
@@ -424,14 +421,12 @@ func SessionFilePath(sessionDir string) string {
 }
 
 // SaveSessionDoc writes a session to sessionDir/chat.json.
-// It persists TokenTally and clears the legacy scalar total_tokens.
 func SaveSessionDoc(sessionDir string, doc SessionDoc, tally *TokenTally) error {
 	if sessionDir == "" {
 		return fmt.Errorf("session directory is required")
 	}
 	doc.Meta.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	doc.TokenTally = tally
-	doc.TotalTokens = 0 // clear legacy scalar on save
 	data, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return err

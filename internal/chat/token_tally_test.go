@@ -555,66 +555,7 @@ func TestCalculateTokenTallyToolsEnabledInternal(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// TotalTokens legacy field: loading old sessions works, saving clears it
-// ---------------------------------------------------------------------------
-
-func TestSessionDocLegacyTotalTokensClearOnSave(t *testing.T) {
-	// Simulate a legacy session file with total_tokens set
-	legacyJSON := `{
-		"version": 1,
-		"total_tokens": 5000,
-		"meta": {"id": "test", "created_at": "2025-01-01T00:00:00Z", "updated_at": "2025-01-01T00:00:00Z"},
-		"messages": []
-	}`
-
-	var doc config.SessionDoc
-	if err := json.Unmarshal([]byte(legacyJSON), &doc); err != nil {
-		t.Fatalf("failed to unmarshal legacy session: %v", err)
-	}
-
-	// Loading should preserve the legacy field
-	if doc.TotalTokens != 5000 {
-		t.Errorf("TotalTokens after load: got %d, want 5000", doc.TotalTokens)
-	}
-
-	// After SaveSessionDoc, TotalTokens should be cleared (0)
-	// Use a temp directory for the save
-	tmpDir := t.TempDir()
-	paths := config.Paths{Sessions: tmpDir}
-	tally := &config.TokenTally{}
-	sessionDir := config.RootSessionDir(paths, "test")
-	err := config.SaveSessionDoc(sessionDir, doc, tally)
-	if err != nil {
-		t.Fatalf("SaveSessionDoc failed: %v", err)
-	}
-
-	// Read back the saved file
-	data, err := os.ReadFile(config.SessionFilePath(sessionDir))
-	if err != nil {
-		t.Fatalf("failed to read saved session: %v", err)
-	}
-
-	// total_tokens should NOT appear in the saved JSON (omitempty + cleared to 0)
-	if strings.Contains(string(data), "total_tokens") {
-		t.Error("saved session should not contain total_tokens field")
-	}
-
-	// Verify the token_tally IS present
-	var savedDoc config.SessionDoc
-	if err := json.Unmarshal(data, &savedDoc); err != nil {
-		t.Fatalf("failed to unmarshal saved session: %v", err)
-	}
-	if savedDoc.TotalTokens != 0 {
-		t.Errorf("TotalTokens after save round-trip: got %d, want 0", savedDoc.TotalTokens)
-	}
-	if savedDoc.TokenTally == nil {
-		t.Error("TokenTally should be present after save")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Attachment tokens: user messages with attachments contribute to
+// // Attachment tokens: user messages with attachments contribute to
 // InputTokenTally.Attachment, not InputTokenTally.User
 // ---------------------------------------------------------------------------
 

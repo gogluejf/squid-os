@@ -15,7 +15,6 @@ func TestBuildFooterDataNilTokenTallySafe(t *testing.T) {
 	// We don't need a full Model — just need to verify no panic.
 	sess := &chat.Session{
 		Doc: config.SessionDoc{
-			Version:    2,
 			TokenTally: nil, // deliberately nil
 		},
 	}

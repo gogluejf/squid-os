@@ -1091,16 +1091,39 @@
         }
 
         // ===== Load Sessions =====
+        // ===== Deep Link: #<session> or #s/<session> opens a session directly =====
+        function sessionFromHash() {
+            const h = decodeURIComponent(location.hash.replace(/^#\/?/, ''));
+            if (!h) return null;
+            const m = h.match(/^s\/(.+)$/);
+            return m ? m[1] : (h.includes('/') || h.endsWith('.chat.json') ? h : null);
+        }
+
         async function loadSessions() {
             try {
                 allSessions = await api('/api/sessions');
                 renderSessionList(allSessions);
                 loadDashboard();
+                const target = sessionFromHash();
+                if (target) {
+                    const match = allSessions.find(s => s.filename === target) ||
+                                  allSessions.find(s => s.filename.startsWith(target));
+                    if (match) showDetail(match.filename);
+                }
             } catch (e) {
                 document.getElementById('session-list').innerHTML =
                     '<div class="loading">Error loading sessions: ' + e.message + '</div>';
             }
         }
+
+        window.addEventListener('hashchange', function() {
+            const target = sessionFromHash();
+            if (target && typeof allSessions !== 'undefined' && allSessions.length) {
+                const match = allSessions.find(s => s.filename === target) ||
+                              allSessions.find(s => s.filename.startsWith(target));
+                if (match) showDetail(match.filename);
+            }
+        });
 
         // ===== Render Session List =====
         function renderSessionList(sessions) {
@@ -1400,6 +1423,7 @@
             });
         }
         async function showDetail(filename) {
+            if (location.hash !== '#/' + filename) history.replaceState(null, '', '#/' + filename);
             document.querySelectorAll('.session-item').forEach(i => {
                 i.classList.toggle('active', i.dataset.filename === filename);
             });
@@ -2357,7 +2381,10 @@
             div.className = 'view active';
             div.innerHTML = `
                 <div class="section">
-                    <h2 id="detail-title">Session Details</h2>
+                    <h2 id="detail-title" style="display:flex;align-items:center;gap:10px">Session Details
+                        <button onclick="copySessionLink()" title="Copy link to this session"
+                            style="font-size:11px;padding:3px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--accent);cursor:pointer">🔗 Copy Link</button>
+                    </h2>
                     <div class="dashboard-grid" id="detail-stats">
                         <div class="stat-card">
                             <div class="label">Model</div>
@@ -2417,6 +2444,15 @@
                 <div class="section"><h3>Files Touched</h3><div id="file-compaction-summary"></div><table id="files-table"><thead><tr><th>File</th><th>Reads</th><th>Edits</th><th>Creates</th><th>Writes</th><th>Tokens</th><th>Compaction</th><th>Checksum</th><th>Last Updated</th></tr></thead><tbody></tbody></table></div>
             `;
             main.appendChild(div);
+        }
+
+        function copySessionLink() {
+            if (!currentDetailSession) return;
+            const url = location.origin + '/' + '#' + '/' + currentDetailSession;
+            navigator.clipboard.writeText(url).then(() => {
+                const btn = document.querySelector('#detail-title button');
+                if (btn) { btn.textContent = '✓ Copied'; setTimeout(() => btn.textContent = '🔗 Copy Link', 1500); }
+            });
         }
 
         // ===== Turn Panel =====

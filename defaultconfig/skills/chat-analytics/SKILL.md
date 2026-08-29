@@ -36,6 +36,12 @@ If it prints `running`, the API is available at `http://localhost:17771`.
 4. Open the dashboard with the `open` tool using the URL `http://localhost:17771`.
 Tell the user: `Dashboard is open at http://localhost:17771`.
 
+### Deep Linking to a Session
+The dashboard supports hash-based deep links — no extra server endpoint needed:
+- `http://localhost:17771/#/<session-name>` opens that session's detail view directly (exact or prefix match).
+- Opening a session updates the URL hash, and a **🔗 Copy Link** button in the session header copies the shareable URL.
+- When the user asks to "open/show analytics for session X" (or the current session), open `http://localhost:17771/#/<session-name>` instead of the bare dashboard. The current session name is visible in the sessions directory listing (most recent folder) or from the session context.
+
 ### Stopping the Server
 When the skill is done or being unloaded:
 ```bash

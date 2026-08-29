@@ -3,3 +3,4 @@ __debug_*
 squid-os
 /squid-os
 /squid-os-*
+skills/**/__pycache__/

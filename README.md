@@ -81,12 +81,12 @@ limits:
 
 Create your own in `~/.config/squid-os/agents/<name>/agent.yaml`.
 
-## Headless mode
+## Run mode (no TUI)
 
-Run without TUI for scripting and pipelines:
+Run without the interactive TUI for scripting and pipelines:
 
 ```bash
-./squid-os --headless "your prompt here"
+./squid-os run --prompt "your prompt here"
 ```
 
 ## Session config resolution

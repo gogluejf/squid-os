@@ -89,6 +89,16 @@ Run without TUI for scripting and pipelines:
 ./squid-os --headless "your prompt here"
 ```
 
+## Session config resolution
+
+Session properties resolve by priority (leftmost wins): **CLI flag > Agent definition > Global settings > Computed default**. Saved sessions lock certain fields (working dir, system prompt, memory) — those are immutable once a session exists.
+
+Full precedence table: [`.squid-os/plans/session-config-resolution.md`](.squid-os/plans/session-config-resolution.md)
+
+## Multimodal attachments
+
+Squid OS gives your operating system eyes. Attach images, screenshots, PDFs, or any media and the model sees them directly — no separate vision pipeline, no "describe this image" ceremony. You can point it at a terminal window and ask *"what do you see?"* and get back a real analysis of what's on screen. Your OS environment becomes part of the conversation.
+
 ## Why this exists
 
 Most AI tools are optimized for convenience. Squid OS is optimized for **feedback speed** and **operational breadth**:

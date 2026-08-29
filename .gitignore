@@ -3,4 +3,5 @@ __debug_*
 squid-os
 /squid-os
 /squid-os-*
-skills/**/__pycache__/
+__pycache__/
+defaultconfig/skills/chat-analytics/sessions

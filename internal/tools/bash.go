@@ -14,10 +14,10 @@ import (
 
 // Bash executes a shell command and returns stdout/stderr.
 var Bash = Tool{
-	Name:         "bash",
-	Description:  "Execute a shell command and return stdout/stderr. Use for git, find, grep, curl, and other CLI tools. Does not modify files. Timeout: 120 seconds.",
+	Name:          "bash",
+	Description:   "Execute a shell command and return stdout/stderr. Use for git, find, grep, curl, and other CLI tools. Does not modify files. Timeout: 120 seconds.",
 	DisplayParams: []string{"command"},
-	Style:        style.ToolStyle(),
+	Style:         style.ToolStyle(),
 	IsDestructive: func(args map[string]interface{}) bool {
 		d, _ := args["destructive"].(bool)
 		cmd, _ := args["command"].(string)
@@ -36,7 +36,7 @@ var Bash = Tool{
 		},
 		"destructive": {
 			"type": "boolean",
-			"description": "Must be true if the command modifies files, deletes data, makes network calls, or changes system state. This field is required."
+			"description": "Must be true if the command modifies files, deletes data, makes network calls (e.g curl), or changes system state. This field is required."
 		}
 	},
 	"required": ["command", "destructive"]

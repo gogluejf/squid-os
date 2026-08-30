@@ -272,15 +272,18 @@ doExecute:
 
 	// Apply session state changes before recording the final tool result so
 	// status, content, duration, and token accounting stay consistent.
-	if toolName == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
-		if pathVal, ok := args["path"].(string); ok {
-			pathVal = tools.ResolvePath(pathVal, s.Doc.Config.WorkingDir)
-			capabilitySummary, err := s.SetWorkingDir(pathVal)
-			if err != nil {
-				result = tools.ToolResult{Status: tools.ResultStatusError, Error: err.Error()}
-			} else {
-				result.Result = capabilitySummary
+	if (toolName == "set_working_dir" || toolName == "skill_list") && result.Status == tools.ResultStatusSuccess {
+		path := s.Doc.Config.WorkingDir
+		if toolName == "set_working_dir" {
+			if pathVal, ok := args["path"].(string); ok {
+				path = tools.ResolvePath(pathVal, s.Doc.Config.WorkingDir)
 			}
+		}
+		capabilitySummary, err := s.ReloadCatalog(path)
+		if err != nil {
+			result = tools.ToolResult{Status: tools.ResultStatusError, Error: err.Error()}
+		} else if toolName == "set_working_dir" {
+			result.Result = capabilitySummary
 		}
 	}
 

@@ -383,8 +383,8 @@ func (s *Session) SetAgents(refs []config.CapabilityRef) {
 	s.Doc.Config.Agents = append([]config.CapabilityRef(nil), refs...)
 }
 
-// SetWorkingDir atomically swaps workspace catalog and effective capability state.
-func (s *Session) SetWorkingDir(path string) (string, error) {
+// ReloadCatalog atomically swaps workspace catalog and effective capability state.
+func (s *Session) ReloadCatalog(path string) (string, error) {
 	catalog, err := runtimeconfig.LoadCatalog(s.Paths, path)
 	if err != nil {
 		return "", err

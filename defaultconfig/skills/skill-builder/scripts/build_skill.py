@@ -34,12 +34,26 @@ def load_state(dirpath):
     fp = os.path.join(dirpath, STATE_FILE)
     if os.path.exists(fp):
         with open(fp, "r") as f:
-            return json.load(f)
-    return None
+            return json.load(f), fp
+    # Check subdirectories for .skill.json (in case --dir is the parent)
+    try:
+        for entry in os.listdir(dirpath):
+            sub = os.path.join(dirpath, entry)
+            if os.path.isdir(sub):
+                sub_fp = os.path.join(sub, STATE_FILE)
+                if os.path.exists(sub_fp):
+                    with open(sub_fp, "r") as f:
+                        return json.load(f), sub_fp
+    except OSError:
+        pass
+    return None, None
 
 
-def save_state(dirpath, state):
-    fp = os.path.join(dirpath, STATE_FILE)
+def save_state(dirpath, state, state_path=None):
+    if state_path:
+        fp = state_path
+    else:
+        fp = os.path.join(dirpath, STATE_FILE)
     with open(fp, "w") as f:
         json.dump(state, f, indent=2)
     return fp
@@ -76,7 +90,7 @@ def get_args():
     parser.add_argument(
         "--dir",
         default=".",
-        help="Skill directory (where .skill.json lives)",
+        help="Parent directory (init creates <dir>/<name>/, other commands use <dir>/<name>/ or <dir> if .skill.json is there)",
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -168,6 +182,10 @@ def cmd_init(args):
         print("Error: Name too long")
         sys.exit(1)
 
+    # Create the skill subdirectory: <dir>/<name>/
+    skill_dir = os.path.join(args.dir, args.name)
+    ensure_dir(skill_dir)
+
     state = {
         "name": args.name,
         "description": args.description,
@@ -185,38 +203,42 @@ def cmd_init(args):
         "assets": {},
         "references": {},
     }
-    save_state(args.dir, state)
-    print("Initialized skill '{}'".format(args.name))
+    save_state(skill_dir, state)
+    print("Initialized skill '{}' at {}".format(args.name, skill_dir))
 
 
 def cmd_set_version(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("Error: No state found. Run 'init' first.")
-        sys.exit(1)
+    state, sp = _load(args)
     state["version"] = args.version
-    save_state(args.dir, state)
+    _save(args, state, sp)
     print("Set version: {}".format(args.version))
 
 
 def cmd_set_license(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("Error: No state found. Run 'init' first.")
-        sys.exit(1)
+    state, sp = _load(args)
     state["license"] = args.license
-    save_state(args.dir, state)
+    _save(args, state, sp)
     print("Set license: {}".format(args.license))
 
 
 def cmd_add_metadata(args):
-    state = load_state(args.dir)
+    state, sp = _load(args)
+    state["metadata"][args.key] = args.value
+    _save(args, state, sp)
+    print("Added metadata: {} = {}".format(args.key, args.value))
+
+
+def _load(args):
+    """Load state, returning (state, state_path) or exiting."""
+    state, state_path = load_state(args.dir)
     if state is None:
         print("Error: No state found. Run 'init' first.")
         sys.exit(1)
-    state["metadata"][args.key] = args.value
-    save_state(args.dir, state)
-    print("Added metadata: {} = {}".format(args.key, args.value))
+    return state, state_path
+
+
+def _save(args, state, state_path):
+    save_state(args.dir, state, state_path)
 
 
 def _read_text(args):
@@ -232,66 +254,51 @@ def _read_text(args):
 
 
 def cmd_add_variables(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("Error: No state found. Run 'init' first.")
-        sys.exit(1)
+    state, sp = _load(args)
     text = _read_text(args)
     if text:
         state["variables"] = text
-    save_state(args.dir, state)
+    _save(args, state, sp)
     print("Set variables ({} chars)".format(len(state["variables"])))
 
 
 def cmd_add_instructions(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("Error: No state found. Run 'init' first.")
-        sys.exit(1)
+    state, sp = _load(args)
     text = _read_text(args)
     if text:
         if state["instructions"]:
             state["instructions"] += "\n\n" + text
         else:
             state["instructions"] = text
-    save_state(args.dir, state)
+    _save(args, state, sp)
     print("Added instructions ({} chars)".format(len(state["instructions"])))
 
 
 def cmd_add_rules(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("Error: No state found. Run 'init' first.")
-        sys.exit(1)
+    state, sp = _load(args)
     text = _read_text(args)
     if text:
         if state["rules"]:
             state["rules"] += "\n\n" + text
         else:
             state["rules"] = text
-    save_state(args.dir, state)
+    _save(args, state, sp)
     print("Added rules ({} chars)".format(len(state["rules"])))
 
 
 def cmd_add_output_format(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("Error: No state found. Run 'init' first.")
-        sys.exit(1)
+    state, sp = _load(args)
     text = _read_text(args)
     state["output_format"] = text
-    save_state(args.dir, state)
+    _save(args, state, sp)
     print("Set output format ({} chars)".format(len(text)))
 
 
 def cmd_add_examples(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("Error: No state found. Run 'init' first.")
-        sys.exit(1)
+    state, sp = _load(args)
     text = _read_text(args)
     state["examples"] = text
-    save_state(args.dir, state)
+    _save(args, state, sp)
     print("Set examples ({} chars)".format(len(text)))
 
 
@@ -314,43 +321,31 @@ def _get_resource_content(args):
 
 
 def cmd_add_script(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("Error: No state found. Run 'init' first.")
-        sys.exit(1)
+    state, sp = _load(args)
     content = _get_resource_content(args)
     _add_named_resource(state, "scripts", args.name, content)
-    save_state(args.dir, state)
+    _save(args, state, sp)
     print("Added script: {}".format(args.name))
 
 
 def cmd_add_asset(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("Error: No state found. Run 'init' first.")
-        sys.exit(1)
+    state, sp = _load(args)
     content = _get_resource_content(args)
     _add_named_resource(state, "assets", args.name, content)
-    save_state(args.dir, state)
+    _save(args, state, sp)
     print("Added asset: {}".format(args.name))
 
 
 def cmd_add_reference(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("Error: No state found. Run 'init' first.")
-        sys.exit(1)
+    state, sp = _load(args)
     content = _get_resource_content(args)
     _add_named_resource(state, "references", args.name, content)
-    save_state(args.dir, state)
+    _save(args, state, sp)
     print("Added reference: {}".format(args.name))
 
 
 def cmd_status(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("No state found.")
-        sys.exit(1)
+    state, sp = _load(args)
     print("Skill: {}".format(state["name"]))
     print("Description: {}".format(state["description"][:80]))
     if state["version"]:
@@ -459,24 +454,23 @@ def write_skill_md(dirpath, state):
 
 
 def cmd_finalize(args):
-    state = load_state(args.dir)
-    if state is None:
-        print("Error: No state found. Run 'init' first.")
-        sys.exit(1)
+    state, state_path = _load(args)
+    # The skill dir is where .skill.json lives
+    skill_dir = os.path.dirname(state_path)
 
     if not state.get("instructions"):
         print("Warning: No instructions set. The skill will be incomplete.")
 
     # Write SKILL.md
-    skill_md = write_skill_md(args.dir, state)
-    skill_path = os.path.join(args.dir, "SKILL.md")
+    skill_md = write_skill_md(skill_dir, state)
+    skill_path = os.path.join(skill_dir, "SKILL.md")
     with open(skill_path, "w") as f:
         f.write(skill_md)
     print("Wrote: SKILL.md")
 
     # Write scripts
     if state.get("scripts"):
-        scripts_dir = os.path.join(args.dir, "scripts")
+        scripts_dir = os.path.join(skill_dir, "scripts")
         os.makedirs(scripts_dir, exist_ok=True)
         for fname, content in state["scripts"].items():
             path = os.path.join(scripts_dir, fname)
@@ -487,7 +481,7 @@ def cmd_finalize(args):
 
     # Write assets
     if state.get("assets"):
-        assets_dir = os.path.join(args.dir, "assets")
+        assets_dir = os.path.join(skill_dir, "assets")
         os.makedirs(assets_dir, exist_ok=True)
         for fname, content in state["assets"].items():
             path = os.path.join(assets_dir, fname)
@@ -497,7 +491,7 @@ def cmd_finalize(args):
 
     # Write references
     if state.get("references"):
-        refs_dir = os.path.join(args.dir, "references")
+        refs_dir = os.path.join(skill_dir, "references")
         os.makedirs(refs_dir, exist_ok=True)
         for fname, content in state["references"].items():
             path = os.path.join(refs_dir, fname)
@@ -506,12 +500,11 @@ def cmd_finalize(args):
             print("Wrote: references/{}".format(fname))
 
     # Remove state file
-    state_path = os.path.join(args.dir, STATE_FILE)
     if os.path.exists(state_path):
         os.remove(state_path)
         print("Removed: {}".format(STATE_FILE))
 
-    print("Skill '{}' finalized at {}".format(state["name"], args.dir))
+    print("Skill '{}' finalized at {}".format(state["name"], skill_dir))
 
 
 # ── Main ───────────────────────────────────────────────────────────────────

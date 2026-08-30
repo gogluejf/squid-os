@@ -23,7 +23,7 @@ Generates compliant squid-os skills by interviewing the user, building increment
 
 2. **Init**: Create the skill skeleton.
    ```bash
-   python3 <skill-folder>/scripts/build_skill.py init --name "<name>" --dir "<skills-dir>/<name>" --description "<description>" --overview "<overview>" --allowed-tools "<allowed-tools>"
+   python3 <skill-folder>/scripts/build_skill.py --dir "<skills-dir>" init --name "<name>" --description "<description>" --overview "<overview>" --allowed-tools "<allowed-tools>"
    ```
 
 3. **Add Variables**: Set the contextual tags for the skill — tag definitions that tell the AI what path placeholders are available.
@@ -130,7 +130,7 @@ The generated SKILL.md must contain these sections in order: Frontmatter, Overvi
 ## Examples
 **Input:** User wants a skill named "yaml-validator" that checks YAML syntax using a shell script.
 **Output:**
-1. `python3 <skill-folder>/scripts/build_skill.py init --name yaml-validator --dir "<skills-dir>/yaml-validator" --description "Validates YAML files" --overview "Checks YAML syntax using a script" --allowed-tools "bash read_file"`
+1. `python3 <skill-folder>/scripts/build_skill.py --dir "<skills-dir>" init --name yaml-validator --description "Validates YAML files" --overview "Checks YAML syntax using a script" --allowed-tools "bash read_file"`
 2. `python3 <skill-folder>/scripts/build_skill.py add-variables --dir "<skills-dir>/yaml-validator" --text "- \`<skill-folder>\` — directory containing this SKILL.md"`
 3. `python3 <skill-folder>/scripts/build_skill.py add-instructions --dir "<skills-dir>/yaml-validator" --text "1. Read the YAML file. 2. Run python3 <skill-folder>/scripts/validate.sh --file <path>"`
 4. `python3 <skill-folder>/scripts/build_skill.py add-script --dir "<skills-dir>/yaml-validator" --name validate.sh --content "#!/bin/bash\npython3 -c 'import yaml; yaml.safe_load(open(sys.argv[1]))'"`

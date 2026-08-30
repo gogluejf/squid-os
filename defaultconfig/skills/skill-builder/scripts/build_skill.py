@@ -89,13 +89,18 @@ def get_args():
     )
     parser.add_argument(
         "--dir",
-        default=".",
-        help="Parent directory (init creates <dir>/<name>/, other commands use <dir>/<name>/ or <dir> if .skill.json is there)",
+        default=None,
+        help="Skill directory (or parent dir for init). May be placed before or after the subcommand.",
     )
     subparsers = parser.add_subparsers(dest="command")
 
+    def _add_dir(p):
+        # Allow --dir after the subcommand as well; main() merges it.
+        p.add_argument("--dir", dest="sub_dir", default=None, help=argparse.SUPPRESS)
+
     # ── init ───────────────────────────────────────────────────────────
     p = subparsers.add_parser("init", help="Create a new skill skeleton")
+    _add_dir(p)
     p.add_argument("--name", required=True, help="Skill name (kebab-case)")
     p.add_argument("--description", required=True, help="Short description (max 1024 chars)")
     p.add_argument("--overview", default="", help="One-paragraph summary")
@@ -103,65 +108,78 @@ def get_args():
 
     # ── set-version ────────────────────────────────────────────────────
     p = subparsers.add_parser("set-version", help="Set version")
+    _add_dir(p)
     p.add_argument("--version", required=True)
 
     # ── set-license ────────────────────────────────────────────────────
     p = subparsers.add_parser("set-license", help="Set license")
+    _add_dir(p)
     p.add_argument("--license", required=True)
 
     # ── add-metadata ───────────────────────────────────────────────────
     p = subparsers.add_parser("add-metadata", help="Add a metadata key-value pair")
+    _add_dir(p)
     p.add_argument("--key", required=True)
     p.add_argument("--value", required=True)
 
     # ── add-variables ──────────────────────────────────────────────
     p = subparsers.add_parser("add-variables", help="Set contextual tags for path construction (NOT shell env vars)")
+    _add_dir(p)
     p.add_argument("--text", default="", help="Variables text to set (tag definitions)")
     p.add_argument("--from-file", default=None, help="Read variables text from file")
 
     # ── add-instructions ───────────────────────────────────────────────
     p = subparsers.add_parser("add-instructions", help="Append text to instructions")
+    _add_dir(p)
     p.add_argument("--text", default="", help="Instruction text to append")
     p.add_argument("--from-file", default=None, help="Read instruction text from file")
 
     # ── add-rules ──────────────────────────────────────────────────────
     p = subparsers.add_parser("add-rules", help="Append text to rules")
+    _add_dir(p)
     p.add_argument("--text", default="", help="Rule text to append")
     p.add_argument("--from-file", default=None, help="Read rule text from file")
 
     # ── add-output-format ──────────────────────────────────────────────
     p = subparsers.add_parser("add-output-format", help="Set output format section")
+    _add_dir(p)
     p.add_argument("--text", default="", help="Output format text")
     p.add_argument("--from-file", default=None, help="Read output format from file")
 
     # ── add-examples ───────────────────────────────────────────────────
     p = subparsers.add_parser("add-examples", help="Set examples section")
+    _add_dir(p)
     p.add_argument("--text", default="", help="Examples text")
     p.add_argument("--from-file", default=None, help="Read examples from file")
 
     # ── add-script ─────────────────────────────────────────────────────
     p = subparsers.add_parser("add-script", help="Add an executable script")
+    _add_dir(p)
     p.add_argument("--name", required=True, help="Script filename (e.g. validate.sh)")
     p.add_argument("--content", default=None, help="Script content (short)")
     p.add_argument("--from-file", default=None, help="Read script from file (for long content)")
 
     # ── add-asset ──────────────────────────────────────────────────────
     p = subparsers.add_parser("add-asset", help="Add a template or resource file")
+    _add_dir(p)
     p.add_argument("--name", required=True, help="Asset filename (e.g. template.md)")
     p.add_argument("--content", default=None, help="Asset content (short)")
     p.add_argument("--from-file", default=None, help="Read asset from file (for long content)")
 
     # ── add-reference ──────────────────────────────────────────────────
     p = subparsers.add_parser("add-reference", help="Add a reference document")
+    _add_dir(p)
     p.add_argument("--name", required=True, help="Reference filename (e.g. api-docs.md)")
     p.add_argument("--content", default=None, help="Reference content (short)")
     p.add_argument("--from-file", default=None, help="Read reference from file (for long content)")
 
     # ── finalize ───────────────────────────────────────────────────────
     p = subparsers.add_parser("finalize", help="Export SKILL.md, write files, remove state")
+    _add_dir(p)
 
     # ── status ─────────────────────────────────────────────────────────
     p = subparsers.add_parser("status", help="Show current state summary")
+    _add_dir(p)
 
     return parser.parse_args()
 
@@ -522,6 +540,9 @@ def main():
     if args.command is None:
         print("Error: No subcommand specified. Use: init, add-instructions, add-script, finalize, etc.")
         sys.exit(1)
+
+    # Merge --dir given before or after the subcommand (sub position wins).
+    args.dir = getattr(args, "sub_dir", None) or args.dir or "."
 
     ensure_dir(args.dir)
 

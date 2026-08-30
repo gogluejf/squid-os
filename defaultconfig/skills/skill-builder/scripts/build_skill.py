@@ -182,8 +182,14 @@ def cmd_init(args):
         print("Error: Name too long")
         sys.exit(1)
 
-    # Create the skill subdirectory: <dir>/<name>/
-    skill_dir = os.path.join(args.dir, args.name)
+    # Create the skill directory. If --dir already points at the skill
+    # directory (basename matches the name, or a .skill.json exists there),
+    # use it as-is instead of nesting <dir>/<name>.
+    base = os.path.abspath(args.dir)
+    if os.path.basename(base) == args.name or os.path.exists(os.path.join(base, STATE_FILE)):
+        skill_dir = base
+    else:
+        skill_dir = os.path.join(base, args.name)
     ensure_dir(skill_dir)
 
     state = {

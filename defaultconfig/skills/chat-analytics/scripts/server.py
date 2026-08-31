@@ -1133,6 +1133,9 @@ class AnalyticsHandler(SimpleHTTPRequestHandler):
         path = self.path
 
         # API endpoints
+        if path == '/api/health':
+            return self.json_response({'status': 'ok', 'time': now_iso()})
+
         if path == '/api/sessions':
             return self.json_response(get_session_list())
 

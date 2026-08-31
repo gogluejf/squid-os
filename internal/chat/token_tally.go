@@ -34,9 +34,10 @@ func (s *Session) calculateLifetimeTally() config.LifetimeTokenTally {
 		case config.RoleSystem:
 			input.SystemPrompt += msg.InputTokens
 		case config.RoleInternal:
-			if msg.ID == "tools0" {
-				input.ToolDefinitions += msg.InputTokens
-			}
+			// Internal messages declare wire cost via InputTokens only when
+			// their content is sent to the model outside the conversation
+			// (today: tools0 tool schemas). All other internal metadata is 0.
+			input.ToolDefinitions += msg.InputTokens
 		case config.RoleSynthetic:
 			input.Synthetic += msg.InputTokens
 		case config.RoleAssistant:

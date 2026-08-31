@@ -21,6 +21,7 @@ type ContextTokens struct {
 	CompactedInput  int // compacted system, user, and tool-result tokens
 	CompactedOutput int // compacted assistant text, reasoning, and tool-call tokens
 	Saved           int // Raw - Compacted
+	ToolDefinitions int // request-body tool schema cost (internal messages), never compacted
 }
 
 // Context holds the next provider-message snapshot and its token accounting.
@@ -42,6 +43,7 @@ func (c Context) TokenTally() config.ContextTokenTally {
 		Saved:            c.Tokens.Saved,
 		SavedInstruction: c.Compaction.Tokens.SavedInstruction,
 		SavedExecution:   c.Compaction.Tokens.SavedExecution,
+		ToolDefinitions:  c.Tokens.ToolDefinitions,
 	}
 }
 
@@ -56,13 +58,15 @@ func BuildContext(messages []config.Message, enabled bool, baseDir string, attac
 
 	compactedMsgs := buildProviderMessages(messages, &plan, attachments, baseDir, caps)
 	compactedTokens := tallyAPIMessagesTokens(compactedMsgs)
+	toolDefs := internalWireTokens(messages)
 	tokens := ContextTokens{
-		Raw:             rawTokens.Input + rawTokens.Output,
-		RawInput:        rawTokens.Input,
+		Raw:             rawTokens.Input + rawTokens.Output + toolDefs,
+		RawInput:        rawTokens.Input + toolDefs,
 		RawOutput:       rawTokens.Output,
-		Compacted:       compactedTokens.Input + compactedTokens.Output,
-		CompactedInput:  compactedTokens.Input,
+		Compacted:       compactedTokens.Input + compactedTokens.Output + toolDefs,
+		CompactedInput:  compactedTokens.Input + toolDefs,
 		CompactedOutput: compactedTokens.Output,
+		ToolDefinitions: toolDefs,
 	}
 	tokens.Saved = tokens.Raw - tokens.Compacted
 
@@ -79,6 +83,16 @@ func BuildContext(messages []config.Message, enabled bool, baseDir string, attac
 		Compaction: plan,
 		Tokens:     tokens,
 	}
+}
+
+func internalWireTokens(messages []config.Message) int {
+	var n int
+	for _, m := range messages {
+		if m.Role == config.RoleInternal {
+			n += m.InputTokens
+		}
+	}
+	return n
 }
 
 // buildProviderMessages builds the provider-message projection. When plan is

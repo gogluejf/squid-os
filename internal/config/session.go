@@ -94,6 +94,9 @@ type ContextTokenTally struct {
 	Saved            int `json:"saved"`
 	SavedInstruction int `json:"saved_instruction"`
 	SavedExecution   int `json:"saved_execution"`
+	// ToolDefinitions is the request-body tool schema cost carried by internal
+	// messages (tools0). It is part of Raw/Compacted but never compacted.
+	ToolDefinitions int `json:"tool_definitions"`
 }
 
 // SessionIdentity holds immutable lineage fields for a session.

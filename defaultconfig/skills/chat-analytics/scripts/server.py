@@ -224,7 +224,9 @@ def parse_session_data(data):
     """Parse a session JSON and extract analytics."""
     meta, initial_config, current_config, pending_config = session_view(data)
     messages = data.get('messages', [])
-    session_total_tokens = data.get('total_tokens')  # authoritative billing total from provider
+    # Session total: computed from messages (current schema has no doc-level
+    # total_tokens scalar; token_tally.lifetime.total is the stored equivalent).
+    session_total_tokens = ((data.get('token_tally') or {}).get('lifetime') or {}).get('total')
 
     # Counts
     total_messages = len(messages)
@@ -248,19 +250,9 @@ def parse_session_data(data):
     total_text_tokens = 0
     total_tool_call_tokens = 0
     for m in messages:
-        # Try top-level first, fall back to nested metrics
-        if m.get('thinking_tokens'):
-            total_thinking_tokens += m['thinking_tokens']
-        elif m.get('thinking_metrics', {}).get('tokens'):
-            total_thinking_tokens += m['thinking_metrics']['tokens']
-        if m.get('text_tokens'):
-            total_text_tokens += m['text_tokens']
-        elif m.get('text_metrics', {}).get('tokens'):
-            total_text_tokens += m['text_metrics']['tokens']
-        if m.get('tool_call_tokens'):
-            total_tool_call_tokens += m['tool_call_tokens']
-        elif m.get('tool_call_metrics', {}).get('tokens'):
-            total_tool_call_tokens += m['tool_call_metrics']['tokens']
+        total_thinking_tokens += (m.get('thinking_metrics') or {}).get('tokens', 0)
+        total_text_tokens += (m.get('text_metrics') or {}).get('tokens', 0)
+        total_tool_call_tokens += (m.get('tool_call_metrics') or {}).get('tokens', 0)
 
     # Aborted messages (synthetic with label='aborted')
     aborted_messages = len([m for m in messages if m.get('label') == 'aborted'])
@@ -392,8 +384,8 @@ def parse_session_data(data):
 
             tm = m.get('text_metrics') or {}
             thm = m.get('thinking_metrics') or {}
-            text_tok = (m.get('text_tokens') or tm.get('tokens')) or 0
-            think_tok = (m.get('thinking_tokens') or thm.get('tokens')) or 0
+            text_tok = tm.get('tokens', 0)
+            think_tok = thm.get('tokens', 0)
 
             if skill_segments:
                 not_skill_tokens += text_tok + think_tok + non_skill_tool_instr + non_skill_tool_exec
@@ -403,7 +395,7 @@ def parse_session_data(data):
                 skill_timeline.extend(skill_segments)
             else:
                 tcm = m.get('tool_call_metrics') or {}
-                instr_tok = (m.get('tool_call_tokens') or tcm.get('tokens')) or 0
+                instr_tok = tcm.get('tokens', 0)
                 exec_tok = sum((tc.get('execution') or {}).get('tokens') or 0 for tc in (m.get('tool_calls') or []))
                 not_skill_tokens += text_tok + think_tok + instr_tok + exec_tok
         elif role in ('user', 'system', 'internal'):
@@ -426,7 +418,7 @@ def parse_session_data(data):
     # Speed (tokens per second)
     speeds = []
     for m in assistant_messages:
-        tps = m.get('tokens_per_second') or m.get('tok_per_sec')
+        tps = m.get('tok_per_sec')
         if tps and tps > 0:
             speeds.append(tps)
         # Also check sequence_stat
@@ -535,9 +527,9 @@ def parse_session_data(data):
         created = m.get('created_at', '')
         input_tok = m.get('input_tokens', 0)
         output_tok = m.get('output_tokens', 0)
-        thinking_tok = m.get('thinking_tokens', 0)
-        text_tok = m.get('text_tokens', 0)
-        duration = m.get('duration_ms', 0) or m.get('duration_time_ms', 0) or m.get('response_time_ms', 0) or 0
+        thinking_tok = (m.get('thinking_metrics') or {}).get('tokens', 0)
+        text_tok = (m.get('text_metrics') or {}).get('tokens', 0)
+        duration = m.get('duration_ms', 0) or 0
 
         # Accumulate cumulative tokens
         ctx_in += input_tok
@@ -569,7 +561,7 @@ def parse_session_data(data):
                     current_model_label = to_model
 
         # Performance data
-        tps = m.get('tokens_per_second') or m.get('tok_per_sec')
+        tps = m.get('tok_per_sec')
         ss_speed = ss.get('avg_tok_per_sec', 0)
         speed = tps or ss_speed
 
@@ -610,13 +602,13 @@ def parse_session_data(data):
             ttft_dur = m.get('time_to_first_token_ms') or 0
             tm = m.get('text_metrics') or {}
             text_dur = tm.get('inference_duration_ms') or 0
-            text_tok_b = (m.get('text_tokens') or tm.get('tokens')) or 0
+            text_tok_b = tm.get('tokens', 0)
             thm = m.get('thinking_metrics') or {}
             thinking_dur = thm.get('inference_duration_ms') or 0
-            think_tok_b = (m.get('thinking_tokens') or thm.get('tokens')) or 0
+            think_tok_b = thm.get('tokens', 0)
             tcm = m.get('tool_call_metrics') or {}
             tool_call_dur = tcm.get('inference_duration_ms') or 0
-            tool_instr_tok = (m.get('tool_call_tokens') or tcm.get('tokens')) or 0
+            tool_instr_tok = tcm.get('tokens', 0)
             # Sum execution duration across all tool calls
             for tc in m.get('tool_calls') or []:
                 exe = tc.get('execution') or {}
@@ -1066,8 +1058,8 @@ def build_turn(messages, msg_id):
             'input_tokens': m.get('input_tokens', 0) or 0,
             'output_tokens': m.get('output_tokens', 0) or 0,
             'time_to_first_token_ms': m.get('time_to_first_token_ms'),
-            'duration_ms': m.get('duration_ms') or m.get('duration_time_ms') or m.get('response_time_ms'),
-            'tok_per_sec': m.get('tokens_per_second') or m.get('tok_per_sec'),
+            'duration_ms': m.get('duration_ms'),
+            'tok_per_sec': m.get('tok_per_sec'),
             'stop_reason': m.get('stop_reason', ''),
             'text_metrics': m.get('text_metrics') or {},
             'thinking_metrics': m.get('thinking_metrics') or {},

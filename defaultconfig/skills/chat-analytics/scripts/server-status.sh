@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PIDFILE="/tmp/chat-analytics.pid"
-URL="http://localhost:17771/api/sessions"
+URL="http://localhost:17771/api/health"
 
 if [ -f "$PIDFILE" ]; then
   PID="$(cat "$PIDFILE" 2>/dev/null || true)"

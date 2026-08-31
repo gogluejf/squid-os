@@ -252,17 +252,33 @@ def parse_session_data(data):
         if checksum and not f['checksum']:
             f['checksum'] = checksum
 
-    # NOTE: File tokens are currently 0 because sequence_stat.file_state is never
-    # written by the runtime. The real per-file token data lives in
-    # tool_calls[].instruction.tokens + execution.tokens, with file paths in
-    # execution.files[]. Per-file compaction (retained/saved) requires porting
-    # the Go BuildCompactionPlan logic (internal/chat/compaction.go): group
-    # events by path, find latest checkpoint (full read/write/create), mark
-    # earlier successful events as compacted. This was lost in c39554d.
     for fp, info in top_level_files.items():
         if isinstance(info, dict):
             touch_file(fp, info.get('trace', 'unknown'), 0,
                        info.get('updated_at', ''), info.get('checksum', ''))
+    # Per-file tokens from tool calls (post Jun 1 format)
+    for m in messages:
+        for tc in (m.get('tool_calls') or []):
+            if not isinstance(tc, dict):
+                continue
+            name = tc.get('name', '') or (tc.get('instruction', {}) or {}).get('name', '')
+            if name not in ('read_file', 'write_file', 'edit_file'):
+                continue
+            exe = tc.get('execution', {}) or {}
+            files = exe.get('files', []) or []
+            if not files:
+                continue
+            instr = tc.get('instruction', {}) or {}
+            tok = (instr.get('tokens', 0) or 0) + (exe.get('tokens', 0) or 0)
+            trace_map = {'read_file': 'read', 'write_file': 'write', 'edit_file': 'edit'}
+            trace = trace_map.get(name, 'unknown')
+            for fe in files:
+                fpath = fe.get('path', '')
+                if not fpath:
+                    continue
+                touch_file(fpath, fe.get('trace', trace), tok,
+                           fe.get('time', m.get('created_at', '')), fe.get('checksum', ''))
+    # Legacy: per-message file_state (pre Jun 1 sessions)
     for m in messages:
         ss = m.get('sequence_stat', {}) or {}
         for fp, info in (ss.get('file_state') or {}).items():

@@ -1680,7 +1680,8 @@
             });
 
             if (charts.perf) charts.perf.destroy();
-            const perfData = tlData.filter(t => t.role === 'assistant' && (t.tokens_per_second || 0) > 0);
+            const perfTimeline = (perf && perf.timeline) || [];
+            const perfData = perfTimeline.filter(t => t.role === 'assistant' && (t.tokens_per_second || 0) > 0);
             const markerPointSet = new Set();
             let prevPerfModel = null;
             perfData.forEach((p, i) => {

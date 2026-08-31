@@ -153,7 +153,7 @@ func TestSetWorkingDirReappliesCapabilityPolicy(t *testing.T) {
 	}
 	session := NewRootSession(cfg, paths, catalogs)
 
-	summary, err := session.SetWorkingDir(workspaceB)
+	summary, err := session.ReloadCatalog(workspaceB)
 	if err != nil {
 		t.Fatal(err)
 	}

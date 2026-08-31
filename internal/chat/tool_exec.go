@@ -268,21 +268,33 @@ doExecute:
 
 	ctx := s.ToolContext(entry.ID, childRef)
 	resultStart := time.Now()
+
+	// Catalog readers rescan before reading: skills/agents may have been
+	// added or removed out-of-band (e.g. via bash).
+	if toolName == "skill_list" || toolName == "skill_load" {
+		if _, err := s.ReloadCatalog(s.Doc.Config.WorkingDir); err != nil {
+			entries[i].Execution.Status = tools.ResultStatusError
+			entries[i].Execution.Error = fmt.Sprintf("catalog reload: %v", err)
+			if err := flushAndCheckpoint(s, msgIdx, opts.Checkpoint); err != nil {
+				return checkpointFailure(msgIdx, i, err)
+			}
+			return ToolExecResult{Action: nextToolAction(i, len(entries)), MsgIdx: msgIdx, ToolIndex: i, NextIndex: i + 1}
+		}
+	}
+
 	result := tool.Execute(args, ctx)
 
 	// Apply session state changes before recording the final tool result so
 	// status, content, duration, and token accounting stay consistent.
-	if (toolName == "set_working_dir" || toolName == "skill_list") && result.Status == tools.ResultStatusSuccess {
+	if toolName == "set_working_dir" && result.Status == tools.ResultStatusSuccess {
 		path := s.Doc.Config.WorkingDir
-		if toolName == "set_working_dir" {
-			if pathVal, ok := args["path"].(string); ok {
-				path = tools.ResolvePath(pathVal, s.Doc.Config.WorkingDir)
-			}
+		if pathVal, ok := args["path"].(string); ok {
+			path = tools.ResolvePath(pathVal, s.Doc.Config.WorkingDir)
 		}
 		capabilitySummary, err := s.ReloadCatalog(path)
 		if err != nil {
 			result = tools.ToolResult{Status: tools.ResultStatusError, Error: err.Error()}
-		} else if toolName == "set_working_dir" {
+		} else {
 			result.Result = capabilitySummary
 		}
 	}

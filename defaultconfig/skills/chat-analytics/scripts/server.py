@@ -252,6 +252,13 @@ def parse_session_data(data):
         if checksum and not f['checksum']:
             f['checksum'] = checksum
 
+    # NOTE: File tokens are currently 0 because sequence_stat.file_state is never
+    # written by the runtime. The real per-file token data lives in
+    # tool_calls[].instruction.tokens + execution.tokens, with file paths in
+    # execution.files[]. Per-file compaction (retained/saved) requires porting
+    # the Go BuildCompactionPlan logic (internal/chat/compaction.go): group
+    # events by path, find latest checkpoint (full read/write/create), mark
+    # earlier successful events as compacted. This was lost in c39554d.
     for fp, info in top_level_files.items():
         if isinstance(info, dict):
             touch_file(fp, info.get('trace', 'unknown'), 0,

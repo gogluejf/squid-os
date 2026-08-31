@@ -267,6 +267,7 @@ def parse_session_data(data):
     perf_timeline = []
     skill_timeline = []
     ctx_total = 0
+    current_model_label = f"{provider}/{model}" if provider else model
     for i, m in enumerate(messages):
         role = m.get('role', 'unknown')
         input_tok = m.get('input_tokens', 0) or 0
@@ -274,6 +275,13 @@ def parse_session_data(data):
         duration = m.get('duration_ms', 0) or 0
         ss = m.get('sequence_stat', {}) or {}
         msg_files = list((ss.get('file_state') or {}).keys())
+
+        # Track model switches
+        if m.get('label') == 'Model Switched':
+            params = m.get('params') or {}
+            new_model = params.get('to', '')
+            if new_model:
+                current_model_label = new_model
 
         norm_tcs = [norm_tool_call(tc) for tc in (m.get('tool_calls') or [])
                     if isinstance(tc, dict)]
@@ -316,7 +324,7 @@ def parse_session_data(data):
                 'tokens_per_second': round(speed, 1),
                 'ttft_ms': m.get('time_to_first_token_ms', 0) or 0,
                 'ctx_total': ctx_total,
-                'current_model_label': f"{provider}/{model}" if provider else model,
+                'current_model_label': current_model_label,
                 'role': role,
             })
 

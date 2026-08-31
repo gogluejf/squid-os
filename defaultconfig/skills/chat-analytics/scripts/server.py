@@ -309,7 +309,7 @@ def parse_session_data(data):
 
         speed = ss.get('avg_tok_per_sec') or m.get('tok_per_sec') or 0
         if role == 'assistant' and speed and speed > 0:
-            ctx_total += input_tok
+            ctx_total += input_tok + output_tok
             perf_timeline.append({
                 'index': i,
                 'id': m.get('id', ''),

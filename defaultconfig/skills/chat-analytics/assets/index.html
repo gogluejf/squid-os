@@ -1515,14 +1515,14 @@
             document.getElementById('detail-tool-calls').textContent = general.tool_calls || 0;
 
             document.getElementById('gen-prompt').textContent = general.system_prompt_file || 'None';
-            document.getElementById('gen-thinking').textContent = (general.inference?.initial?.thinking ? 'on' : 'off');
+            document.getElementById('gen-thinking').textContent = (general.inference?.thinking?.enabled ? 'on' : 'off');
             document.getElementById('gen-tools').textContent = general.tool_calls || 0;
             document.getElementById('gen-synthetic').textContent = general.synthetic_messages || 0;
             document.getElementById('gen-aborted').textContent = general.aborted || 0;
             document.getElementById('gen-skills').textContent = Object.keys(skills.skills || {}).length;
-            document.getElementById('gen-environment').textContent = (general.init_params?.environment || 'None');
-            const initialProvider = general.inference?.initial?.provider || '';
-            const initialModel = general.inference?.initial?.model || '';
+            document.getElementById('gen-environment').textContent = (general.environment || general.working_dir || 'None');
+            const initialProvider = general.inference?.provider || '';
+            const initialModel = general.inference?.model || '';
             document.getElementById('gen-tools-enabled').textContent = (initialProvider && initialModel)
                 ? `${initialProvider}/${initialModel}`
                 : (initialModel || initialProvider || 'None');

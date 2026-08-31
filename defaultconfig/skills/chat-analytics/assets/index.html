@@ -1498,7 +1498,7 @@
             document.getElementById('detail-duration').textContent = fmtDur(general.total_duration_ms || 0);
             document.getElementById('detail-dates').textContent =
                 `${fmtDate(general.created_at)} → ${fmtDate(general.updated_at)}`;
-            document.getElementById('detail-turns').innerHTML = `${general.turns || 0} <span style="color:var(--text-muted)">(${general.messages || general.total_messages || (tally && tally.total_messages) || 0} msgs)</span>`;
+            document.getElementById('detail-turns').innerHTML = `${general.turns || 0} <span style="color:var(--text-muted)">(${general.total_messages || (tally && tally.total_messages) || 0} msgs)</span>`;
             document.getElementById('detail-speed').textContent = general.avg_speed_tok_per_sec ? Math.round(general.avg_speed_tok_per_sec) + ' tok/s' : 'N/A';
             const ttftTimeline = perf.timeline || [];
             const totalTTFTms = ttftTimeline.reduce((s, p) => s + (((p && p.ttft_ms) && p.ttft_ms > 0) ? p.ttft_ms : 0), 0);

@@ -889,7 +889,10 @@
         <!-- Detail View -->
         <div id="view-detail" class="view">
             <div class="section">
-                <h2 id="detail-title">Session Details</h2>
+                <h2 id="detail-title" style="display:flex;align-items:center;gap:10px">Session Details
+                    <button onclick="copySessionLink()" title="Copy link"
+                        style="font-size:11px;padding:3px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--accent);cursor:pointer">🔗 Copy Link</button>
+                </h2>
                 <div class="dashboard-grid" id="detail-stats">
                     <div class="stat-card">
                         <div class="label">Model</div>
@@ -1064,14 +1067,12 @@
 
         // ===== Format Helpers =====
         function fmtK(n) {
-            n = Number(n) || 0;
             if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
             if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
             return n.toString();
         }
 
         function fmtDur(ms) {
-            ms = Number(ms) || 0;
             if (ms < 1000) return ms + 'ms';
             if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
             if (ms < 3600000) {
@@ -1093,12 +1094,11 @@
         }
 
         // ===== Load Sessions =====
-        // ===== Deep Link: #<session> or #s/<session> opens a session directly =====
+        // ===== Deep Link: #/<session> opens a session directly =====
         function sessionFromHash() {
             const h = decodeURIComponent(location.hash.replace(/^#\/?/, ''));
             if (!h) return null;
-            const m = h.match(/^s\/(.+)$/);
-            return m ? m[1] : (h.includes('/') || h.endsWith('.chat.json') ? h : null);
+            return h;
         }
 
         async function loadSessions() {
@@ -1136,17 +1136,16 @@
                 div.className = 'session-item';
                 div.dataset.filename = s.filename;
                 div.onclick = () => showDetail(s.filename);
-                const modelName = (s.model || 'unknown');
                 div.innerHTML = `
                     <div class="meta" style="margin-bottom:4px">
-                        <span class="filename" title="${s.filename}" style="flex:1;overflow:hidden;text-overflow:ellipsis">${s.filename}</span>
-                        <span>${s.time_ago || ''}</span>
+                        <span class="filename" title="${s.filename}" style="flex:1;overflow:hidden;text-overflow:ellipsis">${s.filename.replace('.chat.json', '')}</span>
+                        <span>${s.time_ago}</span>
                     </div>
                     <div style="display:grid;grid-template-columns:auto 1fr;align-items:start;gap:8px">
-                        <span class="model-badge">${modelName.split('/').pop()}</span>
+                        <span class="model-badge">${s.model.split('/').pop()}</span>
                         <div style="text-align:right">
-                            <div style="font-size:11px;color:var(--success)">${fmtK(s.total_tokens || 0)}</div>
-                            <div style="font-size:11px;color:var(--warn)">${(s.turns || 0)} turns</div>
+                            <div style="font-size:11px;color:var(--success)">${fmtK(s.total_tokens)}</div>
+                            <div style="font-size:11px;color:var(--warn)">${s.turns} turns</div>
                         </div>
                     </div>
                 `;
@@ -1158,9 +1157,9 @@
         document.getElementById('search-input').addEventListener('input', function() {
             const q = this.value.toLowerCase();
             const filtered = allSessions.filter(s =>
-                (s.filename || '').toLowerCase().includes(q) ||
-                (s.model || '').toLowerCase().includes(q) ||
-                (s.provider || '').toLowerCase().includes(q)
+                s.filename.toLowerCase().includes(q) ||
+                s.model.toLowerCase().includes(q) ||
+                s.provider.toLowerCase().includes(q)
             );
             renderSessionList(filtered);
         });
@@ -1181,33 +1180,22 @@
 
         // ===== Dashboard =====
         async function loadDashboard() {
-            try {
-                const summary = await api('/api/dashboard/summary');
-                if (summary && !summary.error) {
-                    renderDashboardStats(summary);
-                    renderTop10(summary.top_10 || []);
-                }
-            } catch (e) { console.error('dashboard summary failed:', e); }
+            const summary = await api('/api/dashboard/summary');
+            renderDashboardStats(summary);
+            renderTop10(summary.top_10);
 
-            try {
-                const models = await api('/api/dashboard/models');
-                renderModelsTable(Array.isArray(models) ? models : []);
-            } catch (e) { console.error('dashboard models failed:', e); }
+            const models = await api('/api/dashboard/models');
+            renderModelsTable(models);
 
-            try {
-                const activity = await api('/api/dashboard/activity');
-                renderActivityChart(activity || {});
-            } catch (e) { console.error('dashboard activity failed:', e); }
+            const activity = await api('/api/dashboard/activity');
+            renderActivityChart(activity);
 
-            try {
-                const skills = await api('/api/dashboard/skills');
-                renderSkillsChart(skills || {});
-            } catch (e) { console.error('dashboard skills failed:', e); }
+            const skills = await api('/api/dashboard/skills');
+            renderSkillsChart(skills);
         }
 
         function renderDashboardStats(s) {
             const container = document.getElementById('dashboard-stats');
-            if (!container || !s) return;
             const stats = [
                 { label: 'Total Conversations', value: s.total_conversations, color: '' },
                 { label: 'Avg Input Tokens', value: fmtK(s.avg_input_tokens), color: 'var(--success)' },
@@ -1227,7 +1215,6 @@
 
         function renderModelsTable(models) {
             const tbody = document.querySelector('#models-table tbody');
-            if (!tbody || !Array.isArray(models)) return;
             tbody.innerHTML = models.map(m => `
                 <tr>
                     <td class="mono">${m.model}</td>
@@ -1243,10 +1230,9 @@
 
         function renderTop10(sessions) {
             const tbody = document.querySelector('#top10-table tbody');
-            if (!tbody || !Array.isArray(sessions)) return;
             tbody.innerHTML = sessions.map(s => `
                 <tr>
-                    <td class="link-cell"><a href="#" onclick="showDetail('${s.filename}');return false">${s.filename}</a></td>
+                    <td class="link-cell"><a href="#" onclick="showDetail('${s.filename}');return false">${s.filename.replace('.chat.json','')}</a></td>
                     <td class="mono">${s.model.split('/').pop()}</td>
                     <td class="mono" style="color:var(--success)">${fmtK(s.total_tokens)}</td>
                     <td style="color:var(--warn)">${s.turns} <span style="color:var(--text-muted)">(${s.messages} msgs)</span></td>
@@ -1256,7 +1242,6 @@
         }
 
         function fmtChartNum(n) {
-            n = Number(n) || 0;
             if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
             if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
             return n.toString();
@@ -1264,12 +1249,10 @@
 
         function renderActivityChart(activity) {
             if (charts.activity) charts.activity.destroy();
-            const weeks = (activity && (activity.weeks || activity)) || [];
-            const providers = (activity && activity.providers) || [];
+            const weeks = activity.weeks || activity;
+            const providers = activity.providers || [];
             const labels = weeks.map(w => w.week);
-            const chartEl = document.getElementById('activity-chart');
-            if (!chartEl) return;
-            const ctx = chartEl.getContext('2d');
+            const ctx = document.getElementById('activity-chart').getContext('2d');
             charts.activity = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -1410,11 +1393,9 @@
 
         function renderSkillsChart(skillsData) {
             if (charts.skills) charts.skills.destroy();
-            const weeks = (skillsData && skillsData.week_keys) || [];
-            const weekData = (skillsData && skillsData.weeks) || [];
-            const skillNames = (skillsData && skillsData.skills) || [];
-            const chartEl = document.getElementById('skills-chart');
-            if (!chartEl) return;
+            const weeks = skillsData.week_keys || [];
+            const weekData = skillsData.weeks || [];
+            const skillNames = skillsData.skills || [];
             const colors = ['#569cd6', '#4ec9b0', '#d29922', '#bc8cff', '#f44747', '#79c0ff', '#ff7b72', '#ce9178', '#6a9955', '#dcdcaa'];
             const skillDatasets = skillNames.map((s, i) => ({
                 label: s,
@@ -1423,7 +1404,7 @@
                 borderColor: colors[i % colors.length],
                 borderWidth: 1,
             }));
-            const ctx = chartEl.getContext('2d');
+            const ctx = document.getElementById('skills-chart').getContext('2d');
             charts.skills = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -1443,6 +1424,14 @@
                 }
             });
         }
+        function copySessionLink() {
+            const url = location.origin + location.pathname + location.hash;
+            navigator.clipboard.writeText(url).then(() => {
+                const btn = document.querySelector('[onclick="copySessionLink()"]');
+                if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => btn.textContent = '🔗 Copy Link', 1500); }
+            });
+        }
+
         async function showDetail(filename) {
             if (location.hash !== '#/' + filename) history.replaceState(null, '', '#/' + filename);
             document.querySelectorAll('.session-item').forEach(i => {
@@ -1450,7 +1439,7 @@
             });
             showView('detail');
 
-            document.getElementById('detail-title').textContent = filename;
+            document.getElementById('detail-title').textContent = filename.replace('.chat.json', '');
 
             // Show loading
             document.getElementById('main').querySelector('#view-detail').innerHTML = '<div class="loading">Loading session data...</div>';
@@ -1469,39 +1458,27 @@
 
                 renderDetail(filename, general, tally, timeline, tools, skills, files, perf);
             } catch (e) {
-                console.error('renderDetail failed:', e);
-                const el = document.querySelector('#view-detail');
-                if (el) el.innerHTML = '<div class="loading">Failed to render session: ' + e.message + '</div>';
+                console.error(e);
+                location.reload();
             }
         }
 
         function renderDetail(filename, general, tally, timeline, tools, skills, files, perf) {
-            try {
-                _renderDetailInner(filename, general, tally, timeline, tools, skills, files, perf);
-            } catch (e) {
-                console.error('renderDetail failed:', e);
-                const el = document.getElementById('view-detail');
-                if (el) el.innerHTML = '<div class="loading">Failed to render session: ' + e.message +
-                    '<pre style="color:#f44747;font-size:11px;white-space:pre-wrap">' + (e.stack || '') + '</pre></div>';
-            }
-        }
-
-        function _renderDetailInner(filename, general, tally, timeline, tools, skills, files, perf) {
             currentDetailSession = filename;
             rebuildDetailView();
-            document.getElementById('detail-title').textContent = `Session Details: ${filename}`;
+            document.getElementById('detail-title').textContent = `Session Details: ${filename.replace('.chat.json', '')}`;
 
-            document.getElementById('detail-model').textContent = general.model || 'unknown';
+            document.getElementById('detail-model').textContent = general.model;
             document.getElementById('detail-provider').textContent =
-                `${general.provider || ''}` +
+                `${general.provider}` +
                 ` · Thinking: ${general.thinking ? 'on' : 'off'}`;
-            document.getElementById('detail-duration').textContent = fmtDur(general.total_duration_ms || 0);
+            document.getElementById('detail-duration').textContent = fmtDur(general.total_duration_ms);
             document.getElementById('detail-dates').textContent =
                 `${fmtDate(general.created_at)} → ${fmtDate(general.updated_at)}`;
-            document.getElementById('detail-turns').innerHTML = `${general.turns || 0} <span style="color:var(--text-muted)">(${general.total_messages || (tally && tally.total_messages) || 0} msgs)</span>`;
+            document.getElementById('detail-turns').innerHTML = `${general.turns} <span style="color:var(--text-muted)">(${general.total_messages || tally.total_messages || 0} msgs)</span>`;
             document.getElementById('detail-speed').textContent = general.avg_speed_tok_per_sec ? Math.round(general.avg_speed_tok_per_sec) + ' tok/s' : 'N/A';
             const ttftTimeline = perf.timeline || [];
-            const totalTTFTms = ttftTimeline.reduce((s, p) => s + (((p && p.ttft_ms) && p.ttft_ms > 0) ? p.ttft_ms : 0), 0);
+            const totalTTFTms = ttftTimeline.reduce((s, p) => s + ((p.ttft_ms && p.ttft_ms > 0) ? p.ttft_ms : 0), 0);
             const ttftCount = ttftTimeline.filter(p => p.ttft_ms && p.ttft_ms > 0).length;
             if (ttftCount > 0) {
                 const avgTTFT = totalTTFTms / ttftCount;
@@ -1511,30 +1488,30 @@
                 document.getElementById('detail-total-ttft').textContent = 'N/A';
                 document.getElementById('detail-total-ttft-sub').textContent = '';
             }
-            document.getElementById('detail-total-tokens').textContent = fmtK((tally && tally.total_tokens) || 0);
+            document.getElementById('detail-total-tokens').textContent = fmtK(tally.total_tokens || 0);
             document.getElementById('detail-tool-calls').textContent = general.tool_calls || 0;
 
             document.getElementById('gen-prompt').textContent = general.system_prompt_file || 'None';
-            document.getElementById('gen-thinking').textContent = (general.inference?.thinking?.enabled ? 'on' : 'off');
+            document.getElementById('gen-thinking').textContent = (general.inference?.initial?.thinking ? 'on' : 'off');
             document.getElementById('gen-tools').textContent = general.tool_calls || 0;
             document.getElementById('gen-synthetic').textContent = general.synthetic_messages || 0;
             document.getElementById('gen-aborted').textContent = general.aborted || 0;
             document.getElementById('gen-skills').textContent = Object.keys(skills.skills || {}).length;
-            document.getElementById('gen-environment').textContent = (general.environment || general.working_dir || 'None');
-            const initialProvider = general.inference?.provider || '';
-            const initialModel = general.inference?.model || '';
+            document.getElementById('gen-environment').textContent = (general.init_params?.environment || general.working_dir || 'None');
+            const initialProvider = general.inference?.initial?.provider || '';
+            const initialModel = general.inference?.initial?.model || '';
             document.getElementById('gen-tools-enabled').textContent = (initialProvider && initialModel)
                 ? `${initialProvider}/${initialModel}`
                 : (initialModel || initialProvider || 'None');
 
-            const maxToken = Math.max.apply(null, [
+            const maxToken = Math.max(
                 tally.total_input || 0, tally.total_output || 0,
                 tally.user_input || 0, tally.text || 0,
                 tally.thinking || 0,
                 tally.tool_call || 0, tally.tool_instruction || 0,
                 tally.tool_execution || 0, tally.tool_definition || 0,
                 tally.system_prompt || 0, tally.synthetic || 0
-            ]);
+            );
             const tallyItems = [
                 { label: 'Total Input', value: tally.total_input || 0, cls: 'fill-input' },
                 { label: 'Total Output', value: tally.total_output || 0, cls: 'fill-output' },
@@ -1605,14 +1582,14 @@
                     datasets: [
                         {
                             label: 'Input Tokens',
-                            data: tlData.map(t => (t && t.input_tokens) || 0),
+                            data: tlData.map(t => t.input_tokens),
                             backgroundColor: 'rgba(86,156,214,0.5)',
                             borderColor: '#569cd6',
                             borderWidth: 1,
                         },
                         {
                             label: 'Output Tokens',
-                            data: tlData.map(t => (t && t.output_tokens) || 0),
+                            data: tlData.map(t => t.output_tokens),
                             backgroundColor: 'rgba(78,201,176,0.5)',
                             borderColor: '#4ec9b0',
                             borderWidth: 1,
@@ -1641,13 +1618,12 @@
                                 afterBody: function(ctx) {
                                     const item = tlData[ctx[0].dataIndex];
                                     if (!item) return [];
-                                    const files = item.files || [];
                                     return [
                                         `Role: ${item.role}`,
-                                        `Tools: ${item.tool_count || 0}`,
-                                        `Duration: ${fmtDur(item.duration_ms || 0)}`,
-                                        `Files: ${files.length}`,
-                                        files.slice(0, 3).join(', ') + (files.length > 3 ? '...' : ''),
+                                        `Tools: ${item.tool_count}`,
+                                        `Duration: ${fmtDur(item.duration_ms)}`,
+                                        `Files: ${item.files.length}`,
+                                        item.files.slice(0, 3).join(', ') + (item.files.length > 3 ? '...' : ''),
                                     ];
                                 }
                             }
@@ -1680,8 +1656,7 @@
             });
 
             if (charts.perf) charts.perf.destroy();
-            const perfTimeline = (perf && perf.timeline) || [];
-            const perfData = perfTimeline.filter(t => t.role === 'assistant' && (t.tokens_per_second || 0) > 0);
+            const perfData = tlData.filter(t => t.role === 'assistant' && (t.tokens_per_second || 0) > 0);
             const markerPointSet = new Set();
             let prevPerfModel = null;
             perfData.forEach((p, i) => {
@@ -1694,7 +1669,7 @@
                 prevPerfModel = cur || prevPerfModel;
             });
             const perfXLabels = perfData.map((p, i) => {
-                const cum = (p && p.ctx_total) || 0;
+                const cum = p.ctx_total || 0;
                 if (cum >= 1000000) return (cum / 1000000).toFixed(1) + 'M';
                 if (cum >= 1000) return (cum / 1000).toFixed(0) + 'K';
                 return cum.toString();
@@ -1729,7 +1704,7 @@
                     labels: perfXLabels,
                     datasets: [{
                         label: 'Tokens/sec',
-                        data: perfData.map(p => (p && p.tokens_per_second) || 0),
+                        data: perfData.map(p => p.tokens_per_second),
                         borderColor: '#569cd6',
                         backgroundColor: 'rgba(86,156,214,0.1)',
                         fill: true,
@@ -1748,10 +1723,10 @@
                                     if (!items.length) return '';
                                     const idx = items[0].dataIndex;
                                     const p = perfData[idx];
-                                    return ((p && p.id) || '') + '\nCumulative: ' + (((p && p.ctx_total) || 0)).toLocaleString() + ' tokens';
+                                    return (p.id || '') + '\nCumulative: ' + (p.ctx_total || 0).toLocaleString() + ' tokens';
                                 },
                                 label: function(ctx) {
-                                    return 'Speed: ' + (ctx.parsed.y != null ? ctx.parsed.y.toFixed(1) : '-') + ' tok/s';
+                                    return 'Speed: ' + ctx.parsed.y.toFixed(1) + ' tok/s';
                                 }
                             }
                         }
@@ -1809,7 +1784,7 @@
             const durData = tlData.filter(t => t.role === 'assistant' && (t.duration_ms || 0) > 0);
             if (durData.length > 0) {
                 const totals = {
-                    ttft: durData.reduce((s, d) => s + ((d && d.ttft_dur_ms) || 0), 0),
+                    ttft: durData.reduce((s, d) => s + (d.ttft_dur_ms || 0), 0),
                     thinking: durData.reduce((s, d) => s + (d.thinking_dur_ms || 0), 0),
                     text: durData.reduce((s, d) => s + (d.text_dur_ms || 0), 0),
                     toolCall: durData.reduce((s, d) => s + (d.tool_call_dur_ms || 0), 0),
@@ -1882,7 +1857,7 @@
             // Collect system tokens from sys0, env0, tools0
             let systemTok = 0;
             tlData.forEach(m => {
-                if (m && (m.id === 'sys0' || m.id === 'env0' || m.id === 'tools0' || m.id === 'config0')) {
+                if (m.id === 'sys0' || m.id === 'env0' || m.id === 'tools0') {
                     systemTok += (m.input_tokens || 0);
                 }
             });
@@ -2055,7 +2030,7 @@
                 prevTTFTModel = cur || prevTTFTModel;
             });
             const ttftXLabels = ttftData.map((p) => {
-                const cum = (p && p.ctx_total) || 0;
+                const cum = p.ctx_total || 0;
                 if (cum >= 1000000) return (cum / 1000000).toFixed(1) + 'M';
                 if (cum >= 1000) return (cum / 1000).toFixed(0) + 'K';
                 return cum.toString();
@@ -2090,7 +2065,7 @@
                     labels: ttftXLabels,
                     datasets: [{
                         label: 'TTFT (ms)',
-                        data: ttftData.map(p => (p && p.ttft_ms) || 0),
+                        data: ttftData.map(p => p.ttft_ms),
                         borderColor: '#bc8cff',
                         backgroundColor: 'rgba(188,140,255,0.1)',
                         fill: true,
@@ -2110,11 +2085,11 @@
                                     if (!items.length) return '';
                                     const idx = items[0].dataIndex;
                                     const p = ttftData[idx];
-                                    return ((p && p.id) || '') + '\nCumulative: ' + (((p && p.ctx_total) || 0)).toLocaleString() + ' tokens';
+                                    return (p.id || '') + '\nCumulative: ' + (p.ctx_total || 0).toLocaleString() + ' tokens';
                                 },
                                 label: function(ctx) {
                                     const ms = ctx.parsed.y;
-                                    return 'TTFT: ' + fmtDur(ms || 0);
+                                    return 'TTFT: ' + fmtDur(ms);
                                 }
                             }
                         }
@@ -2201,8 +2176,8 @@
 
             // Skill Timeline Canvas
             if (charts.skillTimeline) charts.skillTimeline.destroy();
-            const stlData = (skills && skills.timeline) || [];
-            const skillTimelineSection = document.getElementById('skilltimeline-chart') ? document.getElementById('skilltimeline-chart').closest('.section') : null;
+            const stlData = skills.timeline || [];
+            const skillTimelineSection = document.getElementById('skilltimeline-chart')?.closest('.section');
             const hasSkillSegment = stlData.some(seg => seg.type === 'skill');
             if (skillTimelineSection) skillTimelineSection.style.display = hasSkillSegment ? '' : 'none';
             if (hasSkillSegment) {
@@ -2220,7 +2195,7 @@
                 const skillNames = skillEntries.map(([n]) => n);
                 const skillColors = ['#569cd6', '#4ec9b0', '#d29922', '#bc8cff', '#f44747', '#79c0ff', '#ff7b72', '#ce9178', '#6a9955', '#dcdcaa'];
                 const notSkillColor = '#5c6370';
-                let totalSTokens = stlData.reduce((s, seg) => s + ((seg && seg.tokens) || 0), 0);
+                let totalSTokens = stlData.reduce((s, seg) => s + seg.tokens, 0);
                 if (totalSTokens === 0) return;
 
                 const barY = 34;
@@ -2255,17 +2230,16 @@
                 const hitRegions = [];
                 let x = x0;
                 stlData.forEach(seg => {
-                    const segTok = (seg && seg.tokens) || 0;
-                    const segW = (segTok / totalSTokens) * barW;
-                    if (!seg || seg.type === 'not_skill') {
+                    const segW = (seg.tokens / totalSTokens) * barW;
+                    if (seg.type === 'not_skill') {
                         ctx.fillStyle = notSkillColor;
                         ctx.fillRect(x, barY, segW, barH);
-                        hitRegions.push({ x: x, y: barY, w: segW, h: barH, label: 'Not Skill', msg: { id: 'context' }, val: segTok });
+                        hitRegions.push({ x: x, y: barY, w: segW, h: barH, label: 'Not Skill', msg: { id: 'context' }, val: seg.tokens });
                     } else {
                         const si = skillNames.indexOf(seg.name);
                         ctx.fillStyle = skillColors[(si >= 0 ? si : 0) % 10];
                         ctx.fillRect(x, barY, segW, barH);
-                        hitRegions.push({ x: x, y: barY, w: segW, h: barH, label: seg.name, msg: { id: (seg && seg.id) || 'skill' }, val: segTok });
+                        hitRegions.push({ x: x, y: barY, w: segW, h: barH, label: seg.name, msg: { id: seg.id || 'skill' }, val: seg.tokens });
                     }
                     x += segW;
                 });
@@ -2344,7 +2318,7 @@
                 canvas.onmouseleave = function() { tooltipEl.style.display = 'none'; };
             }
 
-            const compaction = (files && files.compaction) || {};
+            const compaction = files.compaction || {};
             const currentTokens = compaction.current_tokens || 0;
             const retainedTokens = compaction.retained_tokens || 0;
             const savedTokens = compaction.saved_tokens || 0;
@@ -2381,8 +2355,6 @@
             const fileEntries = files.files || [];
             filesTbody.innerHTML = fileEntries.length ? fileEntries.map(f => {
                 const fc = f.compaction || {};
-                f.reads = f.reads || 0; f.edits = f.edits || 0; f.creates = f.creates || 0; f.writes = f.writes || 0;
-                f.total_tokens = f.total_tokens || 0; f.checksum = f.checksum || ''; f.last_updated = f.last_updated || '';
                 const fcCurrent = fc.current_tokens || 0;
                 const fcSaved = fc.saved_tokens || 0;
                 const fcRetained = fc.retained_tokens || 0;
@@ -2419,10 +2391,7 @@
             div.className = 'view active';
             div.innerHTML = `
                 <div class="section">
-                    <h2 id="detail-title" style="display:flex;align-items:center;gap:10px">Session Details
-                        <button onclick="copySessionLink()" title="Copy link to this session"
-                            style="font-size:11px;padding:3px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--accent);cursor:pointer">🔗 Copy Link</button>
-                    </h2>
+                    <h2 id="detail-title">Session Details</h2>
                     <div class="dashboard-grid" id="detail-stats">
                         <div class="stat-card">
                             <div class="label">Model</div>
@@ -2484,15 +2453,6 @@
             main.appendChild(div);
         }
 
-        function copySessionLink() {
-            if (!currentDetailSession) return;
-            const url = location.origin + '/' + '#' + '/' + currentDetailSession;
-            navigator.clipboard.writeText(url).then(() => {
-                const btn = document.querySelector('#detail-title button');
-                if (btn) { btn.textContent = '✓ Copied'; setTimeout(() => btn.textContent = '🔗 Copy Link', 1500); }
-            });
-        }
-
         // ===== Turn Panel =====
         let currentTurnData = null; // Full turn data for prev/next nav
         let currentTurnSession = null; // Current session filename
@@ -2512,14 +2472,14 @@
             const meta = document.getElementById('turn-panel-meta');
             
             title.textContent = 'Turn: ' + msgId;
-            meta.textContent = sessionId;
+            meta.textContent = sessionId.replace('.chat.json', '');
             body.className = 'loading';
             body.innerHTML = '<div style="text-align:center;padding:40px">Loading turn data...</div>';
             
             panel.classList.add('active');
             overlay.classList.add('active');
             
-            fetch('/api/sessions/' + encodeURIComponent(sessionId) + '/turn?msg_id=' + encodeURIComponent(msgId))
+            fetch('/api/sessions/' + encodeURIComponent(sessionId.replace('.chat.json', '')) + '/turn?msg_id=' + encodeURIComponent(msgId))
                 .then(r => r.json())
                 .then(data => {
                     if (data.error) {

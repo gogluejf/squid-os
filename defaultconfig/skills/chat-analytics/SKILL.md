@@ -1,7 +1,7 @@
 ---
 name: chat-analytics
 description: Browses and analyzes Squid-OS chat session JSON files with an interactive dashboard showing token usage, performance metrics, tool calls, file activity, and model comparison.
-version: 1.4.0
+version: 1.5.0
 allowed-tools: bash read_file write_file
 ---
 
@@ -14,12 +14,14 @@ Serves a self-contained analytics dashboard for Squid-OS chat sessions. A Python
 
 ## Instructions
 ### Starting the Server
-Execute each step as a separate bash tool call.
+Check first — never restart a healthy instance. The server is stateless (it reads session JSON on demand), so restarting gains nothing and only adds latency.
 
-1. Stop any old instance:
+1. Check status:
 ```bash
-<skill-folder>/scripts/stop-server.sh
+<skill-folder>/scripts/server-status.sh
 ```
+- If it prints `running`, skip to step 4 — do NOT stop or start anything.
+- If it prints `stopped` (or the script fails), continue to step 2.
 
 2. Start the server:
 ```bash
@@ -31,16 +33,17 @@ This script handles symlink creation, pid tracking, cleanup, and background laun
 ```bash
 <skill-folder>/scripts/server-status.sh
 ```
-If it prints `running`, the API is available at `http://localhost:17771`.
+If it still does not print `running`, check `/tmp/chat-analytics.log` for errors before reporting failure.
 
-4. Open the dashboard with the `open` tool using the URL `http://localhost:17771`.
+4. **Interactive mode only** (check the `session-mode` field in the Squid-OS environment section): open the dashboard with @tool:open using the URL `http://localhost:17771`.
 Tell the user: `Dashboard is open at http://localhost:17771`.
+In autonomous mode skip this step entirely — never call @tool:open or launch any GUI application; just report that the API is available at `http://localhost:17771`.
 
 ### Deep Linking to a Session
 The dashboard supports hash-based deep links — no extra server endpoint needed:
 - `http://localhost:17771/#/<session-name>` opens that session's detail view directly (exact or prefix match).
 - Opening a session updates the URL hash, and a **🔗 Copy Link** button in the session header copies the shareable URL.
-- When the user asks to "open/show analytics for session X" (or the current session), open `http://localhost:17771/#/<session-name>` instead of the bare dashboard. The current session name is visible in the sessions directory listing (most recent folder) or from the session context.
+- When the user asks to "open/show analytics for session X" (or the current session), open `http://localhost:17771/#/<session-name>` instead of the bare dashboard — interactive mode only. The current session name is visible in the sessions directory listing (most recent folder) or from the session context. In autonomous mode, do not open any URL; query the API directly and answer inline.
 
 ### Stopping the Server
 When the skill is done or being unloaded:
@@ -79,9 +82,9 @@ When the user asks an analytics question:
 ## Rules
 - Always use the helper scripts: `start-server.sh`, `stop-server.sh`, `server-status.sh`.
 - Never inline background shell logic like `nohup`, `&`, `disown`, or `setsid` in the skill instructions.
-- Never use `xdg-open` in this skill. Use the `open` tool for URLs.
+- Use @tool:open for URLs, and only in interactive mode — in autonomous mode never call it or launch GUI applications.
 - Port is fixed at `17771`.
-- Always stop an old instance before starting a new one.
+- Check status before starting; never stop a running instance just to restart it. Only stop when explicitly asked or when the server must be unloaded.
 - Never modify original session files — all operations are read-only.
 
 ## Output Format
@@ -97,15 +100,20 @@ You can ask me analytics questions and I'll query the API for you.
 Input: User wants to browse chat session analytics.
 
 Agent executes:
-1. `<skill-folder>/scripts/stop-server.sh`
+1. `<skill-folder>/scripts/server-status.sh` → `stopped`, so start it
 2. `<skill-folder>/scripts/start-server.sh`
-3. `<skill-folder>/scripts/server-status.sh`
-4. Open `http://localhost:17771` with the `open` tool.
+3. Open `http://localhost:17771` with @tool:open (interactive mode only).
 
 Output:
 Server started.
 Dashboard URL: http://localhost:17771
 Status: running
+
+Input: User asks for analytics again while the server is already running.
+
+Agent executes:
+1. `<skill-folder>/scripts/server-status.sh` → `running pid=... url=http://localhost:17771`
+2. Query the API directly — no stop, no start.
 
 Input: User asks `Which model do I use most?`
 

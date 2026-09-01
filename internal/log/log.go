@@ -10,10 +10,11 @@ import (
 )
 
 var (
-	mu            sync.Mutex
-	enabled       bool
-	sseLogger     *log.Logger
-	metricsLogger *log.Logger
+	mu              sync.Mutex
+	enabled         bool
+	sseLogger       *log.Logger
+	metricsLogger   *log.Logger
+	gitShortStatLogger *log.Logger
 )
 
 // maxLogSize is the threshold (in bytes) for truncating log files on boot.
@@ -33,10 +34,12 @@ func truncateIfOverLimit(path string) {
 func Init(paths config.Paths) {
 	ssePath := paths.Logs + "/sse_chunks.log"
 	metricsPath := paths.Logs + "/stream_metrics.log"
+	gitShortStatPath := paths.Logs + "/git_shortstat.log"
 
 	// Cleanup massive logs on boot (if > 100MB)
 	truncateIfOverLimit(ssePath)
 	truncateIfOverLimit(metricsPath)
+	truncateIfOverLimit(gitShortStatPath)
 
 	sseF, err := os.OpenFile(ssePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err == nil {
@@ -46,6 +49,11 @@ func Init(paths config.Paths) {
 	metricsF, err := os.OpenFile(metricsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err == nil {
 		metricsLogger = log.New(metricsF, "", 0)
+	}
+
+	gitShortStatF, err := os.OpenFile(gitShortStatPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err == nil {
+		gitShortStatLogger = log.New(gitShortStatF, "", 0)
 	}
 }
 
@@ -86,4 +94,19 @@ func LogStreamMetrics(kind, chunk string, n, total int, first, done time.Time) {
 	metricsLogger.Printf("%s %s n=%d chars=%d chunk=%q first=%s done=%s\n",
 		time.Now().Format("15:04:05.000000"), kind, n, total, chunk,
 		first.Format("15:04:05.000000"), done.Format("15:04:05.000000"))
+}
+
+// LogGitShortStat writes a timestamped git shortstat lifecycle event to
+// git_shortstat.log. event is one of: "sync-first", "bg-start", "bg-done".
+// Only git-triggering events are logged (cache hits are intentionally skipped).
+func LogGitShortStat(event, dir string, age, dur time.Duration) {
+	if !IsEnabled() {
+		return
+	}
+	if gitShortStatLogger == nil {
+		return
+	}
+	gitShortStatLogger.Printf("%s %s dir=%s age=%s dur=%s\n",
+		time.Now().Format("15:04:05.000000"), event, dir,
+		age.Round(time.Millisecond), dur.Round(time.Millisecond))
 }

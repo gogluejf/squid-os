@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"squid-os/internal/log"
 	"squid-os/internal/style"
 
 	"github.com/charmbracelet/lipgloss"
@@ -162,6 +163,13 @@ func ShortStat(dir string, showLabels ...bool) string {
 }
 
 // --- Cached version for hot-path (footer) use ---
+//
+// The footer renders on every keystroke, so git must never block the UI
+// thread. Strategy:
+//   - the cached value is always returned immediately (may be stale);
+//   - when the TTL expires, a background goroutine recomputes and swaps the
+//     cached value in when done;
+//   - concurrent expirations coalesce into a single in-flight refresh per key.
 
 const shortStatTTL = 2 * time.Second
 
@@ -170,16 +178,21 @@ type shortStatCacheKey struct {
 	showLabel bool
 }
 
+type shortStatEntry struct {
+	at         time.Time
+	text       string
+	refreshing bool
+}
+
 var (
 	shortStatCacheMu sync.Mutex
-	shortStatCache   = map[shortStatCacheKey]struct {
-		value time.Time
-		text  string
-	}{}
+	shortStatCache   = map[shortStatCacheKey]*shortStatEntry{}
 )
 
-// CachedShortStat returns the git shortstat string for the given directory,
-// cached for shortStatTTL to avoid spawning git processes on every render tick.
+// CachedShortStat returns the last known git shortstat string for the given
+// directory without blocking on git. When the cached value is older than
+// shortStatTTL, a background refresh is started (at most one in flight per
+// key) and the stale value is returned until it completes.
 func CachedShortStat(dir string, showLabels ...bool) string {
 	showLabel := true
 	if len(showLabels) > 0 {
@@ -190,21 +203,35 @@ func CachedShortStat(dir string, showLabels ...bool) string {
 
 	shortStatCacheMu.Lock()
 	entry, ok := shortStatCache[key]
-	if ok && now.Sub(entry.value) < shortStatTTL {
-		cached := entry.text
+	if !ok {
+		// First sight of this dir: compute synchronously once so the footer
+		// never shows an empty stat. Bounded by a single ShortStat call.
+		t0 := time.Now()
+		text := ShortStat(dir, showLabel)
+		entry = &shortStatEntry{text: text, at: time.Now()}
+		shortStatCache[key] = entry
 		shortStatCacheMu.Unlock()
-		return cached
+		log.LogGitShortStat("sync-first", dir, 0, time.Since(t0))
+		return entry.text
 	}
+	stale := now.Sub(entry.at) >= shortStatTTL
+	if stale && !entry.refreshing {
+		entry.refreshing = true
+		go func() {
+			t0 := time.Now()
+			result := ShortStat(dir, showLabel)
+			shortStatCacheMu.Lock()
+			entry.at = time.Now()
+			entry.text = result
+			entry.refreshing = false
+			shortStatCacheMu.Unlock()
+			log.LogGitShortStat("bg-done", dir, 0, time.Since(t0))
+		}()
+		shortStatCacheMu.Unlock()
+		log.LogGitShortStat("bg-start", dir, now.Sub(entry.at), 0)
+		return entry.text
+	}
+	cached := entry.text
 	shortStatCacheMu.Unlock()
-
-	result := ShortStat(dir, showLabel)
-
-	shortStatCacheMu.Lock()
-	shortStatCache[key] = struct {
-		value time.Time
-		text  string
-	}{value: now, text: result}
-	shortStatCacheMu.Unlock()
-
-	return result
+	return cached
 }

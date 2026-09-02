@@ -120,8 +120,10 @@ func (catalog Catalog) FormatSkills(cfg config.SessionConfig) string {
 			b.WriteString(fmt.Sprintf("  - %s: [%s] %s\n", entry.Name, entry.Scope, entry.Description))
 		}
 	}
-	b.WriteString("\n### Missing Skills\n")
-	writeMissing(&b, catalog.MissingSkills(cfg.SkillPolicy))
+	if missing := catalog.MissingSkills(cfg.SkillPolicy); len(missing) > 0 {
+		b.WriteString("\n### Missing Skills\n")
+		writeMissing(&b, missing)
+	}
 	return b.String()
 }
 
@@ -136,8 +138,10 @@ func (catalog Catalog) FormatAgents(cfg config.SessionConfig) string {
 			b.WriteString(fmt.Sprintf("  - %s: [%s] %s\n", entry.Name, entry.Scope, entry.Description))
 		}
 	}
-	b.WriteString("\n### Missing Agents\n")
-	writeMissing(&b, catalog.MissingAgents(cfg.AgentPolicy))
+	if missing := catalog.MissingAgents(cfg.AgentPolicy); len(missing) > 0 {
+		b.WriteString("\n### Missing Agents\n")
+		writeMissing(&b, missing)
+	}
 	return b.String()
 }
 

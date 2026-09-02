@@ -31,6 +31,20 @@ func TestCatalogFormatsAvailableAndMissingCapabilities(t *testing.T) {
 	if !strings.Contains(agentText, "### Available Agents\n- none") || !strings.Contains(agentText, "### Missing Agents\n- reviewer") {
 		t.Fatalf("unexpected agent state: %q", agentText)
 	}
+
+	// No missing skills → section omitted entirely.
+	noMissingCfg := config.SessionConfig{
+		SkillPolicy: config.CapabilityPolicy{Mode: config.PolicyModeAllowlist, Requested: []string{"browser"}},
+		AgentPolicy: config.CapabilityPolicy{Mode: config.PolicyModeAll},
+	}
+	noMissingResolved := catalog.Resolve(noMissingCfg.SkillPolicy, noMissingCfg.AgentPolicy)
+	noMissingCfg.Skills, noMissingCfg.Agents = noMissingResolved.Skills, noMissingResolved.Agents
+	if got := catalog.FormatSkills(noMissingCfg); strings.Contains(got, "### Missing Skills") {
+		t.Fatalf("expected no Missing Skills section, got: %q", got)
+	}
+	if got := catalog.FormatAgents(noMissingCfg); strings.Contains(got, "### Missing Agents") {
+		t.Fatalf("expected no Missing Agents section, got: %q", got)
+	}
 }
 
 func writeCatalogSkill(t *testing.T, root, name, description string) {

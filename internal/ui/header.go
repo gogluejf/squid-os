@@ -27,7 +27,7 @@ func RenderHeader(data HeaderData, width int) string {
 		bgStyle = lipgloss.NewStyle().Background(lipgloss.Color(style.P.BgFooter))
 	}
 
-	title := bgStyle.Bold(true).Foreground(lipgloss.Color(style.P.TextSecondary)).Padding(0, 1).Render("squid-os " + version.Full())
+	title := bgStyle.Bold(true).Foreground(lipgloss.Color(style.P.TextSecondary)).Padding(0, 1).Render("🐙 squid-os " + version.Full())
 
 	// Build right-side session label
 	var right string

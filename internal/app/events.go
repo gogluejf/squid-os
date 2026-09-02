@@ -12,16 +12,19 @@ import (
 // streamEventMsg wraps a StreamEvent for the Bubble Tea message loop
 type streamEventMsg chat.StreamEvent
 
-// streamTickMsg fires periodically while streaming to keep the live timer
-// in the message header animated even when no tokens are arriving yet.
-type streamTickMsg struct{ id string }
+// uiTickMsg fires periodically to keep the UI fresh.
+// While streaming: 200ms (live timer animation).
+// When idle: 2s (footer git shortstat refresh).
+type uiTickMsg struct{}
 
-// streamTickCmd schedules the next tick while streaming is active.
-// Uses 200ms to avoid overwhelming the UI thread with SetContent() calls
-// on large viewports during heavy streaming.
-func streamTickCmd(id string) tea.Cmd {
-	return tea.Tick(200*time.Millisecond, func(_ time.Time) tea.Msg {
-		return streamTickMsg{id: id}
+// uiTickCmd schedules the next tick at the appropriate interval.
+func uiTickCmd(streaming bool) tea.Cmd {
+	interval := 2 * time.Second
+	if streaming {
+		interval = 200 * time.Millisecond
+	}
+	return tea.Tick(interval, func(_ time.Time) tea.Msg {
+		return uiTickMsg{}
 	})
 }
 

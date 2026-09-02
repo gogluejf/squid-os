@@ -167,7 +167,7 @@ func (m *Model) setComponent(c component.Component) {
 	m.recalcLayout()
 }
 
-// Init starts the cursor blink command and refreshes the context window.
+// Init starts the cursor blink command, the UI tick, and refreshes the context window.
 func (m Model) Init() tea.Cmd {
 	chatMode := (&m).setChatMode()
 
@@ -176,7 +176,7 @@ func (m Model) Init() tea.Cmd {
 		resumePending = func() tea.Msg { return pendingToolResumeMsg{msgIdx: msgIdx} }
 	}
 
-	return tea.Batch(chatMode, resumePending, (&m).refreshContextCmd())
+	return tea.Batch(chatMode, resumePending, (&m).refreshContextCmd(), uiTickCmd(false))
 }
 
 // refreshContextCmd scans models in the background and updates the context

@@ -31,12 +31,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case streamTickMsg:
-		if m.session.Stream.Active && msg.id == m.session.UIStream.ID {
-			m.refreshViewportFollowing()
-			return m, streamTickCmd(msg.id)
-		}
-		return m, nil
+	case uiTickMsg:
+		m.refreshViewportFollowing()
+		return m, uiTickCmd(m.session.Stream.Active)
 
 	case streamEventMsg:
 		return m.handleStreamEvent(chat.StreamEvent(msg))

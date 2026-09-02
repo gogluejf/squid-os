@@ -1,8 +1,10 @@
 # squid-os
 
-Runtime and AI harness to operate your entire OS — workstation, server, production.
+**One runtime. From your desktop to production.**
 
-You do more than code. Squid OS is built for all of it: files, documents, applications, workflows, browsing, research, trading, automation. Coding? Absolutely, and very well. But that's just one thing you do in a day.
+Squid OS is an observable AI runtime that operates your actual OS — not a chatbox, not a wrapper. Every inference, every tool call, every token: visible and controllable. Local-first. Same binary, same behavior, whether you're on a workstation or a server.
+
+Built in Go. Deliberately so.
 
 ## Quick start
 

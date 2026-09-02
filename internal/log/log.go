@@ -15,6 +15,7 @@ var (
 	sseLogger       *log.Logger
 	metricsLogger   *log.Logger
 	gitShortStatLogger *log.Logger
+	pasteLogger     *log.Logger
 )
 
 // maxLogSize is the threshold (in bytes) for truncating log files on boot.
@@ -35,11 +36,13 @@ func Init(paths config.Paths) {
 	ssePath := paths.Logs + "/sse_chunks.log"
 	metricsPath := paths.Logs + "/stream_metrics.log"
 	gitShortStatPath := paths.Logs + "/git_shortstat.log"
+	pastePath := paths.Logs + "/paste_debug.log"
 
 	// Cleanup massive logs on boot (if > 100MB)
 	truncateIfOverLimit(ssePath)
 	truncateIfOverLimit(metricsPath)
 	truncateIfOverLimit(gitShortStatPath)
+	truncateIfOverLimit(pastePath)
 
 	sseF, err := os.OpenFile(ssePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err == nil {
@@ -54,6 +57,11 @@ func Init(paths config.Paths) {
 	gitShortStatF, err := os.OpenFile(gitShortStatPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err == nil {
 		gitShortStatLogger = log.New(gitShortStatF, "", 0)
+	}
+
+	pasteF, err := os.OpenFile(pastePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err == nil {
+		pasteLogger = log.New(pasteF, "", 0)
 	}
 }
 
@@ -109,4 +117,25 @@ func LogGitShortStat(event, dir string, age, dur time.Duration) {
 	gitShortStatLogger.Printf("%s %s dir=%s age=%s dur=%s\n",
 		time.Now().Format("15:04:05.000000"), event, dir,
 		age.Round(time.Millisecond), dur.Round(time.Millisecond))
+}
+
+// LogPaste writes a timestamped paste/clipboard event to paste_debug.log.
+// Text is truncated to 80 characters to keep the log small.
+func LogPaste(label, text string, err error) {
+	if !IsEnabled() {
+		return
+	}
+	if pasteLogger == nil {
+		return
+	}
+	errStr := "<nil>"
+	if err != nil {
+		errStr = err.Error()
+	}
+	shortText := text
+	if len(shortText) > 80 {
+		shortText = shortText[:80] + "..."
+	}
+	pasteLogger.Printf("%s %s: text=%q err=%s\n",
+		time.Now().Format("15:04:05.000000"), label, shortText, errStr)
 }

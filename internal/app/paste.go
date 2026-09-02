@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
+	"squid-os/internal/log"
 	"squid-os/internal/media"
 	"squid-os/internal/ui"
 
@@ -53,20 +53,7 @@ func readClipboard() (string, error) {
 }
 
 func logPaste(label, text string, err error) {
-	f, err2 := os.OpenFile(os.ExpandEnv("$HOME/tmp/paste-debug.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err2 != nil {
-		return
-	}
-	defer f.Close()
-	errStr := "<nil>"
-	if err != nil {
-		errStr = err.Error()
-	}
-	shortText := text
-	if len(shortText) > 80 {
-		shortText = shortText[:80] + "..."
-	}
-	f.WriteString(fmt.Sprintf("[%s] %s: text=%q err=%s\n", time.Now().Format(time.RFC3339), label, shortText, errStr))
+	log.LogPaste(label, text, err)
 }
 
 // readClipboardPayload reads clipboard contents and attempts to detect

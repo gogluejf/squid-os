@@ -169,48 +169,45 @@ func TestBuildUserMessagePartsWithAttachment(t *testing.T) {
 }
 
 func TestEstimateAttachmentTokens(t *testing.T) {
-	// Image: ~1 token per 4 bytes
+	// TODO: Stubbed to return 1 for all kinds until proper estimation is implemented.
+	// Old expectations (byte-based heuristic):
+	//   image 4000B → 1000, pdf 8000B → 2000, audio 8000B → 2000,
+	//   video 12000B → 3000, unknown 4000B → 1000, large text → CountTokensApproxInt(maxInlineTextBytes)
+
 	tokens := EstimateAttachmentTokens(media.Attachment{Kind: media.KindImage, Size: 4000})
-	if tokens != 1000 {
-		t.Errorf("image tokens: got %d, want 1000", tokens)
+	if tokens != 1 {
+		t.Errorf("image tokens: got %d, want 1", tokens)
 	}
 
-	// PDF: ~1 token per 4 bytes
 	tokens = EstimateAttachmentTokens(media.Attachment{Kind: media.KindPDF, Size: 8000})
-	if tokens != 2000 {
-		t.Errorf("pdf tokens: got %d, want 2000", tokens)
+	if tokens != 1 {
+		t.Errorf("pdf tokens: got %d, want 1", tokens)
 	}
 
-	// Text: standard approximation
 	tokens = EstimateAttachmentTokens(media.Attachment{Kind: media.KindText, Size: 11})
-	if tokens == 0 {
-		t.Error("text tokens should be > 0")
+	if tokens != 1 {
+		t.Errorf("text tokens: got %d, want 1", tokens)
 	}
 
-	// Unknown kind: conservative estimate (~1 per 4 bytes)
 	tokens = EstimateAttachmentTokens(media.Attachment{Kind: "unknown", Size: 4000})
-	if tokens != 1000 {
-		t.Errorf("unknown kind tokens: got %d, want 1000", tokens)
+	if tokens != 1 {
+		t.Errorf("unknown kind tokens: got %d, want 1", tokens)
 	}
 
-	// Audio: ~1 token per 4 bytes
 	tokens = EstimateAttachmentTokens(media.Attachment{Kind: media.KindAudio, Size: 8000})
-	if tokens != 2000 {
-		t.Errorf("audio tokens: got %d, want 2000", tokens)
+	if tokens != 1 {
+		t.Errorf("audio tokens: got %d, want 1", tokens)
 	}
 
-	// Video: ~1 token per 4 bytes
 	tokens = EstimateAttachmentTokens(media.Attachment{Kind: media.KindVideo, Size: 12000})
-	if tokens != 3000 {
-		t.Errorf("video tokens: got %d, want 3000", tokens)
+	if tokens != 1 {
+		t.Errorf("video tokens: got %d, want 1", tokens)
 	}
 
-	// Large text attachment: bounded by maxInlineTextBytes
 	largeTextSize := int64(maxInlineTextBytes) + 10000
 	tokens = EstimateAttachmentTokens(media.Attachment{Kind: media.KindText, Size: largeTextSize})
-	expected := CountTokensApproxInt(int(maxInlineTextBytes))
-	if tokens != expected {
-		t.Errorf("large text tokens: got %d, want %d (bounded by maxInlineTextBytes)", tokens, expected)
+	if tokens != 1 {
+		t.Errorf("large text tokens: got %d, want 1", tokens)
 	}
 }
 

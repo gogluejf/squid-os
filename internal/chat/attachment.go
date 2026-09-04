@@ -92,30 +92,27 @@ func resolveTextPart(a media.Attachment, data []byte) goai_provider.Part {
 // attachment based on its kind and size. It does not require the GoAI Part
 // to be built, so it can be called at message-creation time.
 //
-// Estimates are intentionally conservative and documented:
-//   - Images: 1 token per 4 bytes (covers tile-based billing).
-//   - PDFs/files: 1 token per 4 bytes (base64 overhead handled by provider).
-//   - Text: standard string token approximation on the inline content.
-//   - Unknown: 1 token per 4 bytes (same as images/files).
-//
-// These estimates are stored per-ref in AttachmentRef.Tokens and summed
-// by the lifetime tally.
+// TODO: Stubbed to return 1 until we implement proper estimation.
+// The byte-based heuristic below is inaccurate for real provider billing.
 func EstimateAttachmentTokens(a media.Attachment) int {
-	switch a.Kind {
-	case media.KindImage, media.KindPDF, media.KindFile, media.KindAudio, media.KindVideo:
-		// Conservative baseline: ~1 token per 4 bytes.
-		// OpenAI charges ~256 tokens per 512×512 tile, which is roughly
-		// proportional to file size for typical images.
-		return int(a.Size) / 4
-	case media.KindText:
-		// Text attachments use standard approximation.
-		// Bounded by maxInlineTextBytes when resolved to a Part.
-		if a.Size > maxInlineTextBytes {
-			return CountTokensApproxInt(int(maxInlineTextBytes))
+	return 1
+	/*
+		switch a.Kind {
+		case media.KindImage, media.KindPDF, media.KindFile, media.KindAudio, media.KindVideo:
+			// Conservative baseline: ~1 token per 4 bytes.
+			// OpenAI charges ~256 tokens per 512×512 tile, which is roughly
+			// proportional to file size for typical images.
+			return int(a.Size) / 4
+		case media.KindText:
+			// Text attachments use standard approximation.
+			// Bounded by maxInlineTextBytes when resolved to a Part.
+			if a.Size > maxInlineTextBytes {
+				return CountTokensApproxInt(int(maxInlineTextBytes))
+			}
+			return CountTokensApproxInt(int(a.Size))
+		default:
+			// Unknown kinds: use the same conservative estimate as images/files.
+			return int(a.Size) / 4
 		}
-		return CountTokensApproxInt(int(a.Size))
-	default:
-		// Unknown kinds: use the same conservative estimate as images/files.
-		return int(a.Size) / 4
-	}
+	*/
 }

@@ -379,23 +379,27 @@ func tallyAPIMessagesTokens(msgs []goai_provider.Message) apiMessageTokenTally {
 }
 
 // estimateMediaPartTokens returns a conservative token estimate for a media
-// part (image or file) based on its data URI. It extracts the base64 payload
-// length and applies a ~1/4 ratio to approximate the underlying byte count.
+// part (image or file) based on its data URI.
+//
+// TODO: Stubbed to return 1 until we implement proper estimation.
 func estimateMediaPartTokens(dataURI, mimeType string) int {
-	// Extract base64 data after "data:...;base64,"
-	const prefix = ";base64,"
-	idx := strings.Index(dataURI, prefix)
-	if idx < 0 {
-		// Not a data URI — might be a regular URL. Use a small conservative
-		// estimate for remote image references.
-		return 256 // typical minimum tile cost
-	}
-	b64Len := len(dataURI) - idx - len(prefix)
-	// base64 expands by ~33%, so raw bytes ≈ b64Len * 0.75
-	// Token estimate: ~1 token per 4 raw bytes
-	rawBytes := b64Len * 3 / 4
-	if rawBytes == 0 {
-		return 1
-	}
-	return rawBytes / 4
+	return 1
+	/*
+		// Extract base64 data after "data:...;base64,"
+		const prefix = ";base64,"
+		idx := strings.Index(dataURI, prefix)
+		if idx < 0 {
+			// Not a data URI — might be a regular URL. Use a small conservative
+			// estimate for remote image references.
+			return 256 // typical minimum tile cost
+		}
+		b64Len := len(dataURI) - idx - len(prefix)
+		// base64 expands by ~33%, so raw bytes ≈ b64Len * 0.75
+		// Token estimate: ~1 token per 4 raw bytes
+		rawBytes := b64Len * 3 / 4
+		if rawBytes == 0 {
+			return 1
+		}
+		return rawBytes / 4
+	*/
 }

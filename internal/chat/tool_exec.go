@@ -266,11 +266,9 @@ doExecute:
 
 	maxToolResultTokens := s.Doc.Config.Limits.MaxToolResultTokens
 
-	ctx := s.ToolContext(entry.ID, childRef)
-	resultStart := time.Now()
-
 	// Catalog readers rescan before reading: skills/agents may have been
-	// added or removed out-of-band (e.g. via bash).
+	// added or removed out-of-band (e.g. via bash). This must run BEFORE the
+	// tool context is built so ctx.Config.Skills reflects the fresh catalog.
 	if toolName == "skill_list" || toolName == "skill_load" {
 		if _, err := s.ReloadCatalog(s.Doc.Config.WorkingDir); err != nil {
 			entries[i].Execution.Status = tools.ResultStatusError
@@ -281,6 +279,9 @@ doExecute:
 			return ToolExecResult{Action: nextToolAction(i, len(entries)), MsgIdx: msgIdx, ToolIndex: i, NextIndex: i + 1}
 		}
 	}
+
+	ctx := s.ToolContext(entry.ID, childRef)
+	resultStart := time.Now()
 
 	result := tool.Execute(args, ctx)
 

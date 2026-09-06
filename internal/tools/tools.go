@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -49,6 +50,11 @@ type RuntimeContext struct {
 	// IngestService handles media ingestion through the session's workspace.
 	// May be nil for tools that don't need it.
 	IngestService *media.IngestService
+	// TurnCtx bounds this turn's child processes. Tools that spawn long-lived
+	// children should derive their command context from it so user cancellation
+	// (ctrl+c) kills in-flight work. Nil when no active bound exists; tools
+	// then rely solely on their own timeouts.
+	TurnCtx context.Context
 }
 
 // ChildSessionRef holds the preallocated identity of a delegated child session.

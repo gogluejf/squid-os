@@ -81,7 +81,15 @@ var Bash = Tool{
 			}
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
+		// Derive the command context from the turn context when present, so
+		// user cancellation (ctrl+c) kills in-flight commands immediately.
+		// The per-command timeout still applies as an inner bound; whichever
+		// fires first cancels ctx and triggers the process-group SIGKILL below.
+		parent := rt.TurnCtx
+		if parent == nil {
+			parent = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parent, time.Duration(timeoutMs)*time.Millisecond)
 		defer cancel()
 
 		// Execute relative to the session's working directory.

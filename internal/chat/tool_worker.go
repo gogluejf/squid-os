@@ -48,7 +48,7 @@ func StartToolExec(ctx context.Context, s *Session, opts ToolExecOptions) <-chan
 		decision := opts.Decision
 		for {
 			// Cooperative cancellation: checked between tools. A cancel that
-			// lands mid-tool still kills the child via its own exec context
+			// lands mid-tool still kills the child via its derived turn context
 			// (bash timeout / process group); this stops the loop from starting
 			// the next tool after that.
 			if ctx.Err() != nil {

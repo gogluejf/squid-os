@@ -12,10 +12,10 @@ import (
 	"github.com/google/uuid"
 	goai_provider "github.com/zendev-sh/goai/provider"
 
+	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
 	"squid-os/internal/environment"
 	"squid-os/internal/media"
-	"squid-os/internal/chat/provider"
 	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/tools"
 )
@@ -41,8 +41,14 @@ type Session struct {
 	// on normal exit and never become visible as saved sessions.
 	isIncognito bool
 	// capsCache / capsCacheKey cache ModelCapabilities per (provider, model).
-	capsCache  goai_provider.ModelCapabilities
+	capsCache    goai_provider.ModelCapabilities
 	capsCacheKey string
+	// turnCtx bounds in-flight tool child processes for the active turn.
+	// Cancelled by user interrupt (ctrl+c) so running children are killed;
+	// reset at the start of each stream. Nil means "no active bound" and
+	// tools fall back to their own timeouts.
+	turnCtx    context.Context
+	turnCancel context.CancelFunc
 }
 
 // NewRootSession creates a root session with a canonical directory. Persistence
@@ -319,6 +325,7 @@ func (s *Session) BuildContext() Context {
 	return ctx
 }
 
+// ToolContext builds the runtime context passed to a tool's Execute/Preview.
 func (s *Session) ToolContext(toolCallID string, childRef tools.ChildSessionRef) tools.RuntimeContext {
 	s.EnsureWorkspace()
 	var ingestSvc *media.IngestService
@@ -336,6 +343,34 @@ func (s *Session) ToolContext(toolCallID string, childRef tools.ChildSessionRef)
 		ToolCallID:    toolCallID,
 		ChildRef:      childRef,
 		IngestService: ingestSvc,
+		TurnCtx:       s.turnCtx,
+	}
+}
+
+// BeginTurnCtx starts a fresh turn context for the active turn. Called at
+// stream start so every tool child spawned this turn shares one cancellation
+// boundary. Any previous context is cancelled and replaced. The new context
+// derives from parent (the runner's context) when non-nil, so an external
+// deadline (headless --max-time) also kills in-flight tool children; pass
+// nil for standalone/TUI use where ctrl+c is the only cancellation source.
+func (s *Session) BeginTurnCtx(parent context.Context) {
+	s.CancelTurnCtx()
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
+	s.turnCtx = ctx
+	s.turnCancel = cancel
+}
+
+// CancelTurnCtx cancels the active turn's context, killing in-flight tool
+// child processes (via their derived contexts / process groups). Safe to call
+// when no context is active.
+func (s *Session) CancelTurnCtx() {
+	if s.turnCancel != nil {
+		s.turnCancel()
+		s.turnCancel = nil
+		s.turnCtx = nil
 	}
 }
 
@@ -617,11 +652,11 @@ func CountTokensApproxString(s string) int {
 
 func NewUserMessage(id, text string) config.Message {
 	return config.Message{
-		ID:               id,
-		Role:             config.RoleUser,
-		CreatedAt:        time.Now(),
-		Text:             text,
-		InputTokens:      CountTokensApproxString(text),
+		ID:          id,
+		Role:        config.RoleUser,
+		CreatedAt:   time.Now(),
+		Text:        text,
+		InputTokens: CountTokensApproxString(text),
 	}
 }
 
@@ -804,77 +839,77 @@ func (s *Session) resolveFileReferences(text string) string {
 		func(a media.Attachment) { s.AddAttachment(a) },
 	)
 
-		// Resolve bare @https://<url> references (no file: prefix)
-		text = bareURLPattern.ReplaceAllStringFunc(text, func(match string) string {
-			urlStr := strings.TrimPrefix(match, "@")
-			attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
-				Kind: media.IngestSourceKindURL,
-				URL:  urlStr,
-			})
-			if err != nil {
+	// Resolve bare @https://<url> references (no file: prefix)
+	text = bareURLPattern.ReplaceAllStringFunc(text, func(match string) string {
+		urlStr := strings.TrimPrefix(match, "@")
+		attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
+			Kind: media.IngestSourceKindURL,
+			URL:  urlStr,
+		})
+		if err != nil {
+			return match
+		}
+		return attach.CanonicalRef()
+	})
+
+	// Resolve @file:<url> references (explicit file: prefix)
+	text = fileURLPattern.ReplaceAllStringFunc(text, func(match string) string {
+		urlStr := strings.TrimPrefix(match, "@file:")
+		attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
+			Kind: media.IngestSourceKindURL,
+			URL:  urlStr,
+		})
+		if err != nil {
+			return match
+		}
+		return attach.CanonicalRef()
+	})
+
+	// Resolve @file:<path> references (absolute or relative to working dir)
+	text = fileRefPattern.ReplaceAllStringFunc(text, func(match string) string {
+		relPath := strings.TrimPrefix(match, "@file:")
+		var absPath string
+		if filepath.IsAbs(relPath) {
+			absPath = relPath
+		} else {
+			absPath = filepath.Join(s.Doc.Config.WorkingDir, relPath)
+		}
+		attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
+			Kind: media.IngestSourceKindFile,
+			Path: absPath,
+		})
+		if err != nil {
+			return match // leave original reference on error
+		}
+		return attach.CanonicalRef()
+	})
+
+	// Resolve bare @<path> references (e.g. @website/architecture.png)
+	// Runs last so it only catches refs not already handled by the patterns above.
+	text = barePathPattern.ReplaceAllStringFunc(text, func(match string) string {
+		relPath := strings.TrimPrefix(match, "@")
+		// Skip if it looks like a capability ref (skill:, agent:, tool:, file:)
+		// Those would have been handled already, but guard against edge cases.
+		for _, prefix := range []string{"skill:", "agent:", "tool:", "file:"} {
+			if strings.HasPrefix(relPath, prefix) {
 				return match
 			}
-			return attach.CanonicalRef()
+		}
+		var absPath string
+		if filepath.IsAbs(relPath) {
+			absPath = relPath
+		} else {
+			absPath = filepath.Join(s.Doc.Config.WorkingDir, relPath)
+		}
+		attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
+			Kind: media.IngestSourceKindFile,
+			Path: absPath,
 		})
-
-		// Resolve @file:<url> references (explicit file: prefix)
-		text = fileURLPattern.ReplaceAllStringFunc(text, func(match string) string {
-			urlStr := strings.TrimPrefix(match, "@file:")
-			attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
-				Kind: media.IngestSourceKindURL,
-				URL:  urlStr,
-			})
-			if err != nil {
-				return match
-			}
-			return attach.CanonicalRef()
-		})
-
-		// Resolve @file:<path> references (absolute or relative to working dir)
-		text = fileRefPattern.ReplaceAllStringFunc(text, func(match string) string {
-			relPath := strings.TrimPrefix(match, "@file:")
-			var absPath string
-			if filepath.IsAbs(relPath) {
-				absPath = relPath
-			} else {
-				absPath = filepath.Join(s.Doc.Config.WorkingDir, relPath)
-			}
-			attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
-				Kind: media.IngestSourceKindFile,
-				Path: absPath,
-			})
-			if err != nil {
-				return match // leave original reference on error
-			}
-			return attach.CanonicalRef()
-		})
-
-		// Resolve bare @<path> references (e.g. @website/architecture.png)
-		// Runs last so it only catches refs not already handled by the patterns above.
-		text = barePathPattern.ReplaceAllStringFunc(text, func(match string) string {
-			relPath := strings.TrimPrefix(match, "@")
-			// Skip if it looks like a capability ref (skill:, agent:, tool:, file:)
-			// Those would have been handled already, but guard against edge cases.
-			for _, prefix := range []string{"skill:", "agent:", "tool:", "file:"} {
-				if strings.HasPrefix(relPath, prefix) {
-					return match
-				}
-			}
-			var absPath string
-			if filepath.IsAbs(relPath) {
-				absPath = relPath
-			} else {
-				absPath = filepath.Join(s.Doc.Config.WorkingDir, relPath)
-			}
-			attach, err := ingestSvc.Ingest(context.Background(), media.IngestSource{
-				Kind: media.IngestSourceKindFile,
-				Path: absPath,
-			})
-			if err != nil {
-				return match // leave original reference on error
-			}
-			return attach.CanonicalRef()
-		})
+		if err != nil {
+			return match // leave original reference on error
+		}
+		return attach.CanonicalRef()
+	})
 
 	return text
 }

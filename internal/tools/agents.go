@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -26,10 +27,10 @@ var ListAgents = Tool{
 }
 
 var CallAgent = Tool{
-	Name:         "call_agent",
-	Description:  "Run an installed callable agent and return its final answer.",
+	Name:          "call_agent",
+	Description:   "Run an installed callable agent and return its final answer.",
 	DisplayParams: []string{"agent", "label"},
-	Style:        style.AgentStyle(),
+	Style:         style.AgentStyle(),
 	Schema: []byte(`{
 		"type": "object",
 		"properties": {
@@ -65,10 +66,10 @@ var CallAgent = Tool{
 }
 
 var InlineAgent = Tool{
-	Name:         "inline_agent",
-	Description:  "Run an ad hoc inline agent and return its final answer.",
+	Name:          "inline_agent",
+	Description:   "Run an ad hoc inline agent and return its final answer.",
 	DisplayParams: []string{"label"},
-	Style:        style.AgentStyle(),
+	Style:         style.AgentStyle(),
 	Schema: []byte(`{
 		"type": "object",
 		"properties": {
@@ -251,10 +252,44 @@ func executeAgentCLI(name, prompt string, values map[string]interface{}, ctx Run
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
+	// Bound the child by the turn context (when present) so ctrl+c in
+	// the parent kills an in-flight agent run. The child enforces its own
+	// --max-time/--max-steps/--max-tools internally; this is the external kill.
+	if ctx.TurnCtx != nil {
+		cmd.Cancel = func() error {
+			if cmd.Process == nil {
+				return fmt.Errorf("process not started")
+			}
+			return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		if err := runWithCtx(ctx.TurnCtx, cmd); err != nil {
+			return failure(strings.TrimSpace(stderr.String() + " " + err.Error()))
+		}
+	} else if err := cmd.Run(); err != nil {
 		return failure(strings.TrimSpace(stderr.String() + " " + err.Error()))
 	}
 	return success(strings.TrimSpace(stdout.String()))
+}
+
+// runWithCtx starts cmd and waits for it, cancelling (via cmd.Cancel) when the
+// context expires. Used for long-lived children that have no built-in timeout
+// of their own visible to the parent.
+func runWithCtx(ctx context.Context, cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		if cmd.Cancel != nil {
+			_ = cmd.Cancel()
+		}
+		<-done // reap
+		return ctx.Err()
+	}
 }
 
 func success(value string) ToolResult { return ToolResult{Status: ResultStatusSuccess, Result: value} }

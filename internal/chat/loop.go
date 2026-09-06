@@ -192,6 +192,7 @@ func FlushToolMessage(s *Session, msgIdx int) {
 // streaming. Cancel via ctx.
 func StartStream(ctx context.Context, s *Session, endpoints config.EndpointsConfig) <-chan StreamEvent {
 	s.Stream.Begin()
+	s.BeginTurnCtx(ctx)
 	inf := s.CurrentInference()
 	providerSettings := config.ResolveProviderSettings(endpoints, inf.Provider)
 	engine := NewEngine(providerSettings, inf.Model, inf.Thinking)

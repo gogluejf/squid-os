@@ -245,6 +245,13 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Cancel):
+		// Tools running in the background: cancel the worker loop. The in-flight
+		// child process is killed by its own exec context / process group; the
+		// worker emits ToolEventCancelled which returns us to chat mode.
+		if m.session.UIStream.ToolCancel != nil {
+			m.session.UIStream.ToolCancel()
+			return m, nil
+		}
 		m.session.Stream.Cancel("Stream aborted by user")
 		return m, nil
 

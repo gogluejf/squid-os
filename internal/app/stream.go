@@ -210,7 +210,9 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 	return m, waitForStreamEvent(m.session.UIStream.Ch)
 }
 
-// resumeToolExecution runs or resumes pure tool execution and handles TUI side effects.
+// resumeToolExecution starts tool execution in a background worker and returns
+// a command that delivers its first event. Slow tools (bash, agents) no longer
+// block the Bubble Tea event loop; each event is handled by handleToolEvent.
 func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 	msgIdx := m.session.UIStream.MsgIdx
 	var decision *chat.AuthDecision
@@ -223,68 +225,92 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 		m.session.UIStream.AuthorizationCtx = nil
 	}
 
-	for {
-		result := chat.ExecuteTools(m.session.Session, chat.ToolExecOptions{
-			Decision: decision,
-			MsgIdx:   msgIdx,
-			Checkpoint: func() error {
-				return m.persistAutoSave()
-			},
-		})
-		decision = nil
-		if result.Error != nil {
-			m.setNotification(ui.NotificationError, result.Error.Error())
-			m.session.Stream.Reset()
-			m.session.UIStream.reset()
-			return m, m.setChatMode()
-		}
+	opts := chat.ToolExecOptions{
+		Decision: decision,
+		MsgIdx:   msgIdx,
+		Checkpoint: func() error {
+			return m.persistAutoSave()
+		},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.session.UIStream.ToolCancel = cancel
+	ch := chat.StartToolExec(ctx, m.session.Session, opts)
+	m.session.UIStream.ToolCh = ch
+	return m, waitForToolEvent(ch)
+}
 
-		if result.MsgIdx >= 0 {
-			m.session.invalidateRenderFrom(result.MsgIdx)
+// handleToolEvent processes one tool-execution event from the worker goroutine.
+// All session mutation happens inside the worker; here we only apply TUI side
+// effects (render invalidation, modes, notifications) and drive the next step.
+func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
+	switch event.Type {
+	case chat.ToolEventRunning:
+		if event.MsgIdx >= 0 {
+			m.session.invalidateRenderFrom(event.MsgIdx)
 		}
-		if result.LoadedSkill != "" {
-			m.session.Doc.Config.ActiveSkill = result.LoadedSkill
+		if event.LoadedSkill != "" {
+			m.session.Doc.Config.ActiveSkill = event.LoadedSkill
 			if m.session.Doc.Pending != nil {
 				m.session.Doc.Pending.ActiveSkill = nil
 			}
 		}
+		m.refreshViewportFollowing()
+		return m, waitForToolEvent(m.session.UIStream.ToolCh)
 
-		switch result.Action {
-		case chat.ToolExecNeedAuth:
-			m.session.UIStream.AuthorizationCtx = &AuthorizationContext{
-				ToolName:      result.AuthRequest.ToolName,
-				Args:          result.AuthRequest.Args,
-				ArgsJSON:      result.AuthRequest.ArgsJSON,
-				DisplayValue:  result.AuthRequest.DisplayValue,
-				IsDestructive: result.AuthRequest.IsDestructive,
-			}
-			m.session.UIStream.MsgIdx = result.MsgIdx
-			m.setAuthMode()
-			return m, nil
-
-		case chat.ToolExecContinue:
-			m.refreshViewportFollowing()
-			msgIdx = result.MsgIdx
-			continue
-
-		case chat.ToolExecDone:
-			m.session.UIStream.AuthorizationCtx = nil
-			if result.CapturedUserText != "" {
-				userMsg := config.Message{
-					ID:        fmt.Sprintf("msg_%d", len(m.session.Doc.Messages)+1),
-					Role:      config.RoleUser,
-					CreatedAt: time.Now(),
-					Text:      result.CapturedUserText,
-				}
-
-				m.session.Append(userMsg)
-			}
-			m.session.Stream.Reset()
-			m.session.UIStream.reset()
-			m.refreshViewportFollowing()
-			return m.startStream()
+	case chat.ToolEventNeedAuth:
+		m.session.UIStream.AuthorizationCtx = &AuthorizationContext{
+			ToolName:      event.AuthRequest.ToolName,
+			Args:          event.AuthRequest.Args,
+			ArgsJSON:      event.AuthRequest.ArgsJSON,
+			DisplayValue:  event.AuthRequest.DisplayValue,
+			IsDestructive: event.AuthRequest.IsDestructive,
 		}
+		m.session.UIStream.MsgIdx = event.MsgIdx
+		m.setAuthMode()
+		return m, nil
+
+	case chat.ToolEventDone:
+		m.session.UIStream.AuthorizationCtx = nil
+		if event.MsgIdx >= 0 {
+			m.session.invalidateRenderFrom(event.MsgIdx)
+		}
+		if event.LoadedSkill != "" {
+			m.session.Doc.Config.ActiveSkill = event.LoadedSkill
+			if m.session.Doc.Pending != nil {
+				m.session.Doc.Pending.ActiveSkill = nil
+			}
+		}
+		if event.CapturedUserText != "" {
+			userMsg := config.Message{
+				ID:        fmt.Sprintf("msg_%d", len(m.session.Doc.Messages)+1),
+				Role:      config.RoleUser,
+				CreatedAt: time.Now(),
+				Text:      event.CapturedUserText,
+			}
+			m.session.Append(userMsg)
+		}
+		m.session.Stream.Reset()
+		m.session.UIStream.reset()
+		m.refreshViewportFollowing()
+		return m.startStream()
+
+	case chat.ToolEventCancelled:
+		(&m).setNotification(ui.NotificationInfo, event.CancelMessage)
+		m.session.Stream.Reset()
+		m.session.UIStream.reset()
+		return m, m.setChatMode()
+
+	case chat.ToolEventError:
+		msg := "tool execution failed"
+		if event.Error != nil {
+			msg = event.Error.Error()
+		}
+		(&m).setNotification(ui.NotificationError, msg)
+		m.session.Stream.Reset()
+		m.session.UIStream.reset()
+		return m, m.setChatMode()
 	}
+	return m, nil
 }
 
 // startStream builds API messages from current session state and starts a new stream.

@@ -38,6 +38,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamEventMsg:
 		return m.handleStreamEvent(chat.StreamEvent(msg))
 
+	case toolEventMsg:
+		return m.handleToolEvent(chat.ToolEvent(msg))
+
 	case pendingToolResumeMsg:
 		m.session.UIStream.MsgIdx = msg.msgIdx
 		return (&m).resumeToolExecution()

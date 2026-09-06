@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -41,5 +42,21 @@ func waitForStreamEvent(ch <-chan chat.StreamEvent) tea.Cmd {
 			return streamEventMsg(chat.StreamEvent{Done: true})
 		}
 		return streamEventMsg(event)
+	}
+}
+
+// toolEventMsg wraps a ToolEvent for the Bubble Tea message loop.
+type toolEventMsg chat.ToolEvent
+
+// waitForToolEvent blocks on the tool-execution channel and returns the next
+// event as a Tea message. It runs in a Bubble Tea command goroutine, so slow
+// tools never block the UI event loop.
+func waitForToolEvent(ch <-chan chat.ToolEvent) tea.Cmd {
+	return func() tea.Msg {
+		event, ok := <-ch
+		if !ok {
+			return toolEventMsg(chat.ToolEvent{Type: chat.ToolEventError, Error: fmt.Errorf("tool execution ended unexpectedly")})
+		}
+		return toolEventMsg(event)
 	}
 }

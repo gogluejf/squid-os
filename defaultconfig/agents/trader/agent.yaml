@@ -1,7 +1,7 @@
 name: trader
 description: Researches markets, evaluates setups, and proposes risk-aware trades.
 
-model: vllm/unsloth/Qwen3.8-27B-NVFP4
+model: ninfer/qwen3.8-27b
 thinking: false
 mode: final_message
 
@@ -28,8 +28,7 @@ tools:
 skills:
   - browser-use
 
-agents:
-  - researcher
+agents: []
 
 save:
   enabled: true

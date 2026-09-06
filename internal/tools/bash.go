@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"squid-os/internal/style"
@@ -88,6 +89,17 @@ var Bash = Tool{
 		cmd := exec.CommandContext(ctx, "bash", "-c", cmdStr)
 		if runDir != "" {
 			cmd.Dir = runDir
+		}
+
+		// Own process group so timeout/cancel can SIGKILL the entire tree
+		// (bash + children), not just the direct child. Without this, a
+		// cancelled `bash -c "sleep 600"` leaves orphans holding the pipes.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Cancel = func() error {
+			if cmd.Process == nil {
+				return fmt.Errorf("process not started")
+			}
+			return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
 
 		// xdg-open blocks the terminal; run it detached via nohup

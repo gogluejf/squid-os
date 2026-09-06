@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	"squid-os/internal/style"
 	"squid-os/internal/util"
@@ -246,6 +247,8 @@ func executeAgentCLI(name, prompt string, values map[string]interface{}, ctx Run
 	}
 	cmd := exec.Command(executable, argv...)
 	cmd.Dir = cfg.WorkingDir
+	// Own process group so a killed agent run takes its whole tree with it.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {

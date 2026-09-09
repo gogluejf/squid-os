@@ -256,13 +256,13 @@ func executeAgentCLI(name, prompt string, values map[string]interface{}, ctx Run
 	// the parent kills an in-flight agent run. The child enforces its own
 	// --max-time/--max-steps/--max-tools internally; this is the external kill.
 	if ctx.TurnCtx != nil {
-		cmd.Cancel = func() error {
+		cancelFn := func() error {
 			if cmd.Process == nil {
 				return fmt.Errorf("process not started")
 			}
 			return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
-		if err := runWithCtx(ctx.TurnCtx, cmd); err != nil {
+		if err := runWithCtx(ctx.TurnCtx, cmd, cancelFn); err != nil {
 			return failure(strings.TrimSpace(stderr.String() + " " + err.Error()))
 		}
 	} else if err := cmd.Run(); err != nil {
@@ -271,10 +271,10 @@ func executeAgentCLI(name, prompt string, values map[string]interface{}, ctx Run
 	return success(strings.TrimSpace(stdout.String()))
 }
 
-// runWithCtx starts cmd and waits for it, cancelling (via cmd.Cancel) when the
-// context expires. Used for long-lived children that have no built-in timeout
-// of their own visible to the parent.
-func runWithCtx(ctx context.Context, cmd *exec.Cmd) error {
+// runWithCtx starts cmd and waits for it, calling cancelFn when the context
+// expires. Used for long-lived children that have no built-in timeout of their
+// own visible to the parent.
+func runWithCtx(ctx context.Context, cmd *exec.Cmd, cancelFn func() error) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -284,9 +284,7 @@ func runWithCtx(ctx context.Context, cmd *exec.Cmd) error {
 	case err := <-done:
 		return err
 	case <-ctx.Done():
-		if cmd.Cancel != nil {
-			_ = cmd.Cancel()
-		}
+		_ = cancelFn()
 		<-done // reap
 		return ctx.Err()
 	}

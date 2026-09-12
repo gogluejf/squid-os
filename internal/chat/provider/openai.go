@@ -75,6 +75,7 @@ func (o *OpenAIProvider) StaticModels() []ModelEntry {
 		{ID: "gpt-5.6-sol", ContextLength: 1_050_000},
 		{ID: "gpt-5.6-terra", ContextLength: 1_050_000},
 		{ID: "gpt-5.6-luna", ContextLength: 1_050_000},
+		{ID: "gpt-6-astra", ContextLength: 1_050_000},
 	}
 }
 func (o *OpenAIProvider) DefaultBaseURL() string { return "https://api.openai.com" }

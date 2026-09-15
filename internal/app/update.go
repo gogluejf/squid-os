@@ -1,10 +1,27 @@
 package app
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/chat"
 )
+
+// handleMouseClick toggles expand/collapse of the block under the cursor.
+// Clicking an expandable block toggles only that block.
+func (m Model) handleMouseClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	line := m.viewport.YOffset + msg.Y - 1
+	for _, r := range m.session.blockRanges {
+		if line >= r.Start && line < r.End {
+			msgID, block, _ := strings.Cut(r.Key, "\x00")
+			m.session.expand.Toggle(msgID, block)
+			m.refreshViewportAnchored(m.session.invalidateRenderAll)
+			return m, nil
+		}
+	}
+	return m, nil
+}
 
 // Update is the top-level Bubble Tea update function — routes every incoming
 // message to the appropriate handler based on its type and current mode.
@@ -28,6 +45,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.ScrollUp(3)
 		case tea.MouseButtonWheelDown:
 			m.viewport.ScrollDown(3)
+		case tea.MouseButtonLeft:
+			if msg.Action == tea.MouseActionPress { // ignore release — a click is one toggle
+				return m.handleMouseClick(msg)
+			}
 		}
 		return m, nil
 

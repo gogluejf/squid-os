@@ -26,18 +26,21 @@ func orderedParams(msg config.Message) []string {
 }
 
 // RenderMessage dispatches to the correct renderer by role.
-func RenderMessage(msg config.Message, width int, expanded bool, attachments []media.Attachment) string {
+func RenderMessage(msg config.Message, width int, tr *ExpandTracker, attachments []media.Attachment) (string, []BlockRange) {
+	block := func(rendered string) (string, []BlockRange) {
+		return rendered, []BlockRange{{Key: msg.ID, End: strings.Count(rendered, "\n")}}
+	}
 	switch msg.Role {
 	case config.RoleSystem:
-		return renderSystemMessage(msg, width, expanded)
+		return block(renderSystemMessage(msg, width, tr.IsOpen(msg.ID, msg.ID)))
 	case config.RoleInternal:
-		return renderInternalMessage(msg, width, expanded)
+		return block(renderInternalMessage(msg, width, tr.IsOpen(msg.ID, msg.ID)))
 	case config.RoleSynthetic:
-		return renderSyntheticMessage(msg, width, expanded)
+		return block(renderSyntheticMessage(msg, width, tr.IsOpen(msg.ID, msg.ID)))
 	case config.RoleUser:
-		return renderUserMessage(msg, width, attachments)
+		return renderUserMessage(msg, width, attachments), nil
 	case config.RoleAssistant:
-		return renderAssistantMessage(msg, width, expanded)
+		return renderAssistantMessage(msg, width, tr)
 	default:
 		panic(fmt.Sprintf("unknown message role: %s", msg.Role))
 	}
@@ -90,7 +93,7 @@ func renderSystemMessage(msg config.Message, width int, expanded bool) string {
 	if expanded && msg.Text != "" {
 		content = []string{renderStyledContent(msg.Text, s.Param, s.Content)}
 	}
-	return drawCanvasSpan(parts, content, s, width)
+	return drawExpandableCanvasSpan(parts, content, s, width, expanded)
 }
 
 // renderInternalMessage renders an internal metadata message (role = internal).
@@ -113,7 +116,7 @@ func renderInternalMessage(msg config.Message, width int, expanded bool) string 
 	if expanded && msg.Text != "" {
 		content = []string{renderStyledContent(msg.Text, s.Param, s.Content)}
 	}
-	return drawCanvasSpan(parts, content, s, width)
+	return drawExpandableCanvasSpan(parts, content, s, width, expanded)
 }
 
 // renderSyntheticMessage renders a synthetic message (e.g. stream aborted, error)
@@ -136,7 +139,7 @@ func renderSyntheticMessage(msg config.Message, width int, expanded bool) string
 	if expanded && msg.Text != "" {
 		content = []string{renderStyledContent(msg.Text, s.Param, s.Content)}
 	}
-	return drawCanvasSpan(parts, content, s, width)
+	return drawExpandableCanvasSpan(parts, content, s, width, expanded)
 }
 
 // renderUserMessage renders a user message as a single UserBox containing
@@ -180,9 +183,15 @@ func RenderAssistantHeader(start time.Time, stat *config.SequenceStat, width int
 
 // renderAssistantMessage renders an assistant message as canvas spans
 // (thinking, text body) followed by one ToolBox per tool call.
-func renderAssistantMessage(msg config.Message, width int, expanded bool) string {
+func renderAssistantMessage(msg config.Message, width int, tr *ExpandTracker) (string, []BlockRange) {
 	var b strings.Builder
+	var ranges []BlockRange
 	boxWidth := style.BoxWidth(width)
+	appendBlock := func(key, block string) {
+		start := strings.Count(b.String(), "\n")
+		b.WriteString(block)
+		ranges = append(ranges, BlockRange{Key: key, Start: start, End: strings.Count(b.String(), "\n")})
+	}
 
 	if msg.ThinkingText != "" {
 		s := style.ThinkingStyleLabel()
@@ -191,10 +200,10 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 			s.Dim.Render(tokenChipOutput(msg.ThinkingMetrics.Tokens, &msg.ThinkingMetrics.InferenceDuractionMs)),
 		}
 		var content []string
-		if expanded {
+		if tr.IsOpen(msg.ID, "thinking") {
 			content = []string{msg.ThinkingText}
 		}
-		b.WriteString(drawCanvasSpan(parts, content, s, width))
+		appendBlock("thinking", drawExpandableCanvasSpan(parts, content, s, width, tr.IsOpen(msg.ID, "thinking")))
 	}
 
 	if msg.Text != "" && msg.Text != "\n\n" {
@@ -204,21 +213,29 @@ func renderAssistantMessage(msg config.Message, width int, expanded bool) string
 	}
 
 	if len(msg.ToolCalls) > 0 {
-		b.WriteString(renderToolCallsInline(msg.ToolCalls, boxWidth, expanded, tools.GetRegistry()))
+		for _, tc := range msg.ToolCalls {
+			key := ToolBlockKey(tc)
+			one := msg
+			one.ToolCalls = []config.ToolCallEntry{tc}
+			appendBlock(key, renderToolCallsInline(one, boxWidth, tr, tools.GetRegistry()))
+			if tc.Execution.Status == tools.ResultStatusPending {
+				break
+			}
+		}
 	}
 
-	return b.String()
+	return b.String(), ranges
 }
 
 // renderToolCallsInline renders one ToolBox per tool call. When expanded,
 // the box contains the label line plus arguments, result/error, and any file diffs stacked
 // inside the same box (separated by "\n").
-func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expanded bool, reg *tools.Registry) string {
+func renderToolCallsInline(msg config.Message, boxWidth int, tr *ExpandTracker, reg *tools.Registry) string {
 	var b strings.Builder
 	if reg == nil {
 		reg = &tools.Registry{}
 	}
-	for _, tc := range toolCalls {
+	for _, tc := range msg.ToolCalls {
 		t := reg.Get(tc.Instruction.Name)
 		if t == nil {
 			// Unknown or empty tool name — render a generic placeholder
@@ -256,7 +273,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 		parts = append(parts, fixedParts...)
 
 		var content []string
-		if expanded {
+		if tr.IsOpen(msg.ID, ToolBlockKey(tc)) {
 			if tc.Instruction.Arguments != "" {
 				content = append(content, formatArgs(tc.Instruction.Arguments, t.Style.Bg, boxWidth))
 			}
@@ -286,7 +303,7 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 			}
 		}
 
-		b.WriteString(drawToolBox(parts, content, t.Style, boxWidth))
+		b.WriteString(drawExpandableToolBox(parts, content, t.Style, boxWidth, tr.IsOpen(msg.ID, ToolBlockKey(tc))))
 
 		// Stop rendering after the first pending tool — it's the one being authorized.
 		if tc.Execution.Status == tools.ResultStatusPending {
@@ -294,6 +311,14 @@ func renderToolCallsInline(toolCalls []config.ToolCallEntry, boxWidth int, expan
 		}
 	}
 	return b.String()
+}
+
+// ToolBlockKey is the stable expand key for one tool call within a message.
+func ToolBlockKey(tc config.ToolCallEntry) string {
+	if tc.ID != "" {
+		return "tool:" + tc.ID
+	}
+	return "tool:" + tc.Instruction.Name
 }
 
 // renderToolFilesDiff renders file diffs inside a tool box.
@@ -546,7 +571,10 @@ type StreamingViewData struct {
 	ThinkingText     string
 	InThinking       bool
 	Width            int
-	Expanded         bool
+	Expanded         bool // global default; per-block overrides come from Tracker
+
+	// Tracker, when non-nil, overrides Expanded for the thinking and tool blocks.
+	Tracker *ExpandTracker
 
 	// Timing
 	RequestStart   time.Time
@@ -562,6 +590,7 @@ type StreamingViewData struct {
 
 // StreamingToolCall holds the display-relevant fields of a pending tool call.
 type StreamingToolCall struct {
+	ID        string // stable tool-call ID; expand key matches the saved message
 	Name      string
 	Arguments string
 	Tokens    int           // aggregate from metrics.ToolCallTokens()
@@ -574,6 +603,11 @@ func RenderStreamingMessage(data StreamingViewData) string {
 
 	width := data.Width
 	boxWidth := style.BoxWidth(width)
+	tracker := data.Tracker
+	if tracker == nil {
+		tracker = NewExpandTracker(data.Expanded)
+	}
+	const liveID = "streaming" // stable ID for the in-flight message's blocks
 
 	if data.Waiting {
 		elapsed := time.Since(data.RequestStart)
@@ -593,7 +627,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 			s.Dim.Render(tokenChipOutput(data.ThinkingTokens, &dur)),
 		}
 		var content []string
-		if data.Expanded {
+		if tracker.IsOpen(liveID, "thinking") {
 			if data.ThinkingText != "" {
 				content = []string{data.ThinkingText}
 			} else {
@@ -621,7 +655,7 @@ func RenderStreamingMessage(data StreamingViewData) string {
 	}
 
 	if len(data.PendingTools) > 0 {
-		b.WriteString(renderStreamingToolCalls(data.PendingTools, boxWidth, data.Expanded))
+		b.WriteString(renderStreamingToolCalls(liveID, data.PendingTools, boxWidth, tracker))
 	}
 
 	return b.String()
@@ -648,7 +682,7 @@ func renderSeqStatRight(stat *config.SequenceStat) string {
 }
 
 // renderStreamingToolCalls renders pending tool calls during streaming.
-func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, expanded bool) string {
+func renderStreamingToolCalls(msgID string, pendingTools []StreamingToolCall, boxWidth int, tr *ExpandTracker) string {
 	var b strings.Builder
 	reg := tools.GetRegistry()
 	if reg == nil {
@@ -682,7 +716,11 @@ func renderStreamingToolCalls(pendingTools []StreamingToolCall, boxWidth int, ex
 		parts = append(parts, fixedParts...)
 
 		var content []string
-		if expanded && tc.Arguments != "" {
+		blockKey := "tool:" + tc.Name
+		if tc.ID != "" {
+			blockKey = "tool:" + tc.ID
+		}
+		if tr.IsOpen(msgID, blockKey) && tc.Arguments != "" {
 			content = []string{tc.Arguments}
 		}
 

@@ -43,6 +43,7 @@ func streamingToolCalls(partials []chat.PartialTool) []ui.StreamingToolCall {
 			dur = end.Sub(p.FirstAt)
 		}
 		out = append(out, ui.StreamingToolCall{
+			ID:        p.ID,
 			Name:      p.Name,
 			Arguments: p.Args,
 			Tokens:    chat.CountTokensApproxInt(p.Chars),

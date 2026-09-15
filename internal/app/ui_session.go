@@ -5,6 +5,7 @@ import (
 	"squid-os/internal/config"
 	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/tools"
+	"squid-os/internal/ui"
 )
 
 type MessageLineRange struct {
@@ -13,18 +14,28 @@ type MessageLineRange struct {
 	End   int // exclusive viewport line
 }
 
+// BlockLineRange is a clickable sub-block within a message (thinking, tool call).
+type BlockLineRange struct {
+	Key   string // ExpandTracker key: msgID + "\x00" + block
+	Start int
+	End   int
+}
+
 // UISession is the TUI wrapper around a pure chat.Session.
 type UISession struct {
 	*chat.Session
-	UIStream         UIStreamState
-	renderedMessages []string
-	renderedWidth    int
-	messageRanges    []MessageLineRange
-	undoStack        [][]config.Message
+	UIStream            UIStreamState
+	renderedMessages    []string
+	renderedBlockRanges [][]ui.BlockRange
+	renderedWidth       int
+	messageRanges       []MessageLineRange
+	blockRanges         []BlockLineRange
+	undoStack           [][]config.Message
+	expand              *ui.ExpandTracker
 }
 
 func NewRootUISession(cfg config.SessionConfig, paths config.Paths, catalog runtimeconfig.Catalog) *UISession {
-	return &UISession{Session: chat.NewRootSession(cfg, paths, catalog)}
+	return &UISession{Session: chat.NewRootSession(cfg, paths, catalog), expand: ui.NewExpandTracker(false)}
 }
 
 func LoadRootUISession(sd config.SessionDoc, sourceName string, paths config.Paths, catalog runtimeconfig.Catalog) (*UISession, error) {
@@ -32,7 +43,7 @@ func LoadRootUISession(sd config.SessionDoc, sourceName string, paths config.Pat
 	if err != nil {
 		return nil, err
 	}
-	return &UISession{Session: session}, nil
+	return &UISession{Session: session, expand: ui.NewExpandTracker(false)}, nil
 }
 
 func (u *UISession) destroyLastSequence() (userText string) {
@@ -80,19 +91,24 @@ func (u *UISession) invalidateRenderFrom(i int) {
 	if i < len(u.renderedMessages) {
 		u.renderedMessages = u.renderedMessages[:i]
 	}
+	if i < len(u.renderedBlockRanges) {
+		u.renderedBlockRanges = u.renderedBlockRanges[:i]
+	}
 	u.messageRanges = nil
+	u.blockRanges = nil
 }
 
 func (u *UISession) invalidateRenderAll() {
 	u.renderedMessages = nil
+	u.renderedBlockRanges = nil
 	u.messageRanges = nil
+	u.blockRanges = nil
 }
 
-func (u *UISession) invalidateRenderAt(i int) {
-	if i < len(u.renderedMessages) {
-		u.renderedMessages[i] = ""
-	}
-	u.messageRanges = nil
+// setExpanded sets the global expand default and clears per-block overrides.
+func (u *UISession) setExpanded(v bool) {
+	u.expand.Global = v
+	u.expand.Clear()
 }
 
 func (u *UISession) lastPendingToolMsgIdx() (int, bool) {

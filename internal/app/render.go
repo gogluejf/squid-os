@@ -104,7 +104,9 @@ func (m *Model) updateViewportContent() {
 	// Render only new messages, reuse cache for existing ones
 	for i := len(m.session.renderedMessages); i < len(m.session.Doc.Messages); i++ {
 		msg := m.session.Doc.Messages[i]
-		m.session.renderedMessages = append(m.session.renderedMessages, ui.RenderMessage(msg, m.width, m.expanded, m.session.Doc.Attachments))
+		rendered, ranges := ui.RenderMessage(msg, m.width, m.session.expand, m.session.Doc.Attachments)
+		m.session.renderedMessages = append(m.session.renderedMessages, rendered)
+		m.session.renderedBlockRanges = append(m.session.renderedBlockRanges, ranges)
 	}
 
 	var liveSeqStat *config.SequenceStat
@@ -118,12 +120,14 @@ func (m *Model) updateViewportContent() {
 	b.WriteString(initialBlock)
 	currentLine := strings.Count(initialBlock, "\n")
 	messageRanges := make([]MessageLineRange, 0, len(m.session.renderedMessages))
+	blockRanges := m.session.blockRanges[:0]
 
 	for i, rendered := range m.session.renderedMessages {
 		msg := m.session.Doc.Messages[i]
 		start := currentLine
+		blockStart := start
 		blockEndsWithNewline := false
-		if msg.Role == "assistant" && msg.SequenceStat != nil {
+		if msg.Role == config.RoleAssistant && msg.SequenceStat != nil {
 			stat := msg.SequenceStat
 			if msg.ID == liveSeqStatID {
 				stat = liveSeqStat
@@ -133,6 +137,7 @@ func (m *Model) updateViewportContent() {
 			header := ui.RenderAssistantHeader(msg.CreatedAt, stat, m.width)
 			b.WriteString(header)
 			currentLine += strings.Count(header, "\n")
+			blockStart = currentLine
 			blockEndsWithNewline = strings.HasSuffix(header, "\n")
 		}
 		b.WriteString(rendered)
@@ -152,6 +157,7 @@ func (m *Model) updateViewportContent() {
 			Start: start,
 			End:   end,
 		})
+		blockRanges = append(blockRanges, translateBlockRanges(msg.ID, blockStart, m.session.renderedBlockRanges[i])...)
 	}
 
 	if m.session.Stream.Active {
@@ -182,7 +188,7 @@ func (m *Model) updateViewportContent() {
 			ThinkingText:     m.session.Stream.Thinking,
 			InThinking:       m.session.Stream.InThinking,
 			Width:            m.width,
-			Expanded:         m.expanded,
+			Expanded:         m.session.expand.Global,
 			RequestStart:     m.session.Stream.Metrics.Start,
 			ThinkingTokens:   m.session.Stream.Metrics.ThinkingTokens(),
 			ThinkingDur:      m.session.Stream.Metrics.ThinkingDuration(),
@@ -190,6 +196,7 @@ func (m *Model) updateViewportContent() {
 			TextDur:          m.session.Stream.Metrics.TextDuration(),
 			Waiting:          !m.session.Stream.Metrics.HasFirstToken(),
 			PendingTools:     streamingToolCalls(m.session.Stream.PartialTools),
+			Tracker:          m.session.expand,
 		}))
 	}
 
@@ -214,6 +221,7 @@ func (m *Model) updateViewportContent() {
 	}
 
 	m.session.messageRanges = messageRanges
+	m.session.blockRanges = blockRanges
 	m.viewport.SetContent(b.String())
 }
 
@@ -271,6 +279,16 @@ func (m *Model) restoreViewportAnchor(anchor viewportAnchor, fallbackOffset int)
 		}
 	}
 	m.viewport.SetYOffset(fallbackOffset)
+}
+
+func translateBlockRanges(msgID string, start int, ranges []ui.BlockRange) []BlockLineRange {
+	out := make([]BlockLineRange, len(ranges))
+	for i, r := range ranges {
+		out[i] = BlockLineRange{
+			Key: msgID + "\x00" + r.Key, Start: start + r.Start, End: start + r.End,
+		}
+	}
+	return out
 }
 
 // refreshViewportAnchored rebuilds content while keeping the same message

@@ -70,7 +70,7 @@ func (m Model) handleComponent(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Expand/collapse works during component overlays (e.g. auth questions).
 	if key.Matches(msg, keys.Expand) {
-		m.expanded = !m.expanded
+		m.session.setExpanded(!m.session.expand.Global)
 		m.refreshViewportAnchored(m.session.invalidateRenderAll)
 		return m, nil
 	}
@@ -133,7 +133,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.Expand):
-		m.expanded = !m.expanded
+		m.session.setExpanded(!m.session.expand.Global)
 		m.refreshViewportAnchored(m.session.invalidateRenderAll)
 		return m, nil
 
@@ -257,7 +257,7 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.Expand):
-		m.expanded = !m.expanded
+		m.session.setExpanded(!m.session.expand.Global)
 		m.refreshViewportAnchored(m.session.invalidateRenderAll)
 		return m, nil
 

@@ -65,9 +65,6 @@ type Model struct {
 	// Misc
 	notification ui.Notification
 	incognito    bool
-
-	// Global expand/collapse state for thinking and tool results (NOT persisted)
-	expanded bool
 }
 
 // StartupOptions contains resolved values for an interactive session bootstrap.

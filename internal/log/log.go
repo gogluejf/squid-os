@@ -10,12 +10,12 @@ import (
 )
 
 var (
-	mu              sync.Mutex
-	enabled         bool
-	sseLogger       *log.Logger
-	metricsLogger   *log.Logger
+	mu                 sync.Mutex
+	enabled            bool
+	sseLogger          *log.Logger
+	metricsLogger      *log.Logger
 	gitShortStatLogger *log.Logger
-	pasteLogger     *log.Logger
+	pasteLogger        *log.Logger
 )
 
 // maxLogSize is the threshold (in bytes) for truncating log files on boot.
@@ -63,6 +63,7 @@ func Init(paths config.Paths) {
 	if err == nil {
 		pasteLogger = log.New(pasteF, "", 0)
 	}
+
 }
 
 // SetEnabled enables or disables logging at runtime.

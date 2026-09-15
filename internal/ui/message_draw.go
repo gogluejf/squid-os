@@ -9,15 +9,20 @@ import (
 )
 
 // DrawCanvas renders a message box with optional title parts and body content.
-//
-//   - parts:  pre-styled title segments rendered as "↳ part0 · part1 · ..."
-//   - content: body blocks joined with "\n\n".  Can be pre-styled or plain text.
-//   - s: StyleLabel with all needed styles.
-//   - topGap:  leading blank rows before the first line.
-//   - width:   total rendered width (includes margins + padding).
-//
-// Trailing spacing: one blank row after content, then MarginBottom (bg-colored).
 func DrawCanvas(parts []string, content []string, s style.StyleLabel, topGap int, width int, marginBottom int) string {
+	return drawCanvasWithPrefix(parts, content, s, topGap, width, marginBottom, "↳")
+}
+
+// DrawExpandableCanvas renders a canvas with a disclosure indicator.
+func DrawExpandableCanvas(parts []string, content []string, s style.StyleLabel, topGap int, width int, marginBottom int, expanded bool) string {
+	prefix := "▸"
+	if expanded {
+		prefix = "▾"
+	}
+	return drawCanvasWithPrefix(parts, content, s, topGap, width, marginBottom, prefix)
+}
+
+func drawCanvasWithPrefix(parts []string, content []string, s style.StyleLabel, topGap int, width int, marginBottom int, prefix string) string {
 
 	partStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(s.Fg)).
@@ -36,7 +41,7 @@ func DrawCanvas(parts []string, content []string, s style.StyleLabel, topGap int
 
 	if len(parts) > 0 {
 		sep := partStyle.Render(" · ")
-		arrow := partStyle.Render("↳ ")
+		arrow := partStyle.Render(prefix + " ")
 
 		b.WriteString(arrow)
 		b.WriteString(parts[0])
@@ -65,9 +70,17 @@ func drawCanvasSpan(parts []string, content []string, s style.StyleLabel, width 
 	return DrawCanvas(parts, content, s, 1, width, 0)
 }
 
+func drawExpandableCanvasSpan(parts []string, content []string, s style.StyleLabel, width int, expanded bool) string {
+	return DrawExpandableCanvas(parts, content, s, 1, width, 0, expanded)
+}
+
 // drawToolBox is a convenience for tool call blocks (topGap=2, marginBottom=1).
 func drawToolBox(parts []string, content []string, s style.StyleLabel, boxWidth int) string {
 	return DrawCanvas(parts, content, s, 2, boxWidth, 1)
+}
+
+func drawExpandableToolBox(parts []string, content []string, s style.StyleLabel, boxWidth int, expanded bool) string {
+	return DrawExpandableCanvas(parts, content, s, 2, boxWidth, 1, expanded)
 }
 
 // drawUserBox is a convenience for user message blocks (topGap=1, marginBottom=1).

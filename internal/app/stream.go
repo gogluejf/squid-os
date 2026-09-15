@@ -232,9 +232,13 @@ func (m *Model) resumeToolExecution() (tea.Model, tea.Cmd) {
 			return m.persistAutoSave()
 		},
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	m.session.UIStream.ToolCancel = cancel
-	ch := chat.StartToolExec(ctx, m.session.Session, opts)
+	// Derive the worker context from the turn context so a single
+	// CancelTurnCtx (ctrl+c) stops the loop and kills in-flight children.
+	parent := m.session.Session.TurnContext()
+	if parent == nil {
+		parent = context.Background()
+	}
+	ch := chat.StartToolExec(parent, m.session.Session, opts)
 	m.session.UIStream.ToolCh = ch
 	return m, waitForToolEvent(ch)
 }
@@ -295,10 +299,17 @@ func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
 		return m.startStream()
 
 	case chat.ToolEventCancelled:
+		// Mirror the stream-cancel path: the worker marked the stream
+		// cancelled and finalized the tool entries; record the synthetic
+		// "aborted" message from the shared CancelMessage and go to chat.
+		m.session.invalidateRenderAll()
+		chat.AppendStreamCancelledMessage(m.session.Session)
 		(&m).setNotification(ui.NotificationInfo, event.CancelMessage)
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
-		return m, m.setChatMode()
+		(&m).setChatMode()
+		nm, autoSaveCmd := m.autoSave()
+		return nm, autoSaveCmd
 
 	case chat.ToolEventError:
 		msg := "tool execution failed"

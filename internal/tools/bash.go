@@ -13,6 +13,7 @@ import (
 	"squid-os/internal/style"
 )
 
+
 // Bash executes a shell command and returns stdout/stderr.
 var Bash = Tool{
 	Name:          "bash",
@@ -88,6 +89,11 @@ var Bash = Tool{
 		parent := rt.TurnCtx
 		if parent == nil {
 			parent = context.Background()
+		}
+		// Turn already cancelled (e.g. ctrl+c between tools): fail fast
+		// instead of spawning a child that would die at start.
+		if err := parent.Err(); err != nil {
+			return ToolResult{Status: ResultStatusError, Error: "cancelled before execution"}
 		}
 		ctx, cancel := context.WithTimeout(parent, time.Duration(timeoutMs)*time.Millisecond)
 		defer cancel()

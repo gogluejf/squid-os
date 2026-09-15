@@ -365,13 +365,21 @@ func (s *Session) BeginTurnCtx(parent context.Context) {
 
 // CancelTurnCtx cancels the active turn's context, killing in-flight tool
 // child processes (via their derived contexts / process groups). Safe to call
-// when no context is active.
+// when no context is active. Note: turnCtx is intentionally NOT niled —
+// contexts derived from it (tool children, worker loop) must observe the
+// cancellation; BeginTurnCtx replaces it for the next turn.
 func (s *Session) CancelTurnCtx() {
 	if s.turnCancel != nil {
 		s.turnCancel()
 		s.turnCancel = nil
-		s.turnCtx = nil
 	}
+}
+
+// TurnContext returns the live turn context, or nil when no turn is active.
+// Callers derive their own contexts from it so a single CancelTurnCtx
+// propagates to every bound goroutine and child process.
+func (s *Session) TurnContext() context.Context {
+	return s.turnCtx
 }
 
 func (s *Session) GetTools() []tools.Tool {

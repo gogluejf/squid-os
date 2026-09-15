@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"time"
 
 	"squid-os/internal/chat"
@@ -16,7 +15,6 @@ type UIStreamState struct {
 	MarkdownEnd      int
 	Ch               <-chan chat.StreamEvent
 	ToolCh           <-chan chat.ToolEvent
-	ToolCancel       context.CancelFunc
 	TokenCount       int
 	Stopwatch        util.Stopwatch
 	AuthorizationCtx *AuthorizationContext

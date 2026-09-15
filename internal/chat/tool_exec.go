@@ -49,6 +49,10 @@ type ToolExecResult struct {
 	CapturedUserText string
 	LoadedSkill      string
 	Error            error
+	// Cancelled is set when the turn context was cancelled around this tool's
+	// execution: remaining entries are finalized as cancelled and the caller
+	// must NOT start a new model turn.
+	Cancelled bool
 }
 
 func BuildInstructionEntry(p PartialTool) config.ToolCallEntry {
@@ -81,6 +85,31 @@ func checkpointFailure(msgIdx, toolIndex int, err error) ToolExecResult {
 		NextIndex: toolIndex,
 		Error:     fmt.Errorf("tool checkpoint: %w", err),
 	}
+}
+
+// finalizeCancelledTools marks every not-yet-terminal tool entry of the
+// message as cancelled, then flushes and checkpoints. Entries that already
+// carry an execution error (e.g. a child killed mid-run) keep their own
+// diagnostic; only tools that never ran get the generic cancellation note.
+// Called when the user aborts a turn mid-tool-execution so the persisted
+// message never carries dangling pending/running entries.
+func finalizeCancelledTools(s *Session, msgIdx int, checkpoint func() error) {
+	if msgIdx < 0 || msgIdx >= len(s.Doc.Messages) {
+		return
+	}
+	entries := s.Doc.Messages[msgIdx].ToolCalls
+	for i := range entries {
+		if entries[i].Execution.Status == tools.ResultStatusSuccess ||
+			entries[i].Execution.Status == tools.ResultStatusError && entries[i].Execution.Error != "" {
+			continue
+		}
+		entries[i].Execution.Status = tools.ResultStatusError
+		if entries[i].Execution.Error == "" {
+			entries[i].Execution.Error = "cancelled: turn aborted by user"
+		}
+	}
+	s.Doc.Messages[msgIdx].ToolCalls = entries
+	_ = flushAndCheckpoint(s, msgIdx, checkpoint)
 }
 
 func ExecuteTools(s *Session, opts ToolExecOptions) ToolExecResult {
@@ -332,6 +361,15 @@ doExecute:
 	}
 	entries[i].Execution.Files = result.Files
 	tools.MergeEntries(result.Files, sessionState)
+
+	// Turn cancelled mid-tool (e.g. ctrl+c killed the child): finalize every
+	// remaining entry and report cancellation so the caller does not start a
+	// new model turn that would re-issue the aborted work.
+	if s.turnCtx != nil && s.turnCtx.Err() != nil {
+		s.Stream.MarkCancelled("tool execution aborted by user")
+		finalizeCancelledTools(s, msgIdx, opts.Checkpoint)
+		return ToolExecResult{Action: ToolExecDone, MsgIdx: msgIdx, ToolIndex: i, NextIndex: len(entries), Cancelled: true}
+	}
 
 	res := ToolExecResult{Action: nextToolAction(i, len(entries)), MsgIdx: msgIdx, ToolIndex: i, NextIndex: i + 1}
 	if toolName == "skill_load" && result.Status == tools.ResultStatusSuccess {

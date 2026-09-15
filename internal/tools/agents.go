@@ -256,6 +256,10 @@ func executeAgentCLI(name, prompt string, values map[string]interface{}, ctx Run
 	// the parent kills an in-flight agent run. The child enforces its own
 	// --max-time/--max-steps/--max-tools internally; this is the external kill.
 	if ctx.TurnCtx != nil {
+		// Turn already cancelled: fail fast instead of spawning a doomed child.
+		if err := ctx.TurnCtx.Err(); err != nil {
+			return failure("cancelled before execution")
+		}
 		cancelFn := func() error {
 			if cmd.Process == nil {
 				return fmt.Errorf("process not started")

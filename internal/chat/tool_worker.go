@@ -50,9 +50,11 @@ func StartToolExec(ctx context.Context, s *Session, opts ToolExecOptions) <-chan
 			// Cooperative cancellation: checked between tools. A cancel that
 			// lands mid-tool still kills the child via its derived turn context
 			// (bash timeout / process group); this stops the loop from starting
-			// the next tool after that.
+			// the next tool after that and finalizes the remaining entries so
+			// none stay pending/running in the persisted message.
 			if ctx.Err() != nil {
 				s.Stream.MarkCancelled("tool execution aborted by user")
+				finalizeCancelledTools(s, msgIdx, opts.Checkpoint)
 				out <- ToolEvent{Type: ToolEventCancelled, CancelMessage: "tool execution aborted", MsgIdx: msgIdx}
 				return
 			}
@@ -74,6 +76,11 @@ func StartToolExec(ctx context.Context, s *Session, opts ToolExecOptions) <-chan
 				out <- ToolEvent{Type: ToolEventRunning, MsgIdx: res.MsgIdx, ToolIndex: res.ToolIndex, NextIndex: res.NextIndex, LoadedSkill: res.LoadedSkill}
 				msgIdx = res.MsgIdx
 			case ToolExecDone:
+				if res.Cancelled {
+					s.Stream.MarkCancelled("tool execution aborted by user")
+					out <- ToolEvent{Type: ToolEventCancelled, CancelMessage: "tool execution aborted", MsgIdx: res.MsgIdx}
+					return
+				}
 				if res.CapturedUserText != "" {
 					s.Append(NewUserMessage(nextMessageID(s), res.CapturedUserText))
 				}

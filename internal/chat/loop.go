@@ -301,6 +301,9 @@ func RunLoop(ctx context.Context, s *Session, paths config.Paths, endpoints conf
 							msgIdx = toolRes.MsgIdx
 							continue
 						case ToolExecDone:
+							if toolRes.Cancelled {
+								return
+							}
 							if toolRes.CapturedUserText != "" {
 								s.Append(NewUserMessage(nextMessageID(s), toolRes.CapturedUserText))
 							}

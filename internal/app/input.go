@@ -245,14 +245,10 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Cancel):
-		// Kill in-flight tool children first (bash/agent process groups), then
-		// stop the worker loop. ToolCancel is a no-op if no tool is running;
-		// Stream.Cancel covers pure inference. Both are safe to call together.
+		// One cancel source: the turn context. Cancelling it stops the tool
+		// worker loop (derived) and SIGKILLs in-flight children (derived).
+		// Stream.Cancel covers pure inference with no tools running.
 		m.session.CancelTurnCtx()
-		if m.session.UIStream.ToolCancel != nil {
-			m.session.UIStream.ToolCancel()
-			return m, nil
-		}
 		m.session.Stream.Cancel("Stream aborted by user")
 		return m, nil
 

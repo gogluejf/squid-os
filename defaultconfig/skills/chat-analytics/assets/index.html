@@ -847,9 +847,21 @@
                 <div class="dashboard-grid" id="dashboard-stats"></div>
             </div>
             <div class="section">
+                <h2>Daily Usage (last 7 days)</h2>
+                <div class="chart-container" style="height:300px">
+                    <canvas id="daily-usage-chart"></canvas>
+                </div>
+            </div>
+            <div class="section">
                 <h2>Activity (per week)</h2>
                 <div class="chart-container">
                     <canvas id="activity-chart"></canvas>
+                </div>
+            </div>
+            <div class="section">
+                <h2>Sub Agent Tokens (per week)</h2>
+                <div class="chart-container" style="height:200px">
+                    <canvas id="agents-chart"></canvas>
                 </div>
             </div>
             <div class="section">
@@ -865,15 +877,9 @@
                 </div>
             </div>
             <div class="section">
-                <h2>Skills Usage (per week)</h2>
-                <div class="chart-container">
-                    <canvas id="skills-chart"></canvas>
-                </div>
-            </div>
-            <div class="section">
                 <h2>Models</h2>
                 <table id="models-table">
-                    <thead><tr><th>Model</th><th>Provider</th><th>Sessions</th><th>Avg In</th><th>Avg Out</th><th>Avg Turns</th><th>Avg Tools</th></tr></thead>
+                    <thead><tr><th>Model</th><th>Provider</th><th>Sessions</th><th>Avg Tokens</th></tr></thead>
                     <tbody></tbody>
                 </table>
             </div>
@@ -1180,6 +1186,10 @@
 
         // ===== Dashboard =====
         async function loadDashboard() {
+            const daily = await api('/api/dashboard/daily-usage');
+            window._dailyUsageData = daily;
+            renderDailyUsageChart(daily);
+
             const summary = await api('/api/dashboard/summary');
             renderDashboardStats(summary);
             renderTop10(summary.top_10);
@@ -1188,22 +1198,64 @@
             renderModelsTable(models);
 
             const activity = await api('/api/dashboard/activity');
-            renderActivityChart(activity);
-
-            const skills = await api('/api/dashboard/skills');
-            renderSkillsChart(skills);
+            const agents = await api('/api/dashboard/agents');
+            renderActivityChart(activity, agents);
         }
 
         function renderDashboardStats(s) {
             const container = document.getElementById('dashboard-stats');
+            // Compute 7-day stats from allSessions
+            const now = new Date();
+            const weekAgo = new Date(now);
+            weekAgo.setDate(weekAgo.getDate() - 7);
+            const recent = allSessions.filter(sess => {
+                const d = new Date(sess.created_at);
+                return d >= weekAgo;
+            });
+            const totalTokens7d = recent.reduce((sum, sess) => sum + (sess.total_tokens || 0), 0);
+
+            // Sub-agent tokens + TTFT + speed + durations from daily-usage
+            let agentTokens7d = 0;
+            let avgTtft = 0;
+            let avgSpeed = 0;
+            let totalWaitedMs = 0;
+            let totalInferenceMs = 0;
+            if (window._dailyUsageData) {
+                agentTokens7d = window._dailyUsageData.days.reduce((s, d) => s + (d.agent_tokens || 0), 0);
+                avgTtft = window._dailyUsageData.avg_ttft_ms || 0;
+                avgSpeed = window._dailyUsageData.avg_speed_tok_per_sec || 0;
+                totalWaitedMs = window._dailyUsageData.total_waited_ms || 0;
+                totalInferenceMs = window._dailyUsageData.total_inference_ms || 0;
+            }
+
+            const avgPerDay = Math.round(totalTokens7d / 7);
+
+            // Most active day with weekday label
+            let mostActiveDay = '—';
+            let mostActiveTokens = 0;
+            if (window._dailyUsageData) {
+                for (const d of window._dailyUsageData.days) {
+                    const total = d.total_tokens + (d.agent_tokens || 0);
+                    if (total > mostActiveTokens) {
+                        mostActiveTokens = total;
+                        const dt = new Date(d.date + 'T00:00:00');
+                        const dow = dt.toLocaleDateString('en', { weekday: 'short' });
+                        const short = dt.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+                        mostActiveDay = `${dow} (${short})`;
+                    }
+                }
+            }
+
             const stats = [
-                { label: 'Total Conversations', value: s.total_conversations, color: '' },
-                { label: 'Avg Input Tokens', value: fmtK(s.avg_input_tokens), color: 'var(--success)' },
-                { label: 'Avg Output Tokens', value: fmtK(s.avg_output_tokens), color: 'var(--success)' },
-                { label: 'Avg TTFT', value: s.avg_ttft_ms ? fmtDur(s.avg_ttft_ms) : 'N/A', color: '' },
-                { label: 'Avg Speed', value: s.avg_speed_tok_per_sec ? s.avg_speed_tok_per_sec + ' tok/s' : 'N/A', color: '' },
-                { label: 'Avg Turns', value: s.avg_turns, color: 'var(--warn)' },
-                { label: 'Avg Tool Calls', value: s.avg_tool_calls, color: 'var(--accent)' },
+                { label: 'Sessions (7d)', value: recent.length, color: '' },
+                { label: 'Tokens (7d)', value: fmtK(totalTokens7d), color: 'var(--success)' },
+                { label: 'Sub-Agent Tokens (7d)', value: fmtK(agentTokens7d), color: '#bc8cff' },
+                { label: 'Avg/Day', value: fmtK(avgPerDay), color: '' },
+                { label: 'Most Active Day', value: mostActiveDay, color: 'var(--warn)' },
+                { label: 'Total Waited', value: fmtDur(totalWaitedMs), color: '' },
+                { label: 'Total Inference', value: fmtDur(totalInferenceMs), color: '' },
+                { label: 'Avg TTFT', value: avgTtft ? fmtDur(avgTtft) : 'N/A', color: '' },
+                { label: 'Avg Speed', value: avgSpeed ? avgSpeed + ' tok/s' : 'N/A', color: 'var(--accent)' },
             ];
             container.innerHTML = stats.map(s => `
                 <div class="stat-card">
@@ -1220,10 +1272,7 @@
                     <td class="mono">${m.model}</td>
                     <td><span class="badge badge-provider">${m.provider}</span></td>
                     <td>${m.sessions}</td>
-                    <td class="mono" style="color:var(--success)">${fmtK(m.avg_input_tokens)}</td>
-                    <td class="mono" style="color:var(--success)">${fmtK(m.avg_output_tokens)}</td>
-                    <td style="color:var(--warn)">${m.avg_turns}</td>
-                    <td style="color:var(--accent)">${m.avg_tool_calls}</td>
+                    <td class="mono" style="color:var(--success)">${fmtK(m.avg_total_tokens || 0)}</td>
                 </tr>
             `).join('');
         }
@@ -1247,11 +1296,144 @@
             return n.toString();
         }
 
-        function renderActivityChart(activity) {
+        function renderDailyUsageChart(data) {
+            if (charts.dailyUsage) charts.dailyUsage.destroy();
+            const days = (data.days || []).slice().reverse();
+            const totalTokens = days.reduce((s, d) => s + d.total_tokens, 0);
+            const totalSessions = days.reduce((s, d) => s + d.sessions, 0);
+
+            // Summary line
+            const section = document.getElementById('daily-usage-chart').closest('.section');
+            let summaryEl = section.querySelector('.daily-summary');
+            if (!summaryEl) {
+                summaryEl = document.createElement('div');
+                summaryEl.className = 'daily-summary';
+                summaryEl.style.cssText = 'margin-bottom:8px;font-size:13px;color:var(--text-muted)';
+                section.insertBefore(summaryEl, section.querySelector('.chart-container'));
+            }
+            summaryEl.innerHTML = `<strong style="color:var(--text)">${fmtChartNum(totalTokens)} tokens</strong> · ${totalSessions} sessions`;
+
+            const labels = days.map(d => {
+                const dt = new Date(d.date + 'T00:00:00');
+                const short = dt.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                if (d.date === todayStr) return `Today (${short})`;
+                const dow = dt.toLocaleDateString('en', { weekday: 'short' });
+                return `${dow} (${short})`;
+            });
+            const ctx = document.getElementById('daily-usage-chart').getContext('2d');
+            charts.dailyUsage = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Session Tokens',
+                            data: days.map(d => d.total_tokens),
+                            backgroundColor: 'rgba(86,156,214,0.7)',
+                            borderColor: '#569cd6',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                        },
+                        {
+                            label: 'Sub-Agent Tokens',
+                            data: days.map(d => d.agent_tokens || 0),
+                            backgroundColor: 'rgba(188,140,255,0.7)',
+                            borderColor: '#bc8cff',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const d = days[ctx.dataIndex];
+                                    if (ctx.datasetIndex === 0) return `Sessions: ${fmtChartNum(d.total_tokens)} tokens`;
+                                    return `Sub-agents: ${fmtChartNum(d.agent_tokens || 0)} tokens`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { stacked: true, ticks: { color: '#999', callback: v => fmtChartNum(v) }, grid: { color: '#3e3e42' }, beginAtZero: true },
+                        y: { stacked: true, ticks: { color: '#999', font: { size: 12 } }, grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        function renderAgentsChart(data) {
+            if (charts.agents) charts.agents.destroy();
+            const weeks = data.week_keys || [];
+            const weekData = data.weeks || [];
+            const totals = weekData.map(wk => {
+                let t = 0;
+                for (const agent in (wk || {})) t += (wk[agent].tokens || 0);
+                return t;
+            });
+            const ctx = document.getElementById('agents-chart').getContext('2d');
+            charts.agents = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: weeks,
+                    datasets: [{
+                        label: 'Sub-Agent Tokens',
+                        data: totals,
+                        backgroundColor: 'rgba(188,140,255,0.7)',
+                        borderColor: '#bc8cff',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    return fmtChartNum(ctx.parsed.y) + ' tokens';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#999' }, grid: { display: false } },
+                        y: { ticks: { color: '#999', callback: v => fmtChartNum(v) }, grid: { color: '#3e3e42' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function renderActivityChart(activity, agentsData) {
             if (charts.activity) charts.activity.destroy();
             const weeks = activity.weeks || activity;
             const providers = activity.providers || [];
             const labels = weeks.map(w => w.week);
+
+            // Compute agent tokens per week (matching activity week keys)
+            const agentWeekMap = {};
+            if (agentsData) {
+                const aWeekKeys = agentsData.week_keys || [];
+                const aWeekData = agentsData.weeks || [];
+                for (let i = 0; i < aWeekKeys.length; i++) {
+                    let total = 0;
+                    const wk = aWeekData[i] || {};
+                    for (const agent in wk) {
+                        total += (wk[agent].tokens || 0);
+                    }
+                    agentWeekMap[aWeekKeys[i]] = total;
+                }
+            }
             const ctx = document.getElementById('activity-chart').getContext('2d');
             charts.activity = new Chart(ctx, {
                 type: 'line',
@@ -1272,7 +1454,11 @@
                         },
                         {
                             label: 'Total Tokens',
-                            data: weeks.map(w => w.input_tokens + w.output_tokens),
+                            data: weeks.map(w => {
+                                const base = w.total_tokens || (w.input_tokens + w.output_tokens);
+                                const agentTok = (agentsData && agentsData.week_keys) ? (agentWeekMap[w.week] || 0) : 0;
+                                return base + agentTok;
+                            }),
                             borderColor: '#4ec9b0',
                             backgroundColor: 'rgba(78,201,176,0.1)',
                             fill: true,
@@ -1307,26 +1493,27 @@
                 }
             });
 
-            // Tokens histogram
+            // Tokens histogram — stacked: primary sessions + sub-agents
             if (charts.tokens) charts.tokens.destroy();
             const ctx2 = document.getElementById('tokens-chart').getContext('2d');
+
             charts.tokens = new Chart(ctx2, {
                 type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [
                         {
-                            label: 'Input',
-                            data: weeks.map(w => w.input_tokens),
+                            label: 'Session Tokens',
+                            data: weeks.map(w => w.total_tokens || (w.input_tokens + w.output_tokens)),
                             backgroundColor: 'rgba(86,156,214,0.7)',
                             borderColor: '#569cd6',
                             borderWidth: 1,
                         },
                         {
-                            label: 'Output',
-                            data: weeks.map(w => w.output_tokens),
-                            backgroundColor: 'rgba(78,201,176,0.7)',
-                            borderColor: '#4ec9b0',
+                            label: 'Sub-Agent Tokens',
+                            data: weeks.map(w => agentWeekMap[w.week] || 0),
+                            backgroundColor: 'rgba(188,140,255,0.7)',
+                            borderColor: '#bc8cff',
                             borderWidth: 1,
                         }
                     ]
@@ -1340,14 +1527,15 @@
                             callbacks: {
                                 label: function(ctx) {
                                     const n = ctx.parsed.y;
-                                    return ctx.dataset.label + ': ' + (n >= 1000000 ? (n / 1000000).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(0) + 'K' : n);
+                                    return ctx.dataset.label + ': ' + fmtChartNum(n);
                                 }
                             }
                         }
                     },
                     scales: {
-                        x: { ticks: { color: '#999' }, grid: { color: '#3e3e42' } },
+                        x: { stacked: true, ticks: { color: '#999' }, grid: { color: '#3e3e42' } },
                         y: {
+                            stacked: true,
                             position: 'left',
                             ticks: {
                                 color: '#999',
@@ -1389,41 +1577,11 @@
                     }
                 }
             });
+
+            // Sub-agent tokens chart
+            if (agentsData) renderAgentsChart(agentsData);
         }
 
-        function renderSkillsChart(skillsData) {
-            if (charts.skills) charts.skills.destroy();
-            const weeks = skillsData.week_keys || [];
-            const weekData = skillsData.weeks || [];
-            const skillNames = skillsData.skills || [];
-            const colors = ['#569cd6', '#4ec9b0', '#d29922', '#bc8cff', '#f44747', '#79c0ff', '#ff7b72', '#ce9178', '#6a9955', '#dcdcaa'];
-            const skillDatasets = skillNames.map((s, i) => ({
-                label: s,
-                data: weekData.map(w => (w && w[s]) || 0),
-                backgroundColor: colors[i % colors.length] + 'b3',
-                borderColor: colors[i % colors.length],
-                borderWidth: 1,
-            }));
-            const ctx = document.getElementById('skills-chart').getContext('2d');
-            charts.skills = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: weeks,
-                    datasets: skillDatasets,
-                },
-                options: {
-                    responsive: true,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { labels: { color: '#999', boxWidth: 12 } }
-                    },
-                    scales: {
-                        x: { stacked: true, ticks: { color: '#999' }, grid: { color: '#3e3e42' } },
-                        y: { stacked: true, ticks: { color: '#999', stepSize: 1 }, grid: { color: '#3e3e42' }, title: { display: true, text: 'Skill Loads', color: '#999' } },
-                    }
-                }
-            });
-        }
         function copySessionLink() {
             const url = location.origin + location.pathname + location.hash;
             navigator.clipboard.writeText(url).then(() => {

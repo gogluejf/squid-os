@@ -743,39 +743,58 @@ def parse_session_data(data):
         }
     }
 
+def _read_session_meta(entry):
+    """Lightweight read: extract only top-level meta fields without parsing messages."""
+    chat_path = os.path.join(SESSIONS_DIR, entry, 'chat.json')
+    if not os.path.isfile(chat_path):
+        return None
+    try:
+        stat = os.stat(chat_path)
+        with open(chat_path) as f:
+            data = json.load(f)
+        meta = data.get('meta') or {}
+        config = data.get('config') or {}
+        inference = config.get('inference') or {}
+        tally = ((data.get('token_tally') or {}).get('lifetime') or {})
+        total_tokens = tally.get('total', 0)
+        # Fallback: sum message tokens only if tally is missing
+        if not total_tokens:
+            msgs = data.get('messages', [])
+            total_tokens = sum(m.get('input_tokens', 0) + m.get('output_tokens', 0) for m in msgs)
+        return {
+            'filename': entry,
+            'created_at': meta.get('created_at', ''),
+            'updated_at': meta.get('updated_at', ''),
+            'time_ago': time_ago(meta.get('updated_at', '')),
+            'model': inference.get('model', ''),
+            'provider': inference.get('provider', ''),
+            'total_tokens': total_tokens,
+            'file_size': stat.st_size,
+            'mtime': stat.st_mtime,
+        }
+    except Exception as e:
+        print(f"Error reading meta for {entry}: {e}", file=sys.stderr)
+        return None
+
+
+_SESSION_LIST_CACHE = {'data': None, 'ts': 0}
+_SESSION_LIST_TTL = 30  # seconds
+
 def get_session_list():
-    """Get list of all sessions with metadata."""
+    """Get list of all sessions with metadata. Cached with TTL."""
+    now = time.time()
+    if _SESSION_LIST_CACHE['data'] is not None and (now - _SESSION_LIST_CACHE['ts']) < _SESSION_LIST_TTL:
+        return _SESSION_LIST_CACHE['data']
+
     sessions = []
     for entry in os.listdir(SESSIONS_DIR):
-        session_dir = os.path.join(SESSIONS_DIR, entry)
-        chat_path = os.path.join(session_dir, 'chat.json')
-        if not os.path.isfile(chat_path):
-            continue
-        try:
-            stat = os.stat(chat_path)
-            data = load_session(entry)
-            parsed = parse_session_data(data)
-            sessions.append({
-                'filename': entry,
-                'created_at': parsed['session_info']['created_at'],
-                'updated_at': parsed['session_info']['updated_at'],
-                'time_ago': time_ago(parsed['session_info']['updated_at']),
-                'model': parsed['session_info']['model'],
-                'provider': parsed['session_info']['provider'],
-                'messages': parsed['counts']['total_messages'],
-                'turns': parsed['counts']['turns'],
-                'input_tokens': parsed['tokens']['total_input'],
-                'output_tokens': parsed['tokens']['total_output'],
-                'total_tokens': parsed['tokens'].get('session_total') or 0,
-                'tool_calls': parsed['counts']['tool_calls'],
-                'file_size': stat.st_size,
-                'mtime': stat.st_mtime,
-            })
-        except Exception as e:
-            print(f"Error parsing {entry}: {e}", file=sys.stderr)
-            continue
-    # Sort by updated_at descending
+        meta = _read_session_meta(entry)
+        if meta:
+            sessions.append(meta)
     sessions.sort(key=lambda s: s['updated_at'], reverse=True)
+
+    _SESSION_LIST_CACHE['data'] = sessions
+    _SESSION_LIST_CACHE['ts'] = now
     return sessions
 
 def get_dashboard_summary():
@@ -785,12 +804,10 @@ def get_dashboard_summary():
         return {'error': 'No sessions found'}
 
     total_conversations = len(sessions)
-    total_input = sum(s['input_tokens'] for s in sessions)
-    total_output = sum(s['output_tokens'] for s in sessions)
-    avg_input = total_input // total_conversations if total_conversations else 0
-    avg_output = total_output // total_conversations if total_conversations else 0
+    total_tokens = sum(s['total_tokens'] for s in sessions)
+    avg_tokens = total_tokens // total_conversations if total_conversations else 0
 
-    # Average file touch (based on mtime spread)
+    # Average file age (based on mtime spread)
     mtimes = [s['mtime'] for s in sessions]
     if mtimes:
         avg_mtime = sum(mtimes) / len(mtimes)
@@ -805,50 +822,25 @@ def get_dashboard_summary():
     else:
         avg_age_str = "N/A"
 
-    # Average turns
-    total_turns = sum(s['turns'] for s in sessions)
-    avg_turns = total_turns // total_conversations if total_conversations else 0
-
-    # Average tool calls
-    total_tools = sum(s['tool_calls'] for s in sessions)
-    avg_tools = total_tools // total_conversations if total_conversations else 0
-
-    # Average TTFT and speed (need to load each session)
-    all_ttfts = []
-    all_speeds = []
-    for s in sessions[:50]:  # Limit to avoid slowdown
-        try:
-            data = load_session(s['filename'])
-            parsed = parse_session_data(data)
-            if parsed['performance']['avg_ttft_ms'] > 0:
-                all_ttfts.append(parsed['performance']['avg_ttft_ms'])
-            if parsed['performance']['avg_speed_tok_per_sec'] > 0:
-                all_speeds.append(parsed['performance']['avg_speed_tok_per_sec'])
-        except:
-            pass
-
-    avg_ttft = sum(all_ttfts) / len(all_ttfts) if all_ttfts else 0
-    avg_speed = sum(all_speeds) / len(all_speeds) if all_speeds else 0
-
     # Top 10 biggest by total tokens
     top_10 = sorted(sessions, key=lambda s: s['total_tokens'], reverse=True)[:10]
 
     return {
         'total_conversations': total_conversations,
-        'total_input_tokens': total_input,
-        'total_output_tokens': total_output,
-        'avg_input_tokens': avg_input,
-        'avg_output_tokens': avg_output,
-        'avg_ttft_ms': round(avg_ttft, 1),
-        'avg_speed_tok_per_sec': round(avg_speed, 1),
-        'avg_turns': avg_turns,
-        'avg_tool_calls': avg_tools,
+        'total_input_tokens': 0,  # not available without full parse
+        'total_output_tokens': 0,
+        'avg_input_tokens': 0,
+        'avg_output_tokens': 0,
+        'avg_ttft_ms': 0,
+        'avg_speed_tok_per_sec': 0,
+        'avg_turns': 0,
+        'avg_tool_calls': 0,
         'avg_file_age': avg_age_str,
         'top_10': [{
             'filename': s['filename'],
             'total_tokens': s['total_tokens'],
-            'messages': s['messages'],
-            'turns': s['turns'],
+            'messages': 0,
+            'turns': 0,
             'model': s['model'],
             'created_at': s['created_at'],
         } for s in top_10],
@@ -865,25 +857,11 @@ def get_models_table():
                 'model': s['model'],
                 'provider': s['provider'],
                 'sessions': 0,
-                'total_input': 0,
-                'total_output': 0,
-                'total_turns': 0,
-                'total_tools': 0,
-                'ttfts': [],
-                'speeds': [],
+                'total_tokens': 0,
             }
         m = models[model_key]
         m['sessions'] += 1
-        m['total_input'] += s['input_tokens']
-        m['total_output'] += s['output_tokens']
-        m['total_turns'] += s['turns']
-        m['total_tools'] += s['tool_calls']
-
-    # Compute averages and TTFT/speed from actual data
-    for key, m in models.items():
-        # Need to sample sessions for TTFT/speed
-        # For efficiency, use the session list data
-        pass
+        m['total_tokens'] += s['total_tokens']
 
     result = []
     for key, m in models.items():
@@ -891,13 +869,161 @@ def get_models_table():
             'model': m['model'],
             'provider': m['provider'],
             'sessions': m['sessions'],
-            'avg_input_tokens': m['total_input'] // m['sessions'] if m['sessions'] else 0,
-            'avg_output_tokens': m['total_output'] // m['sessions'] if m['sessions'] else 0,
-            'avg_turns': m['total_turns'] // m['sessions'] if m['sessions'] else 0,
-            'avg_tool_calls': m['total_tools'] // m['sessions'] if m['sessions'] else 0,
+            'avg_input_tokens': 0,
+            'avg_output_tokens': 0,
+            'avg_turns': 0,
+            'avg_tool_calls': 0,
+            'avg_total_tokens': m['total_tokens'] // m['sessions'] if m['sessions'] else 0,
         })
     result.sort(key=lambda x: x['sessions'], reverse=True)
     return result
+
+def _child_session_tokens(session_dir):
+    """Sum token_tally.lifetime.total for all sub-agent sessions under agents/."""
+    agents_dir = os.path.join(session_dir, 'agents')
+    if not os.path.isdir(agents_dir):
+        return 0
+    total = 0
+    for agent_name in os.listdir(agents_dir):
+        chat_path = os.path.join(agents_dir, agent_name, 'chat.json')
+        if not os.path.isfile(chat_path):
+            continue
+        try:
+            with open(chat_path) as f:
+                data = json.load(f)
+            total += ((data.get('token_tally') or {}).get('lifetime') or {}).get('total', 0)
+        except Exception:
+            continue
+    return total
+
+def get_daily_usage(days=7):
+    """Get daily token usage for the last N days (default 7). Uses token_tally.lifetime.total."""
+    from datetime import timedelta
+    today = datetime.now().astimezone().date()
+    day_map = {}
+    for i in range(days - 1, -1, -1):
+        d = today - timedelta(days=i)
+        key = d.strftime('%Y-%m-%d')
+        day_map[key] = {'date': key, 'sessions': 0, 'total_tokens': 0, 'agent_tokens': 0}
+
+    # Only scan sessions whose folder name starts with a date in our range
+    prefixes = set(day_map.keys())
+
+    all_ttfts = []
+    all_speeds = []
+    total_waited_ms = 0
+    total_inference_ms = 0
+
+    for entry in os.listdir(SESSIONS_DIR):
+        # Quick filter: session folders are named YYYY-MM-DD_...
+        if not any(entry.startswith(p) for p in prefixes):
+            continue
+        chat_path = os.path.join(SESSIONS_DIR, entry, 'chat.json')
+        if not os.path.isfile(chat_path):
+            continue
+        try:
+            with open(chat_path) as f:
+                data = json.load(f)
+            meta = data.get('meta') or {}
+            created = meta.get('created_at', '')[:10]
+            if created not in day_map:
+                continue
+            # Use precomputed tally — no need to sum messages
+            total = ((data.get('token_tally') or {}).get('lifetime') or {}).get('total', 0)
+            if not total:
+                msgs = data.get('messages', [])
+                total = sum(m.get('input_tokens', 0) + m.get('output_tokens', 0) for m in msgs)
+            day_map[created]['sessions'] += 1
+            day_map[created]['total_tokens'] += total
+
+            # Agent tokens: sum token_tally of child sessions under agents/
+            session_dir = os.path.join(SESSIONS_DIR, entry)
+            day_map[created]['agent_tokens'] += _child_session_tokens(session_dir)
+
+            # TTFT + speed + durations from assistant messages
+            for m in data.get('messages', []):
+                if m.get('role') == 'assistant':
+                    ttft = m.get('time_to_first_token_ms')
+                    if ttft and ttft > 0:
+                        all_ttfts.append(ttft)
+                        total_waited_ms += ttft
+                    tps = m.get('tok_per_sec')
+                    if tps and tps > 0:
+                        all_speeds.append(tps)
+                    # Inference duration (everything but TTFT)
+                    tm = m.get('text_metrics') or {}
+                    thm = m.get('thinking_metrics') or {}
+                    tcm = m.get('tool_call_metrics') or {}
+                    total_inference_ms += (tm.get('inference_duration_ms') or 0)
+                    total_inference_ms += (thm.get('inference_duration_ms') or 0)
+                    total_inference_ms += (tcm.get('inference_duration_ms') or 0)
+        except Exception:
+            continue
+
+    avg_ttft = round(sum(all_ttfts) / len(all_ttfts), 1) if all_ttfts else 0
+    avg_speed = round(sum(all_speeds) / len(all_speeds), 1) if all_speeds else 0
+
+    return {
+        'days': list(day_map.values()),
+        'avg_ttft_ms': avg_ttft,
+        'avg_speed_tok_per_sec': avg_speed,
+        'total_waited_ms': total_waited_ms,
+        'total_inference_ms': total_inference_ms,
+    }
+
+
+def get_agents_weekly():
+    """Get agent invocations grouped by week: call count + tokens per agent.
+    Tokens are read from child session token_tally.lifetime.total (the agent's
+    actual work), not from the parent's tool-call instruction/execution tokens."""
+    sessions = get_session_list()
+    weekly = {}
+    all_agents = set()
+
+    for s in sessions:
+        entry = s['filename']
+        session_dir = os.path.join(SESSIONS_DIR, entry)
+        agents_dir = os.path.join(session_dir, 'agents')
+        if not os.path.isdir(agents_dir):
+            continue
+
+        # Determine the week from the parent session's created_at
+        try:
+            dt = datetime.strptime(s['created_at'][:10], '%Y-%m-%d')
+            iso = dt.isocalendar()
+            week_key = f"{iso[0]}-W{iso[1]:02d}"
+        except:
+            continue
+
+        if week_key not in weekly:
+            weekly[week_key] = {}
+        wk = weekly[week_key]
+
+        for agent_name in os.listdir(agents_dir):
+            chat_path = os.path.join(agents_dir, agent_name, 'chat.json')
+            if not os.path.isfile(chat_path):
+                continue
+            try:
+                with open(chat_path) as f:
+                    data = json.load(f)
+                tokens = ((data.get('token_tally') or {}).get('lifetime') or {}).get('total', 0)
+            except Exception:
+                continue
+
+            all_agents.add(agent_name)
+            if agent_name not in wk:
+                wk[agent_name] = {'calls': 0, 'tokens': 0}
+            wk[agent_name]['calls'] += 1
+            wk[agent_name]['tokens'] += tokens
+
+    weekly_ordered = sorted(weekly.items(), key=lambda x: x[0])
+
+    return {
+        'weeks': [w[1] for w in weekly_ordered],
+        'week_keys': [w[0] for w in weekly_ordered],
+        'agents': sorted(list(all_agents)),
+    }
+
 
 def get_activity_chart():
     """Get sessions grouped by week for activity chart."""
@@ -917,12 +1043,12 @@ def get_activity_chart():
                 'sessions': 0,
                 'input_tokens': 0,
                 'output_tokens': 0,
+                'total_tokens': 0,
                 'providers': {},
             }
         w = weekly[week_key]
         w['sessions'] += 1
-        w['input_tokens'] += s['input_tokens']
-        w['output_tokens'] += s['output_tokens']
+        w['total_tokens'] += s['total_tokens']
         p = s['provider']
         if p not in w['providers']:
             w['providers'][p] = 0
@@ -938,17 +1064,17 @@ def get_activity_chart():
 
 def get_skills_weekly():
     """Get skill loads grouped by week. Skills appear via synthetic messages
-    with label='skill-load' and params.name, or via tool_calls named 'skill-load'.
+    with label='skill_load' and params.name, or via tool_calls named 'skill_load'.
     Week assignment is based on the message timestamp, not the session updated_at."""
-    sessions = []
+    weekly = {}
+    all_skills = set()
+
     for entry in os.listdir(SESSIONS_DIR):
         chat_path = os.path.join(SESSIONS_DIR, entry, 'chat.json')
         if not os.path.isfile(chat_path):
             continue
-        filepath = chat_path
-        filename = entry
         try:
-            data = load_session(filename)
+            data = load_session(entry)
         except:
             continue
 
@@ -1148,8 +1274,11 @@ class AnalyticsHandler(SimpleHTTPRequestHandler):
         if path == '/api/dashboard/activity':
             return self.json_response(get_activity_chart())
 
-        if path == '/api/dashboard/skills':
-            return self.json_response(get_skills_weekly())
+        if path == '/api/dashboard/daily-usage':
+            return self.json_response(get_daily_usage(7))
+
+        if path == '/api/dashboard/agents':
+            return self.json_response(get_agents_weekly())
 
         # Turn detail: /api/sessions/<filename>/turn?msg_id=msg_X
         import re

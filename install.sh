@@ -26,7 +26,11 @@ BIN_DIR="${REPO_ROOT}/bin"
 
 GO_VERSION="1.26.3"
 GO_ARCHIVE="go${GO_VERSION}.linux-amd64.tar.gz"
-GO_SDK="/usr/local/go"
+if [[ -w /usr/local ]] || sudo -n true 2>/dev/null; then
+    GO_SDK="/usr/local/go"
+else
+    GO_SDK="${HOME}/.local/go"
+fi
 GO_BIN="${GO_SDK}/bin/go"
 BINARY="squid-os"
 BINARY_PATH="${BIN_DIR}/${BINARY}"
@@ -55,14 +59,27 @@ fi
 # 1. Go SDK
 # ─────────────────────────────────────────────────────────────────────────────
 
+need_go=true
 if [[ -x "${GO_BIN}" ]]; then
     current="$("${GO_BIN}" version 2>/dev/null | awk '{print $3}' | sed 's/go//')"
-    echo -e "  ${GREEN}✓${RESET}  Go ${current} ${DIM}(${GO_SDK})${RESET}"
-else
+    if [[ "${current}" == "${GO_VERSION}"* ]]; then
+        echo -e "  ${GREEN}✓${RESET}  Go ${current} ${DIM}(${GO_SDK})${RESET}"
+        need_go=false
+    else
+        echo -e "  ${CYAN}↓${RESET}  Go ${current:-unknown} is stale; installing ${GO_VERSION}..."
+    fi
+fi
+if $need_go; then
     echo -e "  ${CYAN}↓${RESET}  Downloading Go ${GO_VERSION}..."
     wget -q "https://go.dev/dl/${GO_ARCHIVE}" -O "/tmp/${GO_ARCHIVE}"
-    sudo rm -rf "${GO_SDK}"
-    sudo tar -C /usr/local -xzf "/tmp/${GO_ARCHIVE}"
+    if [[ "${GO_SDK}" == /usr/local/* ]]; then
+        sudo rm -rf "${GO_SDK}"
+        sudo tar -C /usr/local -xzf "/tmp/${GO_ARCHIVE}"
+    else
+        rm -rf "${GO_SDK}"
+        mkdir -p "$(dirname "${GO_SDK}")"
+        tar -C "$(dirname "${GO_SDK}")" -xzf "/tmp/${GO_ARCHIVE}"
+    fi
     rm -f "/tmp/${GO_ARCHIVE}"
     echo -e "  ${GREEN}✓${RESET}  Go ${GO_VERSION} installed ${DIM}→ ${GO_SDK}${RESET}"
 fi
@@ -72,9 +89,9 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-if ! grep -q '/usr/local/go/bin' "${HOME}/.bashrc" 2>/dev/null; then
+if ! grep -q "${GO_SDK}/bin" "${HOME}/.bashrc" 2>/dev/null; then
     {
-        echo 'export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH'
+        echo "export PATH=${GO_SDK}/bin:\$HOME/go/bin:\$PATH"
     } >> "${HOME}/.bashrc"
     echo -e "  ${GREEN}✓${RESET}  PATH added to ${DIM}~/.bashrc${RESET}"
     source ~/.bashrc

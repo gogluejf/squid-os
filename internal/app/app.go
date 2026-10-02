@@ -55,6 +55,10 @@ type Model struct {
 	historyIdx int // -1 = draft, 0..n = browsing history
 	draft      string
 
+	// Kill ring (GNU readline): text removed by kill bindings (ctrl+k, ctrl+u,
+	// ctrl+w, alt+d) is stored here so ctrl+y can yank it back. Last kill wins.
+	killBuffer string
+
 	// Capability autocomplete. Escape dismisses the current token's suggestion
 	// until its text changes. Selection is transient and tied to one completion.
 	completionDismissed string

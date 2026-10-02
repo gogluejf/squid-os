@@ -9,6 +9,7 @@ type keyMap struct {
 	Cancel        key.Binding
 	Help          key.Binding
 	Expand        key.Binding
+	Yank          key.Binding
 	Save          key.Binding
 	Load          key.Binding
 	Model         key.Binding
@@ -56,6 +57,10 @@ var keys = keyMap{
 	Expand: key.NewBinding(
 		key.WithKeys("ctrl+o"),
 		key.WithHelp("ctrl+o", "expand/collapse"),
+	),
+	Yank: key.NewBinding(
+		key.WithKeys("ctrl+y"),
+		key.WithHelp("ctrl+y", "yank killed text"),
 	),
 	Save: key.NewBinding(
 		key.WithKeys("ctrl+s"),

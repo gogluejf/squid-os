@@ -110,6 +110,19 @@ func RenderHelp(width, height int) string {
 	}))
 	b.WriteString("\n\n")
 
+	// ── Text editing (GNU readline) ──
+	b.WriteString(section("Text editing (readline)", []string{
+		keyRow("ctrl+a / ctrl+e", "Line start / end"),
+		keyRow("alt+b / alt+f", "Word backward / forward"),
+		keyRow("ctrl+k", "Kill to end of line"),
+		keyRow("ctrl+u", "Kill to start of line"),
+		keyRow("ctrl+w", "Kill previous word"),
+		keyRow("alt+d", "Kill next word"),
+		keyRow("ctrl+y", "Yank (paste back killed text)"),
+		keyRow("ctrl+t", "Transpose characters"),
+	}))
+	b.WriteString("\n\n")
+
 	// ── Streaming ──
 	b.WriteString(section("Streaming", []string{
 		keyRow("ctrl+c", "Abort current assistant turn"),

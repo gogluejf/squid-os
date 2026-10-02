@@ -121,6 +121,14 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case key.Matches(msg, keys.Yank):
+		if m.killBuffer == "" {
+			return m, nil
+		}
+		m.textarea.InsertString(m.killBuffer)
+		m.autoSizeTextarea()
+		return m, nil
+
 	case key.Matches(msg, keys.Escape):
 		if completion, ok := m.activeCapabilityCompletion(); ok {
 			m.completionDismissed = completion.key()
@@ -213,8 +221,14 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.completionSelectKey != "" {
 			m.clearCapabilitySelection()
 		}
+		// Capture text removed by kill bindings (ctrl+k, ctrl+u, ctrl+w, alt+d)
+		// into the kill ring so ctrl+y can restore it.
+		before := m.textarea.Value()
 		var cmd tea.Cmd
 		m.textarea, cmd = m.textarea.Update(msg)
+		if killed := diffKilled(before, m.textarea.Value()); killed != "" {
+			m.killBuffer = killed
+		}
 		// Soft wrapping can change visual height without changing logical lines.
 		m.autoSizeTextarea()
 		// Editing or moving away naturally re-evaluates a dismissed suggestion.

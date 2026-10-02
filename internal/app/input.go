@@ -118,8 +118,6 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.textarea.Value() != "" {
 			m.textarea.SetValue("")
 			m.autoSizeTextarea()
-		} else {
-			return m, m.quitCmd
 		}
 		return m, nil
 
@@ -130,7 +128,8 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.recalcLayout()
 			return m, nil
 		}
-		return m, nil
+		// Esc exits the app completely.
+		return m, m.quitCmd
 
 	case key.Matches(msg, keys.Expand):
 		m.session.setExpanded(!m.session.expand.Global)

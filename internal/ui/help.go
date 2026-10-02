@@ -82,13 +82,13 @@ func RenderHelp(width, height int) string {
 
 	// ── Chat + Streaming (always available) ──
 	b.WriteString(section("Chat & Streaming", []string{
-		keyRow("ctrl+e", "Expand/collapse thinking & tool results"),
+		keyRow("ctrl+o", "Expand/collapse thinking & tool results"),
 		keyRow("ctrl+h", "Toggle this help"),
 		keyRow("alt+t", "Toggle thinking mode"),
 		keyRow("ctrl+k", "Select active skill"),
 		keyRow("shift+tab", "Cycle authorization mode"),
 		keyRow("/", "Open command palette"),
-		keyRow("esc", "Close overlay / dismiss palette"),
+		keyRow("esc", "Close overlay / dismiss palette / quit app"),
 	}))
 	b.WriteString("\n\n")
 
@@ -98,7 +98,7 @@ func RenderHelp(width, height int) string {
 		keyRow("enter", "Send message"),
 		keyRow("left alt+enter", "New line"),
 		keyRow("ctrl+v", "Paste (text, images, large pastes auto-attach)"),
-		keyRow("ctrl+c", "Clear input / quit app"),
+		keyRow("ctrl+c", "Clear input"),
 		keyRow("ctrl+d", "Destroy last message pair"),
 		keyRow("ctrl+u", "Undo last destroy"),
 		keyRow("alt+i", "Toggle incognito mode"),

@@ -54,8 +54,8 @@ var keys = keyMap{
 		key.WithHelp("ctrl+h", "toggle help"),
 	),
 	Expand: key.NewBinding(
-		key.WithKeys("ctrl+e"),
-		key.WithHelp("ctrl+e", "expand/collapse"),
+		key.WithKeys("ctrl+o"),
+		key.WithHelp("ctrl+o", "expand/collapse"),
 	),
 	Save: key.NewBinding(
 		key.WithKeys("ctrl+s"),

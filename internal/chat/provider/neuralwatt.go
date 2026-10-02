@@ -64,8 +64,19 @@ func (p *NeuralWattProvider) StaticModels() []ModelEntry {
 }
 func (p *NeuralWattProvider) DefaultBaseURL() string { return "https://api.neuralwatt.com/v1" }
 func (p *NeuralWattProvider) RequiresBaseURL() bool  { return false }
+// RequestProviderOptions forces the Chat Completions API and toggles Qwen
+// thinking via the vLLM nested form. Verified live against api.neuralwatt.com:
+// on /responses, chat_template_kwargs is dropped and even reasoning.effort
+// does not suppress reasoning; on /chat/completions, the nested
+// enable_thinking form works both ways (vision included) while a top-level
+// enable_thinking is silently ignored.
 func (p *NeuralWattProvider) RequestProviderOptions(model string, thinking bool) map[string]any {
-	return nil
+	return map[string]any{
+		"useResponsesAPI": false,
+		"chat_template_kwargs": map[string]any{
+			"enable_thinking": thinking,
+		},
+	}
 }
 
 func (p *NeuralWattProvider) BuildGoAIModel(model string) (goai_provider.LanguageModel, bool, error) {

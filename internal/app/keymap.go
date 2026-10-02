@@ -34,12 +34,12 @@ type keyMap struct {
 
 var keys = keyMap{
 	Destroy: key.NewBinding(
-		key.WithKeys("ctrl+d"),
-		key.WithHelp("ctrl+d", "destroy last pair"),
+		key.WithKeys("ctrl+x"),
+		key.WithHelp("ctrl+x", "destroy last pair"),
 	),
 	UndoDestroy: key.NewBinding(
-		key.WithKeys("ctrl+u"),
-		key.WithHelp("ctrl+u", "undo destroy"),
+		key.WithKeys("ctrl+z"),
+		key.WithHelp("ctrl+z", "undo destroy"),
 	),
 	Send: key.NewBinding(
 		key.WithKeys("enter"),
@@ -82,8 +82,8 @@ var keys = keyMap{
 		key.WithHelp("alt+t", "toggle thinking"),
 	),
 	Skill: key.NewBinding(
-		key.WithKeys("ctrl+k"),
-		key.WithHelp("ctrl+k", "select skill"),
+		key.WithKeys("alt+s"),
+		key.WithHelp("alt+s", "select skill"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c"),

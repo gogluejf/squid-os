@@ -95,7 +95,7 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Destroy):
 		userText := m.session.destroyLastSequence()
 		m.textarea.SetValue(userText)
-		(&m).setNotification(ui.NotificationInfo, "last message removed  ·  ctrl+u to restore")
+		(&m).setNotification(ui.NotificationInfo, "last message removed  ·  ctrl+z to restore")
 		m.autoSave()
 		m.refreshViewportFollowing()
 		return m, nil

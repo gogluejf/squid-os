@@ -48,6 +48,7 @@ const (
 	ProviderMistral     = "mistral"
 	ProviderPerplexity  = "perplexity"
 	ProviderCerebras    = "cerebras"
+	ProviderNeuralWatt  = "neuralwatt"
 	ProviderNVIDIA      = "nvidia"
 	ProviderRunPod      = "runpod"
 	ProviderFPTCloud    = "fptcloud"

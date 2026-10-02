@@ -124,6 +124,7 @@ var providerDialects = map[string]config.Dialect{
 	config.ProviderMistral:     config.DialectOpenAICompatible,
 	config.ProviderPerplexity:  config.DialectOpenAICompatible,
 	config.ProviderCerebras:    config.DialectOpenAICompatible,
+	config.ProviderNeuralWatt:  config.DialectOpenAICompatible,
 	config.ProviderNVIDIA:      config.DialectOpenAICompatible,
 	config.ProviderRunPod:      config.DialectOpenAICompatible,
 	config.ProviderFPTCloud:    config.DialectOpenAICompatible,

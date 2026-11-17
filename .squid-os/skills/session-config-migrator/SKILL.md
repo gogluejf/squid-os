@@ -77,4 +77,8 @@ Output: Show only relevant old/new fields and JSON, enumerate mappings and risks
 ## Resources
 
 ### Scripts
-- [migrate_sessions.py](scripts/migrate_sessions.py) — Executable script
+
+
+| File | Description |
+|---|---|
+| `migrate_sessions.py` | Applies a pure one-document migration callback to session JSON files (dry-run + backup by default). |

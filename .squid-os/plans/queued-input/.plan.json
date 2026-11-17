@@ -1,0 +1,341 @@
+{
+  "plan_name": "queued-input",
+  "title": "Reliable queued input and Hex Sponge delivery",
+  "why": "Allow keyboard and voice messages during assistant work without lost input, duplicate history, focus stealing, or transport-specific hacks.",
+  "outcomes": "Shared step/turn queues; durable receipts; responsive TUI; private local socket; acknowledged voice delivery and normal-TUI startup. Contract: ../queued-input-design.md.",
+  "milestones": [
+    {
+      "number": "1",
+      "name": "Reliable in-turn user input",
+      "pattern": [
+        "Single-owner application coordinator and transport-independent queue domain"
+      ],
+      "objective": "Fix duplicate authorization input and implement durable step/turn scheduling plus busy composer UX.",
+      "success": "Keyboard queue behavior works independently of IPC, with crash recovery and no session-worker mutation races.",
+      "diagram": "flowchart LR\nComposer --> Admission\nAdmission --> Pending\nPending --> SafeBoundary\nSafeBoundary --> Session\nSession --> Inference",
+      "tasks": [
+        {
+          "number": "1.1",
+          "name": "Fix authorization instruction double insertion",
+          "type": "bug",
+          "what": "Remove the second TUI append of worker-owned authorization instructions and add a worker-to-TUI regression test.",
+          "why": "Stored duplicate messages already reach provider context; fix ownership before extending ingestion.",
+          "files": [
+            "~ internal/app/stream.go",
+            "~ internal/chat/tool_worker.go",
+            "+ internal/app/authorization_instructions_test.go",
+            "+ internal/chat/tool_worker_test.go"
+          ],
+          "snippet": [
+            "// Follow ../queued-input-design.md; existing symbols are documented there."
+          ],
+          "acceptance": [
+            "Approved and rejected decisions with instructions produce one stored user message and one provider projection.",
+            "Plain yes/no adds no instruction; remaining-tool cancellation semantics stay unchanged.",
+            "Headless RunLoop still appends once; checkpoint and render invalidation include the instruction.",
+            "Do not rewrite historical sessions; use synthetic fixture inspired by msg_94/msg_95 and msg_419/msg_420 in the referenced session."
+          ],
+          "verify": [
+            "go test ./internal/app ./internal/chat"
+          ]
+        },
+        {
+          "number": "1.2",
+          "name": "Add shared admission and durable queue receipts",
+          "type": "feature",
+          "what": "Introduce session-bound step/turn queues and an application submission coordinator with durable admission and recovery.",
+          "why": "Keyboard and IPC must share ordering, validation, deduplication and persistence semantics.",
+          "files": [
+            "+ internal/inputqueue/queue.go",
+            "+ internal/inputqueue/store.go",
+            "+ internal/inputqueue/queue_test.go",
+            "+ internal/inputqueue/store_test.go",
+            "+ internal/app/submission.go",
+            "~ internal/app/ui_session.go",
+            "~ internal/config/session.go",
+            "~ internal/chat/session.go"
+          ],
+          "snippet": [
+            "// Follow ../queued-input-design.md; existing symbols are documented there."
+          ],
+          "acceptance": [
+            "Implement entries, server sequence, request IDs, boundary selection, state receipts and limits per design sections 3-4.",
+            "Same ID/same payload is idempotent; changed payload rejects; repeated text with new IDs remains distinct.",
+            "Acceptance waits for durable journal write; errors retain client draft/outbox; incognito explicitly reports memory durability.",
+            "Crash-window tests reconcile prepared/injected stable IDs with session checkpoint; recover paused with no automatic inference.",
+            "Session document backward compatibility and normal autosave-off queue checkpoint behavior are tested.",
+            "Queue store owns receipt state; no background socket mutation of chat.Session; I/O does not freeze UI."
+          ],
+          "verify": [
+            "go test ./internal/inputqueue ./internal/chat ./internal/config",
+            "go test -race ./internal/inputqueue"
+          ]
+        },
+        {
+          "number": "1.3",
+          "name": "Enable busy composer, queues, counters and help",
+          "type": "feature",
+          "what": "Route keyboard submissions through shared admission while streaming and running tools, and display both queue counters.",
+          "why": "Typing must remain responsive and share the exact semantics later used by voice.",
+          "files": [
+            "~ internal/app/input.go",
+            "~ internal/app/update.go",
+            "~ internal/app/stream.go",
+            "~ internal/app/keymap.go",
+            "~ internal/app/render.go",
+            "~ internal/ui/notification.go",
+            "~ internal/ui/help.go",
+            "+ internal/app/queued_input_test.go",
+            "+ internal/ui/notification_test.go"
+          ],
+          "snippet": [
+            "// Follow ../queued-input-design.md; existing symbols are documented there."
+          ],
+          "acceptance": [
+            "Enter queues next step when busy and submits when idle; Alt+Q queues after turn; Alt+Enter still inserts newline.",
+            "Draft, editing, paste, wrap, blink and scroll work while tokens/tools run; accepted enqueue clears only its own draft.",
+            "Ctrl+C precedence is clear draft then flush pending queues then cancel active turn; auth component keys are unchanged.",
+            "Rightmost status counters reflect pending entries and paused state; narrow widths truncate safely without shifting footer.",
+            "Remote-style admission preserves a partially typed draft; help describes all shortcuts and auth-overlay exception.",
+            "Admission rejection leaves text and shows error; empty submission is no-op."
+          ],
+          "verify": [
+            "go test ./internal/app ./internal/ui"
+          ]
+        },
+        {
+          "number": "1.4",
+          "name": "Drain batches only at safe lifecycle boundaries",
+          "type": "feature",
+          "what": "Connect the scheduler at tool-batch completion and normal terminal completion, with explicit busy/paused state and generation checks.",
+          "why": "Avoid inserting prompts into unresolved tool calls or accidentally launching queued work after cancellation.",
+          "files": [
+            "~ internal/app/submission.go",
+            "~ internal/app/stream.go",
+            "~ internal/app/events.go",
+            "~ internal/app/app.go",
+            "~ internal/app/tui_session.go",
+            "~ internal/app/command.go",
+            "+ internal/app/queue_boundary_test.go"
+          ],
+          "snippet": [
+            "// Follow ../queued-input-design.md; existing symbols are documented there."
+          ],
+          "acceptance": [
+            "Drain all step entries FIFO once after entire tool batch, before one continuation; never append while worker owns session.",
+            "Step entries at terminal boundary extend current logical turn; after-turn batch waits for terminal with no pending step entries.",
+            "Arrivals after cutoff wait for next boundary; no duplicate inference when admissions and Done arrive together.",
+            "Errors/cancel/limits pause queues; /queue-resume and /queue-clear are explicit and documented.",
+            "Awaiting authorization stays busy; incoming prompts never approve a tool or replace instructions.",
+            "Stale generation/session events cannot drain another session; session-switch/new/clear/incognito with pending input is blocked clearly.",
+            "Preserve existing dirty thinking-only/headless code; fake channels exercise slow tool and streaming responsiveness."
+          ],
+          "verify": [
+            "go test ./internal/app ./internal/chat",
+            "go test -race ./internal/app ./internal/inputqueue"
+          ]
+        }
+      ]
+    },
+    {
+      "number": "2",
+      "name": "Local input gateway",
+      "pattern": [
+        "Ports and adapters with idempotent request-reply"
+      ],
+      "objective": "Expose the shared queue to local clients without key simulation or direct session mutation.",
+      "success": "A client receives durable receipts while TUI is idle, streaming, executing tools or awaiting authorization.",
+      "diagram": "flowchart LR\nClient --> PrivateSocket\nPrivateSocket --> ApplicationAdmission\nApplicationAdmission --> Queue\nQueue --> Receipt\nReceipt --> Client",
+      "tasks": [
+        {
+          "number": "2.1",
+          "name": "Serve private local submissions through the TUI coordinator",
+          "type": "feature",
+          "what": "Add versioned Unix-socket request handling and bridge validated submissions into Bubble Tea admission.",
+          "why": "A transport must enqueue safely, not synthesize Enter or bypass authorization.",
+          "files": [
+            "+ internal/localinput/protocol.go",
+            "+ internal/localinput/server.go",
+            "+ internal/localinput/server_test.go",
+            "~ internal/cli/tui.go",
+            "~ internal/app/events.go",
+            "~ internal/app/update.go",
+            "~ internal/app/submission.go"
+          ],
+          "snippet": [
+            "// Proposed protocol and lifecycle contracts: ../queued-input-design.md sections 4-5."
+          ],
+          "acceptance": [
+            "Private runtime directory, 0600 socket, peer UID validation, symlink refusal and bounded frames/connections/deadlines.",
+            "Submit/status/clear/resume use the common queue and session identity; status distinguishes accepted from injected.",
+            "Ack occurs only after persistence result; dropped reply plus same-ID retry cannot duplicate or resurrect discarded input.",
+            "Malformed, oversized, wrong-version, wrong-session, full and closing receiver errors are structured.",
+            "Auth/picker visibility does not bypass queue rules; socket thread never appends or reads mutable session state directly.",
+            "No paid API calls in tests; fake program admission proves responsiveness while a tool worker blocks."
+          ],
+          "verify": [
+            "go test ./internal/localinput ./internal/app",
+            "go test -race ./internal/localinput ./internal/inputqueue"
+          ]
+        },
+        {
+          "number": "2.2",
+          "name": "Add input CLI, instance discovery and lifecycle cleanup",
+          "type": "feature",
+          "what": "Implement input list/send/status/clear/resume commands and publish live per-instance descriptors from normal TUI startup.",
+          "why": "Sponge needs reliable selection and receipts instead of matching terminal titles.",
+          "files": [
+            "+ internal/cli/input.go",
+            "+ internal/cli/input_test.go",
+            "+ internal/localinput/discovery.go",
+            "+ internal/localinput/discovery_test.go",
+            "~ internal/cli/cli.go",
+            "~ internal/cli/tui.go"
+          ],
+          "snippet": [
+            "// Proposed protocol and lifecycle contracts: ../queued-input-design.md sections 4-5."
+          ],
+          "acceptance": [
+            "CLI follows typed Command pattern; --stdin preserves Unicode/newlines and never exposes transcript in argv.",
+            "Default only when one compatible normal instance exists; multiple instances require explicit selection.",
+            "Descriptors published after accept path ready, contain live session identity; stale files never masquerade as ready.",
+            "Proposed --input-instance launch token identifies a newly opened normal TUI; no prompt/autonomous-run misuse.",
+            "Exit cleans only owned socket/descriptor; session switch rejects stale target; no path-length overflow.",
+            "CLI exit codes and JSON results distinguish permanent rejection, timeout/uncertainty, unavailable and accepted."
+          ],
+          "verify": [
+            "go test ./internal/cli ./internal/localinput"
+          ]
+        },
+        {
+          "number": "2.3",
+          "name": "Prove durable local-input delivery across failures",
+          "type": "feature",
+          "what": "Add queue/socket/TUI integration coverage and document the client contract and recovery behavior.",
+          "why": "Resolve crash and disconnect semantics before enabling hands-free submission.",
+          "files": [
+            "+ internal/localinput/integration_test.go",
+            "+ internal/app/input_delivery_test.go",
+            "+ docs/local-input.md",
+            "~ internal/ui/help.go"
+          ],
+          "snippet": [
+            "// Proposed protocol and lifecycle contracts: ../queued-input-design.md sections 4-5."
+          ],
+          "acceptance": [
+            "Disconnect before/after acceptance, retry across server restart and prepared/checkpoint crashes preserve at-most-one history insertion.",
+            "Pending queues reload paused; receipt state survives clear; incognito never persists queued text.",
+            "Two instances, session changes, auth pending, disk failure and queue overflow produce explicit non-destructive outcomes.",
+            "Document accepted versus injected versus assistant completion; no claim of exactly-once model/tool execution.",
+            "Document limits, privacy, queue commands, startup and recovery; run targeted race tests and full Go suite without altering unrelated dirty work."
+          ],
+          "verify": [
+            "go test ./internal/localinput ./internal/app ./internal/inputqueue",
+            "go test -race ./internal/localinput ./internal/inputqueue",
+            "go test ./..."
+          ]
+        }
+      ]
+    },
+    {
+      "number": "3",
+      "name": "Hands-free Hex Sponge delivery",
+      "pattern": [
+        "Acknowledged local client with durable outbox and explicit capture state machine"
+      ],
+      "objective": "Replace unreliable X11 delivery with shared-queue submissions and launch a normal TUI when absent.",
+      "success": "Voice is captured without pasting or focus changes, accepted by the intended queue, and safely retained on failure.",
+      "diagram": "flowchart LR\nShortcut --> HexCLI\nHexCLI --> Outbox\nOutbox --> Discovery\nDiscovery --> InputCLI\nInputCLI --> QueueReceipt\nQueueReceipt --> Badge",
+      "tasks": [
+        {
+          "number": "3.1",
+          "name": "Deliver captured voice through acknowledged queue requests",
+          "type": "feature",
+          "what": "Replace SQUID-mode xdotool delivery with the new input CLI and a request-ID-based outbox.",
+          "why": "Successful synthetic key events did not reach the TUI; only an application receipt proves admission.",
+          "files": [
+            "~ <hex-repo>/hex-enter/hex_sponge.py",
+            "+ <hex-repo>/hex-enter/squid_client.py",
+            "+ <hex-repo>/hex-enter/test_squid_client.py",
+            "+ <hex-repo>/hex-enter/test_hex_sponge.py"
+          ],
+          "snippet": [
+            "// In <hex-repo>; follow ../queued-input-design.md section 6. No xdotool SQUID delivery."
+          ],
+          "acceptance": [
+            "Keep native Hex shortcut untouched; SQUID Ctrl+Shift+Space controls start and stop --print, no global history replay.",
+            "Badge is non-focusable and GTK main loop remains responsive; subprocess and IPC work stays outside UI thread.",
+            "One stable UUID per capture persists before send; requests use when=step and intended session identity.",
+            "Retry timeout/uncertain reply with same ID; query receipt; permanent rejection and ambiguity retain outbox visibly.",
+            "Show Listening/Transcribing/Sending/Queued or Submitted; never claim delivery from process exit alone.",
+            "Handle no-speech exit 4, Unicode/newlines, mode changes during capture, stop failure and repeated recordings.",
+            "Legacy outbox entries require manual review; never replay old x-events-sent or pending records automatically.",
+            "No clipboard changes, terminal activation or simulated typing in SQUID; no model subprocess spawned for delivery."
+          ],
+          "verify": [
+            "cd <hex-repo> && python3 -m unittest discover -s hex-enter -p \"test_*.py\"",
+            "cd <hex-repo> && python3 -m py_compile hex-enter/hex_sponge.py hex-enter/squid_client.py"
+          ]
+        },
+        {
+          "number": "3.2",
+          "name": "Launch normal Squid TUI when discovery is empty",
+          "type": "feature",
+          "what": "Add serialized terminal launch and bounded readiness discovery to the client.",
+          "why": "Hands-free messages must work when Squid is absent without opening duplicate or autonomous sessions.",
+          "files": [
+            "~ <hex-repo>/hex-enter/squid_client.py",
+            "~ <hex-repo>/hex-enter/test_squid_client.py",
+            "~ <hex-repo>/README.md"
+          ],
+          "snippet": [
+            "// In <hex-repo>; follow ../queued-input-design.md section 6. No xdotool SQUID delivery."
+          ],
+          "acceptance": [
+            "No compatible live instance: acquire per-user launch lock, recheck, launch configured terminal argv with normal squid-os tui and unique --input-instance token.",
+            "No transcript in argv; no run or prompt-prefill workaround; preserve standard auth/configuration.",
+            "Poll readiness in background with bounded backoff and timeout; socket publication alone is not proof of admission readiness.",
+            "Two simultaneous senders launch once; multiple pre-existing instances require explicit target rather than guessing.",
+            "Existing busy/auth-paused TUI is not absent; launch failure/timeout retains original UUID and transcript with visible error.",
+            "Selected session identity is revalidated before submit; a changed session rejects rather than silently rerouting."
+          ],
+          "verify": [
+            "cd <hex-repo> && python3 -m unittest discover -s hex-enter -p \"test_*.py\""
+          ]
+        },
+        {
+          "number": "3.3",
+          "name": "Integrate setup, tray controls and end-to-end acceptance",
+          "type": "feature",
+          "what": "Finish dependency checks, service refresh and tray state consistency, then document and test the complete workflow.",
+          "why": "The implementation must remain self-contained and repeatable after install or restart.",
+          "files": [
+            "~ <hex-repo>/hex-enter/install.sh",
+            "~ <hex-repo>/hex-enter/hex_enter_tray.py",
+            "~ <hex-repo>/hex-enter/hex-enter-toggle",
+            "~ <hex-repo>/README.md",
+            "+ <hex-repo>/hex-enter/test_integration.py",
+            "~ docs/local-input.md"
+          ],
+          "snippet": [
+            "// In <hex-repo>; follow ../queued-input-design.md section 6. No xdotool SQUID delivery."
+          ],
+          "acceptance": [
+            "Dependency checks precede startup; setup deploys new client module and explicitly restarts updated services without silently invoking sudo.",
+            "OFF/ENTER/SQUID remain the only modes; fix GLib refresh False return and legacy enabled-file-only toggle; remove incorrect left-click claims.",
+            "Fake Hex and fake input CLI tests cover capture-to-queue and errors without paid model calls or live keystroke injection.",
+            "Manual acceptance: editor content/focus/clipboard unchanged; real TUI receives one message while streaming and while tool executes.",
+            "Batch three step and two turn submissions; verify counters, order, one request per eligible batch and correct Ctrl+C flush behavior.",
+            "Test approval pending, repeated voice captures, no TUI launch, two-instance refusal, restart/retry and queue persistence.",
+            "Run focused tests before broad suites; record actual results, known limitations and baseline failures; no automatic commit."
+          ],
+          "verify": [
+            "cd <hex-repo> && bash -n hex-enter/install.sh",
+            "cd <hex-repo> && python3 -m unittest discover -s hex-enter -p \"test_*.py\"",
+            "go test ./..."
+          ]
+        }
+      ]
+    }
+  ]
+}

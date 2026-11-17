@@ -13,13 +13,16 @@ import (
 )
 
 // ContextTokens holds raw, compacted, and saved provider-message tokens.
+// Note: assistant thinking (reasoning) is intentionally excluded from the
+// outgoing projection — it is never re-sent to the provider (see
+// appendAssistantProviderMessages). It remains in the lifetime tally.
 type ContextTokens struct {
 	Raw             int // tokens in the un-compacted provider messages
 	RawInput        int // raw system, user, and tool-result tokens
-	RawOutput       int // raw assistant text, reasoning, and tool-call tokens
+	RawOutput       int // raw assistant text and tool-call tokens
 	Compacted       int // tokens in the compacted projection
 	CompactedInput  int // compacted system, user, and tool-result tokens
-	CompactedOutput int // compacted assistant text, reasoning, and tool-call tokens
+	CompactedOutput int // compacted assistant text and tool-call tokens
 	Saved           int // Raw - Compacted
 	ToolDefinitions int // request-body tool schema cost (internal messages), never compacted
 }
@@ -138,9 +141,13 @@ func buildProviderMessages(messages []config.Message, plan *CompactionPlan, atta
 
 func appendAssistantProviderMessages(out []goai_provider.Message, msg config.Message, plan *CompactionPlan, attachments []media.Attachment, baseDir string, caps *goai_provider.ModelCapabilities) []goai_provider.Message {
 	var parts []goai_provider.Part
-	if msg.ThinkingText != "" {
-		parts = append(parts, goai_provider.Part{Type: goai_provider.PartReasoning, Text: msg.ThinkingText})
-	}
+	// NOTE: ThinkingText is intentionally NOT re-sent to the provider.
+	// Re-sending past reasoning on every turn is a context-bloat anti-pattern
+	// (no major provider recommends echoing raw thinking back). Thinking is
+	// still: recorded on the message (ThinkingText) for UI + persistence, and
+	// counted in the LIFETIME tally (output.Thinking) as real generated cost.
+	// It is simply excluded from the CONTEXT (next-call) projection, so the
+	// footer/context number reflects only what is actually sent.
 	if msg.Text != "" {
 		parts = append(parts, goai_provider.Part{Type: goai_provider.PartText, Text: msg.Text})
 	}

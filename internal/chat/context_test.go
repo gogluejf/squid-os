@@ -137,6 +137,44 @@ func TestBuildContextTokenBreakdownByProviderRole(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Thinking is NOT re-sent to the provider (context projection only)
+// ---------------------------------------------------------------------------
+
+func TestBuildContextExcludesThinkingFromProjection(t *testing.T) {
+	messages := []config.Message{
+		{ID: "sys0", Role: config.RoleSystem, Text: "system prompt"},
+		{ID: "u1", Role: config.RoleUser, Text: "hello", CreatedAt: time.Now()},
+		{ID: "a1", Role: config.RoleAssistant, ThinkingText: "a long reasoning chain that must not be re-sent", Text: "answer"},
+	}
+	ctx := BuildContext(messages, false, "", nil, nil)
+
+	// No PartReasoning part may appear anywhere in the outgoing projection.
+	for _, msg := range ctx.Messages {
+		for _, part := range msg.Content {
+			if part.Type == goai_provider.PartReasoning {
+				t.Fatalf("thinking must not be re-sent to the provider, but found PartReasoning in message %+v", msg.Role)
+			}
+		}
+	}
+
+	// The assistant's visible text is still projected.
+	found := false
+	for _, msg := range ctx.Messages {
+		if msg.Role != goai_provider.RoleAssistant {
+			continue
+		}
+		for _, part := range msg.Content {
+			if part.Type == goai_provider.PartText && part.Text == "answer" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("assistant text should still be present in the projection")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Enabled compaction: tool-call ID, name, chronology, valid JSON
 // ---------------------------------------------------------------------------
 

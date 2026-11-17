@@ -191,11 +191,17 @@ func FlushToolMessage(s *Session, msgIdx int) {
 // StartStream builds API messages from session state and starts provider
 // streaming. Cancel via ctx.
 func StartStream(ctx context.Context, s *Session, endpoints config.EndpointsConfig) <-chan StreamEvent {
+	// Read before Begin(): Begin → Reset wipes StreamState.
+	disableThinking := s.Stream.NextThinkingDisabled
 	s.Stream.Begin()
 	s.BeginTurnCtx(ctx)
 	inf := s.CurrentInference()
 	providerSettings := config.ResolveProviderSettings(endpoints, inf.Provider)
-	engine := NewEngine(providerSettings, inf.Model, inf.Thinking)
+	thinking := inf.Thinking
+	if disableThinking {
+		thinking.Enabled = false
+	}
+	engine := NewEngine(providerSettings, inf.Model, thinking)
 	streamCtx, cancel := context.WithCancel(ctx)
 	s.Stream.CancelFn = func(msg string) {
 		s.Stream.MarkCancelled(msg)
@@ -230,11 +236,20 @@ type LoopEvent struct {
 	Cancelled   bool
 }
 
+// shouldNudgeThinkingOnlyTurn reports whether a terminal turn that produced
+// reasoning but no visible text and no tool call should trigger the single
+// nudge (with thinking disabled for that call) forcing the answer as text.
+// Budget: one nudge per run (nudged is set once and never reset).
+func shouldNudgeThinkingOnlyTurn(nudged bool, m config.Message) bool {
+	return !nudged && m.Text == "" && len(m.ToolCalls) == 0 && m.ThinkingText != ""
+}
+
 func RunLoop(ctx context.Context, s *Session, paths config.Paths, endpoints config.EndpointsConfig, checkpoint func() error) <-chan LoopEvent {
 	out := make(chan LoopEvent, 64)
 	go func() {
 		defer close(out)
 		steps, toolCount := 0, 0
+		nudged := false
 		for {
 			steps++
 			if s.Doc.Config.Limits.MaxSteps > 0 && steps > s.Doc.Config.Limits.MaxSteps {
@@ -273,6 +288,19 @@ func RunLoop(ctx context.Context, s *Session, paths config.Paths, endpoints conf
 					return
 				case LoopDone:
 					_ = config.PersistRefreshedProvider(paths, endpoints, s.CurrentInference().Provider)
+					// Thinking-only terminal turn: the model ended with reasoning
+					// but no visible text and no tool call, which resolves to an
+					// empty final answer in autonomous runs. Nudge once — with
+					// thinking disabled for that single call so the model cannot
+					// hide in the think block again — forcing the answer as text.
+					if !res.Cancelled && res.MsgIdx >= 0 && shouldNudgeThinkingOnlyTurn(nudged, s.Doc.Messages[res.MsgIdx]) {
+						nudged = true
+						s.Append(NewUserMessage(nextMessageID(s),
+							"Your final answer must be visible text. Output it now — no reasoning."))
+						s.Stream.NextThinkingDisabled = true
+						restart = true
+						break
+					}
 					if res.Cancelled {
 						res.MsgIdx = AppendStreamCancelledMessage(s)
 					}

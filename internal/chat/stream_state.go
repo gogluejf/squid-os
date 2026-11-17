@@ -19,7 +19,11 @@ type StreamState struct {
 	Thinking        string
 	InThinking      bool
 	Active          bool
-	Metrics         StreamMetrics
+	// NextThinkingDisabled disables thinking for the next stream call only.
+	// Set by RunLoop's thinking-only-turn nudge; consumed by StartStream, which
+	// must read it before Begin() (Begin → Reset wipes StreamState).
+	NextThinkingDisabled bool
+	Metrics              StreamMetrics
 	StreamCancelled bool
 	CancelMessage   string
 	CancelFn        func(msg string)

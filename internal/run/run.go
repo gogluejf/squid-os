@@ -121,12 +121,40 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 	if final == "" {
 		final = finalPass
 	}
+	var resolveErr error
+	if final == "" {
+		// Terminal turn produced no visible text (thinking-only final turn,
+		// including after the single nudge). Recover the most recent reasoning
+		// content, or fail loudly — never a silent empty success.
+		final, resolveErr = resolveEmptyFinal(session.Doc.Messages)
+	}
 	result := Result{FinalText: final, Session: session}
 	if err := checkpointSave(session); err != nil {
 		return result, fmt.Errorf("autosave: %w", err)
+	}
+	if resolveErr != nil {
+		return result, resolveErr
 	}
 	if cfg.Autosave.Enabled {
 		result.SavedSessionName = session.Info.Name
 	}
 	return result, nil
+}
+
+// thinkingFallbackPrefix marks a final answer recovered from reasoning content
+// after a run ended without visible text.
+const thinkingFallbackPrefix = "⚠ Assistant returned no visible text — showing thinking output:\n\n"
+
+// resolveEmptyFinal recovers a final answer when the run ended without visible
+// text: it returns the reasoning content of the most recent thinking-only
+// turn (empty text, non-empty reasoning) — the turn that failed to answer —
+// or an error when no such turn exists.
+func resolveEmptyFinal(messages []config.Message) (string, error) {
+	for i := len(messages) - 1; i >= 0; i-- {
+		m := messages[i]
+		if m.Role == config.RoleAssistant && m.Text == "" && m.ThinkingText != "" {
+			return thinkingFallbackPrefix + m.ThinkingText, nil
+		}
+	}
+	return "", fmt.Errorf("run ended with empty final answer")
 }

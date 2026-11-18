@@ -104,6 +104,17 @@ var AllCommands = []SlashCommand{
 			return m, nil
 		},
 	},
+	{
+		Name:        "queue-clear",
+		Description: "Discard all pending queued input",
+		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+			n := (&m).flushQueues()
+			if n == 0 {
+				(&m).setNotification(ui.NotificationInfo, "no queued input to clear")
+			}
+			return m, nil
+		},
+	},
 }
 
 // buildCommandPickerItems builds the standard command list as PickerItems for the command palette.

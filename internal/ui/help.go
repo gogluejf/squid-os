@@ -95,7 +95,8 @@ func RenderHelp(width, height int) string {
 	// ── Chat ──
 	b.WriteString(section("Chat", []string{
 		keyRow("tab", "Numberize / next item"),
-		keyRow("enter", "Send message"),
+		keyRow("enter", "Send message · queue next step (busy)"),
+		keyRow("alt+q", "Queue after turn (busy) · send (idle)"),
 		keyRow("left alt+enter", "New line"),
 		keyRow("ctrl+v", "Paste (text, images, large pastes auto-attach)"),
 		keyRow("ctrl+c", "Clear input"),
@@ -124,8 +125,13 @@ func RenderHelp(width, height int) string {
 	b.WriteString("\n\n")
 
 	// ── Streaming ──
-	b.WriteString(section("Streaming", []string{
-		keyRow("ctrl+c", "Abort current assistant turn"),
+	b.WriteString(section("Streaming (busy)", []string{
+		keyRow("typing", "Draft stays editable while streaming/tools run"),
+		keyRow("enter", "Queue message for the next step"),
+		keyRow("alt+q", "Queue message after the current turn"),
+		keyRow("ctrl+c", "Clear draft · else flush queues · else abort turn"),
+		keyRow("/queue-resume", "Resume paused queued input"),
+		keyRow("/queue-clear", "Discard pending queued input"),
 	}))
 	b.WriteString("\n\n")
 

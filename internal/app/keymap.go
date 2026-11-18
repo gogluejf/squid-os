@@ -31,6 +31,7 @@ type keyMap struct {
 	PageDown      key.Binding
 	HistorySearch key.Binding
 	AuthMode      key.Binding
+	QueueAfterTurn key.Binding
 }
 
 var keys = keyMap{
@@ -44,11 +45,11 @@ var keys = keyMap{
 	),
 	Send: key.NewBinding(
 		key.WithKeys("enter"),
-		key.WithHelp("enter", "send message"),
+		key.WithHelp("enter", "send / queue (busy)"),
 	),
 	Cancel: key.NewBinding(
 		key.WithKeys("ctrl+c"),
-		key.WithHelp("ctrl+c", "clear input / quit"),
+		key.WithHelp("ctrl+c", "clear · flush queue · cancel"),
 	),
 	Help: key.NewBinding(
 		key.WithKeys("ctrl+h"),
@@ -145,5 +146,9 @@ var keys = keyMap{
 	AuthMode: key.NewBinding(
 		key.WithKeys("shift+tab"),
 		key.WithHelp("shift+tab", "cycle auth mode"),
+	),
+	QueueAfterTurn: key.NewBinding(
+		key.WithKeys("alt+q"),
+		key.WithHelp("alt+q", "queue after turn (busy)"),
 	),
 }

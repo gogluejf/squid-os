@@ -13,6 +13,7 @@ import (
 
 	"squid-os/internal/chat"
 	"squid-os/internal/config"
+	"squid-os/internal/inputqueue"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
 )
@@ -75,6 +76,7 @@ func (m *Model) setAuthMode() tea.Cmd {
 func (m *Model) setChatMode() tea.Cmd {
 	m.textarea.Placeholder = "Type a message..."
 	m.mode = ModeChat
+	m.turnActive = false
 	m.activeComponent = nil
 	m.textarea.Focus()
 	m.refreshViewportFollowing()
@@ -107,6 +109,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 		CreatedAt:   time.Now(),
 		Text:        text,
 		InputTokens: countTokensApprox(text),
+		Params:      sourceParams("keyboard"),
 	}
 
 	m.session.Append(userMsg)
@@ -119,7 +122,9 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.session.undoStack = nil
 
 	m.textarea.SetValue("")
-	m.textarea.Blur()
+	// Keep the textarea FOCUSED while streaming: the busy composer must stay
+	// editable so the user can draft and queue (Enter/Alt+Q) mid-turn.
+	m.textarea.Focus()
 	(&m).clearNotification()
 
 	return (&m).startStream()
@@ -158,6 +163,8 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			_ = config.PersistRefreshedProvider(m.paths, m.endpoints, m.session.CurrentInference().Provider)
 			result.MsgIdx = chat.AppendStreamErrorMessage(m.session.Session, result.Error)
 		}
+		// Error boundary: flush queued entries to draft for user review.
+		(&m).flushQueuesToDraft()
 		(&m).setNotification(ui.NotificationError, msg)
 
 		nm, autoSaveCmd := m.autoSave()
@@ -182,7 +189,30 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			} else {
 				result.MsgIdx = chat.AppendStreamCancelledMessage(m.session.Session)
 			}
+			// Cancel: flush queued entries to draft for user review.
+			(&m).flushQueuesToDraft()
 			(&m).setNotification(ui.NotificationInfo, "stream cancelled")
+			m.session.Stream.Reset()
+			m.session.UIStream.reset()
+			(&m).setChatMode()
+			nm, autoSaveCmd := m.autoSave()
+			return nm, autoSaveCmd
+		}
+		// Terminal inference (success boundary, design §3 rule 2): the
+		// assistant message is already appended by ProcessStreamEvent.
+		// Step queue nonempty → extend the logical turn; else after-turn
+		// queue nonempty → one new turn with ALL of it; else end normally.
+		if n := (&m).drainBoundary(inputqueue.BoundaryStep); n > 0 {
+			m.session.Stream.Reset()
+			m.session.UIStream.reset()
+			(&m).setNotification(ui.NotificationInfo, fmt.Sprintf("injected %d queued next-step message(s)", n))
+			return (&m).startStream()
+		}
+		if n := (&m).drainBoundary(inputqueue.BoundaryTurn); n > 0 {
+			m.session.Stream.Reset()
+			m.session.UIStream.reset()
+			(&m).setNotification(ui.NotificationInfo, fmt.Sprintf("injected %d queued after-turn message(s)", n))
+			return (&m).startStream()
 		}
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
@@ -284,19 +314,23 @@ func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
 				m.session.Doc.Pending.ActiveSkill = nil
 			}
 		}
-		if event.CapturedUserText != "" {
-			userMsg := config.Message{
-				ID:        fmt.Sprintf("msg_%d", len(m.session.Doc.Messages)+1),
-				Role:      config.RoleUser,
-				CreatedAt: time.Now(),
-				Text:      event.CapturedUserText,
-			}
-			m.session.Append(userMsg)
+		// The worker already appended any captured authorization instruction
+		// to the session; only invalidate its render here. Appending again
+		// would duplicate the user message in history and provider context.
+		if event.AppendedUserMsgIdx >= 0 {
+			m.session.invalidateRenderFrom(event.AppendedUserMsgIdx)
+		}
+		// Tool batch done = safe steering boundary (design §3 rule 1): the
+		// worker finished all mutations, so drain pending NEXT-STEP entries
+		// now — each exactly once — before issuing ONE continuation.
+		// After-turn entries stay pending.
+		if n := (&m).drainBoundary(inputqueue.BoundaryStep); n > 0 {
+			(&m).setNotification(ui.NotificationInfo, fmt.Sprintf("injected %d queued next-step message(s)", n))
 		}
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
 		m.refreshViewportFollowing()
-		return m.startStream()
+		return (&m).startStream()
 
 	case chat.ToolEventCancelled:
 		// Mirror the stream-cancel path: the worker marked the stream
@@ -304,6 +338,8 @@ func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
 		// "aborted" message from the shared CancelMessage and go to chat.
 		m.session.invalidateRenderAll()
 		chat.AppendStreamCancelledMessage(m.session.Session)
+		// Cancel: flush queued entries to draft for user review.
+		(&m).flushQueuesToDraft()
 		(&m).setNotification(ui.NotificationInfo, event.CancelMessage)
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
@@ -316,6 +352,8 @@ func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
 		if event.Error != nil {
 			msg = event.Error.Error()
 		}
+		// Error: flush queued entries to draft for user review.
+		(&m).flushQueuesToDraft()
 		(&m).setNotification(ui.NotificationError, msg)
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
@@ -327,6 +365,13 @@ func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
 // startStream builds API messages from current session state and starts a new stream.
 func (m *Model) startStream() (tea.Model, tea.Cmd) {
 	m.setStreamMode()
+	m.turnActive = true
+
+	// Test seam: boundary tests stub the provider call so they never touch
+	// the network or spawn real streams. Nil in production.
+	if startStreamStub != nil {
+		return m, startStreamStub(m)
+	}
 
 	ch := chat.StartStream(context.Background(), m.session.Session, m.endpoints)
 	m.session.UIStream.Ch = ch

@@ -67,6 +67,10 @@ func (m Model) openSaveSessionPrompt() (Model, tea.Cmd) {
 
 // clearSession resets all messages and session state to start fresh.
 func (m Model) clearSession() (Model, tea.Cmd) {
+	// v1: never move queued instructions to another session (design §3 rule 6).
+	if (m).guardIdentityChange("clear") {
+		return m, nil
+	}
 	sessionConfig, err := runtimeconfig.Resolve(runtimeconfig.Inputs{
 		Settings: m.settings,
 		Paths:    m.paths,
@@ -92,6 +96,10 @@ func (m Model) clearSession() (Model, tea.Cmd) {
 // On: keep current session alive, stop saving/history/debug.
 // Off: reload session from disk if it was saved (discarding incognito changes).
 func (m Model) toggleIncognito() (Model, tea.Cmd) {
+	// v1: identity-changing action — blocked while queued input is pending.
+	if (m).guardIdentityChange("incognito toggle") {
+		return m, nil
+	}
 	m.incognito = !m.incognito
 	if m.incognito {
 		m.settings.LastSessionName = ""
@@ -161,6 +169,10 @@ func (m Model) openSessionPicker() (Model, tea.Cmd) {
 			m := ctx.(*Model)
 			selected := item.Value
 			if selected == "" {
+				return m.setChatMode()
+			}
+			// v1: never move queued instructions to another session (design §3 rule 6).
+			if (m).guardIdentityChange("session switch") {
 				return m.setChatMode()
 			}
 			m.settings.LastSessionName = selected

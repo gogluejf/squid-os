@@ -10,6 +10,7 @@ import (
 
 	"squid-os/internal/app"
 	"squid-os/internal/config"
+	"squid-os/internal/localinput"
 	"squid-os/internal/media"
 	runtimeconfig "squid-os/internal/runtime"
 )
@@ -18,6 +19,7 @@ type TUIOptions struct {
 	Prompt, SessionName, Model, WorkingDir, AgentName, AgentSystem, ActiveSkill, AutosaveName, AuthMode string
 	MemoryNamespace, MemoryInstructions                                                                 string
 	Thinking, Autosave                                                                                  *bool
+	InputInstance                                                                                       string
 	ToolNames, SkillNames, CallableAgentNames                                                           []string
 	Limits                                                                                              LimitOptions
 	thinking, save                                                                                      bool
@@ -57,6 +59,7 @@ func (tuiCmd) Flags(f *pflag.FlagSet) *TUIOptions {
 	f.StringSliceVar(&o.CallableAgentNames, "agents", nil, "callable agent names")
 	f.StringVar(&o.MemoryNamespace, "memory-namespace", "", "memory namespace")
 	f.StringVar(&o.MemoryInstructions, "memory-instructions", "", "memory instructions")
+	f.StringVar(&o.InputInstance, "input-instance", "", "local input gateway instance ID (socket identity)")
 	f.BoolVar(&o.save, "save", false, "autosave TUI session")
 	f.StringVar(&o.AutosaveName, "save-name", "", "autosaved session name")
 	f.IntVar(&o.Limits.MaxSteps, "max-steps", 0, "maximum loop steps")
@@ -116,8 +119,8 @@ func launchTUI(opts *TUIOptions) error {
 
 	// Clean up stale temporary workspaces from crashed or abandoned sessions.
 	_ = media.CleanupStale(media.CleanupPolicy{
-		Root:      cfg.paths.TempFolder,
-		OlderThan: 24 * time.Hour,
+		Root:       cfg.paths.TempFolder,
+		OlderThan:  24 * time.Hour,
 		MaxEntries: 100,
 	})
 
@@ -189,9 +192,28 @@ func launchTUI(opts *TUIOptions) error {
 	if err != nil {
 		return fmt.Errorf("start TUI: %w", err)
 	}
+
+	// Local input gateway (design §5): private socket bridging external
+	// submissions into the shared coordinator. Published only after binding.
+	var inputServer *localinput.Server
 	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	if opts.InputInstance != "" {
+		// The socket Admit callback runs on a server goroutine; it hands idle
+		// deliveries to the UI loop via program.Send (thread-safe). Binding
+		// fails before Run, so no running program needs releasing.
+		inputServer, err = model.StartLocalInputServer(opts.InputInstance, program.Send)
+		if err != nil {
+			return fmt.Errorf("input gateway: %w", err)
+		}
+	}
 	if _, err := program.Run(); err != nil {
+		if inputServer != nil {
+			inputServer.Close()
+		}
 		return fmt.Errorf("TUI error: %w", err)
+	}
+	if inputServer != nil {
+		inputServer.Close()
 	}
 	return nil
 }

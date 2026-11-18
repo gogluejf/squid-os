@@ -152,10 +152,14 @@ func renderUserMessage(msg config.Message, width int, attachments []media.Attach
 
 	leftStr := s.Dim.Render(msg.CreatedAt.Format("15:04:05"))
 	var right []string
+	if src := sourceChip(msg); src != "" {
+		right = append(right, sourceChipStyle(msg.Params["source"]).Render(src))
+	}
 	if msg.InputTokens > 0 {
 		right = append(right, s.Dim.Render(tokenChipInput(msg.InputTokens, nil)))
 	}
-	rightStr := strings.Join(right, s.Dim.Render("  "))
+	// Every segment, including the gap after the icon, carries BgUser.
+	rightStr := strings.Join(right, s.Dim.Render(" "))
 	gap := inner - lipgloss.Width(leftStr) - lipgloss.Width(rightStr)
 	if gap < 1 {
 		gap = 1
@@ -727,4 +731,35 @@ func renderStreamingToolCalls(msgID string, pendingTools []StreamingToolCall, bo
 		b.WriteString(drawToolBox(parts, content, t.Style, boxWidth))
 	}
 	return b.String()
+}
+
+// sourceChip renders the provenance meta (how a user message arrived) as a
+// small header chip: mouth / writing hand / prompt. Empty when the
+// message carries no source param (pre-provenance history stays clean).
+// sourceChipStyle returns a lipgloss style for the provenance chip based on
+// source. CLI gets the inline-code orange (209); emoji sources use the default
+// param style (they carry their own color).
+func sourceChipStyle(src string) lipgloss.Style {
+	s := style.UserStyleLabel()
+	if src == "cli" {
+		return s.Param.Foreground(lipgloss.Color("209"))
+	}
+	return s.Param
+}
+
+func sourceChip(msg config.Message) string {
+	src := msg.Params["source"]
+	switch src {
+	case "squid-sponge", "hex-sponge", "voice":
+		return "👄"
+	case "keyboard":
+		return "✍️"
+	case "cli":
+		return ">_"
+	default:
+		if src == "" {
+			return ""
+		}
+		return src
+	}
 }

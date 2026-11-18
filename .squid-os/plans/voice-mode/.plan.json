@@ -1,0 +1,343 @@
+{
+  "plan_name": "voice-mode",
+  "title": "Voice mode \u2014 the assistant speaks",
+  "why": "Give Squid-OS a spoken channel: responses, errors, and system events are read aloud via the local squid-tts server, toggleable live, interruptible at any time.",
+  "outcomes": "/voice + alt+v toggle; per-language voice settings; sentence-chunk streaming with ~2s time-to-first-audio; universal alt+x shut-up scoped to speech groups; sponge key-down cancellation via 'squid-os voice stop'; bilingual alert lead-ins driven by last-user-language detection.",
+  "milestones": [
+    {
+      "number": "1",
+      "name": "Core voice pipeline",
+      "pattern": [
+        "Single-owner voice coordinator with group bumping; chunking strategy behind an interface"
+      ],
+      "objective": "Assistant responses are spoken in sentence chunks while streaming, with per-language voice selection, group-scoped cancellation, and clean process teardown.",
+      "success": "With voice on, first audio arrives ~2s into a response; alt+x silences the whole group instantly including not-yet-emitted chunks; no orphaned aplay processes; kill switch verified under race.",
+      "diagram": "flowchart LR\nStream[Assistant stream] --> Chunker\nChunker --> Coord[Coordinator]\nCoord --> Detect[/detect]\nDetect --> Lookup[Voice lookup]\nLookup --> CLI[squid-tts-say]\nCLI --> Aplay[aplay]\nAltX[alt+x] -->|CancelGroup| Coord",
+      "tasks": [
+        {
+          "number": "1.1",
+          "name": "Add voice settings",
+          "type": "feature",
+          "what": "Add nested voice config (enabled, voices.en, voices.fr) with defaults enabled=false, en=jane, fr=jane; normalize missing/partial sections at load time in internal/config/settings.go.",
+          "why": "Everything else reads from this structure; defaults must exist before the wrapper.",
+          "files": [
+            "~ internal/config/settings.go"
+          ],
+          "snippet": [
+            "type Voice struct {\n    Enabled bool\n    Voices  map[string]string // lang -> voice name\n}"
+          ],
+          "acceptance": [
+            "Missing voice section loads as disabled with jane/jane",
+            "Partial sections (only voices.en set) fill fr from default",
+            "Invalid voice names pass through (server validates at request time)"
+          ],
+          "verify": [
+            "go test ./internal/config"
+          ]
+        },
+        {
+          "number": "1.2",
+          "name": "Build voice wrapper and coordinator",
+          "type": "feature",
+          "what": "New internal/voice package: Speak(text, cfg) spawns squid-tts-say in its own process group (detect \u2192 voice lookup \u2192 pipe stdin); Coordinator owns group state (StartGroup/Emit/EndGroup/CancelGroup) with muted-drop, back-to-back within group, and bump-across-groups via an onPreempt policy hook.",
+          "why": "Single owner of detect \u2192 lookup \u2192 spawn \u2192 teardown AND group arbitration; every caller goes through it; the onPreempt hook keeps the door open to stacking later.",
+          "files": [
+            "+ internal/voice/voice.go",
+            "+ internal/voice/coordinator.go",
+            "+ internal/voice/voice_test.go"
+          ],
+          "snippet": [
+            "type Coordinator struct {\n    current  int            // playing group ID\n    muted    map[int]bool   // cancelled groups\n    gen      int            // generation counter for stale-callback guards\n    onPreempt func(oldGroup int) // default: CancelGroup; future: enqueue\n}",
+            "// Spawn: exec.Command(\"squid-tts-say\", \"-v\", name, \"-q\", \"--stdin\")\n// SysProcAttr{Setpgid: true}; kill(-pgid, SIGKILL) on cancel or replacement"
+          ],
+          "acceptance": [
+            "Resolves voice per detected language; unknown language falls back without failing",
+            "Same-group chunks play back-to-back without bumping each other (ordering test)",
+            "Cross-group Emit bumps the playing group (default policy) and starts immediately",
+            "Cancellation mid-playback kills the whole process group; no orphaned aplay \u2014 deterministic subprocess test plus go test -race",
+            "Emit for a muted groupID is dropped even if it arrives after cancellation (late-chunk test)",
+            "Server down returns error, never panics, bounded timeout; CLI resolved from PATH"
+          ],
+          "verify": [
+            "go test ./internal/voice",
+            "go test -race ./internal/voice"
+          ]
+        },
+        {
+          "number": "1.3",
+          "name": "Implement the Chunker",
+          "type": "feature",
+          "what": "Define Chunker { Feed; Flush; ArmHoldTimer } in internal/voice with a sentence-boundary strategy: split on . ! ? \\n, hold fragments under ~3 words and merge, max hold 1.5s via owned timer, max chunk ~40 words force-flush.",
+          "why": "Measured TTS floor is 2-4s per call \u2014 single-word chunks sound robotic; merging fixes bullet lists; the interface keeps the algorithm swappable without touching wrapper or cancellation code.",
+          "files": [
+            "+ internal/voice/chunker.go",
+            "+ internal/voice/chunker_test.go"
+          ],
+          "snippet": [
+            "type Chunker interface {\n    Feed(text string) []string // emit complete chunks\n    Flush() string             // drain remainder at stream end\n    ArmHoldTimer(cb func())    // fire held fragment when input stalls (1.5s)\n}"
+          ],
+          "acceptance": [
+            "Prose emits per sentence; one-word bullets merge into groups",
+            "40-word run-on without periods force-flushes",
+            "Held fragment emits via timer when input stalls (injected ticker test)",
+            "Flush drains buffer exactly once; Feed after Flush starts fresh; timer cancelled after Flush",
+            "Strategy params (min words, max hold, max size, boundaries) are constructor args"
+          ],
+          "verify": [
+            "go test ./internal/voice"
+          ]
+        },
+        {
+          "number": "1.4",
+          "name": "Wire narration into the assistant stream",
+          "type": "feature",
+          "what": "Allocate a group ID at assistant message start; feed rendered text deltas into the Chunker and Emit chunks to the coordinator; EndGroup at stream end; group lifecycle tied to the message, surviving UIStreamState.reset() around tools.",
+          "why": "This is the core UX \u2014 first audio ~2s, not after full generation; already-emitted chunks keep playing during tool calls (no pause concept exists).",
+          "files": [
+            "~ internal/app/stream.go",
+            "~ internal/app/app.go"
+          ],
+          "snippet": [
+            "// at message start:  gid := coord.StartGroup()\n// per delta:         for _, chunk := range chunker.Feed(delta) { coord.Emit(gid, chunk) }\n// at stream end:     coord.Emit(gid, chunker.Flush()); coord.EndGroup(gid)"
+          ],
+          "acceptance": [
+            "First chunk speaks while later sentences are still generating",
+            "Stream end sends EndGroup; a muted group stops receiving feeds (producer checks coordinator before emitting)",
+            "Group survives UIStreamState.reset() between tool phases; no duplicate or lost chunks across the reset",
+            "Voice mute never cancels the model stream or tool execution (independent contexts verified)",
+            "Session switch / shutdown tears down active groups (kill + indicator cleared)"
+          ],
+          "verify": [
+            "go test ./internal/app"
+          ]
+        },
+        {
+          "number": "1.5",
+          "name": "Toggle: /voice command, alt+v, help entry",
+          "type": "feature",
+          "what": "Register /voice on|off in internal/app/command.go (add argument handling to the name-only callbacks); bind alt+v mirroring thinking; add both keys to the hard-coded help list in internal/ui/help.go; print feedback line on toggle.",
+          "why": "Live control without restarting; parity with thinking UX; WithHelp alone will not show the entry because help.go is hard-coded.",
+          "files": [
+            "~ internal/app/command.go",
+            "~ internal/app/keymap.go",
+            "~ internal/ui/help.go",
+            "~ internal/app/update.go"
+          ],
+          "snippet": [
+            "Thinking: key.NewBinding(key.WithKeys(\"alt+t\"), key.WithHelp(\"alt+t\", \"toggle thinking\")),\nVoice:    key.NewBinding(key.WithKeys(\"alt+v\"), key.WithHelp(\"alt+v\", \"toggle voice\"))"
+          ],
+          "acceptance": [
+            "alt+v and /voice both flip the same runtime state; settings value is the startup source of truth; runtime toggle does not write the settings file",
+            "Help overlay lists alt+v",
+            "Toggling off mid-speech kills current playback immediately (CancelGroup + disable)"
+          ],
+          "verify": [
+            "go test ./internal/app"
+          ]
+        },
+        {
+          "number": "1.6",
+          "name": "Speaking indicator",
+          "type": "feature",
+          "what": "Show a speaker glyph / 'speaking\u2026' in the existing status row (internal/ui/notification.go:98, called from render.go:78) while any audio plays; cleared on completion or cancellation.",
+          "why": "Shut-up needs a visible target; users must see that voice is active and that alt+x did something.",
+          "files": [
+            "~ internal/ui/notification.go",
+            "~ internal/app/render.go",
+            "~ internal/app/app.go"
+          ],
+          "snippet": [],
+          "acceptance": [
+            "Indicator appears on first chunk start, disappears on player exit or kill",
+            "Never stuck on after cancellation (kill path clears it)",
+            "Stale callbacks from superseded groups cannot clear a NEWER group's indicator (generation-ID guard)"
+          ],
+          "verify": [
+            "manual TUI run"
+          ]
+        }
+      ]
+    },
+    {
+      "number": "2",
+      "name": "Cancellation and external control",
+      "pattern": [
+        "Group-scoped cancellation; external commands route into the same coordinator"
+      ],
+      "objective": "alt+x, new messages, and sponge key-down all trigger the identical CancelGroup path; 'squid-os voice stop' works from outside the TUI.",
+      "success": "Every cancel source silences the whole group within one frame and leaves no orphans; socket command round-trips like input ops.",
+      "diagram": "flowchart LR\nAltX[alt+x] --> Coord[Coordinator]\nNewMsg[Submitted message] --> Coord\nSponge[Sponge key-down] --> CLI2[squid-os voice stop]\nCLI2 --> Socket[Unix socket]\nSocket --> Coord\nCoord --> KillPG[kill -pgid SIGKILL]\nAltX -. CancelGroup .-> Coord\nNewMsg -. CancelGroup .-> Coord\nSocket -. CancelGroup .-> Coord",
+      "tasks": [
+        {
+          "number": "2.1",
+          "name": "alt+x universal shut-up",
+          "type": "feature",
+          "what": "Bind alt+x (verified free); handler calls coordinator.CancelGroup(activeGroup) \u2014 kills running chunk, drops buffered chunks, mutes all future chunks of that group. Handler must run BEFORE mode dispatch (internal/app/input.go:15) so authorization and help overlays cannot swallow the key.",
+          "why": "Per-group mute with zero exception rules; applies to narration AND alerts identically; one press silences a multi-chunk error completely. Not sticky: next group speaks normally.",
+          "files": [
+            "~ internal/app/keymap.go",
+            "~ internal/app/input.go",
+            "~ internal/app/update.go"
+          ],
+          "snippet": [
+            "ShutUp: key.NewBinding(key.WithKeys(\"alt+x\"), key.WithHelp(\"alt+x\", \"shut up voice\"))"
+          ],
+          "acceptance": [
+            "alt+x during narration mutes rest of current message only \u2014 including phrases not yet emitted",
+            "alt+x during an error lead-in silences the upcoming detail chunk too (one press, whole group dead)",
+            "alt+x works while the authorization overlay or help overlay is open",
+            "Next assistant message/alert speaks normally without re-enabling anything"
+          ],
+          "verify": [
+            "go test ./internal/app"
+          ]
+        },
+        {
+          "number": "2.2",
+          "name": "New submitted message cancels speech",
+          "type": "feature",
+          "what": "Submitting a user message cancels the active group before processing begins, hooked at ALL THREE admission paths: idle keyboard (stream.go:86), queued keyboard (queued_input.go:39), and socket admission (local_input.go:42) \u2014 at admission, not eventual delivery.",
+          "why": "User talking/typing a new instruction = barge-in; busy socket submissions currently push no UI event (local_input.go:59-62), so hooking only delivery misses immediate cancellation.",
+          "files": [
+            "~ internal/app/stream.go",
+            "~ internal/app/queued_input.go",
+            "~ internal/app/local_input.go"
+          ],
+          "snippet": [],
+          "acceptance": [
+            "Sending a message while Jane speaks silences her whole group before the new turn starts, from all three paths",
+            "Plain typing WITHOUT submitting does NOT cancel (listen-while-drafting preserved)"
+          ],
+          "verify": [
+            "go test ./internal/app"
+          ]
+        },
+        {
+          "number": "2.3",
+          "name": "squid-os voice stop CLI command",
+          "type": "feature",
+          "what": "New internal/cli/voice.go following the input.go pattern: 'squid-os voice stop' sends a socket op to the live TUI triggering the same CancelGroup as alt+x; register in cli.go, add op to server dispatch (internal/localinput/server.go:188) and app-side handler (internal/app/local_input.go). Scaffold for future on/off subcommands.",
+          "why": "Sponge needs key-down cancellation before any transcript exists; same Unix socket protocol as input, zero new infrastructure. Use existing --instance/--session flags (input.go:46-47).",
+          "files": [
+            "+ internal/cli/voice.go",
+            "+ internal/cli/voice_test.go",
+            "~ internal/localinput/server.go",
+            "~ internal/app/local_input.go",
+            "~ internal/cli/cli.go"
+          ],
+          "snippet": [
+            "// voice stop = localinput.Request{Op: \"voice_stop\"}\n// reply: {status: \"cancelled\" | \"nothing_playing\"}, exit 0 either way"
+          ],
+          "acceptance": [
+            "'squid-os voice stop' against a live instance silences the current group; reply acknowledges actual cancellation or explicit nothing-playing no-op, exit 0",
+            "No live instance gives clean error, non-zero exit, same style as input commands",
+            "--instance/--session flags behave like input's"
+          ],
+          "verify": [
+            "go test ./internal/cli ./internal/localinput"
+          ]
+        },
+        {
+          "number": "2.4",
+          "name": "Sponge key-down integration",
+          "type": "feature",
+          "what": "In the sponge client, on shortcut key-DOWN (before transcription), invoke 'squid-os voice stop'. LOCATE the sponge source first (check ~/src/squid-stack/squid-companion and the sponge repo) and record the real path here before implementing.",
+          "why": "Voice must die the instant the user starts talking into the mic \u2014 not when the transcript arrives seconds later; speaking over the assistant would be unusable.",
+          "files": [
+            "~ sponge client source - LOCATE FIRST"
+          ],
+          "snippet": [],
+          "acceptance": [
+            "Pressing the sponge shortcut while voice plays silences it within ~100ms, before any audio from the user is captured",
+            "Works even when no voice is playing (no-op, no error spam)"
+          ],
+          "verify": [
+            "manual test with mic"
+          ]
+        }
+      ]
+    },
+    {
+      "number": "3",
+      "name": "Bilingual alerts",
+      "pattern": [
+        "Event hooks push preformatted alert groups through the same coordinator"
+      ],
+      "objective": "Errors, authorization prompts, context bust, skill loads, sub-agent calls, and thinking-start are announced in the user's language with English detail where relevant.",
+      "success": "Each event speaks its lead-in in lastUserLang as its own group; all alerts share universal cancellation; alert map lives in one table of ~12 strings.",
+      "diagram": "flowchart LR\nEvents[App events] --> Format[Alert formatter]\nLastLang[lastUserLang] --> Format\nFormat -->|StartGroup| Coord[Coordinator]",
+      "tasks": [
+        {
+          "number": "3.1",
+          "name": "Track lastUserLang asynchronously",
+          "type": "feature",
+          "what": "On every user message submission, fire /detect asynchronously (goroutine, ~500ms deadline) with a submission ID; store the result in session state only if that ID is still the newest. Fallback: previous value, then en.",
+          "why": "Drives alert lead-in language (~75ms locally, cheap enough to run always) without serializing any of the three submission paths; older results must never overwrite newer language state.",
+          "files": [
+            "+ internal/voice/detect.go",
+            "~ internal/app/stream.go",
+            "~ internal/app/queued_input.go",
+            "~ internal/app/local_input.go"
+          ],
+          "snippet": [
+            "func DetectLang(text string, subID int64, store *LangStore) {\n    // POST /detect with 500ms deadline\n    // store.SetIfNewest(subID, lang) // stale results dropped\n}"
+          ],
+          "acceptance": [
+            "French user message sets lastUserLang=fr for subsequent alerts",
+            "Rapid-fire two messages (FR then EN): only the EN result lands, even if FR resolves second (ordering test)",
+            "Detect failure/timeout leaves previous value intact; turn latency unaffected"
+          ],
+          "verify": [
+            "go test ./internal/voice ./internal/app"
+          ]
+        },
+        {
+          "number": "3.2",
+          "name": "Alert map and formatting",
+          "type": "feature",
+          "what": "Single table of bilingual alert templates in internal/voice/alerts.go: error, authorization, context-bust, skill-loaded with name, sub-agent-called, thinking-started; formatter picks language from lastUserLang and interpolates details.",
+          "why": "~12 strings total \u2014 maintainable; the user hears their own language immediately while technical detail stays English (auto-detected by the server).",
+          "files": [
+            "+ internal/voice/alerts.go",
+            "+ internal/voice/alerts_test.go"
+          ],
+          "snippet": [
+            "var alerts = map[Event]map[string]string{\n    Error:        {en: \"An error occurred.\", fr: \"Une erreur est survenue.\"},\n    Authorization:{en: \"A command requires your authorization.\", fr: \"Une commande requiert votre autorisation.\"},\n    ContextBust:  {en: \"Warning, no context left.\", fr: \"Attention, plus de contexte disponible.\"},\n    SkillLoaded:  {en: \"I loaded the skill {name}.\", fr: \"Jai charge la competence {name}.\"},\n    SubAgent:     {en: \"I sent a sub-agent working on it.\", fr: \"Jai lance un sous-agent qui va effectuer le travail.\"},\n    ThinkingStart:{en: \"Let me think about it now.\", fr: \"Laisse-moi y penser.\"},\n}"
+          ],
+          "acceptance": [
+            "Each event renders the exact EN/FR strings from the table",
+            "Error alerts append raw English detail after the lead-in (same group)",
+            "Unknown language falls back to EN templates"
+          ],
+          "verify": [
+            "go test ./internal/voice"
+          ]
+        },
+        {
+          "number": "3.3",
+          "name": "Hook events into the voice coordinator",
+          "type": "feature",
+          "what": "Wire all six alert call sites, each starting its own group: ToolEventNeedAuth (stream.go:293), LoadedSkill (stream.go:284/310), a NEW pre-execution agent event in tool_worker.go (ToolEventRunning fires too late, after ExecuteTools returns), error paths with distinct context-bust classification, and thinking-start (once per thinking session when thinking mode is active).",
+          "why": "These are the 'get my eyes here' moments \u2014 the highest-value voice use; alerts land between messages in practice, so bumping narration is the rare overlap case.",
+          "files": [
+            "~ internal/app/stream.go",
+            "~ internal/chat/tool_worker.go"
+          ],
+          "snippet": [
+            "// guard: coordinator suppresses new alerts while an alert is playing\n// (prevents TTS-failure -> spoken-error recursion)"
+          ],
+          "acceptance": [
+            "With voice on each of the six events speaks its alert as its own group; with voice off silence and no behavior change",
+            "Thinking-start speaks exactly once per thinking session, only when thinking mode is active",
+            "Alert landing while the tail of an answer is still playing bumps the tail (intended behavior) and speaks",
+            "alt+x during an alert behaves identically to alt+x during narration (whole group dies including pending detail chunk)",
+            "TTS failure during an alert produces no further speech (recursion guard tested)"
+          ],
+          "verify": [
+            "go test ./internal/app"
+          ]
+        }
+      ]
+    }
+  ]
+}

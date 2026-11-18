@@ -46,7 +46,8 @@ func TestSetWorkingDirToolSwapsSessionCatalog(t *testing.T) {
 		t.Fatalf("effective list not applied: %+v", session.Doc.Config.Skills)
 	}
 	toolResult := session.Doc.Messages[result.MsgIdx].ToolCalls[result.ToolIndex].Execution.Result
-	if !strings.Contains(toolResult, "### Available Skills") || !strings.Contains(toolResult, "build-b: [workspace] project build") || !strings.Contains(toolResult, "### Missing Skills") {
+	// "### Missing Skills" is omitted when nothing is missing (commit 2383cd4).
+	if !strings.Contains(toolResult, "### Available Skills") || !strings.Contains(toolResult, "build-b: [workspace] project build") {
 		t.Fatalf("workspace tool result missing capability state: %q", toolResult)
 	}
 }

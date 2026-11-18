@@ -74,7 +74,9 @@ func Execute(ctx context.Context, request Request) (Result, error) {
 		return Result{}, err
 	}
 
-	session.Append(chat.NewUserMessage(fmt.Sprintf("msg_%d", len(session.Doc.Messages)+1), sessionRequest.Prompt))
+	userMsg := chat.NewUserMessage(fmt.Sprintf("msg_%d", len(session.Doc.Messages)+1), sessionRequest.Prompt)
+	userMsg.Params = map[string]string{"source": "cli"}
+	session.Append(userMsg)
 	if err := chat.PrepareTurn(session); err != nil {
 		return Result{}, err
 	}

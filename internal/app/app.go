@@ -69,6 +69,16 @@ type Model struct {
 	// Misc
 	notification ui.Notification
 	incognito    bool
+
+	// Queued input (design: queued-input). Single admission entry point for
+	// keyboard and (later) socket transports; owns durable receipts.
+	submissions *SubmissionCoordinator
+
+	// turnActive is true from startStream until the turn fully ends (setChatMode).
+	// Covers the gap between "tool batch done" and "first token of next step"
+	// where no stream/tool channel is active yet but a turn is still in flight.
+	// Submissions arriving in that window must queue, not deliver immediately.
+	turnActive bool
 }
 
 // StartupOptions contains resolved values for an interactive session bootstrap.
@@ -128,7 +138,7 @@ func New(options StartupOptions) (Model, error) {
 		}
 	}
 
-	return Model{
+	m := Model{
 		textarea:      ta,
 		viewport:      vp,
 		mode:          ModeChat,
@@ -142,7 +152,32 @@ func New(options StartupOptions) (Model, error) {
 		historySearch: ui.NewHistorySearchOverlay(nil),
 		incognito:     false,
 		notification:  notification,
-	}, nil
+		submissions:   newModelSubmissionCoordinator(paths, sess, &incognitoFlag{m: nil}),
+	}
+	m.submissions.flag.m = &m
+	return m, nil
+}
+
+// incognitoFlag adapts the model's live incognito flag to the coordinator's
+// lazy probe (the coordinator is built before the Model value exists).
+type incognitoFlag struct {
+	m *Model
+}
+
+func (f *incognitoFlag) get() bool { return f.m != nil && f.m.incognito }
+
+// newModelSubmissionCoordinator creates queue storage; admission receives the
+// current session from the UI loop rather than retaining a Model pointer.
+func newModelSubmissionCoordinator(paths config.Paths, sess *UISession, flag *incognitoFlag) *SubmissionCoordinator {
+	c := NewSubmissionCoordinator(paths.Root, flag.get)
+	c.flag = flag
+	if sess != nil && sess.Session != nil {
+		id := sess.Doc.Identity.ID
+		if id != "" {
+			_ = c.LoadSession(id)
+		}
+	}
+	return c
 }
 
 func (m *Model) setNotification(level ui.NotificationLevel, msg string) {
@@ -157,6 +192,7 @@ func (m *Model) quitCmd() tea.Msg {
 	if m.session != nil {
 		_ = m.session.CleanupWorkspace()
 	}
+	m.closeSubmissions()
 	return tea.Quit()
 }
 
@@ -166,6 +202,13 @@ func (m *Model) setComponent(c component.Component) {
 	m.mode = ModeComponent
 	m.textarea.Blur()
 	m.recalcLayout()
+}
+
+// closeSubmissions stops the queue persistence worker at shutdown.
+func (m *Model) closeSubmissions() {
+	if m.submissions != nil {
+		m.submissions.Close()
+	}
 }
 
 // Init starts the cursor blink command, the UI tick, and refreshes the context window.

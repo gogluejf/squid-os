@@ -21,15 +21,20 @@ const (
 // all session mutation; consumers only read these immutable snapshots and
 // never call ExecuteTools concurrently with the worker.
 type ToolEvent struct {
-	Type             ToolEventType
-	Error            error
-	CancelMessage    string
-	MsgIdx           int
-	ToolIndex        int
-	NextIndex        int
-	AuthRequest      *AuthRequest
-	CapturedUserText string
-	LoadedSkill      string
+	Type          ToolEventType
+	Error         error
+	CancelMessage string
+	MsgIdx        int
+	ToolIndex     int
+	NextIndex     int
+	AuthRequest   *AuthRequest
+	// AppendedUserMsgID / AppendedUserMsgIdx identify the user message the
+	// worker already appended to the session (authorization instructions).
+	// Consumers must NOT append it again; use the index for render
+	// invalidation. Empty ID / -1 means no instruction was captured.
+	AppendedUserMsgID  string
+	AppendedUserMsgIdx int
+	LoadedSkill        string
 }
 
 // StartToolExec runs the ExecuteTools loop in a background goroutine so slow
@@ -81,11 +86,15 @@ func StartToolExec(ctx context.Context, s *Session, opts ToolExecOptions) <-chan
 					out <- ToolEvent{Type: ToolEventCancelled, CancelMessage: "tool execution aborted", MsgIdx: res.MsgIdx}
 					return
 				}
+				var appendedID string
+				appendedIdx := -1
 				if res.CapturedUserText != "" {
-					s.Append(NewUserMessage(nextMessageID(s), res.CapturedUserText))
+					appendedID = nextMessageID(s)
+					s.Append(NewUserMessage(appendedID, res.CapturedUserText))
+					appendedIdx = len(s.Doc.Messages) - 1
 				}
 				s.Stream.Reset()
-				out <- ToolEvent{Type: ToolEventDone, MsgIdx: res.MsgIdx, ToolIndex: res.ToolIndex, NextIndex: res.NextIndex, CapturedUserText: res.CapturedUserText, LoadedSkill: res.LoadedSkill}
+				out <- ToolEvent{Type: ToolEventDone, MsgIdx: res.MsgIdx, ToolIndex: res.ToolIndex, NextIndex: res.NextIndex, AppendedUserMsgID: appendedID, AppendedUserMsgIdx: appendedIdx, LoadedSkill: res.LoadedSkill}
 				return
 			default:
 				out <- ToolEvent{Type: ToolEventError, Error: fmt.Errorf("unexpected tool action %d", res.Action)}

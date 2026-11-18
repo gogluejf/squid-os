@@ -6,6 +6,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"squid-os/internal/chat"
+	"squid-os/internal/inputqueue"
+	"squid-os/internal/localinput"
 )
 
 // handleMouseClick toggles expand/collapse of the block under the cursor.
@@ -65,6 +67,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pendingToolResumeMsg:
 		m.session.UIStream.MsgIdx = msg.msgIdx
 		return (&m).resumeToolExecution()
+
+	case localSessionQuery:
+		msg.reply <- m.liveSessionID()
+		return m, nil
+	case localAdmissionMsg:
+		res := m.submissions.AdmitSubmission(msg.req, m.liveSessionID())
+		info := localinput.ReceiptInfo{OK: res.OK, Code: res.Code, Message: res.Msg}
+		if res.OK {
+			counts := m.submissions.Counts(msg.req.SessionID)
+			info.Durability = string(res.Receipt.Durability)
+			info.Sequence = res.Receipt.Sequence
+			info.Duplicate = res.Receipt.Duplicate
+			info.Counts = localinput.Counts{Step: counts.Step, Turn: counts.Turn}
+		}
+		msg.reply <- info
+		if res.OK && !res.Receipt.Duplicate && msg.req.Boundary == inputqueue.BoundaryStep && !m.isBusy() {
+			return m.sendLocalSocketMessage(localSocketMsg{requestID: msg.req.RequestID, sessionID: msg.req.SessionID, text: msg.req.Text, source: msg.req.Source})
+		}
+		return m, nil
+	case localSocketMsg:
+		// Socket submission that arrived while idle: send it NOW as a normal
+		// user message (the admission already parked it pending; mark it
+		// injected after the real send so the queue never double-fires it).
+		return (&m).sendLocalSocketMessage(msg)
 
 	case modelsLoadedMsg:
 		m = m.onModelsLoaded(msg)

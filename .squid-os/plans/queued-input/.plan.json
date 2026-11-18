@@ -337,5 +337,14 @@
         }
       ]
     }
-  ]
+  ],
+  "reviewers": {
+    "a": {
+      "model": "ninfer/qwen3.8-27b",
+      "max_steps": 75,
+      "max_time": "15m"
+    },
+    "b": null,
+    "note": "Reviewer B (codex/openai) disabled by user for this plan \u2014 single-reviewer workflow; record 'B: skipped by user' in reviews.md."
+  }
 }

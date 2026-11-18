@@ -2,10 +2,12 @@ package app
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"squid-os/internal/inputqueue"
 	"squid-os/internal/ui"
 )
 
@@ -115,9 +117,16 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case key.Matches(msg, keys.Cancel):
+		// Idle Ctrl+C follows the same precedence as busy: clear-draft first,
+		// then flush pending queued input. A parked "1 next step" entry must
+		// be undoable without restarting the app (design §3 rule 5 escape hatch).
 		if m.textarea.Value() != "" {
 			m.textarea.SetValue("")
 			m.autoSizeTextarea()
+			return m, nil
+		}
+		if n := (&m).flushQueues(); n > 0 {
+			return m, nil
 		}
 		return m, nil
 
@@ -154,6 +163,17 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePaste()
 
 	case key.Matches(msg, keys.Send):
+		if m.isBusy() {
+			// Busy: Enter queues the draft as a next-step steer. The draft is
+			// cleared only after successful admission; rejection keeps it.
+			text := strings.TrimSpace(m.textarea.Value())
+			if text == "" {
+				return m, nil
+			}
+			(&m).admitQueuedInput(text, inputqueue.BoundaryStep)
+			m.refreshViewportFollowing()
+			return m, nil
+		}
 		if completion, ok := m.activeCapabilityCompletion(); ok {
 			_, selected := m.selectedCapabilityCandidate(completion)
 			if selected || len(completion.candidates) == 1 {
@@ -173,6 +193,23 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.textarea.InsertRune('\n')
 		m.autoSizeTextarea()
 		return m, nil
+
+	case key.Matches(msg, keys.QueueAfterTurn):
+		// Alt+Q: idle → submit normally (raw draft, like Enter); busy → queue
+		// after the logical turn (trimmed, as all queued text is).
+		if m.textarea.Value() == "" {
+			return m, nil
+		}
+		if m.isBusy() {
+			text := strings.TrimSpace(m.textarea.Value())
+			if text == "" {
+				return m, nil
+			}
+			(&m).admitQueuedInput(text, inputqueue.BoundaryTurn)
+			m.refreshViewportFollowing()
+			return m, nil
+		}
+		return m.sendMessage()
 
 	case msg.Type == tea.KeyTab && !msg.Alt:
 		if completion, ok := m.activeCapabilityCompletion(); ok {
@@ -254,13 +291,26 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-// handleStreamingKey handles key input while an inference stream is active.
+// handleStreamingKey handles key input while an inference stream or tool
+// worker is active. The composer stays fully editable: ordinary typing edits
+// the draft, Enter queues a next-step steer, Alt+Q queues after-turn, and
+// Ctrl+C follows clear-draft → flush-queues → abort-turn precedence.
 func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Cancel):
-		// One cancel source: the turn context. Cancelling it stops the tool
-		// worker loop (derived) and SIGKILLs in-flight children (derived).
-		// Stream.Cancel covers pure inference with no tools running.
+		// Precedence 1: a nonempty draft is cleared, never aborted over.
+		if m.textarea.Value() != "" {
+			m.textarea.SetValue("")
+			m.autoSizeTextarea()
+			return m, nil
+		}
+		// Precedence 2: pending queued input is flushed (marked discarded).
+		if n := (&m).flushQueues(); n > 0 {
+			return m, nil
+		}
+		// Precedence 3: one cancel source — the turn context. Cancelling it
+		// stops the tool worker loop (derived) and SIGKILLs in-flight children
+		// (derived). Stream.Cancel covers pure inference with no tools running.
 		m.session.CancelTurnCtx()
 		m.session.Stream.Cancel("Stream aborted by user")
 		return m, nil
@@ -275,8 +325,50 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case m.handleViewportScroll(msg):
 		return m, nil
+
+	case msg.Alt && msg.Type == tea.KeyEnter:
+		// Alt+Enter keeps inserting a newline even while busy.
+		m.textarea.InsertRune('\n')
+		m.autoSizeTextarea()
+		return m, nil
+
+	case key.Matches(msg, keys.Send):
+		text := strings.TrimSpace(m.textarea.Value())
+		if text == "" {
+			return m, nil
+		}
+		(&m).admitQueuedInput(text, inputqueue.BoundaryStep)
+		m.refreshViewportFollowing()
+		return m, nil
+
+	case key.Matches(msg, keys.QueueAfterTurn):
+		text := strings.TrimSpace(m.textarea.Value())
+		if text == "" {
+			return m, nil
+		}
+		(&m).admitQueuedInput(text, inputqueue.BoundaryTurn)
+		m.refreshViewportFollowing()
+		return m, nil
+
+	case msg.Type == tea.KeyTab && !msg.Alt:
+		// Tab still numberizes / moves list items while busy.
+		return m.applyListify()
+
+	default:
+		// Everything else edits the draft exactly like idle chat mode.
+		var cmd tea.Cmd
+		m.textarea, cmd = m.textarea.Update(msg)
+		m.autoSizeTextarea()
+		return m, cmd
 	}
-	return m, nil
+}
+
+// isBusy reports whether an assistant response is in flight (streaming tokens,
+// executing tools, or inside a turn that has not yet fully ended), i.e. keyboard
+// and socket submissions must be queued instead of sent. turnActive covers the
+// gap between "tool batch done" and "first token of next step".
+func (m Model) isBusy() bool {
+	return m.mode == ModeStreaming || m.session.Stream.Active || m.session.UIStream.ToolCh != nil || m.turnActive
 }
 
 // startHistorySearch enters history search mode and populates the overlay with prompt history.

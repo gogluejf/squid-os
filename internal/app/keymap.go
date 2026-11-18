@@ -32,6 +32,7 @@ type keyMap struct {
 	HistorySearch key.Binding
 	AuthMode      key.Binding
 	QueueAfterTurn key.Binding
+	Voice         key.Binding
 }
 
 var keys = keyMap{
@@ -150,5 +151,9 @@ var keys = keyMap{
 	QueueAfterTurn: key.NewBinding(
 		key.WithKeys("alt+q"),
 		key.WithHelp("alt+q", "queue after turn (busy)"),
+	),
+	Voice: key.NewBinding(
+		key.WithKeys("alt+v"),
+		key.WithHelp("alt+v", "toggle voice"),
 	),
 }

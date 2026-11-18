@@ -93,6 +93,9 @@ type Settings struct {
 	// MediaModel is the provider/model used for autonomous media inspection
 	// (e.g. "openai/gpt-4o"). Empty means inspection is not available.
 	MediaModel string `json:"media_model"`
+
+	// Voice configures spoken output.
+	Voice Voice `json:"voice"`
 }
 
 // PasteConfig controls paste behavior in the composer.
@@ -103,14 +106,45 @@ type PasteConfig struct {
 	LargeTextBytes int `json:"large_text_bytes"`
 }
 
+// Voice configures spoken output via the local squid-tts server.
+type Voice struct {
+	// Enabled turns spoken responses on. Off by default.
+	Enabled bool `json:"enabled"`
+
+	// Voices maps language code to TTS voice name (e.g. "en" -> "jane").
+	// Invalid names pass through; the TTS server validates at request time.
+	Voices map[string]string `json:"voices"`
+}
+
+const (
+	defaultVoiceLangEN = "en"
+	defaultVoiceLangFR = "fr"
+	defaultVoiceName   = "jane"
+)
+
+// NormalizeVoice fills missing/partial voice sections with defaults:
+// enabled=false, voices.en=jane, voices.fr=jane. Existing values are kept.
+func (s *Settings) NormalizeVoice() {
+	if s.Voice.Voices == nil {
+		s.Voice.Voices = make(map[string]string)
+	}
+	for _, lang := range []string{defaultVoiceLangEN, defaultVoiceLangFR} {
+		if s.Voice.Voices[lang] == "" {
+			s.Voice.Voices[lang] = defaultVoiceName
+		}
+	}
+}
+
 // LoadSettings loads settings.json from the given config directory.
 func LoadSettings(cfgDir string) Settings {
 	var s Settings
 	data, err := os.ReadFile(filepath.Join(cfgDir, "settings.json"))
 	if err != nil {
+		s.NormalizeVoice()
 		return s
 	}
 	_ = json.Unmarshal(data, &s)
+	s.NormalizeVoice()
 	return s
 }
 

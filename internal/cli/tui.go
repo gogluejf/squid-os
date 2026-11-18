@@ -197,6 +197,11 @@ func launchTUI(opts *TUIOptions) error {
 	// submissions into the shared coordinator. Published only after binding.
 	var inputServer *localinput.Server
 	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	// Voice speaking indicator (task 1.6): the coordinator's speaking hook
+	// posts into the Bubble Tea loop now that the program exists. The model
+	// was built with a nil-program coordinator; this replaces it in place so
+	// the live narrator keeps its group state.
+	model.WireVoiceSpeaking(program)
 	if opts.InputInstance != "" {
 		// The socket Admit callback runs on a server goroutine; it hands idle
 		// deliveries to the UI loop via program.Send (thread-safe). Binding

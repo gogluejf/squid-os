@@ -25,6 +25,9 @@ func (m *Model) loadUISession(doc config.SessionDoc, name string) bool {
 		return false
 	}
 	m.session = loaded
+	// Voice: a session switch tears down any in-flight speech group so no
+	// audio from the old session keeps playing. (Indicator clear is task 1.6.)
+	m.narrator.cancelActive()
 	return true
 }
 

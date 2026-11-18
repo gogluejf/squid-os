@@ -26,6 +26,10 @@ func (m *Model) setStreamMode() {
 	m.mode = ModeStreaming
 	m.session.UIStream.Stopwatch.Start()
 	m.textarea.Placeholder = "ctrl+c to cancel..."
+	// Voice: one speech group per assistant message. The group survives the
+	// UIStreamState.reset() calls between tool phases; only true message
+	// completion ends it (narrator.endMessage).
+	m.narrator.beginMessage(m.voiceOn)
 }
 
 // setAuthMode builds a Question component for tool authorization and sets it as the active component.
@@ -171,6 +175,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		m = nm
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
+		(&m).narrator.cancelActive() // aborted message: kill group, drop buffer
 		(&m).setChatMode()
 		return m, autoSaveCmd
 
@@ -194,6 +199,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			(&m).setNotification(ui.NotificationInfo, "stream cancelled")
 			m.session.Stream.Reset()
 			m.session.UIStream.reset()
+			(&m).narrator.cancelActive() // aborted message: kill group, drop buffer
 			(&m).setChatMode()
 			nm, autoSaveCmd := m.autoSave()
 			return nm, autoSaveCmd
@@ -216,6 +222,11 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		}
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
+		// Voice: terminal inference — flush the final buffer and close the
+		// group. Done BEFORE setChatMode so the utterance is complete when
+		// the turn ends; queued next-step messages start a fresh group via
+		// setStreamMode.
+		(&m).narrator.endMessage(context.Background())
 		(&m).setChatMode()
 		nm, autoSaveCmd := m.autoSave()
 		return nm, autoSaveCmd
@@ -229,6 +240,11 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		if event.ToolCallDelta != "" {
 			m.refreshViewportFollowing()
 			return m, waitForStreamEvent(m.session.UIStream.Ch)
+		}
+		// Voice: feed the rendered text delta into the chunker NOW so the
+		// first sentence speaks while later sentences are still generating.
+		if event.Text != "" {
+			(&m).narrator.feedDelta(event.Text)
 		}
 		m.session.UIStream.TokenCount++
 		if m.session.UIStream.TokenCount%3 == 0 {
@@ -343,6 +359,7 @@ func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
 		(&m).setNotification(ui.NotificationInfo, event.CancelMessage)
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
+		(&m).narrator.cancelActive() // aborted turn: kill group, drop buffer
 		(&m).setChatMode()
 		nm, autoSaveCmd := m.autoSave()
 		return nm, autoSaveCmd
@@ -357,6 +374,7 @@ func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
 		(&m).setNotification(ui.NotificationError, msg)
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
+		(&m).narrator.cancelActive() // aborted turn: kill group, drop buffer
 		return m, m.setChatMode()
 	}
 	return m, nil

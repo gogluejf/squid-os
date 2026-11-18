@@ -58,6 +58,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshViewportFollowing()
 		return m, uiTickCmd(m.session.Stream.Active)
 
+	case voiceSpeakingMsg:
+		// Voice speaking indicator (task 1.6): set on first chunk start,
+		// cleared on player exit or kill. The coordinator's generation guard
+		// guarantees a stale callback from a superseded group can never clear
+		// a newer group's indicator (see voice.Coordinator.setSpeakingLocked).
+		m.voiceSpeaking = msg.on
+		return m, nil
+
 	case streamEventMsg:
 		return m.handleStreamEvent(chat.StreamEvent(msg))
 

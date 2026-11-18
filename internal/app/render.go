@@ -72,10 +72,10 @@ func (m Model) View() string {
 		}
 	}
 
-	// Status line: notification (left), queued-input counters (right)
+	// Status line: notification (left), speaking indicator, queued-input counters (right)
 	// Skip notification when in history search mode (the search overlay replaces it)
 	if m.mode != ModeHistorySearch {
-		sections = append(sections, ui.RenderStatusLine(m.notification, m.queueChip(), m.width))
+		sections = append(sections, ui.RenderStatusLine(m.notification, m.queueChip(), m.voiceSpeaking, m.width))
 	}
 
 	// Textarea (shown for all modes except component overlay which replaces it)

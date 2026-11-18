@@ -16,6 +16,7 @@ import (
 	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
+	"squid-os/internal/voice"
 )
 
 // Model is the top-level Bubble Tea model
@@ -70,9 +71,23 @@ type Model struct {
 	notification ui.Notification
 	incognito    bool
 
+	// voiceOn mirrors settings.Voice.Enabled at runtime; task 1.5 adds the
+	// live toggle (alt+v / /voice) that flips it without writing settings.
+	voiceOn bool
+
 	// Queued input (design: queued-input). Single admission entry point for
 	// keyboard and (later) socket transports; owns durable receipts.
 	submissions *SubmissionCoordinator
+
+	// Narrator wires spoken output into the assistant stream (voice mode,
+	// task 1.4). Group lifecycle is tied to the message, not the turn ctx.
+	narrator *Narrator
+
+	// voiceSpeaking drives the "🔊 speaking…" indicator in the status row
+	// (task 1.6). Set by the coordinator's speaking hook on the first chunk
+	// start; cleared on player exit or kill. Written only from the Bubble
+	// Tea update goroutine (see newVoiceCoordinator), so no extra lock.
+	voiceSpeaking bool
 
 	// turnActive is true from startStream until the turn fully ends (setChatMode).
 	// Covers the gap between "tool batch done" and "first token of next step"
@@ -151,11 +166,59 @@ func New(options StartupOptions) (Model, error) {
 		allCommands:   buildCommandPickerItems(),
 		historySearch: ui.NewHistorySearchOverlay(nil),
 		incognito:     false,
+		voiceOn:       settings.Voice.Enabled,
 		notification:  notification,
 		submissions:   newModelSubmissionCoordinator(paths, sess, &incognitoFlag{m: nil}),
 	}
 	m.submissions.flag.m = &m
+	// The voice coordinator is built lazily in WireVoiceSpeaking, once the
+	// tea program exists (the speaking hook needs it). Until then the
+	// narrator is inert: every Narrator method no-ops on a nil coord.
+	m.narrator = newNarrator(nil)
 	return m, nil
+}
+
+// voiceSpeakingMsg is posted by the coordinator's speaking hook (from a
+// background goroutine) into the Bubble Tea loop. The indicator state is
+// applied only inside Update, so Model writes stay single-goroutine.
+type voiceSpeakingMsg struct{ on bool }
+
+// WireVoiceSpeaking builds the voice coordinator now that the tea program
+// exists (app.New builds the model before the program does) and installs the
+// speaking-indicator hook. The narrator starts inert (nil coord) until this
+// call, so no throwaway coordinator is built in New. Safe to call once; a
+// no-op when voice is unavailable or already wired.
+func (m *Model) WireVoiceSpeaking(p *tea.Program) {
+	if m.narrator == nil || p == nil {
+		return
+	}
+	m.narrator.coord = newVoiceCoordinator(m.settings.Voice, p)
+}
+
+// newVoiceCoordinator builds the voice coordinator from settings. A missing
+// TTS CLI or server is not fatal: it returns nil and the narrator degrades to
+// an inert no-op rather than blocking startup (voice is opt-in and
+// best-effort). The speaking hook posts a tea.Msg into the Bubble Tea loop so
+// the status-row indicator (task 1.6) updates on first chunk start / player
+// exit / kill — never by writing Model state from a background goroutine.
+func newVoiceCoordinator(vcfg config.Voice, p *tea.Program) *voice.Coordinator {
+	sp, err := voice.NewSpeaker(voice.SpeakerOptions{})
+	if err != nil {
+		return nil
+	}
+	c := voice.NewCoordinator(sp, &vcfg)
+	if p != nil {
+		c.SetSpeakingHook(func(on bool) {
+			// Safe to call from any goroutine, including inside Bubble Tea's
+			// Update: program.Send only pushes onto an internal channel and
+			// never blocks on the event loop (it is not a synchronous
+			// round-trip into Update), so posting voiceSpeakingMsg here
+			// cannot deadlock even when the hook fires from Emit/CancelGroup
+			// paths that run inside Update.
+			p.Send(voiceSpeakingMsg{on: on})
+		})
+	}
+	return c
 }
 
 // incognitoFlag adapts the model's live incognito flag to the coordinator's
@@ -189,6 +252,9 @@ func (m *Model) clearNotification() { m.notification = ui.Notification{} }
 // quitCmd returns a command that cleans up the session workspace (including
 // incognito temp directories) and then quits the TUI.
 func (m *Model) quitCmd() tea.Msg {
+	// Voice: shutdown kills any in-flight speech group (process groups die
+	// with us, but cancel gives a clean kill + state teardown).
+	m.narrator.cancelActive()
 	if m.session != nil {
 		_ = m.session.CleanupWorkspace()
 	}

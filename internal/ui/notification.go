@@ -92,10 +92,13 @@ func itoa(n int) string {
 
 // RenderStatusLine renders the fixed status row between the viewport and textarea.
 // Notification is left-aligned; queueChip (pre-rendered, may be "") is right-aligned.
+// When speaking is true a speaker glyph ("🔊 speaking…") is prepended to the
+// left side as the voice-mode indicator (task 1.6); it truncates with the
+// notification when both sides would exceed width.
 // The right side is always reserved so the footer below never shifts; the left
 // notification truncates when both sides would exceed width.
 // Always returns a full-width string so the row is stable (no layout shift).
-func RenderStatusLine(n Notification, queueChip string, width int) string {
+func RenderStatusLine(n Notification, queueChip string, speaking bool, width int) string {
 	var left string
 	switch {
 	case n.Empty():
@@ -106,6 +109,14 @@ func RenderStatusLine(n Notification, queueChip string, width int) string {
 		left = style.WarningStyle.Render("⚠ " + n.Message)
 	default:
 		left = style.InfoStyle.Render("· " + n.Message)
+	}
+	if speaking {
+		glyph := style.InfoStyle.Render("🔊 speaking…")
+		if left == "" {
+			left = glyph
+		} else {
+			left = glyph + " " + left
+		}
 	}
 
 	rightW := lipgloss.Width(queueChip)
@@ -125,7 +136,13 @@ func RenderStatusLine(n Notification, queueChip string, width int) string {
 		gap = gapMin
 	}
 	mid := style.StatusLineStyle.Render(strings.Repeat(" ", gap))
-	return left + mid + queueChip
+	row := left + mid + queueChip
+	// Always return exactly width columns so the row is stable (no layout
+	// shift), even when styled segments render narrower than their rune count.
+	for lipgloss.Width(row) < width {
+		row += " "
+	}
+	return row
 }
 
 // truncateStyled shortens a rendered (styled) string to at most max display

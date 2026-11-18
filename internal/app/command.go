@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,7 +17,8 @@ type SlashCommand struct {
 	Description       string
 	Key               key.Binding // keyboard shortcut that triggers this command
 	BlockDuringStream bool        // if true, show notification and skip execution while streaming
-	OnExecute         func(Model) (tea.Model, tea.Cmd)
+	Args              []string    // accepted argument values ("" = no args); nil/empty = name-only
+	OnExecute         func(Model, []string) (tea.Model, tea.Cmd)
 }
 
 // AllCommands is the full slash command list
@@ -26,7 +28,7 @@ var AllCommands = []SlashCommand{
 		Description:       "Select inference model",
 		Key:               keys.Model,
 		BlockDuringStream: true,
-		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 			return m.openModelPicker()
 		},
 	},
@@ -34,7 +36,7 @@ var AllCommands = []SlashCommand{
 		Name:        "skill",
 		Description: "Select active skill",
 		Key:         keys.Skill,
-		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 			return m.openSkillPicker()
 		},
 	},
@@ -42,15 +44,23 @@ var AllCommands = []SlashCommand{
 		Name:        "thinking",
 		Description: "Toggle thinking mode (on/off)",
 		Key:         keys.Thinking,
-		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 			return m.toggleThinking()
+		},
+	},
+	{
+		Name:        "voice",
+		Description: "Toggle voice mode (on/off)",
+		Key:         keys.Voice,
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
+			return m.toggleVoice()
 		},
 	},
 	{
 		Name:        "auth-mode",
 		Description: "Cycle authorization mode (auto/ask-on-write/ask-for-all)",
 		Key:         keys.AuthMode,
-		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 			return m.cycleAuthorization(true)
 		},
 	},
@@ -59,7 +69,7 @@ var AllCommands = []SlashCommand{
 		Description:       "Save current session",
 		Key:               keys.Save,
 		BlockDuringStream: true,
-		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 			return m.openSaveSessionPrompt()
 		},
 	},
@@ -68,7 +78,7 @@ var AllCommands = []SlashCommand{
 		Description:       "Load a saved session",
 		Key:               keys.Load,
 		BlockDuringStream: true,
-		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 			return m.openSessionPicker()
 		},
 	},
@@ -77,21 +87,21 @@ var AllCommands = []SlashCommand{
 		Description:       "Clear chat and start fresh",
 		Key:               keys.NewSession,
 		BlockDuringStream: true,
-		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 			return m.clearSession()
 		},
 	},
 	{
 		Name:        "system",
 		Description: "Load system prompt",
-		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 			return m.openSystemPicker()
 		},
 	},
 	{
 		Name:        "exit",
 		Description: "Exit squid-os",
-		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 			return m, m.quitCmd
 		},
 	},
@@ -99,7 +109,7 @@ var AllCommands = []SlashCommand{
 		Name:        "help",
 		Description: "Show help",
 		Key:         keys.Help,
-		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 			m.mode = ModeHelp
 			return m, nil
 		},
@@ -107,7 +117,7 @@ var AllCommands = []SlashCommand{
 	{
 		Name:        "queue-clear",
 		Description: "Discard all pending queued input",
-		OnExecute: func(m Model) (tea.Model, tea.Cmd) {
+		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 			n := (&m).flushQueues()
 			if n == 0 {
 				(&m).setNotification(ui.NotificationInfo, "no queued input to clear")
@@ -155,17 +165,32 @@ func findCommand(name string) *SlashCommand {
 	return nil
 }
 
-// executeCommandByName dispatches to the appropriate handler for a command name.
-func (m Model) executeCommandByName(name string) (tea.Model, tea.Cmd) {
+// executeCommandByName dispatches to the appropriate handler for a command
+// name. Args are optional; when the command declares accepted values, an
+// unknown value is rejected with a notification instead of executing.
+func (m Model) executeCommandByName(name string, args ...string) (tea.Model, tea.Cmd) {
 	cmd := findCommand(name)
 	if cmd == nil || cmd.OnExecute == nil {
 		return m, m.setChatMode()
+	}
+	if len(args) > 0 && len(cmd.Args) > 0 {
+		ok := false
+		for _, a := range cmd.Args {
+			if args[0] == a {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			m.setNotification(ui.NotificationInfo, fmt.Sprintf("usage: /%s %s", name, strings.Join(cmd.Args, " | ")))
+			return m, nil
+		}
 	}
 	if cmd.BlockDuringStream && m.mode == ModeStreaming {
 		m.setNotification(ui.NotificationInfo, fmt.Sprintf("/%s will be available when assistant finishes", name))
 		return m, nil
 	}
-	return cmd.OnExecute(m)
+	return cmd.OnExecute(m, args)
 }
 
 // openCommandPicker opens the slash command palette.

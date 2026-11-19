@@ -12,8 +12,10 @@ import (
 
 // fakeStore is the in-memory coordinator backing the CLI socket tests.
 type fakeStore struct {
-	mu    sync.Mutex
-	store []string
+	mu          sync.Mutex
+	store       []string
+	voiceActive bool
+	voiceStatus string // override for VoiceStop; empty = derive from voiceActive
 }
 
 func (f *fakeStore) admit(req inputqueue.AdmissionRequest) localinput.ReceiptInfo {
@@ -53,6 +55,18 @@ func newTestServer(t *testing.T, instanceID string, fs *fakeStore) (*localinput.
 				return n, nil
 			}
 			return 0, fmt.Errorf("unknown %q", action)
+		},
+		VoiceStop: func() string {
+			fs.mu.Lock()
+			defer fs.mu.Unlock()
+			if fs.voiceStatus != "" {
+				return fs.voiceStatus
+			}
+			if !fs.voiceActive {
+				return localinput.VoiceStopNothingPlaying
+			}
+			fs.voiceActive = false
+			return localinput.VoiceStopCancelled
 		},
 	}
 	srv, err := cfg.Start()

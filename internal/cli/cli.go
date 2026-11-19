@@ -67,6 +67,7 @@ func buildRoot(tui Command[TUIOptions], run Command[RunOptions], gnu Command[GNU
 	models.AddCommand(makeCobra(modelsListCmd{}), makeCobra(modelsRefreshCmd{}))
 	root.AddCommand(models, makeCobra(modelsCacheRefreshCmd{}))
 	registerInputCommands(root)
+	registerVoiceCommands(root)
 	return root
 }
 

@@ -86,6 +86,7 @@ func RenderHelp(width, height int) string {
 		keyRow("ctrl+h", "Toggle this help"),
 		keyRow("alt+t", "Toggle thinking mode"),
 		keyRow("alt+v", "Toggle voice mode"),
+		keyRow("alt+x", "Shut up voice (current message)"),
 		keyRow("alt+s", "Select active skill"),
 		keyRow("shift+tab", "Cycle authorization mode"),
 		keyRow("/", "Open command palette"),

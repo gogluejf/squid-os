@@ -53,6 +53,10 @@ func (m *Model) admitQueuedInput(text string, boundary inputqueue.Boundary) bool
 		(m).setNotification(ui.NotificationError, "queued input rejected: "+res.Msg)
 		return false
 	}
+	// Voice barge-in (task 2.2): a submitted queued message cancels the
+	// active speech group at admission — even though delivery waits for the
+	// next safe boundary. Plain typing never reaches here.
+	m.narrator.cancelActive()
 	m.textarea.SetValue("")
 	m.autoSizeTextarea()
 	label := "next step"

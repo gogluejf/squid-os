@@ -82,38 +82,46 @@
       "milestone": "Core voice pipeline",
       "milestone_number": "1",
       "summary": {
-        "failures": "None — go build ./..., go vet, and go test -count=1 (internal/app, internal/ui, internal/voice, internal/cli) all pass; race detector clean on the speaking-hook + stale-watcher tests.",
-        "done": "Coordinator speaking hook (internal/voice/coordinator.go): SetSpeakingHook(fn(on bool)) fires exactly on state transitions — on=true when the first chunk of any group starts playing (startChunkLocked), on=false from clearCurrentLocked (player exit, drain after EndGroup, kill via CancelGroup). Back-to-back chunks of the same group do NOT re-fire (no flicker); the hook runs outside mu so it can safely re-enter. UI: RenderStatusLine gained a speaking bool param and prepends '🔊 speaking…' to the left side (truncates with the notification, right chip reserved); row is now padded to exactly width columns. Model.voiceSpeaking field set only inside Update via new voiceSpeakingMsg posted by the coordinator hook through program.Send (never written from a background goroutine). Wiring: app.New builds the coordinator with a nil program; cli/tui.go calls model.WireVoiceSpeaking(program) after tea.NewProgram replaces the coordinator in place (narrator keeps its group state). Tests: 4 coordinator-level tests in voice_test.go (first-chunk start/exit edges, back-to-back no-flicker, kill-path clears, stale callback cannot clear newer group's indicator — using the playerFinished injection seam), 3 app-level tests in narration_test.go (indicator appears on first chunk while generating + clears on completion incl. the Update path; kill path never stuck on; bump scenario where a superseded group's late watcher cannot turn off the newer group's indicator), and TestRenderStatusLineSpeakingIndicator covering glyph presence/absence, coexistence with notification+chip, and narrow-width truncation.",
-        "tradeoffs": "The speaker emoji renders double-width in most fonts, so lipgloss.Width of the glyph string exceeds its rune count by one; the status row pads to width but a pure-rune length assertion is off-by-one when the glyph is present (tests assert ~width). Alternative was an ASCII-only marker ('♪ speaking…') which would be font-stable but less recognizable. WireVoiceSpeaking replaces the whole coordinator at program-creation time rather than adding a second hook-install point — safe because it happens before Run() and no groups exist yet, but it means a future code path that emits speech between app.New and program creation would speak without indicator updates.",
-        "decisions": "Indicator state lives on the Coordinator (single owner of playback truth), not on the Narrator or Model — the hook reports 'any audio plays' across ALL groups (narration AND future alerts from milestone 3), matching the acceptance wording. Transition-based firing (not per-chunk) keeps the indicator steady during multi-chunk messages. The hook posts a tea.Msg instead of writing Model directly: Bubble Tea requires single-goroutine Model mutation, and p.Send is the sanctioned cross-goroutine channel (same pattern as localinput socket delivery). Generation-ID guard requirement is satisfied structurally: the existing per-group player-identity check (g.player == p) plus the current-group check in finishChunkLocked means a stale watcher for a superseded group neither clears Current nor fires an off-transition — verified deterministically by injecting c.playerFinished(g1, old) after g2 took over.",
+        "failures": "None \u2014 go build ./..., go vet, and go test -count=1 (internal/app, internal/ui, internal/voice, internal/cli) all pass; race detector clean on the speaking-hook + stale-watcher tests.",
+        "done": "Coordinator speaking hook (internal/voice/coordinator.go): SetSpeakingHook(fn(on bool)) fires exactly on state transitions \u2014 on=true when the first chunk of any group starts playing (startChunkLocked), on=false from clearCurrentLocked (player exit, drain after EndGroup, kill via CancelGroup). Back-to-back chunks of the same group do NOT re-fire (no flicker); the hook runs outside mu so it can safely re-enter. UI: RenderStatusLine gained a speaking bool param and prepends '\ud83d\udd0a speaking\u2026' to the left side (truncates with the notification, right chip reserved); row is now padded to exactly width columns. Model.voiceSpeaking field set only inside Update via new voiceSpeakingMsg posted by the coordinator hook through program.Send (never written from a background goroutine). Wiring: app.New builds the coordinator with a nil program; cli/tui.go calls model.WireVoiceSpeaking(program) after tea.NewProgram replaces the coordinator in place (narrator keeps its group state). Tests: 4 coordinator-level tests in voice_test.go (first-chunk start/exit edges, back-to-back no-flicker, kill-path clears, stale callback cannot clear newer group's indicator \u2014 using the playerFinished injection seam), 3 app-level tests in narration_test.go (indicator appears on first chunk while generating + clears on completion incl. the Update path; kill path never stuck on; bump scenario where a superseded group's late watcher cannot turn off the newer group's indicator), and TestRenderStatusLineSpeakingIndicator covering glyph presence/absence, coexistence with notification+chip, and narrow-width truncation.",
+        "tradeoffs": "The speaker emoji renders double-width in most fonts, so lipgloss.Width of the glyph string exceeds its rune count by one; the status row pads to width but a pure-rune length assertion is off-by-one when the glyph is present (tests assert ~width). Alternative was an ASCII-only marker ('\u266a speaking\u2026') which would be font-stable but less recognizable. WireVoiceSpeaking replaces the whole coordinator at program-creation time rather than adding a second hook-install point \u2014 safe because it happens before Run() and no groups exist yet, but it means a future code path that emits speech between app.New and program creation would speak without indicator updates.",
+        "decisions": "Indicator state lives on the Coordinator (single owner of playback truth), not on the Narrator or Model \u2014 the hook reports 'any audio plays' across ALL groups (narration AND future alerts from milestone 3), matching the acceptance wording. Transition-based firing (not per-chunk) keeps the indicator steady during multi-chunk messages. The hook posts a tea.Msg instead of writing Model directly: Bubble Tea requires single-goroutine Model mutation, and p.Send is the sanctioned cross-goroutine channel (same pattern as localinput socket delivery). Generation-ID guard requirement is satisfied structurally: the existing per-group player-identity check (g.player == p) plus the current-group check in finishChunkLocked means a stale watcher for a superseded group neither clears Current nor fires an off-transition \u2014 verified deterministically by injecting c.playerFinished(g1, old) after g2 took over.",
         "confidence": "high",
-        "lessons_learned": "lipgloss.Width vs len([]rune) diverge on emoji (double-width runes): full-row-width assertions must use lipgloss.Width or allow ±1 rune tolerance when styled emoji are involved. And when a feature needs a background goroutine to update TUI state, the correct seam is always program.Send(msg) + a case in Update — direct field writes from coordinator goroutines are a data race even if they appear harmless."
+        "lessons_learned": "lipgloss.Width vs len([]rune) diverge on emoji (double-width runes): full-row-width assertions must use lipgloss.Width or allow \u00b11 rune tolerance when styled emoji are involved. And when a feature needs a background goroutine to update TUI state, the correct seam is always program.Send(msg) + a case in Update \u2014 direct field writes from coordinator goroutines are a data race even if they appear harmless."
       }
     },
     "2.1": {
       "number": "2.1",
-      "status": "not_started",
+      "status": "done",
       "name": "alt+x universal shut-up",
       "milestone": "Cancellation and external control",
       "milestone_number": "2"
     },
     "2.2": {
       "number": "2.2",
-      "status": "not_started",
+      "status": "done",
       "name": "New submitted message cancels speech",
       "milestone": "Cancellation and external control",
       "milestone_number": "2"
     },
     "2.3": {
       "number": "2.3",
-      "status": "not_started",
+      "status": "done",
       "name": "squid-os voice stop CLI command",
       "milestone": "Cancellation and external control",
-      "milestone_number": "2"
+      "milestone_number": "2",
+      "summary": {
+        "done": "Added 'squid-os voice stop' CLI command following the input.go pattern: new internal/cli/voice.go (voiceCmd + voiceSubCmd tree with stop/on/off, reusing discoverInstance/roundTrip/printReply and --instance/--session flags), registered in cli.go via registerVoiceCommands; added voice_stop op to localinput server dispatch (new VoiceStopFunc config hook, reply status cancelled|nothing_playing); app-side handler localVoiceStopMsg in update.go runs the identical narrator.cancelActive() CancelGroup path as alt+x, wired through StartLocalInputServer's push channel like the other socket callbacks. Narrator.cancelActive now returns bool so the reply can distinguish actual cancellation from a no-op.",
+        "lessons_learned": "The CLI test helper fakeStore needed a voiceActive flag + VoiceStop wiring to make the end-to-end CLI test deterministic; server test rewires srv.cfg.VoiceStop directly since startTestServer doesn't take it.",
+        "confidence": "high",
+        "failures": "None",
+        "decisions": "Reused the existing socket protocol shape (Request{Op: voice_stop}) instead of inventing a new frame type; session resolution mirrors control ops (req.SessionID falling back to live session). cancelActive gained a bool return so the wire reply is honest about whether a group actually existed \u2014 all existing call sites ignore the value, zero behavior change for alt+x/stream paths.",
+        "tradeoffs": "on/off subcommands are stubs returning 'not implemented yet: use /voice inside the TUI' \u2014 scaffold only per task scope. VoiceStop callback returns false on the 5s UI timeout (treated as nothing_playing) rather than an error, keeping exit 0 for the best-effort voice contract."
+      }
     },
     "2.4": {
       "number": "2.4",
-      "status": "not_started",
+      "status": "done",
       "name": "Sponge key-down integration",
       "milestone": "Cancellation and external control",
       "milestone_number": "2"

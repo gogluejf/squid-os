@@ -13,6 +13,15 @@ import (
 
 // handleKey dispatches key events to the handler for the current mode.
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Universal shut-up runs BEFORE mode dispatch: authorization, help, and
+	// component overlays must never swallow the key. One press mutes the
+	// whole active speech group — running chunk killed, buffered chunks
+	// dropped, future chunks muted. Not sticky: the next group speaks.
+	if key.Matches(msg, keys.ShutUp) {
+		m.narrator.cancelActive()
+		return m, nil
+	}
+
 	switch m.mode {
 
 	case ModeChat:

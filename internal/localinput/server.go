@@ -34,6 +34,23 @@ type StatusFunc func(sessionID string) (counts Counts, paused bool, err error)
 // ControlFunc handles clear/resume operations. action is "clear" or "resume".
 type ControlFunc func(action, sessionID string) (affected int, err error)
 
+// Voice stop reply statuses (app-side handler → server). The three-valued
+// result keeps a wedged UI loop distinguishable from "no active speech":
+// only Cancelled and NothingPlaying are success outcomes; NotReady is a
+// failure the server maps to a rejection.
+const (
+	VoiceStopCancelled       = "cancelled"
+	VoiceStopNothingPlaying  = "nothing_playing"
+	VoiceStopNotReady        = "receiver_not_ready"
+)
+
+// VoiceStopFunc cancels the active speech group (the same CancelGroup path as
+// alt+x). It returns one of the VoiceStop* status strings: Cancelled when an
+// active group was killed, NothingPlaying for the explicit no-op, or
+// NotReady when the receiver could not confirm either (wedged UI loop).
+// Must be safe for concurrent use.
+type VoiceStopFunc func() string
+
 // ServerConfig wires the socket server to the application coordinator.
 type ServerConfig struct {
 	InstanceID string
@@ -41,6 +58,7 @@ type ServerConfig struct {
 	Admit      AdmissionFunc
 	Status     StatusFunc
 	Control    ControlFunc
+	VoiceStop  VoiceStopFunc
 }
 
 // Server serves the private local input socket for one TUI instance.
@@ -195,6 +213,8 @@ func (s *Server) dispatch(req Request) Reply {
 		return s.control(req, "clear")
 	case "resume":
 		return s.control(req, "resume")
+	case "voice_stop":
+		return s.voiceStop(req)
 	default:
 		return Reject("unknown_op", "unsupported op "+req.Op)
 	}
@@ -315,6 +335,30 @@ func (s *Server) control(req Request, action string) Reply {
 		Code:      code,
 		SessionID: session,
 		Message:   fmt.Sprintf("%d entr%s affected", n, plural(n)),
+	}
+}
+
+func (s *Server) voiceStop(req Request) Reply {
+	if s.cfg.VoiceStop == nil {
+		return Reject("receiver_unavailable", "voice control path not ready")
+	}
+	session := req.SessionID
+	if session == "" {
+		session = s.liveSession()
+	}
+	if session == "" || session != s.liveSession() {
+		return Reject("wrong_session", "no target session")
+	}
+	status := s.cfg.VoiceStop()
+	switch status {
+	case VoiceStopCancelled:
+		return Reply{Version: ProtocolVersion, Status: "cancelled", SessionID: session, Message: "active speech group cancelled"}
+	case VoiceStopNothingPlaying:
+		return Reply{Version: ProtocolVersion, Status: "nothing_playing", SessionID: session, Message: "no active speech group"}
+	default:
+		// receiver_not_ready (or any unexpected value): the UI loop could not
+		// confirm cancellation or no-op — reject so the CLI exits non-zero.
+		return Reject("receiver_unavailable", "voice control path not ready")
 	}
 }
 

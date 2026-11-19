@@ -30,6 +30,8 @@ type Coordinator struct {
 
 	speakingHook func(on bool) // UI indicator hook (nil = no reporting)
 	speaking     bool          // last reported state of the hook
+
+	groupDrainedHook GroupDrainedFunc // per-group drain callback (nil = none)
 }
 
 type groupState struct {
@@ -75,6 +77,22 @@ func (c *Coordinator) SetSpeakingHook(fn func(on bool)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.speakingHook = fn
+}
+
+// GroupDrainedFunc fires exactly once when a group stops being current:
+// either its playback fully drained (last accepted chunk finished) or it was
+// cancelled. It runs OUTSIDE the coordinator lock and may re-enter it (it
+// must not block). A nil hook disables reporting. Safe to install at any
+// time; groups that already stopped before installation are not reported.
+type GroupDrainedFunc func(groupID int)
+
+// SetGroupDrainedHook installs the per-group drain callback. It complements
+// SetSpeakingHook, which only reports aggregate playing/stopped transitions
+// and cannot identify WHICH group stopped — this one does.
+func (c *Coordinator) SetGroupDrainedHook(fn GroupDrainedFunc) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.groupDrainedHook = fn
 }
 
 // StartGroup allocates a new group ID. It does not speak anything by itself.
@@ -140,6 +158,12 @@ func (c *Coordinator) startChunkLocked(g *groupState, ctx context.Context, text 
 		c.playerFinished(g.id, p)
 	}()
 	c.setSpeakingLocked(true) // first chunk of this group started playing
+	// A group can be muted between Speak and here (Emit re-checks g.muted
+	// after the out-of-lock preempt hook); a late kill must never leave an
+	// orphaned process behind.
+	if g.muted {
+		p.Kill()
+	}
 	return nil
 }
 
@@ -221,6 +245,12 @@ func (c *Coordinator) clearCurrentLocked(groupID int) {
 		c.current = 0
 	}
 	c.setSpeakingLocked(false)
+	hook := c.groupDrainedHook
+	if hook != nil {
+		c.mu.Unlock()
+		hook(groupID)
+		c.mu.Lock()
+	}
 }
 
 // setSpeakingLocked reports a speaking-state transition to the hook, if any.

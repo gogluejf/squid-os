@@ -20,15 +20,46 @@ import (
 type Narrator struct {
 	coord *voice.Coordinator
 
-	mu      sync.Mutex
-	groupID int    // current message's group; 0 = none active
-	chunker *voice.SentenceChunker
+	mu         sync.Mutex
+	groupID    int // current message's group; 0 = none active
+	lastGroupID int // last group started, survives endMessage while its tail drains
+	chunker    *voice.SentenceChunker
 }
 
 // newNarrator builds a Narrator over the given coordinator. A nil coord
 // yields an inert narrator (all methods no-op) so callers need no guards.
 func newNarrator(coord *voice.Coordinator) *Narrator {
-	return &Narrator{coord: coord}
+	n := &Narrator{coord: coord}
+	if coord != nil {
+		// Track group drain so cancelActive can keep silencing the audible
+		// tail after endMessage (EndGroup closes admission, not playback).
+		// The hook fires from the coordinator's lock-free path and re-enters
+		// n.mu — safe because it never blocks.
+		coord.SetGroupDrainedHook(n.onGroupDrained)
+	}
+	return n
+}
+
+// onGroupDrained is the coordinator's per-group drain callback: once a group
+// stops being current (tail drained or killed), forget it if it is still the
+// tracked last group. Group identity guards against stale callbacks clearing
+// a newer group's tracking (same pattern as the coordinator's own guards).
+//
+// The hook runs OUTSIDE the coordinator lock and may re-enter it, so it must
+// never block: use TryLock and skip on contention (the next transition will
+// report again; a skipped clear only delays forgetting a drained group, it
+// cannot corrupt state).
+func (n *Narrator) onGroupDrained(gid int) {
+	if n == nil {
+		return
+	}
+	if !n.mu.TryLock() {
+		return
+	}
+	defer n.mu.Unlock()
+	if n.lastGroupID == gid {
+		n.lastGroupID = 0
+	}
 }
 
 // beginMessage allocates a fresh speech group at assistant message start.
@@ -44,6 +75,10 @@ func (n *Narrator) beginMessage(enabled bool) {
 		n.endLocked(context.Background())
 	}
 	n.groupID = n.coord.StartGroup()
+	// The previous message's draining tail (if any) is superseded: it keeps
+	// playing but is no longer the cancellable "active" group. A drained one
+	// was already cleared by the drain hook; this assignment covers both.
+	n.lastGroupID = n.groupID
 	gid := n.groupID // capture by value: the timer goroutine must not read n.groupID live (it is written under mu elsewhere)
 	n.chunker = voice.NewSentenceChunker(0, 0, 0, nil)
 	// Hold-timer expiry emits the held fragment from the timer goroutine;
@@ -107,23 +142,39 @@ func (n *Narrator) endLocked(ctx context.Context) {
 // cancelActive kills the in-flight group without flushing its buffer
 // (stream aborted / session switch / shutdown). The coordinator mutes the
 // group so late-arriving chunks are dropped. Does not touch the model
-// stream or tool worker.
-func (n *Narrator) cancelActive() {
+// stream or tool worker. Returns true when a playing or draining group was
+// cancelled, false when nothing was playing.
+//
+// It targets lastGroupID rather than groupID: after endMessage the group is
+// closed for new chunks but already-emitted chunks keep draining (EndGroup
+// closes admission, not playback), and that audible tail must stay
+// cancellable by alt+x, message barge-in, and 'squid-os voice stop'.
+func (n *Narrator) cancelActive() bool {
 	if n == nil || n.coord == nil {
-		return
+		return false
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if n.groupID == 0 {
-		return
+	gid := n.lastGroupID
+	if gid == 0 {
+		return false
 	}
-	gid := n.groupID
+	// Guard by group identity: only cancel if this group is still the one
+	// the coordinator knows as current (playing or about to play). A drained
+	// or superseded group has Current() != gid, so no stale cancel can hit
+	// a newer group.
+	if n.coord.Current() != gid {
+		n.lastGroupID = 0 // group is gone; forget it
+		return false
+	}
 	n.groupID = 0
+	n.lastGroupID = 0
 	if n.chunker != nil {
 		n.chunker.Cancel()
 		n.chunker = nil
 	}
 	n.coord.CancelGroup(gid)
+	return true
 }
 
 // emit speaks one chunk of group gid through the coordinator. Speak errors

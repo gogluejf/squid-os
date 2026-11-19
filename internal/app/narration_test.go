@@ -191,6 +191,140 @@ func TestNarrationShutdownCancelsActiveGroup(t *testing.T) {
 	}
 }
 
+// TestNarrationCancelActiveSilencesDrainingTail (finding 1): after
+// endMessage the group is closed for new chunks but already-emitted chunks
+// keep draining (EndGroup closes admission, not playback). The audible tail
+// must stay cancellable: cancelActive targets lastGroupID while it is still
+// current, kills it, and drops late chunks.
+func TestNarrationCancelActiveSilencesDrainingTail(t *testing.T) {
+	m := newVoiceTestModel(t, true)
+	m.narrator.beginMessage(true)
+	m.narrator.feedDelta("First sentence of the reply. ")
+	gid := m.narrator.coord.Current()
+	if gid == 0 {
+		t.Fatal("no active group after feed")
+	}
+
+	// Stream end: EndGroup closes admission; the playing chunk keeps draining.
+	m.narrator.endMessage(context.Background())
+	if got := m.narrator.coord.Current(); got != gid {
+		t.Fatalf("tail not still current after endMessage: got %d want %d", got, gid)
+	}
+
+	// alt+x / barge-in / voice stop during the drain: must silence the tail.
+	if !m.narrator.cancelActive() {
+		t.Fatal("cancelActive returned false while the tail was still draining")
+	}
+	if got := m.narrator.coord.Current(); got != 0 {
+		t.Fatalf("Current() = %d after cancel, want 0", got)
+	}
+
+	// Late chunk (in-flight delta or timer fire) must be dropped by the mute.
+	m.narrator.emit(gid, "late chunk that must be dropped.")
+	if got := m.narrator.coord.Current(); got != 0 {
+		t.Fatalf("late chunk resurrected group %d", got)
+	}
+}
+
+// TestNarrationCancelAfterTailDrainsIsNoOp (finding 1b): once the tail has
+// fully drained the coordinator reports the group no longer current, the
+// drain hook clears lastGroupID, and cancelActive returns false.
+func TestNarrationCancelAfterTailDrainsIsNoOp(t *testing.T) {
+	m := newVoiceTestModel(t, true)
+	m.narrator.beginMessage(true)
+	m.narrator.feedDelta("A short utterance to drain. ")
+	if m.narrator.coord.Current() == 0 {
+		t.Fatal("no active group after feed")
+	}
+
+	m.narrator.endMessage(context.Background())
+	deadline := time.Now().Add(2 * time.Second)
+	for m.narrator.coord.Current() != 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := m.narrator.coord.Current(); got != 0 {
+		t.Fatalf("group did not drain: %d", got)
+	}
+
+	if m.narrator.cancelActive() {
+		t.Fatal("cancelActive returned true after the tail fully drained")
+	}
+}
+
+// TestNarrationStaleCancelCannotHitNewerGroup (finding 1c): a drained old
+// group's tracking is cleared before a newer group starts, so a stale cancel
+// of the old group cannot kill the newer one (guard by group identity).
+func TestNarrationStaleCancelCannotHitNewerGroup(t *testing.T) {
+	m := newVoiceTestModel(t, true)
+	m.narrator.beginMessage(true)
+	m.narrator.feedDelta("Old message being spoken. ")
+	oldGid := m.narrator.coord.Current()
+	if oldGid == 0 {
+		t.Fatal("no active group after first feed")
+	}
+
+	// Let the old group fully drain (hook clears lastGroupID).
+	m.narrator.endMessage(context.Background())
+	deadline := time.Now().Add(2 * time.Second)
+	for m.narrator.coord.Current() != 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// A NEWER group starts fresh with its own ID.
+	m.narrator.beginMessage(true)
+	m.narrator.feedDelta("Newer message now speaking. ")
+	newGid := m.narrator.coord.Current()
+	if newGid == 0 || newGid == oldGid {
+		t.Fatalf("newer group = %d, want a fresh non-zero ID distinct from %d", newGid, oldGid)
+	}
+
+	// Simulate a stale cancel that still targets the OLD drained group: it
+	// must be dropped by the coordinator's mute (group already muted/ended),
+	// and the newer group keeps playing untouched.
+	m.narrator.coord.CancelGroup(oldGid)
+	if got := m.narrator.coord.Current(); got != newGid {
+		t.Fatalf("stale CancelGroup(%d) disturbed newer group: Current() = %d, want %d", oldGid, got, newGid)
+	}
+
+	// The narrator's own cancelActive still targets the newer group only.
+	if !m.narrator.cancelActive() {
+		t.Fatal("cancelActive returned false while the newer group was current")
+	}
+	if got := m.narrator.coord.Current(); got != 0 {
+		t.Fatalf("Current() = %d after cancelling the newer group, want 0", got)
+	}
+}
+
+// TestNarrationBeginMessageStartsFreshGroup (finding 1): after endMessage the
+// next beginMessage allocates a NEW group ID — the draining tail of the old
+// message is superseded and can no longer be hit by cancelActive.
+func TestNarrationBeginMessageStartsFreshGroup(t *testing.T) {
+	m := newVoiceTestModel(t, true)
+	m.narrator.beginMessage(true)
+	m.narrator.feedDelta("First message spoken out loud. ")
+	oldGid := m.narrator.coord.Current()
+	if oldGid == 0 {
+		t.Fatal("no active group after first feed")
+	}
+	m.narrator.endMessage(context.Background())
+
+	m.narrator.beginMessage(true)
+	m.narrator.feedDelta("Second message now speaking. ")
+	newGid := m.narrator.coord.Current()
+	if newGid == 0 || newGid == oldGid {
+		t.Fatalf("second message group = %d, want fresh non-zero distinct from %d", newGid, oldGid)
+	}
+
+	// cancelActive now targets ONLY the newer group; killing it leaves the
+	// (already-muted or drained) old group irrelevant.
+	if !m.narrator.cancelActive() {
+		t.Fatal("cancelActive returned false with the newer group current")
+	}
+	if got := m.narrator.coord.Current(); got != 0 {
+		t.Fatalf("Current() = %d after cancel, want 0", got)
+	}
+}
+
 // --- test helpers mirroring the production wiring (setStreamMode/handleStreamEvent) ---
 
 // narrationBeginForTest mirrors setStreamMode's voice hook.

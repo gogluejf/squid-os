@@ -24,12 +24,19 @@ type localSocketMsg struct {
 	source    string
 }
 
+// localSocketTimeout bounds the UI-loop round-trip for socket callbacks
+// (session query, admission, voice stop). A reply arriving after this means
+// the Bubble Tea loop is wedged — the receiver must be reported as not
+// ready, not silently treated as a no-op.
+const localSocketTimeout = 5 * time.Second
+
 // Socket callbacks ask the UI loop for current state; they never retain a Model.
 type localSessionQuery struct{ reply chan string }
 type localAdmissionMsg struct {
 	req   inputqueue.AdmissionRequest
 	reply chan localinput.ReceiptInfo
 }
+type localVoiceStopMsg struct{ reply chan string }
 
 // StartLocalInputServer binds the private input socket for this TUI instance
 // and wires it to the shared submission coordinator. Returns nil (no-op) when
@@ -56,7 +63,7 @@ func (m *Model) StartLocalInputServer(instanceID string, push func(tea.Msg)) (*l
 			select {
 			case id := <-reply:
 				return id
-			case <-time.After(5 * time.Second):
+			case <-time.After(localSocketTimeout):
 				return ""
 			}
 		},
@@ -69,7 +76,7 @@ func (m *Model) StartLocalInputServer(instanceID string, push func(tea.Msg)) (*l
 			select {
 			case result := <-reply:
 				return result
-			case <-time.After(5 * time.Second):
+			case <-time.After(localSocketTimeout):
 				return localinput.ReceiptInfo{Code: "receiver_unavailable", Message: "UI admission timed out; check receipt before retrying"}
 			}
 		},
@@ -83,6 +90,21 @@ func (m *Model) StartLocalInputServer(instanceID string, push func(tea.Msg)) (*l
 				return coordinator.Discard(sessionID), nil
 			default:
 				return 0, fmt.Errorf("unknown control %q", action)
+			}
+		},
+		VoiceStop: func() string {
+			if push == nil {
+				return localinput.VoiceStopNotReady
+			}
+			reply := make(chan string, 1)
+			push(localVoiceStopMsg{reply: reply})
+			select {
+			case status := <-reply:
+				return status
+			case <-time.After(localSocketTimeout):
+				// A wedged UI loop must NOT read as "nothing playing":
+				// report the failure so the server rejects it.
+				return localinput.VoiceStopNotReady
 			}
 		},
 	}

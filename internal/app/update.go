@@ -79,6 +79,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case localSessionQuery:
 		msg.reply <- m.liveSessionID()
 		return m, nil
+	case localVoiceStopMsg:
+		// External voice stop (squid-os voice stop): the identical CancelGroup
+		// path as alt+x — one frame silences the whole active speech group.
+		// The reply is three-valued so a wedged UI loop (reported by the
+		// callback wrapper on timeout) can never masquerade as nothing_playing.
+		status := localinput.VoiceStopNothingPlaying
+		if m.narrator.cancelActive() {
+			status = localinput.VoiceStopCancelled
+		}
+		msg.reply <- status
+		return m, nil
 	case localAdmissionMsg:
 		res := m.submissions.AdmitSubmission(msg.req, m.liveSessionID())
 		info := localinput.ReceiptInfo{OK: res.OK, Code: res.Code, Message: res.Msg}
@@ -88,6 +99,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			info.Sequence = res.Receipt.Sequence
 			info.Duplicate = res.Receipt.Duplicate
 			info.Counts = localinput.Counts{Step: counts.Step, Turn: counts.Turn}
+			if !res.Receipt.Duplicate {
+				// Voice barge-in (task 2.2): a NEW submitted message cancels
+				// the active speech group NOW, at admission — a busy
+				// submission pushes no UI event until its boundary, so hooking
+				// delivery would miss the immediate cancellation. A duplicate
+				// receipt is an idempotent retry of an already-admitted
+				// request: no new message was submitted, so it must NOT mute
+				// in-progress speech.
+				m.narrator.cancelActive()
+			}
 		}
 		msg.reply <- info
 		if res.OK && !res.Receipt.Duplicate && msg.req.Boundary == inputqueue.BoundaryStep && !m.isBusy() {

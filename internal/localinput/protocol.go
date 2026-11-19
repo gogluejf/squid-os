@@ -22,7 +22,7 @@ const (
 // Request is an inbound newline-delimited JSON frame.
 type Request struct {
 	Version   int    `json:"version"`
-	Op        string `json:"op"` // submit | status | clear | resume | list
+	Op        string `json:"op"` // submit | status | clear | resume | list | voice_stop
 	RequestID string `json:"request_id,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
 	When      string `json:"when,omitempty"` // step | turn (submit only)

@@ -1,6 +1,6 @@
 {
   "plan_name": "voice-mode",
-  "title": "Voice mode \u2014 the assistant speaks",
+  "title": "Voice mode — the assistant speaks",
   "why": "Give Squid-OS a spoken channel: responses, errors, and system events are read aloud via the local squid-tts server, toggleable live, interruptible at any time.",
   "outcomes": "/voice + alt+v toggle; per-language voice settings; sentence-chunk streaming with ~2s time-to-first-audio; universal alt+x shut-up scoped to speech groups; sponge key-down cancellation via 'squid-os voice stop'; bilingual alert lead-ins driven by last-user-language detection.",
   "milestones": [
@@ -39,8 +39,8 @@
           "number": "1.2",
           "name": "Build voice wrapper and coordinator",
           "type": "feature",
-          "what": "New internal/voice package: Speak(text, cfg) spawns squid-tts-say in its own process group (detect \u2192 voice lookup \u2192 pipe stdin); Coordinator owns group state (StartGroup/Emit/EndGroup/CancelGroup) with muted-drop, back-to-back within group, and bump-across-groups via an onPreempt policy hook.",
-          "why": "Single owner of detect \u2192 lookup \u2192 spawn \u2192 teardown AND group arbitration; every caller goes through it; the onPreempt hook keeps the door open to stacking later.",
+          "what": "New internal/voice package: Speak(text, cfg) spawns squid-tts-say in its own process group (detect → voice lookup → pipe stdin); Coordinator owns group state (StartGroup/Emit/EndGroup/CancelGroup) with muted-drop, back-to-back within group, and bump-across-groups via an onPreempt policy hook.",
+          "why": "Single owner of detect → lookup → spawn → teardown AND group arbitration; every caller goes through it; the onPreempt hook keeps the door open to stacking later.",
           "files": [
             "+ internal/voice/voice.go",
             "+ internal/voice/coordinator.go",
@@ -54,7 +54,7 @@
             "Resolves voice per detected language; unknown language falls back without failing",
             "Same-group chunks play back-to-back without bumping each other (ordering test)",
             "Cross-group Emit bumps the playing group (default policy) and starts immediately",
-            "Cancellation mid-playback kills the whole process group; no orphaned aplay \u2014 deterministic subprocess test plus go test -race",
+            "Cancellation mid-playback kills the whole process group; no orphaned aplay — deterministic subprocess test plus go test -race",
             "Emit for a muted groupID is dropped even if it arrives after cancellation (late-chunk test)",
             "Server down returns error, never panics, bounded timeout; CLI resolved from PATH"
           ],
@@ -68,7 +68,7 @@
           "name": "Implement the Chunker",
           "type": "feature",
           "what": "Define Chunker { Feed; Flush; ArmHoldTimer } in internal/voice with a sentence-boundary strategy: split on . ! ? \\n, hold fragments under ~3 words and merge, max hold 1.5s via owned timer, max chunk ~40 words force-flush.",
-          "why": "Measured TTS floor is 2-4s per call \u2014 single-word chunks sound robotic; merging fixes bullet lists; the interface keeps the algorithm swappable without touching wrapper or cancellation code.",
+          "why": "Measured TTS floor is 2-4s per call — single-word chunks sound robotic; merging fixes bullet lists; the interface keeps the algorithm swappable without touching wrapper or cancellation code.",
           "files": [
             "+ internal/voice/chunker.go",
             "+ internal/voice/chunker_test.go"
@@ -92,7 +92,7 @@
           "name": "Wire narration into the assistant stream",
           "type": "feature",
           "what": "Allocate a group ID at assistant message start; feed rendered text deltas into the Chunker and Emit chunks to the coordinator; EndGroup at stream end; group lifecycle tied to the message, surviving UIStreamState.reset() around tools.",
-          "why": "This is the core UX \u2014 first audio ~2s, not after full generation; already-emitted chunks keep playing during tool calls (no pause concept exists).",
+          "why": "This is the core UX — first audio ~2s, not after full generation; already-emitted chunks keep playing during tool calls (no pause concept exists).",
           "files": [
             "~ internal/app/stream.go",
             "~ internal/app/app.go"
@@ -139,7 +139,7 @@
           "number": "1.6",
           "name": "Speaking indicator",
           "type": "feature",
-          "what": "Show a speaker glyph / 'speaking\u2026' in the existing status row (internal/ui/notification.go:98, called from render.go:78) while any audio plays; cleared on completion or cancellation.",
+          "what": "Show a speaker glyph / 'speaking…' in the existing status row (internal/ui/notification.go:98, called from render.go:78) while any audio plays; cleared on completion or cancellation.",
           "why": "Shut-up needs a visible target; users must see that voice is active and that alt+x did something.",
           "files": [
             "~ internal/ui/notification.go",
@@ -172,7 +172,7 @@
           "number": "2.1",
           "name": "alt+x universal shut-up",
           "type": "feature",
-          "what": "Bind alt+x (verified free); handler calls coordinator.CancelGroup(activeGroup) \u2014 kills running chunk, drops buffered chunks, mutes all future chunks of that group. Handler must run BEFORE mode dispatch (internal/app/input.go:15) so authorization and help overlays cannot swallow the key.",
+          "what": "Bind alt+x (verified free); handler calls coordinator.CancelGroup(activeGroup) — kills running chunk, drops buffered chunks, mutes all future chunks of that group. Handler must run BEFORE mode dispatch (internal/app/input.go:15) so authorization and help overlays cannot swallow the key.",
           "why": "Per-group mute with zero exception rules; applies to narration AND alerts identically; one press silences a multi-chunk error completely. Not sticky: next group speaks normally.",
           "files": [
             "~ internal/app/keymap.go",
@@ -183,7 +183,7 @@
             "ShutUp: key.NewBinding(key.WithKeys(\"alt+x\"), key.WithHelp(\"alt+x\", \"shut up voice\"))"
           ],
           "acceptance": [
-            "alt+x during narration mutes rest of current message only \u2014 including phrases not yet emitted",
+            "alt+x during narration mutes rest of current message only — including phrases not yet emitted",
             "alt+x during an error lead-in silences the upcoming detail chunk too (one press, whole group dead)",
             "alt+x works while the authorization overlay or help overlay is open",
             "Next assistant message/alert speaks normally without re-enabling anything"
@@ -196,7 +196,7 @@
           "number": "2.2",
           "name": "New submitted message cancels speech",
           "type": "feature",
-          "what": "Submitting a user message cancels the active group before processing begins, hooked at ALL THREE admission paths: idle keyboard (stream.go:86), queued keyboard (queued_input.go:39), and socket admission (local_input.go:42) \u2014 at admission, not eventual delivery.",
+          "what": "Submitting a user message cancels the active group before processing begins, hooked at ALL THREE admission paths: idle keyboard (stream.go:86), queued keyboard (queued_input.go:39), and socket admission (local_input.go:42) — at admission, not eventual delivery.",
           "why": "User talking/typing a new instruction = barge-in; busy socket submissions currently push no UI event (local_input.go:59-62), so hooking only delivery misses immediate cancellation.",
           "files": [
             "~ internal/app/stream.go",
@@ -242,9 +242,9 @@
           "name": "Sponge key-down integration",
           "type": "feature",
           "what": "In the sponge client, on shortcut key-DOWN (before transcription), invoke 'squid-os voice stop'. LOCATE the sponge source first (check ~/src/squid-stack/squid-companion and the sponge repo) and record the real path here before implementing.",
-          "why": "Voice must die the instant the user starts talking into the mic \u2014 not when the transcript arrives seconds later; speaking over the assistant would be unusable.",
+          "why": "Voice must die the instant the user starts talking into the mic — not when the transcript arrives seconds later; speaking over the assistant would be unusable.",
           "files": [
-            "~ sponge client source - LOCATE FIRST"
+            "~ squid-stack/squid-tray/squid_sponge.py (LOCATED: sponge client lives at /home/goglue/src/squid-stack/squid-tray/squid_sponge.py, not a separate repo)"
           ],
           "snippet": [],
           "acceptance": [
@@ -296,7 +296,7 @@
           "name": "Alert map and formatting",
           "type": "feature",
           "what": "Single table of bilingual alert templates in internal/voice/alerts.go: error, authorization, context-bust, skill-loaded with name, sub-agent-called, thinking-started; formatter picks language from lastUserLang and interpolates details.",
-          "why": "~12 strings total \u2014 maintainable; the user hears their own language immediately while technical detail stays English (auto-detected by the server).",
+          "why": "~12 strings total — maintainable; the user hears their own language immediately while technical detail stays English (auto-detected by the server).",
           "files": [
             "+ internal/voice/alerts.go",
             "+ internal/voice/alerts_test.go"
@@ -318,7 +318,7 @@
           "name": "Hook events into the voice coordinator",
           "type": "feature",
           "what": "Wire all six alert call sites, each starting its own group: ToolEventNeedAuth (stream.go:293), LoadedSkill (stream.go:284/310), a NEW pre-execution agent event in tool_worker.go (ToolEventRunning fires too late, after ExecuteTools returns), error paths with distinct context-bust classification, and thinking-start (once per thinking session when thinking mode is active).",
-          "why": "These are the 'get my eyes here' moments \u2014 the highest-value voice use; alerts land between messages in practice, so bumping narration is the rare overlap case.",
+          "why": "These are the 'get my eyes here' moments — the highest-value voice use; alerts land between messages in practice, so bumping narration is the rare overlap case.",
           "files": [
             "~ internal/app/stream.go",
             "~ internal/chat/tool_worker.go"

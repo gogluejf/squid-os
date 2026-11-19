@@ -182,6 +182,68 @@ func TestStatusListClearResume(t *testing.T) {
 	}
 }
 
+func TestVoiceStopOp(t *testing.T) {
+	fc := newFake()
+	srv, sess := startTestServer(t, fc)
+
+	// No voice control wired: receiver_unavailable rejection.
+	r := sendFrame(t, srv.Path(), Request{Version: 1, Op: "voice_stop", SessionID: sess})
+	if r.Status != "rejected" || r.Code != "receiver_unavailable" {
+		t.Fatalf("unwired = %+v", r)
+	}
+
+	// Rewire with a live VoiceStop callback.
+	var mu sync.Mutex
+	calls := 0
+	srv.cfg.VoiceStop = func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		calls++
+		if calls == 1 { // first call cancels, second finds nothing
+			return VoiceStopCancelled
+		}
+		return VoiceStopNothingPlaying
+	}
+
+	r = sendFrame(t, srv.Path(), Request{Version: 1, Op: "voice_stop", SessionID: sess})
+	if r.Status != "cancelled" || r.SessionID != sess {
+		t.Fatalf("stop = %+v", r)
+	}
+	r = sendFrame(t, srv.Path(), Request{Version: 1, Op: "voice_stop"})
+	if r.Status != "nothing_playing" {
+		t.Fatalf("second stop = %+v", r)
+	}
+
+	// Explicit mismatched --session rejects like the input ops (wrong_session).
+	mu.Lock()
+	callsBefore := calls
+	mu.Unlock()
+	r = sendFrame(t, srv.Path(), Request{Version: 1, Op: "voice_stop", SessionID: "deadbeef-0000-4000-8000-000000000002"})
+	if r.Status != "rejected" || r.Code != "wrong_session" {
+		t.Fatalf("mismatched session = %+v", r)
+	}
+	mu.Lock()
+	if calls != callsBefore {
+		t.Fatalf("VoiceStop invoked for mismatched session: %d calls", calls)
+	}
+	mu.Unlock()
+}
+
+// TestVoiceStopOpReceiverNotReady verifies the three-valued app-side result:
+// a wedged UI loop (reported as receiver_not_ready) must map to a rejection,
+// NOT to a successful nothing_playing — the CLI then exits non-zero.
+func TestVoiceStopOpReceiverNotReady(t *testing.T) {
+	fc := newFake()
+	srv, sess := startTestServer(t, fc)
+
+	srv.cfg.VoiceStop = func() string { return VoiceStopNotReady }
+
+	r := sendFrame(t, srv.Path(), Request{Version: 1, Op: "voice_stop", SessionID: sess})
+	if r.Status != "rejected" || r.Code != "receiver_unavailable" {
+		t.Fatalf("not-ready stop = %+v, want rejected/receiver_unavailable", r)
+	}
+}
+
 func TestConcurrentSubmissionsSerialize(t *testing.T) {
 	fc := newFake()
 	srv, sess := startTestServer(t, fc)

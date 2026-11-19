@@ -107,6 +107,12 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.historyIdx = -1
 	m.draft = ""
 
+	// Voice barge-in (task 2.2): a NEW submitted message cancels the active
+	// speech group at ADMISSION, before processing begins — from every
+	// admission path (idle Enter, queued Enter/Alt+Q, socket). Plain typing
+	// without submitting never reaches here, so listen-while-drafting holds.
+	m.narrator.cancelActive()
+
 	userMsg := config.Message{
 		ID:          fmt.Sprintf("msg_%d", len(m.session.Doc.Messages)+1),
 		Role:        config.RoleUser,

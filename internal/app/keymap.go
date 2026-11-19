@@ -33,6 +33,7 @@ type keyMap struct {
 	AuthMode      key.Binding
 	QueueAfterTurn key.Binding
 	Voice         key.Binding
+	ShutUp        key.Binding
 }
 
 var keys = keyMap{
@@ -155,5 +156,9 @@ var keys = keyMap{
 	Voice: key.NewBinding(
 		key.WithKeys("alt+v"),
 		key.WithHelp("alt+v", "toggle voice"),
+	),
+	ShutUp: key.NewBinding(
+		key.WithKeys("alt+x"),
+		key.WithHelp("alt+x", "shut up voice"),
 	),
 }

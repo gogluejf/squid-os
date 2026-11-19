@@ -83,17 +83,53 @@ type Model struct {
 	// task 1.4). Group lifecycle is tied to the message, not the turn ctx.
 	narrator *Narrator
 
+	// langStore tracks the last detected user language asynchronously
+	// (task 3.1); submissions bump its newest-ID at admission time.
+	langStore *voice.LangStore
+
+	// langSeq counts user-message submissions for async detection IDs;
+	// written only on the UI goroutine (admission paths), no lock needed.
+	langSeq int64
+
+	// langPush is the program.Send used by fireUserLangDetect to post results
+	// into the Bubble Tea loop. It lives in voiceWiring (a shared pointer) so
+	// the value copied into tea.NewProgram sees the wiring installed by
+	// WireVoiceSpeaking on the pre-program copy — a plain Model field would be
+	// lost in that copy and fireUserLangDetect would no-op forever in
+	// production (finding #1). Set in WireVoiceSpeaking (nil = no-op).
+
 	// voiceSpeaking drives the "🔊 speaking…" indicator in the status row
 	// (task 1.6). Set by the coordinator's speaking hook on the first chunk
 	// start; cleared on player exit or kill. Written only from the Bubble
 	// Tea update goroutine (see newVoiceCoordinator), so no extra lock.
 	voiceSpeaking bool
 
+	// lastUserLang is the last detected user-message language ("en"/"fr"),
+	// driving bilingual alert lead-ins (task 3.1). Detection runs
+	// asynchronously at submission time; the background goroutine posts
+	// langDetectedMsg via program.Send, so this field is written ONLY
+	// inside Update — same rule as voiceSpeaking.
+	lastUserLang string
+
 	// turnActive is true from startStream until the turn fully ends (setChatMode).
 	// Covers the gap between "tool batch done" and "first token of next step"
 	// where no stream/tool channel is active yet but a turn is still in flight.
 	// Submissions arriving in that window must queue, not deliver immediately.
 	turnActive bool
+
+	// voiceWiring holds program-side wiring installed by WireVoiceSpeaking
+	// AFTER tea.NewProgram copied the Model. The pointer is shared across all
+	// copies (Bubble Tea runs the copy; Update returns fresh copies each
+	// frame), so langPush set on the pre-program model is visible to the live
+	// loop. Finding #1: a plain value field would be lost in the copy.
+	voiceWiring *voiceWiringState
+}
+
+// voiceWiringState is the mutable, program-side voice wiring shared by
+// reference across every Model copy. Written once by WireVoiceSpeaking
+// (pre-Run, single goroutine) and read-only afterwards — no lock needed.
+type voiceWiringState struct {
+	langPush func(tea.Msg)
 }
 
 // StartupOptions contains resolved values for an interactive session bootstrap.
@@ -175,6 +211,12 @@ func New(options StartupOptions) (Model, error) {
 	// tea program exists (the speaking hook needs it). Until then the
 	// narrator is inert: every Narrator method no-ops on a nil coord.
 	m.narrator = newNarrator(nil)
+	// Async user-language detection (task 3.1): always present so any
+	// submission path can bump the newest-ID; fireUserLangDetect is a no-op
+	// until a speaker + program exist. The wiring state is allocated here so
+	// every Model copy shares the same pointer (finding #1).
+	m.langStore = voice.NewLangStore()
+	m.voiceWiring = &voiceWiringState{}
 	return m, nil
 }
 
@@ -183,16 +225,70 @@ func New(options StartupOptions) (Model, error) {
 // applied only inside Update, so Model writes stay single-goroutine.
 type voiceSpeakingMsg struct{ on bool }
 
+// langDetectedMsg carries an async user-language detection result from the
+// DetectLang goroutine into the Bubble Tea loop. It is posted via
+// program.Send and applied only inside Update (m.lastUserLang), keeping all
+// Model writes on the update goroutine. subID identifies which submission
+// fired this detection; Update applies it only while that submission is still
+// the newest (finding #7: a stale snapshot must never overwrite a newer
+// language).
+type langDetectedMsg struct {
+	subID int64
+	lang  string
+}
+
+// fireUserLangDetect bumps the lang store's newest-submission ID and fires
+// one /detect round-trip in a background goroutine with a bounded deadline.
+// The bump happens synchronously on the UI goroutine at admission time, so a
+// later submission always supersedes an earlier one regardless of when the
+// HTTP round-trips resolve. The result is posted back through program.Send as
+// langDetectedMsg; failures/timeouts post nothing (previous value intact).
+// No-op when voice or the program wiring is unavailable.
+func (m *Model) fireUserLangDetect(text string) {
+	// Voice off → nothing will ever speak, so detecting the user's language
+	// is pure waste: skip it. The last known value stays intact; flipping
+	// /voice on re-detects from the next message.
+	if !m.voiceOn || m.langStore == nil || m.narrator == nil || m.narrator.coord == nil || m.voiceWiring == nil || m.voiceWiring.langPush == nil {
+		return
+	}
+	sp := m.narrator.coord.Speaker()
+	m.langSeq++
+	subID := m.langSeq
+	m.langStore.Submit(subID)
+	go func() {
+		voice.DetectLang(sp, text, subID, m.langStore)
+		// program.Send only pushes onto an internal channel and never blocks
+		// on the event loop (same guarantee as the speaking hook), so this
+		// cannot deadlock even from inside Update.
+		m.voiceWiring.langPush(langDetectedMsg{subID: subID, lang: m.langStore.Get()})
+	}()
+}
+
 // WireVoiceSpeaking builds the voice coordinator now that the tea program
 // exists (app.New builds the model before the program does) and installs the
 // speaking-indicator hook. The narrator starts inert (nil coord) until this
 // call, so no throwaway coordinator is built in New. Safe to call once; a
 // no-op when voice is unavailable or already wired.
+//
+// Finding #1: this mutates the PRE-program Model copy — tea.NewProgram has
+// already copied the value. Two things make the wiring reach the live loop:
+//  1. langPush lives in voiceWiringState, a pointer shared by every copy;
+//  2. the narrator is rebuilt via newNarrator (not a direct coord assign) so
+//     the group-drain hook installs — without it the alert recursion guard
+//     wedges after the first alert (finding #2). Group state is empty at this
+//     point (pre-Run), so a fresh Narrator loses nothing.
 func (m *Model) WireVoiceSpeaking(p *tea.Program) {
 	if m.narrator == nil || p == nil {
 		return
 	}
-	m.narrator.coord = newVoiceCoordinator(m.settings.Voice, p)
+	m.narrator = newNarrator(newVoiceCoordinator(m.settings.Voice, p))
+	// Async user-language detection posts its result through the same
+	// program.Send channel as the speaking hook (task 3.1). Written through
+	// the shared wiring state so the program's Model copy sees it.
+	if m.voiceWiring == nil {
+		m.voiceWiring = &voiceWiringState{}
+	}
+	m.voiceWiring.langPush = p.Send
 }
 
 // newVoiceCoordinator builds the voice coordinator from settings. A missing

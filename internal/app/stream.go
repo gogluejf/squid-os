@@ -16,6 +16,7 @@ import (
 	"squid-os/internal/inputqueue"
 	"squid-os/internal/ui"
 	"squid-os/internal/ui/component"
+	"squid-os/internal/voice"
 )
 
 // setStreamMode initializes TUI state for a new request.
@@ -137,6 +138,10 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	m.textarea.Focus()
 	(&m).clearNotification()
 
+	// Async user-language detection (task 3.1): fire-and-forget at admission;
+	// adds no turn latency, failures leave lastUserLang intact.
+	(&m).fireUserLangDetect(text)
+
 	return (&m).startStream()
 }
 
@@ -167,9 +172,19 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			msg = "Authentication failed — use /model to re-authenticate"
 			result.MsgIdx = chat.AppendAuthErrorMessage(m.session.Session)
 		} else if result.SilentFailure {
+			// Generic error (finding #10 ruling): an empty stream with no stop
+			// reason is NOT classified as its own ContextBust event. Voice
+			// alerts are reactive — they announce what just happened, they do
+			// not drive a preventive "compact your context" workflow — so the
+			// dedicated context-bust template buys nothing here; the standard
+			// Error lead-in + raw detail covers it.
+			(&m).speakAlertEvent(voice.Error, msg)
 			_ = config.PersistRefreshedProvider(m.paths, m.endpoints, m.session.CurrentInference().Provider)
 			result.MsgIdx = chat.AppendSilentFailureMessage(m.session.Session)
 		} else {
+			// Voice alert (task 3.3): localized lead-in + raw English detail,
+			// same group — spoken BEFORE the aborted narration group dies.
+			(&m).speakAlertEvent(voice.Error, msg)
 			_ = config.PersistRefreshedProvider(m.paths, m.endpoints, m.session.CurrentInference().Provider)
 			result.MsgIdx = chat.AppendStreamErrorMessage(m.session.Session, result.Error)
 		}
@@ -252,6 +267,16 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		if event.Text != "" {
 			(&m).narrator.feedDelta(event.Text)
 		}
+		// Thinking-start alert (task 3.3): once per thinking session, only
+		// when thinking mode is actually enabled in the session config AND
+		// the model enters a think block. The engine sets InThinking on the
+		// first thinking delta and it stays true until the block ends, so
+		// this fires exactly once.
+		if event.InThinking && !m.session.UIStream.ThinkingAnnounced &&
+			m.session.EffectiveInference().Thinking.Enabled {
+			m.session.UIStream.ThinkingAnnounced = true
+			(&m).speakAlertEvent(voice.ThinkingStart, "")
+		}
 		m.session.UIStream.TokenCount++
 		if m.session.UIStream.TokenCount%3 == 0 {
 			m.refreshViewportFollowing()
@@ -309,6 +334,16 @@ func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
 			if m.session.Doc.Pending != nil {
 				m.session.Doc.Pending.ActiveSkill = nil
 			}
+			// Voice alert (task 3.3): "I loaded the skill {name}" — fired at
+			// RUNNING (pre-execution visibility), matching ToolEventDone's
+			// later state application; both events carry LoadedSkill.
+			(&m).speakAlertEvent(voice.SkillLoaded, event.LoadedSkill)
+		}
+		// Sub-agent alert (task 3.3): "I sent a sub-agent working on it" at
+		// PRE-EXECUTION — AgentName is set by the worker only when this
+		// Running event corresponds to an agent tool starting.
+		if event.AgentName != "" {
+			(&m).speakAlertEvent(voice.SubAgent, event.AgentName)
 		}
 		m.refreshViewportFollowing()
 		return m, waitForToolEvent(m.session.UIStream.ToolCh)
@@ -322,6 +357,9 @@ func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
 			IsDestructive: event.AuthRequest.IsDestructive,
 		}
 		m.session.UIStream.MsgIdx = event.MsgIdx
+		// Voice alert (task 3.3): "a command requires your authorization" in
+		// the user's language, as its own group — get-my-eyes-here moment.
+		(&m).speakAlertEvent(voice.Authorization, "")
 		m.setAuthMode()
 		return m, nil
 

@@ -48,6 +48,10 @@ type ToolExecResult struct {
 	AuthRequest      *AuthRequest
 	CapturedUserText string
 	LoadedSkill      string
+	// AgentName is populated when the tool about to run (or just started) is
+	// an agent tool: the agent's name for call_agent, or "inline" for
+	// inline_agent. Consumers use it for the pre-execution sub-agent alert.
+	AgentName string
 	Error            error
 	// Cancelled is set when the turn context was cancelled around this tool's
 	// execution: remaining entries are finalized as cancelled and the caller
@@ -312,6 +316,19 @@ doExecute:
 	ctx := s.ToolContext(entry.ID, childRef)
 	resultStart := time.Now()
 
+	// Pre-execution agent identity (task 3.3): the sub-agent voice alert must
+	// fire when the tool STARTS running, BEFORE Execute blocks on the child —
+	// ToolEventDone would arrive only after the child finishes. Reuses the
+	// childRef name already derived via GenerateChildSessionRef above (single
+	// source of truth for the agent identity). Applied to the result at every
+	// return path below (agent tools always continue or error, never
+	// need-auth) — including ToolExecDone for a sole/final agent call, which
+	// is exactly the common case the pre-execution event exists for.
+	preExecAgentName := ""
+	if tools.IsAgentTool(toolName) {
+		preExecAgentName = childRef.Name
+	}
+
 	result := tool.Execute(args, ctx)
 
 	// Apply session state changes before recording the final tool result so
@@ -372,6 +389,9 @@ doExecute:
 	}
 
 	res := ToolExecResult{Action: nextToolAction(i, len(entries)), MsgIdx: msgIdx, ToolIndex: i, NextIndex: i + 1}
+	if preExecAgentName != "" {
+		res.AgentName = preExecAgentName
+	}
 	if toolName == "skill_load" && result.Status == tools.ResultStatusSuccess {
 		if name, ok := args["name"].(string); ok {
 			res.LoadedSkill = name

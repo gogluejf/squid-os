@@ -239,6 +239,11 @@ func (c *Coordinator) Current() int {
 	return c.current
 }
 
+// Speaker exposes the underlying speaker for callers that need detection
+// without playback (async user-language tracking). Nil-safe by construction:
+// a Coordinator always owns its speaker.
+func (c *Coordinator) Speaker() *Speaker { return c.speaker }
+
 // clearCurrentLocked forgets groupID as the active group. Caller holds mu.
 func (c *Coordinator) clearCurrentLocked(groupID int) {
 	if c.current == groupID {

@@ -147,5 +147,8 @@ func (m Model) sendLocalSocketMessage(msg localSocketMsg) (tea.Model, tea.Cmd) {
 		(&m).setNotification(ui.NotificationError, err.Error())
 		return m, nil
 	}
+	// Async user-language detection (task 3.1): socket submissions count as
+	// user messages too — the alert lead-in must follow their language.
+	(&m).fireUserLangDetect(msg.text)
 	return (&m).startStream()
 }

@@ -24,20 +24,33 @@ type Narrator struct {
 	groupID    int // current message's group; 0 = none active
 	lastGroupID int // last group started, survives endMessage while its tail drains
 	chunker    *voice.SentenceChunker
+
+	// Alert state (task 3.3): alertActive is the recursion guard — true while
+	// any alert group is in flight; alertGids tracks which groups are alerts
+	// so the drain hook can clear the flag when the last one finishes.
+	alertActive bool
+	alertGids   map[int]struct{}
 }
 
 // newNarrator builds a Narrator over the given coordinator. A nil coord
 // yields an inert narrator (all methods no-op) so callers need no guards.
 func newNarrator(coord *voice.Coordinator) *Narrator {
-	n := &Narrator{coord: coord}
+	n := &Narrator{coord: coord, alertGids: map[int]struct{}{}}
 	if coord != nil {
 		// Track group drain so cancelActive can keep silencing the audible
 		// tail after endMessage (EndGroup closes admission, not playback).
 		// The hook fires from the coordinator's lock-free path and re-enters
 		// n.mu — safe because it never blocks.
-		coord.SetGroupDrainedHook(n.onGroupDrained)
+		coord.SetGroupDrainedHook(n.onAnyGroupDrained)
 	}
 	return n
+}
+
+// onAnyGroupDrained dispatches the coordinator's per-group drain callback to
+// the narration-tail tracker and the alert-guard tracker.
+func (n *Narrator) onAnyGroupDrained(gid int) {
+	n.onGroupDrained(gid)
+	n.onAlertDrained(gid)
 }
 
 // onGroupDrained is the coordinator's per-group drain callback: once a group

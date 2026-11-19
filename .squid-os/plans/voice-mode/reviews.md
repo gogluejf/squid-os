@@ -46,3 +46,41 @@
   - #7 minor REJECTED — supporting files (narration.go, protocol.go, test helpers) were flagged and justified per-task in sections 2.1-2.4 above.
   - #2 sponge major PARTIALLY ADDRESSED — capture cannot block on ack (wedged TUI would kill dictation); residual race documented in begin(); happy-path latency unchanged (daemon thread, tens of ms). Final confirmation needs the manual mic test.
 - Re-verified after fixes: go build, go vet, go test -count=1 (app/cli/localinput), go test -race (app/voice) all green.
+
+## 3.1 Track lastUserLang asynchronously
+- A (ninfer/qwen3.8-27b): PASS — minor: 500ms inline literal (→ named detectLangDeadline); FR test one hop weaker (now asserts posted value AND langStore.Get()); rapid-fire timing test theoretically skippable (mitigated by the deterministic SetIfNewest ordering test).
+- B (openai-codex/gpt-6-astra): DEFERRED — single end-of-milestone review per user instruction.
+- Resolution: both actionable minors accepted and fixed; re-verified green (build, vet, tests). NOT committed — awaiting explicit user commit instruction (standing rule).
+
+## 3.2 Alert map and formatting
+- A (ninfer/qwen3.8-27b): PASS — minor: unknown Event panicked on nil map index (→ degrades to ""); empty-name degenerate rendering baked into contract without stating intent (→ dedicated documenting test).
+- B (openai-codex/gpt-6-astra): DEFERRED — single end-of-milestone review per user instruction.
+- Resolution: both minors accepted and fixed; re-verified green. NOT committed — awaiting explicit user commit instruction (standing rule).
+
+## 3.3 Hook events into the voice coordinator
+- A (ninfer/qwen3.8-27b): PASS — major: thinking-start fired without checking thinking mode enabled (→ gated on EffectiveInference().Thinking.Enabled + test case); minor: pre-exec agent name re-derived instead of reusing childRef.Name (→ single source of truth); minor: three call-site tests don't pin the specific alert due to fast fake-TTS drain (accepted as-is: guard-lifecycle proof + one-line passthrough call sites; noted).
+- B (openai-codex/gpt-6-astra): DEFERRED — single end-of-milestone review per user instruction.
+- Resolution: both actionable findings fixed; re-verified green ×3 (build, vet, race, app/voice/chat). NOT committed — awaiting explicit user commit instruction (standing rule).
+
+## 3.1 refinement (user-requested): detection gated on voice-on
+- User pointed out: detecting language while voice is off is pointless waste (only alerts consume lastUserLang, and alerts are silent when off).
+- Fix: fireUserLangDetect now bails when !m.voiceOn. Last known value stays intact; flipping /voice on re-detects from the next message. Three 3.1 tests updated to set m.voiceOn=true (they exercise detection itself). Re-verified green ×2 incl. race.
+
+## Milestone 3 — end-of-milestone review (B) — RESOLVED (2026-11-19)
+- B (openai-codex/gpt-6-astra): FAIL, 13 findings. Fixes landed in-tree across sessions 2026-11-18_20-58-41 → 2026-11-19_01-39-26 → this session; the previous session died mid-edit on #6 with a handoff message.
+- Resolution:
+  - #1 blocker ACCEPTED+FIXED — launchTUI wired WireVoiceSpeaking on the PRE-program Model copy, so the program's copy kept langPush == nil and fireUserLangDetect was a permanent production no-op. Fix: langPush now lives in voiceWiringState, a pointer allocated in New and shared by every Model copy (value copies share the pointer); WireVoiceSpeaking writes through it. Test: TestWireVoiceSpeakingReachesProgramCopy proves the copied model sees non-nil langPush.
+  - #2 blocker ACCEPTED+FIXED (prior session) — WireVoiceSpeaking rebuilds the narrator via newNarrator so the group-drain hook installs; the alert recursion guard no longer wedges after the first alert.
+  - #3 blocker ACCEPTED+FIXED (prior session) — speakAlert sets n.lastGroupID = gid, so alt+x / barge-in / voice stop / toggle-off / shutdown kill alerts exactly like narration.
+  - #4 major ACCEPTED+FIXED (prior session) — preExecAgentName applied on every return path in tool_exec.go; AgentName carried on ToolEventDone (tool_worker.go).
+  - #5 major ACCEPTED+FIXED (prior session) — SkillLoaded + SubAgent alerts added to the ToolEventDone handler (stream.go); sole/final skill_load and agent calls no longer silent.
+  - #6 major ACCEPTED+FIXED — socket submissions only ran lang detection on the IDLE path; busy/after-turn admissions parked in the queue were drained at the boundary without detection. Fix: fireUserLangDetect now fires at admission in Update's localAdmissionMsg case (next to cancelActive, duplicates excluded). The newest-subID guard (#7) drops stale results.
+  - #7 major ACCEPTED+FIXED — stale lang overwrite: the goroutine snapshotted m.langStore.Get() AFTER a newer submission may have landed, and Update wrote lastUserLang unconditionally. Fix: langDetectedMsg carries subID; Update applies only when msg.subID >= m.langSeq. All four last_user_lang tests updated to construct langDetectedMsg{subID, lang}.
+  - #8 minor RESOLVED — doc/comment-only finding; addressed in-tree (comment clarifications), no behavior change.
+  - #9 major ACCEPTED+FIXED (prior session) — speakAlert splits text into 2 chunks (SplitN(text," ",2)) so the EN detail gets its own TTS language detection. Verified by recording-CLI test asserting both lead-in and detail are spoken.
+  - #10 major USER RULING (2026-11-19) — SilentFailure ("empty stream, no stop reason") now routes to the GENERIC Error alert, NOT the dedicated ContextBust event. User clarified: voice alerts are reactive announcements of what just happened — there is no preventive "compact your context" workflow, so the dedicated template buys nothing. The ContextBust Event/template stays in the voice package (unused by app call sites for now); tests updated: TestSilentFailureSpeaksGenericError (+ recorded variant) replace the old ContextBust-distinctly tests.
+  - #11 major ACCEPTED+FIXED (prior session) — auth errors + ToolEventError now speak voice.Error alerts.
+  - #12 major ACCEPTED+FIXED — call-site tests proved nothing about actual emission (guard-clear + probe passed even with the alert removed). Hardened with a RECORDING fake TTS CLI (writes each spoken chunk to a temp file): TestToolEventNeedAuthSpeaksAuthorizationRecorded, TestToolEventRunningSkillLoadedSpeaksAlertRecorded, TestLoopErrorSpeaksErrorAlertWithDetailRecorded, TestContextBustSpeaksOwnTemplateRecorded, TestSpeakAlertRecursionGuardDropsSecond all assert the expected lead-in string was actually spoken (and the dropped second alert was NOT).
+  - #13 minor REJECTED — scope note (out-of-plan file touched); justified: the fix required touching the wiring state in app.go, which is the plan's core file. No unrelated changes.
+- Re-verified after fixes: go build ./..., go vet ./..., go test -count=1 (app/voice/chat/cli/localinput), go test -race (app/voice) — ALL GREEN.
+- Status: all 13 findings resolved. NOT committed — awaiting explicit user commit instruction (standing rule), ideally after user tests voice mode.

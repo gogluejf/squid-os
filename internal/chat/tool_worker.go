@@ -35,6 +35,12 @@ type ToolEvent struct {
 	AppendedUserMsgID  string
 	AppendedUserMsgIdx int
 	LoadedSkill        string
+	// AgentName is set on ToolEventRunning for agent tool calls (call_agent /
+	// inline_agent) BEFORE execution starts — the voice alert "I sent a
+	// sub-agent working on it" needs it at pre-execution time, when
+	// ToolEventRunning fires (ToolEventDone would be too late: by then the
+	// child may already be running and the user wants the heads-up NOW).
+	AgentName string
 }
 
 // StartToolExec runs the ExecuteTools loop in a background goroutine so slow
@@ -78,7 +84,7 @@ func StartToolExec(ctx context.Context, s *Session, opts ToolExecOptions) <-chan
 				out <- ToolEvent{Type: ToolEventNeedAuth, MsgIdx: res.MsgIdx, ToolIndex: res.ToolIndex, AuthRequest: res.AuthRequest}
 				return
 			case ToolExecContinue:
-				out <- ToolEvent{Type: ToolEventRunning, MsgIdx: res.MsgIdx, ToolIndex: res.ToolIndex, NextIndex: res.NextIndex, LoadedSkill: res.LoadedSkill}
+				out <- ToolEvent{Type: ToolEventRunning, MsgIdx: res.MsgIdx, ToolIndex: res.ToolIndex, NextIndex: res.NextIndex, LoadedSkill: res.LoadedSkill, AgentName: res.AgentName}
 				msgIdx = res.MsgIdx
 			case ToolExecDone:
 				if res.Cancelled {
@@ -94,7 +100,7 @@ func StartToolExec(ctx context.Context, s *Session, opts ToolExecOptions) <-chan
 					appendedIdx = len(s.Doc.Messages) - 1
 				}
 				s.Stream.Reset()
-				out <- ToolEvent{Type: ToolEventDone, MsgIdx: res.MsgIdx, ToolIndex: res.ToolIndex, NextIndex: res.NextIndex, AppendedUserMsgID: appendedID, AppendedUserMsgIdx: appendedIdx, LoadedSkill: res.LoadedSkill}
+				out <- ToolEvent{Type: ToolEventDone, MsgIdx: res.MsgIdx, ToolIndex: res.ToolIndex, NextIndex: res.NextIndex, AppendedUserMsgID: appendedID, AppendedUserMsgIdx: appendedIdx, LoadedSkill: res.LoadedSkill, AgentName: res.AgentName}
 				return
 			default:
 				out <- ToolEvent{Type: ToolEventError, Error: fmt.Errorf("unexpected tool action %d", res.Action)}

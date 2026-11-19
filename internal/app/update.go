@@ -66,6 +66,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.voiceSpeaking = msg.on
 		return m, nil
 
+	case langDetectedMsg:
+		// Async user-language detection result (task 3.1). The store already
+		// dropped stale results via SetIfNewest, but the posted value is a
+		// SNAPSHOT taken when THIS submission's round-trip resolved — a newer
+		// submission may have landed since. Apply only while this result still
+		// belongs to the newest submission; otherwise keep the current value
+		// (a later msg for the newer submission carries its language). Finding
+		// #7. Written only here (Update), per the Bubble Tea single-goroutine
+		// rule.
+		if msg.lang != "" && msg.subID >= m.langSeq {
+			m.lastUserLang = msg.lang
+		}
+		return m, nil
+
 	case streamEventMsg:
 		return m.handleStreamEvent(chat.StreamEvent(msg))
 
@@ -108,6 +122,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// request: no new message was submitted, so it must NOT mute
 				// in-progress speech.
 				m.narrator.cancelActive()
+				// Async user-language detection (task 3.1): fire at ADMISSION
+				// for every path. Idle deliveries run it inside
+				// sendLocalSocketMessage, but busy/after-turn admissions park
+				// in the queue and are drained at the boundary WITHOUT any
+				// other detect call — the alert lead-in must follow their
+				// language too (finding #6). The newest-subID guard drops
+				// stale results; duplicates are excluded above.
+				(&m).fireUserLangDetect(msg.req.Text)
 			}
 		}
 		msg.reply <- info

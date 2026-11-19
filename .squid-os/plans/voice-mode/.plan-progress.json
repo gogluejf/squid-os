@@ -128,21 +128,37 @@
     },
     "3.1": {
       "number": "3.1",
-      "status": "not_started",
+      "status": "done",
       "name": "Track lastUserLang asynchronously",
       "milestone": "Bilingual alerts",
-      "milestone_number": "3"
+      "milestone_number": "3",
+      "summary": {
+        "decisions": "Detection result is posted via program.Send as langDetectedMsg and applied ONLY inside Update (Bubble Tea single-goroutine rule); the background goroutine never writes Model fields. Stale-result protection lives in LangStore.SetIfNewest (subID >= lastID check), so even out-of-order HTTP resolutions cannot clobber newer state. The posted value is store.Get() at completion time, which is always the newest accepted language. Fire-and-forget goroutine (no tea.Cmd) so queued-input admission (which returns bool, not cmds) can also trigger detection at admission time rather than boundary delivery.",
+        "tradeoffs": "langSeq is a per-Model counter (not persisted); session reload starts IDs fresh \u2014 harmless since LangStore is also fresh per process. Detection fires only when the voice coordinator exists (TTS CLI available); without it alerts default to en fallback downstream.",
+        "confidence": "high",
+        "done": "Added internal/voice/detect.go (LangStore with Submit/SetIfNewest/Get + DetectLang helper with 500ms bounded deadline reusing Speaker.DetectLanguage). Wired Model.lastUserLang (written only in Update via langDetectedMsg posted through program.Send, same pattern as voiceSpeakingMsg) and fireUserLangDetect called from all three submission paths: sendMessage (stream.go), admitQueuedInput at admission (queued_input.go), sendLocalSocketMessage (local_input.go). Added Coordinator.Speaker() accessor. Tests: voice package covers FR detection, rapid-fire stale-drop ordering (FR resolves second but EN wins), failure/timeout leaving previous value intact, empty-result ignored; app package covers the full wiring incl. Update application.",
+        "lessons_learned": "newQueueTestModel does not initialize narrator/langStore \u2014 tests must set them explicitly. Model is passed by value through Update, so pointer fields (narrator, langStore) survive copies but scalar fields (lastUserLang) do not \u2014 seed scalars directly in tests instead of round-tripping through Update before wiring. Connection-refused to 127.0.0.1:1 fails fast (~ms), well under the 500ms deadline.",
+        "failures": "None"
+      }
     },
     "3.2": {
       "number": "3.2",
-      "status": "not_started",
+      "status": "done",
       "name": "Alert map and formatting",
       "milestone": "Bilingual alerts",
-      "milestone_number": "3"
+      "milestone_number": "3",
+      "summary": {
+        "failures": "None",
+        "confidence": "high",
+        "decisions": "Reused the existing fallbackLang constant from voice.go as the EN key instead of introducing a new 'en' literal; kept FormatAlert (pure template render) separate from AlertText (group-level text assembly) so later tasks can emit chunks without re-deriving language logic.",
+        "tradeoffs": "None \u2014 table is the single source; no call-site magic strings.",
+        "done": "Created internal/voice/alerts.go with the Event type (6 events), the single bilingual alerts table (~12 strings, EN+FR per event), FormatAlert(ev, lang, detail) which falls back to EN for unknown languages and interpolates {name}, and AlertText(ev, lastUserLang, detail) which appends raw English detail after the lead-in for Error events only. Added alerts_test.go with deterministic exact-string tests covering all 12 template strings, EN fallback for unknown/empty languages, {name} interpolation in both languages, error-detail appending, and non-error detail suppression.",
+        "lessons_learned": "strings.ReplaceAll with an empty replacement strips the placeholder entirely ('I loaded the skill .') \u2014 the test must expect that, not the raw template, when detail is empty."
+      }
     },
     "3.3": {
       "number": "3.3",
-      "status": "not_started",
+      "status": "done",
       "name": "Hook events into the voice coordinator",
       "milestone": "Bilingual alerts",
       "milestone_number": "3"

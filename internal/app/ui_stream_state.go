@@ -19,6 +19,10 @@ type UIStreamState struct {
 	Stopwatch        util.Stopwatch
 	AuthorizationCtx *AuthorizationContext
 	MsgIdx           int
+	// ThinkingAnnounced: the thinking-start voice alert (task 3.3) fired for
+	// the current think block. Reset with the stream so a NEW message's
+	// thinking speaks again; survives within one message so it fires once.
+	ThinkingAnnounced bool
 }
 
 func (ss *UIStreamState) reset() {

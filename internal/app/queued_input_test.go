@@ -32,6 +32,9 @@ func newQueueTestModel(t *testing.T) Model {
 	}
 	m.submissions = NewMemSubmissionCoordinator(func() bool { return false })
 	t.Cleanup(m.submissions.Close)
+	// Voice wiring state (finding #1): allocated here so every test model has
+	// the shared pointer; fireUserLangDetect/WireVoiceSpeaking rely on it.
+	m.voiceWiring = &voiceWiringState{}
 	return m
 }
 

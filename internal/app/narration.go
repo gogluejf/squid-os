@@ -83,7 +83,7 @@ func (n *Narrator) beginMessage(enabled bool) {
 	if n.groupID != 0 {
 		n.endLocked(context.Background())
 	}
-	n.groupID = n.coord.StartGroup()
+	n.groupID = n.coord.StartGroup(voice.FinishChunk)
 	// The previous message's draining tail (if any) is superseded: it keeps
 	// playing but is no longer the cancellable "active" group. A drained one
 	// was already cleared by the drain hook; this assignment covers both.
@@ -156,21 +156,15 @@ func (n *Narrator) endLocked(ctx context.Context) {
 // It targets the allocated message group even before audio starts, then falls
 // back to lastGroupID after endMessage while already-emitted chunks drain.
 // The draining-tail identity check prevents cancellation of a newer group.
+// cancelActive = shut-up: kill current + all pending + our own group. Silence now.
 func (n *Narrator) cancelActive() bool {
 	if n == nil || n.coord == nil {
 		return false
 	}
 	n.mu.Lock()
-	defer n.mu.Unlock()
-	// Cancel an allocated group even before its first chunk is emitted.
-	// Current() is still zero during the chunker's hold period.
-	gid := n.groupID
-	if gid == 0 {
-		gid = n.lastGroupID
-		if gid == 0 || n.coord.Current() != gid {
-			n.lastGroupID = 0
-			return false
-		}
+	ourGid := n.groupID
+	if ourGid == 0 {
+		ourGid = n.lastGroupID
 	}
 	n.groupID = 0
 	n.lastGroupID = 0
@@ -178,7 +172,57 @@ func (n *Narrator) cancelActive() bool {
 		n.chunker.Cancel()
 		n.chunker = nil
 	}
-	n.coord.CancelGroup(gid)
+	n.mu.Unlock()
+	n.coord.CancelAll()
+	if ourGid != 0 {
+		n.coord.CancelGroup(ourGid)
+	}
+	return true
+}
+
+// cancelNarration kills the narrator's own group + pending, but leaves
+// independently-started groups (alerts) alone. Used at stream abort boundaries.
+func (n *Narrator) cancelNarration() {
+	if n == nil || n.coord == nil {
+		return
+	}
+	n.mu.Lock()
+	gid := n.groupID
+	if gid == 0 {
+		gid = n.lastGroupID
+	}
+	n.groupID = 0
+	n.lastGroupID = 0
+	if n.chunker != nil {
+		n.chunker.Cancel()
+		n.chunker = nil
+	}
+	n.mu.Unlock()
+	if gid != 0 {
+		n.coord.CancelGroup(gid)
+	}
+}
+
+// finishActiveChunk = barge-in: let current chunk finish, discard the rest.
+func (n *Narrator) finishActiveChunk() bool {
+	if n == nil || n.coord == nil {
+		return false
+	}
+	n.mu.Lock()
+	gid := n.groupID
+	if gid == 0 {
+		gid = n.lastGroupID
+	}
+	n.groupID = 0
+	if n.chunker != nil {
+		n.chunker.Cancel()
+		n.chunker = nil
+	}
+	n.mu.Unlock()
+	if gid == 0 {
+		return false
+	}
+	n.coord.FinishCurrentChunk(gid)
 	return true
 }
 

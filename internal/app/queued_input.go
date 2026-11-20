@@ -56,7 +56,7 @@ func (m *Model) admitQueuedInput(text string, boundary inputqueue.Boundary) bool
 	// Voice barge-in (task 2.2): a submitted queued message cancels the
 	// active speech group at admission — even though delivery waits for the
 	// next safe boundary. Plain typing never reaches here.
-	m.narrator.cancelActive()
+	m.narrator.finishActiveChunk()
 	// Async user-language detection (task 3.1): fire at ADMISSION, not at
 	// boundary delivery — the language is known as soon as the text is in.
 	m.fireUserLangDetect(text)

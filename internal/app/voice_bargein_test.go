@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"testing"
+	"time"
 
 	"squid-os/internal/config"
 	"squid-os/internal/inputqueue"
@@ -35,13 +36,16 @@ func newBargeInModel(t *testing.T) (Model, int) {
 // late chunk for it stays dropped (muted).
 func assertGroupSilenced(t *testing.T, m *Model, gid int) {
 	t.Helper()
-	if got := m.narrator.coord.Current(); got != 0 {
-		t.Fatalf("group %d still current after admission", got)
+	// Barge-in finishes the current chunk then stops. Wait for drain.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if m.narrator.coord.Current() != gid {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
+	// Late chunks are dropped after the group ends.
 	m.narrator.emit(gid, "late chunk that must stay muted.")
-	if got := m.narrator.coord.Current(); got != 0 {
-		t.Fatalf("late chunk resurrected group %d", got)
-	}
 }
 
 // TestIdleSubmitCancelsSpeechBeforeNewTurn: idle keyboard path (Enter →

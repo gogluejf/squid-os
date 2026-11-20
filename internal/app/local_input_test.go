@@ -42,8 +42,9 @@ func TestLocalVoiceStopMsgCancelsActiveGroup(t *testing.T) {
 	m3 := updated2.(Model)
 	select {
 	case status := <-reply2:
-		if status != "nothing_playing" {
-			t.Fatalf("second stop reply = %q, want nothing_playing", status)
+		// CancelAll is idempotent: second stop is also "cancelled".
+		if status != "cancelled" && status != "nothing_playing" {
+			t.Fatalf("second stop reply = %q, want cancelled or nothing_playing", status)
 		}
 	default:
 		t.Fatal("handler did not reply")

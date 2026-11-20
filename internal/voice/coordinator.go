@@ -8,6 +8,15 @@ import (
 	"squid-os/internal/log"
 )
 
+// InterruptPolicy controls how an incoming group takes over playback.
+type InterruptPolicy uint8
+
+const (
+	InterruptNow InterruptPolicy = iota // cancel the active group immediately
+	FinishChunk                         // finish the active chunk, discard its rest
+	FinishGroup                         // wait for the whole group to end
+)
+
 // Coordinator owns speech-group state and arbitrates groups.
 //
 // A group is one logical utterance (an assistant message, or an alert).
@@ -22,12 +31,14 @@ type Coordinator struct {
 	speaker *Speaker
 	cfg     *config.Voice
 
-	emitMu    sync.Mutex // serialize admission across the out-of-lock policy hook
-	mu        sync.Mutex
-	nextGroup int
-	current   int // playing group ID, 0 = none
-	groups    map[int]*groupState
-	onPreempt func(oldGroup int) // default: CancelGroup; future: enqueue
+	emitMu     sync.Mutex // serialize admission across the out-of-lock policy hook
+	mu         sync.Mutex
+	nextGroup  int
+	current    int // playing group ID, 0 = none
+	groups     map[int]*groupState
+	onPreempt  func(oldGroup int)
+	pending    []int
+	preempting bool
 
 	speakingHook func(on bool) // UI indicator hook (nil = no reporting)
 	speaking     bool          // last reported state of the hook
@@ -40,13 +51,16 @@ type Coordinator struct {
 }
 
 type groupState struct {
-	id       int
-	muted    bool
-	ended    bool
-	player   *Process           // currently playing chunk (nil between chunks)
-	waiters  []chunk            // accepted chunks, FIFO
-	starting bool               // spawn in flight
-	cancel   context.CancelFunc // interrupts startup as well as playback
+	id             int
+	policy         InterruptPolicy
+	admitted       bool
+	stopAfterChunk bool
+	muted          bool
+	ended          bool
+	player         *Process           // currently playing chunk (nil between chunks)
+	waiters        []chunk            // accepted chunks, FIFO
+	starting       bool               // spawn in flight
+	cancel         context.CancelFunc // interrupts startup as well as playback
 }
 
 type chunk struct {
@@ -109,12 +123,16 @@ func (c *Coordinator) SetGroupDrainedHook(fn GroupDrainedFunc) {
 }
 
 // StartGroup allocates a new group ID. It does not speak anything by itself.
-func (c *Coordinator) StartGroup() int {
+func (c *Coordinator) StartGroup(policy ...InterruptPolicy) int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.nextGroup
 	c.nextGroup++
-	c.groups[id] = &groupState{id: id}
+	p := InterruptNow
+	if len(policy) > 0 && policy[0] <= FinishGroup {
+		p = policy[0]
+	}
+	c.groups[id] = &groupState{id: id, policy: p}
 	return id
 }
 
@@ -143,21 +161,35 @@ func (c *Coordinator) EmitAlert(ctx context.Context, groupID int, text, alertLan
 	if c.closed || g == nil || g.muted || g.ended {
 		return nil
 	}
-	if c.current != 0 && c.current != groupID {
-		old, preempt := c.current, c.onPreempt
-		c.mu.Unlock()
-		preempt(old)
-		c.mu.Lock()
-		if c.closed || g.muted || g.ended {
-			return nil
-		}
+	if g.stopAfterChunk {
+		return nil
 	}
-	c.current = groupID
 	g.waiters = append(g.waiters, chunk{ctx: ctx, text: text, alertLang: alertLang})
-	if !c.worker {
-		c.worker = true
-		go c.run()
+	if !g.admitted {
+		g.admitted = true
+		if c.current == 0 {
+			c.current = groupID
+		} else if g.policy == InterruptNow {
+			old, preempt := c.current, c.onPreempt
+			c.preempting = true
+			c.mu.Unlock()
+			preempt(old)
+			c.mu.Lock()
+			c.preempting = false
+			if c.closed || g.muted {
+				c.promoteLocked()
+				return nil
+			}
+			c.current = groupID
+		} else {
+			c.pending = append(c.pending, groupID)
+		}
+		log.LogVoice("group.admit", "group=%d policy=%d current=%d pending=%v", groupID, g.policy, c.current, c.pending)
 	}
+	if c.current != groupID {
+		c.applyPendingPolicyLocked()
+	}
+	c.startWorkerLocked()
 	return nil
 }
 
@@ -178,6 +210,7 @@ func (c *Coordinator) run() {
 		ctx, cancel := context.WithCancel(next.ctx)
 		g.cancel = cancel
 		g.starting = true
+		c.applyPendingPolicyLocked()
 		c.mu.Unlock()
 
 		log.LogVoice("chunk.start", "group=%d language=%q text=%q", g.id, next.alertLang, next.text)
@@ -228,6 +261,13 @@ func (c *Coordinator) finishChunkLocked(g *groupState) {
 	if c.current != g.id || g.muted {
 		return
 	}
+	if g.stopAfterChunk && !g.starting && g.player == nil {
+		g.muted = true
+		g.ended = true
+		g.waiters = nil
+		c.clearCurrentLocked(g.id)
+		return
+	}
 	if len(g.waiters) == 0 && !g.starting && g.player == nil && g.ended {
 		c.clearCurrentLocked(g.id)
 	}
@@ -257,8 +297,14 @@ func (c *Coordinator) CancelGroup(groupID int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	g, ok := c.groups[groupID]
-	if !ok {
+	if !ok || g.muted {
 		return
+	}
+	for i, id := range c.pending {
+		if id == groupID {
+			c.pending = append(c.pending[:i], c.pending[i+1:]...)
+			break
+		}
 	}
 	g.muted = true
 	g.ended = true
@@ -272,6 +318,8 @@ func (c *Coordinator) CancelGroup(groupID int) {
 	}
 	if c.current == groupID {
 		c.clearCurrentLocked(groupID)
+	} else {
+		c.applyPendingPolicyLocked()
 	}
 }
 
@@ -296,6 +344,87 @@ func (c *Coordinator) clearCurrentLocked(groupID int) {
 	hook := c.groupDrainedHook
 	if hook != nil {
 		c.notifyLocked(func() { hook(groupID) })
+	}
+	c.promoteLocked()
+}
+
+func (c *Coordinator) promoteLocked() {
+	if c.closed || c.preempting || c.current != 0 {
+		return
+	}
+	for len(c.pending) > 0 {
+		id := c.pending[0]
+		c.pending = c.pending[1:]
+		if g := c.groups[id]; g != nil && !g.muted {
+			c.current = id
+			log.LogVoice("group.promote", "group=%d pending=%v", id, c.pending)
+			c.startWorkerLocked()
+			return
+		}
+	}
+}
+
+func (c *Coordinator) applyPendingPolicyLocked() {
+	if len(c.pending) == 0 || c.closed {
+		return
+	}
+	g := c.groups[c.current]
+	next := c.groups[c.pending[0]]
+	if g == nil || next == nil || next.policy != FinishChunk {
+		return
+	}
+	g.stopAfterChunk = true
+	g.waiters = nil
+	if g.player == nil && !g.starting {
+		g.muted = true
+		g.ended = true
+		c.clearCurrentLocked(g.id)
+	}
+}
+
+func (c *Coordinator) startWorkerLocked() {
+	if !c.worker && !c.closed && c.current != 0 {
+		c.worker = true
+		go c.run()
+	}
+}
+
+// CancelAll kills current + all pending groups. Shut-up = silence now.
+func (c *Coordinator) CancelAll() {
+	c.mu.Lock()
+	ids := make([]int, 0, len(c.pending)+1)
+	if c.current != 0 {
+		ids = append(ids, c.current)
+	}
+	ids = append(ids, c.pending...)
+	c.pending = nil
+	c.mu.Unlock()
+	for _, id := range ids {
+		c.CancelGroup(id)
+	}
+}
+
+// FinishCurrentChunk closes admission without killing a playing chunk.
+func (c *Coordinator) FinishCurrentChunk(groupID int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	g := c.groups[groupID]
+	if g == nil || g.muted {
+		return
+	}
+	g.stopAfterChunk = true
+	g.ended = true
+	g.waiters = nil
+	if c.current == groupID {
+		c.finishChunkLocked(g)
+	} else {
+		g.muted = true
+		for i, id := range c.pending {
+			if id == groupID {
+				c.pending = append(c.pending[:i], c.pending[i+1:]...)
+				break
+			}
+		}
 	}
 }
 

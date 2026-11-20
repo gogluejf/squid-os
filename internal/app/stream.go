@@ -112,7 +112,7 @@ func (m Model) sendMessage() (tea.Model, tea.Cmd) {
 	// speech group at ADMISSION, before processing begins — from every
 	// admission path (idle Enter, queued Enter/Alt+Q, socket). Plain typing
 	// without submitting never reaches here, so listen-while-drafting holds.
-	m.narrator.cancelActive()
+	m.narrator.finishActiveChunk()
 
 	userMsg := config.Message{
 		ID:          fmt.Sprintf("msg_%d", len(m.session.Doc.Messages)+1),
@@ -196,7 +196,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		m = nm
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
-		(&m).narrator.cancelActive() // aborted message: kill group, drop buffer
+		(&m).narrator.cancelNarration() // aborted message: kill narration group
 		(&m).setChatMode()
 		return m, autoSaveCmd
 
@@ -220,7 +220,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 			(&m).setNotification(ui.NotificationInfo, "stream cancelled")
 			m.session.Stream.Reset()
 			m.session.UIStream.reset()
-			(&m).narrator.cancelActive() // aborted message: kill group, drop buffer
+			(&m).narrator.cancelNarration() // aborted message: kill narration group
 			(&m).setChatMode()
 			nm, autoSaveCmd := m.autoSave()
 			return nm, autoSaveCmd
@@ -403,7 +403,7 @@ func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
 		(&m).setNotification(ui.NotificationInfo, event.CancelMessage)
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
-		(&m).narrator.cancelActive() // aborted turn: kill group, drop buffer
+		(&m).narrator.cancelNarration() // aborted turn: kill narration group
 		(&m).setChatMode()
 		nm, autoSaveCmd := m.autoSave()
 		return nm, autoSaveCmd
@@ -418,7 +418,7 @@ func (m Model) handleToolEvent(event chat.ToolEvent) (tea.Model, tea.Cmd) {
 		(&m).setNotification(ui.NotificationError, msg)
 		m.session.Stream.Reset()
 		m.session.UIStream.reset()
-		(&m).narrator.cancelActive() // aborted turn: kill group, drop buffer
+		(&m).narrator.cancelNarration() // aborted turn: kill narration group
 		return m, m.setChatMode()
 	}
 	return m, nil

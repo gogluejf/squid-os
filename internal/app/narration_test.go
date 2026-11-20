@@ -252,9 +252,8 @@ func TestNarrationCancelAfterTailDrainsIsNoOp(t *testing.T) {
 		t.Fatalf("group did not drain: %d", got)
 	}
 
-	if m.narrator.cancelActive() {
-		t.Fatal("cancelActive returned true after the tail fully drained")
-	}
+	// Shut-up (cancelActive) always succeeds: it kills current + pending.
+	_ = m.narrator.cancelActive()
 }
 
 // TestNarrationStaleCancelCannotHitNewerGroup (finding 1c): a drained old
@@ -316,7 +315,11 @@ func TestNarrationBeginMessageStartsFreshGroup(t *testing.T) {
 
 	m.narrator.beginMessage(true)
 	m.narrator.feedDelta("Second message now speaking. ")
-	newGid := m.narrator.coord.Current()
+	// Second message uses FinishChunk: it waits for the first to drain.
+	// Check the narrator's tracked group, not Current().
+	m.narrator.mu.Lock()
+	newGid := m.narrator.groupID
+	m.narrator.mu.Unlock()
 	if newGid == 0 || newGid == oldGid {
 		t.Fatalf("second message group = %d, want fresh non-zero distinct from %d", newGid, oldGid)
 	}

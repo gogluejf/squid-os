@@ -123,7 +123,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// receipt is an idempotent retry of an already-admitted
 				// request: no new message was submitted, so it must NOT mute
 				// in-progress speech.
-				m.narrator.cancelActive()
+				m.narrator.finishActiveChunk()
 				// Async user-language detection (task 3.1): fire at ADMISSION
 				// for every path. Idle deliveries run it inside
 				// sendLocalSocketMessage, but busy/after-turn admissions park

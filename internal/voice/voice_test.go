@@ -990,3 +990,47 @@ func TestNarrationKeepsCommonConfiguredVoice(t *testing.T) {
 		t.Fatal("common configured voice lost")
 	}
 }
+
+func TestSpeakUsesExplicitAlertSynthesisLanguage(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "log")
+	cli := recordingCLI(t, logPath, false)
+	sp, err := NewSpeaker(SpeakerOptions{CLIPath: cli})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := sp.Speak(context.Background(), "Une commande requiert votre autorisation.", testCfg(), "fr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-p.Done()
+	if err := p.Err(); err != nil {
+		t.Fatal(err)
+	}
+	out := readLog(t, logPath)
+	for _, want := range []string{"-l", "fr", "-v", "jane"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in args:\n%s", want, out)
+		}
+	}
+}
+
+func TestNarrationKeepsAutoSynthesisLanguage(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "log")
+	cli := recordingCLI(t, logPath, false)
+	sp, err := NewSpeaker(SpeakerOptions{CLIPath: cli})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := sp.Speak(context.Background(), "The cat is waiting.", testCfg(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-p.Done()
+	if err := p.Err(); err != nil {
+		t.Fatal(err)
+	}
+	out := readLog(t, logPath)
+	if !strings.Contains(out, "-l auto") {
+		t.Fatalf("narration should use auto:\n%s", out)
+	}
+}

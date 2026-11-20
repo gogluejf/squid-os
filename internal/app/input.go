@@ -76,7 +76,7 @@ func (m Model) handleComponent(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Auth mode cycling works from any component overlay — allows switching
 	// to auto mid-prompt without dismissing the dialog.
 	if key.Matches(msg, keys.AuthMode) {
-		return m.cycleAuthorization(false)
+		return m.cycleAuthorization()
 	}
 
 	// Expand/collapse works during component overlays (e.g. auth questions).
@@ -194,6 +194,12 @@ func (m Model) handleChatKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case m.handleViewportScroll(msg):
 		return m, nil
+
+	case key.Matches(msg, keys.Voice):
+		return m.cycleVoice()
+
+	case key.Matches(msg, keys.AuthMode):
+		return m.cycleAuthorization()
 
 	case matchCommandKey(msg) != "":
 		return m.executeCommandByName(matchCommandKey(msg))
@@ -328,6 +334,12 @@ func (m Model) handleStreamingKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.session.setExpanded(!m.session.expand.Global)
 		m.refreshViewportAnchored(m.session.invalidateRenderAll)
 		return m, nil
+
+	case key.Matches(msg, keys.Voice):
+		return m.cycleVoice()
+
+	case key.Matches(msg, keys.AuthMode):
+		return m.cycleAuthorization()
 
 	case matchCommandKey(msg) != "":
 		return m.executeCommandByName(matchCommandKey(msg))

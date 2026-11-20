@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"squid-os/internal/config"
+	"squid-os/internal/ui/component"
 	"squid-os/internal/voice"
 )
 
@@ -22,19 +23,19 @@ func TestVoiceToggleFlipsRuntimeState(t *testing.T) {
 	}
 
 	// First toggle: off → step.
-	m2, _ := m.toggleVoice()
+	m2, _ := m.cycleVoice()
 	if m2.settings.Voice.Mode != config.NarrationStep {
 		t.Fatalf("first toggle: mode = %q, want step", m2.settings.Voice.Mode)
 	}
 
 	// Second toggle: step → turn.
-	m3, _ := m2.toggleVoice()
+	m3, _ := m2.cycleVoice()
 	if m3.settings.Voice.Mode != config.NarrationTurn {
 		t.Fatalf("second toggle: mode = %q, want turn", m3.settings.Voice.Mode)
 	}
 
 	// Third toggle: turn → off.
-	m4, _ := m3.toggleVoice()
+	m4, _ := m3.cycleVoice()
 	if m4.settings.Voice.Mode != config.NarrationOff {
 		t.Fatalf("third toggle: mode = %q, want off", m4.settings.Voice.Mode)
 	}
@@ -76,8 +77,8 @@ func TestVoiceToggleOffKillsPlayback(t *testing.T) {
 	}
 
 	// step → turn (still on), then turn → off (kills playback)
-	m2, _ := m.toggleVoice()
-	m2, _ = m2.toggleVoice()
+	m2, _ := m.cycleVoice()
+	m2, _ = m2.cycleVoice()
 	if m2.settings.Voice.Mode != config.NarrationOff {
 		t.Fatalf("voice mode = %q, want off", m2.settings.Voice.Mode)
 	}
@@ -107,12 +108,21 @@ func TestVoiceToggleCommandsPersistWithoutDisturbingStream(t *testing.T) {
 				var cmd tea.Cmd
 				if viaKey {
 					updated, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}, Alt: true})
+					m = updated.(Model)
 				} else {
-					updated, cmd = m.executeCommandByName("voice")
-				}
-				m = updated.(Model)
-				if cmd != nil {
-					t.Fatal("toggle scheduled stream work")
+					// /voice opens picker; select desired mode
+					updated, _ = m.openVoiceModePicker()
+					m2 := updated.(Model)
+					picker := m2.activeComponent.(*component.Picker)
+					for i, item := range picker.Items {
+						if item.Value == string(wantMode) {
+							picker.Selected = i
+							cmd = picker.OnConfirm(item, &m2)
+							break
+						}
+					}
+					m = m2
+					_ = cmd
 				}
 				saved := config.LoadSettings(m.paths.Root)
 				if saved.Voice.Mode != wantMode || m.settings.Voice.Mode != wantMode {
@@ -135,7 +145,7 @@ func TestVoiceToggleSaveFailureKeepsState(t *testing.T) {
 	if err := os.Mkdir(m.paths.SettingsFile(), 0700); err != nil {
 		t.Fatal(err)
 	}
-	m, _ = m.toggleVoice()
+	m, _ = m.cycleVoice()
 	if m.settings.Voice.VoiceEnabled() {
 		t.Fatal("failed save changed enabled state")
 	}
@@ -152,8 +162,8 @@ func TestVoiceToggleOffCancelsBufferedNarration(t *testing.T) {
 		t.Fatal("expected allocated, not yet playing group")
 	}
 	// step → turn → off (two toggles to reach off)
-	m, _ = m.toggleVoice()
-	m, _ = m.toggleVoice()
+	m, _ = m.cycleVoice()
+	m, _ = m.cycleVoice()
 	if m.narrator.groupID != 0 || m.narrator.chunker != nil {
 		t.Fatal("buffer survived mute")
 	}

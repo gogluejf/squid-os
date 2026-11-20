@@ -151,7 +151,11 @@ func (s *Speaker) Speak(ctx context.Context, text string, cfg *config.Voice, ale
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	args := []string{"raw", "-q", "--stdin", "-l", "auto", "-s", s.opts.ServerURL}
+	synthesisLang := "auto"
+	if alertLang == "fr" || alertLang == "en" {
+		synthesisLang = alertLang
+	}
+	args := []string{"raw", "-q", "--stdin", "-l", synthesisLang, "-s", s.opts.ServerURL}
 	name := ""
 	if alertLang != "" {
 		var ok bool

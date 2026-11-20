@@ -51,13 +51,34 @@ func TestCommandPickerVoiceEnter(t *testing.T) {
 			ctx := m.session.TurnContext()
 			uiStream := m.session.UIStream
 			for _, voiceWant := range []config.NarrationMode{config.NarrationStep, config.NarrationTurn} {
+				// Step 1: confirm "voice" in the command palette → opens voice picker
 				m = confirmPaletteCommand(t, m, "voice")
-				if m.mode != wantMode || m.activeComponent != nil || !m.textarea.Focused() || m.textarea.Value() != "" {
-					t.Fatalf("palette not dismissed: mode=%v component=%T", m.mode, m.activeComponent)
+				picker, ok := m.activeComponent.(*component.Picker)
+				if !ok {
+					t.Fatalf("expected voice picker, got %T", m.activeComponent)
+				}
+				// Step 2: select the desired mode from the voice picker
+				for i, item := range picker.Items {
+					if item.Value == string(voiceWant) {
+						picker.Selected = i
+						dismissCmd := picker.OnConfirm(item, &m)
+						// dismissCmd restores the pre-picker mode (streaming or chat)
+						m.activeComponent = nil
+						if streaming {
+							m.mode = ModeStreaming
+						} else {
+							m.mode = ModeChat
+						}
+						_ = dismissCmd
+						break
+					}
+				}
+				if m.activeComponent != nil || !m.textarea.Focused() || m.textarea.Value() != "" {
+					t.Fatalf("picker not dismissed: mode=%v component=%T", m.mode, m.activeComponent)
 				}
 				saved := config.LoadSettings(m.paths.Root)
 				if saved.Voice.Mode != voiceWant || m.settings.Voice.Mode != voiceWant {
-					t.Fatal("voice toggle not persisted")
+					t.Fatal("voice mode not persisted")
 				}
 				if saved.Model != "preserve-model" || saved.Voice.Voices["en"] != "jane" {
 					t.Fatal("unrelated settings changed")

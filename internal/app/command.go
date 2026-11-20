@@ -50,18 +50,18 @@ var AllCommands = []SlashCommand{
 	},
 	{
 		Name:        "voice",
-		Description: "Toggle voice mode (on/off)",
+		Description: "Select voice mode (off/step/turn)",
 		Key:         keys.Voice,
 		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
-			return m.toggleVoice()
+			return m.openVoiceModePicker()
 		},
 	},
 	{
 		Name:        "auth-mode",
-		Description: "Cycle authorization mode (auto/ask-on-write/ask-for-all)",
+		Description: "Select authorization mode (auto/ask-on-write/ask-for-all)",
 		Key:         keys.AuthMode,
 		OnExecute: func(m Model, _ []string) (tea.Model, tea.Cmd) {
-			return m.cycleAuthorization(true)
+			return m.openAuthorizationModePicker()
 		},
 	},
 	{

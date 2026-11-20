@@ -2,8 +2,11 @@ package voice
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
+
+	"squid-os/internal/log"
 )
 
 // detectLangDeadline bounds one user-language detection round-trip. Shorter
@@ -47,10 +50,13 @@ func (s *LangStore) SetIfNewest(subID int64, lang string) {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if subID >= s.lastID {
+	accepted := subID >= s.lastID
+	if accepted {
 		s.lastLang = lang
 	}
+	newest, retained := s.lastID, s.lastLang
+	s.mu.Unlock()
+	log.LogVoice("detect.store", "submission=%d newest=%d accepted=%t detected=%q retained=%q", subID, newest, accepted, lang, retained)
 }
 
 // Get returns the current last-user-language. The caller applies the
@@ -68,10 +74,20 @@ func (s *LangStore) Get() string {
 // time so no turn latency is added. All failures are swallowed: detection is
 // best-effort and must never surface to the user.
 func DetectLang(sp *Speaker, text string, subID int64, store *LangStore) {
+	log.LogVoice("detect.start", "submission=%d text=%q", subID, text)
 	ctx, cancel := context.WithTimeout(context.Background(), detectLangDeadline)
 	defer cancel()
 	lang, err := sp.DetectLanguage(ctx, text)
 	if err != nil || lang == "" {
+		outcome := "empty"
+		if err != nil {
+			outcome = "failed"
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			outcome = "timeout"
+		}
+		// Do not log raw HTTP errors: URLs/response bodies can contain secrets.
+		log.LogVoice("detect.result", "submission=%d outcome=%s retained=%q", subID, outcome, store.Get())
 		return
 	}
 	store.SetIfNewest(subID, lang)

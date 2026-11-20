@@ -8,6 +8,7 @@ import (
 	"squid-os/internal/chat"
 	"squid-os/internal/inputqueue"
 	"squid-os/internal/localinput"
+	"squid-os/internal/log"
 )
 
 // handleMouseClick toggles expand/collapse of the block under the cursor.
@@ -75,6 +76,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (a later msg for the newer submission carries its language). Finding
 		// #7. Written only here (Update), per the Bubble Tea single-goroutine
 		// rule.
+		log.LogVoice("detect.ui", "submission=%d newest=%d applied=%t language=%q", msg.subID, m.langSeq, msg.lang != "" && msg.subID >= m.langSeq, msg.lang)
 		if msg.lang != "" && msg.subID >= m.langSeq {
 			m.lastUserLang = msg.lang
 		}

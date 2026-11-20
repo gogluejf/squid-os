@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"squid-os/internal/config"
+	"squid-os/internal/log"
 )
 
 const (
@@ -184,12 +185,15 @@ func (s *Speaker) Speak(ctx context.Context, text string, cfg *config.Voice, ale
 		cancel()
 		return nil, fmt.Errorf("voice: stdin pipe: %w", err)
 	}
+	log.LogVoice("command.attempt", "argv=%q stdin=%q", cmd.Args, text)
 	if err := cmd.Start(); err != nil {
+		log.LogVoice("command.start_failed", "argv=%q", cmd.Args)
 		cancel()
 		_ = stdin.Close()
 		return nil, fmt.Errorf("voice: spawn: %w", err)
 	}
 
+	log.LogVoice("command.started", "pid=%d argv=%q", cmd.Process.Pid, cmd.Args)
 	p := &Process{cmd: cmd, done: make(chan struct{})}
 	go func() {
 		defer cancel()
@@ -227,6 +231,7 @@ func (p *Process) run(stdin io.WriteCloser, text string) {
 		}
 		return nil
 	}()
+	log.LogVoice("command.finished", "pid=%d success=%t", p.Pid(), p.err == nil)
 	p.once.Do(func() { close(p.done) })
 }
 

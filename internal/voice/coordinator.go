@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"squid-os/internal/config"
+	"squid-os/internal/log"
 )
 
 // Coordinator owns speech-group state and arbitrates groups.
@@ -179,7 +180,13 @@ func (c *Coordinator) run() {
 		g.starting = true
 		c.mu.Unlock()
 
+		log.LogVoice("chunk.start", "group=%d language=%q text=%q", g.id, next.alertLang, next.text)
 		p, err := c.speaker.Speak(ctx, next.text, c.cfg, next.alertLang)
+		if p != nil {
+			log.LogVoice("chunk.started", "group=%d pid=%d", g.id, p.Pid())
+		} else {
+			log.LogVoice("chunk.failed", "group=%d", g.id)
+		}
 		c.mu.Lock()
 		g.starting = false
 		if err != nil || c.closed || g.muted || c.current != g.id {

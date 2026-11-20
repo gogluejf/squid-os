@@ -1,6 +1,7 @@
 package log
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -12,7 +13,9 @@ import (
 var (
 	mu                 sync.Mutex
 	enabled            bool
+	voiceEpoch         uint64
 	sseLogger          *log.Logger
+	voiceLogger        *log.Logger
 	metricsLogger      *log.Logger
 	gitShortStatLogger *log.Logger
 	pasteLogger        *log.Logger
@@ -37,12 +40,14 @@ func Init(paths config.Paths) {
 	metricsPath := paths.Logs + "/stream_metrics.log"
 	gitShortStatPath := paths.Logs + "/git_shortstat.log"
 	pastePath := paths.Logs + "/paste_debug.log"
+	voicePath := paths.Logs + "/voice.log"
 
 	// Cleanup massive logs on boot (if > 100MB)
 	truncateIfOverLimit(ssePath)
 	truncateIfOverLimit(metricsPath)
 	truncateIfOverLimit(gitShortStatPath)
 	truncateIfOverLimit(pastePath)
+	truncateIfOverLimit(voicePath)
 
 	sseF, err := os.OpenFile(ssePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err == nil {
@@ -64,12 +69,19 @@ func Init(paths config.Paths) {
 		pasteLogger = log.New(pasteF, "", 0)
 	}
 
+	voiceF, err := os.OpenFile(voicePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err == nil {
+		voiceLogger = log.New(voiceF, "", 0)
+	}
 }
 
 // SetEnabled enables or disables logging at runtime.
 func SetEnabled(v bool) {
 	mu.Lock()
 	defer mu.Unlock()
+	if !v {
+		voiceEpoch++
+	}
 	enabled = v
 }
 
@@ -139,4 +151,43 @@ func LogPaste(label, text string, err error) {
 	}
 	pasteLogger.Printf("%s %s: text=%q err=%s\n",
 		time.Now().Format("15:04:05.000000"), label, shortText, errStr)
+}
+
+// LogVoice writes to the dedicated voice.log debug sink. A bounded
+// queue keeps disk IO off the UI/playback locks; overload drops diagnostics.
+// Epoch checks discard queued records across privacy/debug disable transitions.
+var voiceQueue = make(chan voiceRecord, 128)
+var voiceWorker sync.Once
+
+type voiceRecord struct {
+	line  string
+	epoch uint64
+}
+
+func LogVoice(event, format string, args ...any) {
+	mu.Lock()
+	if !enabled || voiceLogger == nil {
+		mu.Unlock()
+		return
+	}
+	epoch := voiceEpoch
+	mu.Unlock()
+	r := voiceRecord{fmt.Sprintf("%s voice.%s %s", time.Now().Format("15:04:05.000000"), event, fmt.Sprintf(format, args...)), epoch}
+	voiceWorker.Do(func() {
+		go func() {
+			for r := range voiceQueue {
+				mu.Lock()
+				logger := voiceLogger
+				allowed := enabled && r.epoch == voiceEpoch
+				mu.Unlock()
+				if allowed && logger != nil {
+					logger.Print(r.line)
+				}
+			}
+		}()
+	})
+	select {
+	case voiceQueue <- r:
+	default:
+	}
 }

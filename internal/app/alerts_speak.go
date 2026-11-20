@@ -1,6 +1,7 @@
 package app
 
 import (
+	"squid-os/internal/log"
 	"squid-os/internal/voice"
 )
 
@@ -11,6 +12,7 @@ import (
 // No-op when voice is off or unwired.
 func (m *Model) speakAlertEvent(ev voice.Event, detail string) {
 	if m.narrator == nil || m.narrator.coord == nil {
+		log.LogVoice("alert.skipped", "event=%q reason=unwired", ev)
 		return
 	}
 	lang := m.lastUserLang
@@ -23,5 +25,6 @@ func (m *Model) speakAlertEvent(ev voice.Event, detail string) {
 		lang = "en"
 	}
 	text := voice.AlertText(ev, lang, detail)
+	log.LogVoice("alert.trigger", "event=%q submission=%d enabled=%t language=%q text=%q", ev, m.langSeq, m.settings.Voice.Enabled, lang, text)
 	m.narrator.speakAlert(m.settings.Voice.Enabled, text, lang)
 }

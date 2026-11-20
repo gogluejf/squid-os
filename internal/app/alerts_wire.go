@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+
+	"squid-os/internal/log"
 )
 
 // speakAlert speaks one preformatted alert as its OWN speech group — distinct
@@ -24,6 +26,7 @@ func (n *Narrator) speakAlert(voiceOn bool, text, lang string) {
 	n.mu.Lock()
 	if n.alertActive {
 		n.mu.Unlock()
+		log.LogVoice("alert.skipped", "reason=active_alert language=%q", lang)
 		return // recursion guard: an alert is already playing
 	}
 	n.alertActive = true
@@ -31,6 +34,7 @@ func (n *Narrator) speakAlert(voiceOn bool, text, lang string) {
 	n.alertGids[gid] = struct{}{}
 	n.mu.Unlock()
 
+	log.LogVoice("alert.group", "group=%d language=%q text=%q", gid, lang, text)
 	n.coord.EmitAlert(context.Background(), gid, text, lang)
 	n.coord.EndGroup(gid)
 }

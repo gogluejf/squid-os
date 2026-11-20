@@ -12,6 +12,7 @@ import (
 
 	"squid-os/internal/chat/provider"
 	"squid-os/internal/config"
+	"squid-os/internal/log"
 	"squid-os/internal/modelcache"
 	runtimeconfig "squid-os/internal/runtime"
 	"squid-os/internal/ui"
@@ -243,7 +244,11 @@ func (m *Model) fireUserLangDetect(text string) {
 	// Voice off → nothing will ever speak, so detecting the user's language
 	// is pure waste: skip it. The last known value stays intact; flipping
 	// /voice on re-detects from the next message.
+	if !m.incognito {
+		log.LogVoice("submission", "voice_enabled=%t text=%q", m.settings.Voice.Enabled, text)
+	}
 	if !m.settings.Voice.Enabled || m.langStore == nil || m.narrator == nil || m.narrator.coord == nil || m.voiceWiring == nil || m.voiceWiring.langPush == nil {
+		log.LogVoice("detect.skipped", "voice_enabled=%t reason=disabled_or_unwired", m.settings.Voice.Enabled)
 		return
 	}
 	sp := m.narrator.coord.Speaker()

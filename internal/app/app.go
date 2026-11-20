@@ -71,10 +71,6 @@ type Model struct {
 	notification ui.Notification
 	incognito    bool
 
-	// voiceOn mirrors settings.Voice.Enabled at runtime; task 1.5 adds the
-	// live toggle (alt+v / /voice) that flips it without writing settings.
-	voiceOn bool
-
 	// Queued input (design: queued-input). Single admission entry point for
 	// keyboard and (later) socket transports; owns durable receipts.
 	submissions *SubmissionCoordinator
@@ -202,7 +198,6 @@ func New(options StartupOptions) (Model, error) {
 		allCommands:   buildCommandPickerItems(),
 		historySearch: ui.NewHistorySearchOverlay(nil),
 		incognito:     false,
-		voiceOn:       settings.Voice.Enabled,
 		notification:  notification,
 		submissions:   newModelSubmissionCoordinator(paths, sess, &incognitoFlag{m: nil}),
 	}
@@ -242,13 +237,13 @@ type langDetectedMsg struct {
 // The bump happens synchronously on the UI goroutine at admission time, so a
 // later submission always supersedes an earlier one regardless of when the
 // HTTP round-trips resolve. The result is posted back through program.Send as
-// langDetectedMsg; failures/timeouts post nothing (previous value intact).
+// langDetectedMsg; failures/timeouts post the unchanged store value.
 // No-op when voice or the program wiring is unavailable.
 func (m *Model) fireUserLangDetect(text string) {
 	// Voice off → nothing will ever speak, so detecting the user's language
 	// is pure waste: skip it. The last known value stays intact; flipping
 	// /voice on re-detects from the next message.
-	if !m.voiceOn || m.langStore == nil || m.narrator == nil || m.narrator.coord == nil || m.voiceWiring == nil || m.voiceWiring.langPush == nil {
+	if !m.settings.Voice.Enabled || m.langStore == nil || m.narrator == nil || m.narrator.coord == nil || m.voiceWiring == nil || m.voiceWiring.langPush == nil {
 		return
 	}
 	sp := m.narrator.coord.Speaker()
@@ -257,9 +252,8 @@ func (m *Model) fireUserLangDetect(text string) {
 	m.langStore.Submit(subID)
 	go func() {
 		voice.DetectLang(sp, text, subID, m.langStore)
-		// program.Send only pushes onto an internal channel and never blocks
-		// on the event loop (same guarantee as the speaking hook), so this
-		// cannot deadlock even from inside Update.
+		// program.Send may block on Tea's unbuffered event channel. Keep it
+		// on this worker, never on the UI goroutine; program exit releases it.
 		m.voiceWiring.langPush(langDetectedMsg{subID: subID, lang: m.langStore.Get()})
 	}()
 }
@@ -270,18 +264,16 @@ func (m *Model) fireUserLangDetect(text string) {
 // call, so no throwaway coordinator is built in New. Safe to call once; a
 // no-op when voice is unavailable or already wired.
 //
-// Finding #1: this mutates the PRE-program Model copy — tea.NewProgram has
-// already copied the value. Two things make the wiring reach the live loop:
-//  1. langPush lives in voiceWiringState, a pointer shared by every copy;
-//  2. the narrator is rebuilt via newNarrator (not a direct coord assign) so
-//     the group-drain hook installs — without it the alert recursion guard
-//     wedges after the first alert (finding #2). Group state is empty at this
-//     point (pre-Run), so a fresh Narrator loses nothing.
+// Wiring happens before Run. Preserve the shared narrator pointer so the
+// value already copied into Bubble Tea receives the coordinator and hooks.
 func (m *Model) WireVoiceSpeaking(p *tea.Program) {
-	if m.narrator == nil || p == nil {
+	if m.narrator == nil || p == nil || m.narrator.coord != nil {
 		return
 	}
-	m.narrator = newNarrator(newVoiceCoordinator(m.settings.Voice, p))
+	m.narrator.coord = newVoiceCoordinator(m.settings.Voice, p)
+	if m.narrator.coord != nil {
+		m.narrator.coord.SetGroupDrainedHook(m.narrator.onAnyGroupDrained)
+	}
 	// Async user-language detection posts its result through the same
 	// program.Send channel as the speaking hook (task 3.1). Written through
 	// the shared wiring state so the program's Model copy sees it.
@@ -302,15 +294,16 @@ func newVoiceCoordinator(vcfg config.Voice, p *tea.Program) *voice.Coordinator {
 	if err != nil {
 		return nil
 	}
+	return voiceCoordinatorWithSpeaker(vcfg, p, sp)
+}
+
+func voiceCoordinatorWithSpeaker(vcfg config.Voice, p *tea.Program, sp *voice.Speaker) *voice.Coordinator {
 	c := voice.NewCoordinator(sp, &vcfg)
 	if p != nil {
 		c.SetSpeakingHook(func(on bool) {
-			// Safe to call from any goroutine, including inside Bubble Tea's
-			// Update: program.Send only pushes onto an internal channel and
-			// never blocks on the event loop (it is not a synchronous
-			// round-trip into Update), so posting voiceSpeakingMsg here
-			// cannot deadlock even when the hook fires from Emit/CancelGroup
-			// paths that run inside Update.
+			// Send blocks on Tea's unbuffered event channel. The coordinator
+			// dispatches hooks on one ordered worker, never inside Update.
+			// Tea releases a pending Send when the program exits.
 			p.Send(voiceSpeakingMsg{on: on})
 		})
 	}
@@ -350,7 +343,7 @@ func (m *Model) clearNotification() { m.notification = ui.Notification{} }
 func (m *Model) quitCmd() tea.Msg {
 	// Voice: shutdown kills any in-flight speech group (process groups die
 	// with us, but cancel gives a clean kill + state teardown).
-	m.narrator.cancelActive()
+	m.CloseVoice()
 	if m.session != nil {
 		_ = m.session.CleanupWorkspace()
 	}
@@ -394,5 +387,13 @@ func (m *Model) refreshContextCmd() tea.Cmd {
 		models := provider.ScanModels(ctx, m.endpoints)
 		_ = (modelcache.Store{Dir: m.paths.CacheDir}).Save(m.endpoints, models)
 		return contextRefreshMsg{models: models}
+	}
+}
+
+// CloseVoice stops narration on every program exit, including external kills.
+func (m *Model) CloseVoice() {
+	if m.narrator != nil && m.narrator.coord != nil {
+		m.narrator.cancelActive()
+		m.narrator.coord.Close()
 	}
 }

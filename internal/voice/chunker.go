@@ -17,6 +17,7 @@ import (
 // All Feed/Flush calls must happen on the stream goroutine; the hold-timer
 // callback may run on the timer goroutine, so cb must be safe to call from
 // any goroutine (typically it hands the chunk to the Coordinator).
+// Callbacks must return promptly and must not re-enter the chunker.
 type Chunker interface {
 	// Feed appends streamed text and returns complete chunks, if any.
 	Feed(text string) []string
@@ -24,8 +25,7 @@ type Chunker interface {
 	// Feed starts fresh; Flush after Flush returns "".
 	Flush() string
 	// ArmHoldTimer arms the owned hold timer: if no further Feed arrives
-	// within MaxHold while a fragment is held, cb fires with the held
-	// fragment as text. Every Feed re-arms; Flush and Cancel disarm.
+	// within MaxHold while text is buffered, cb fires with that text. Further Feed calls do not extend the deadline; Flush and Cancel disarm.
 	ArmHoldTimer(cb func(text string))
 	// Cancel disarms the timer and discards all buffered state.
 	Cancel()
@@ -33,17 +33,20 @@ type Chunker interface {
 
 // SentenceChunker is the default Chunker implementation.
 type SentenceChunker struct {
-	minWords   int      // hold fragments below this word count
+	batchWords int // after first emission; zero retains sentence strategy
+	emitted    bool
+	armed      bool
+	minWords   int // hold fragments below this word count
 	maxHold    time.Duration
 	maxWords   int      // force-flush threshold for the accumulated chunk
 	boundaries []string // e.g. [".", "!", "?", "\n"]
 
-	mu       sync.Mutex
-	buf      string  // raw text not yet cut at a boundary
-	held     string  // short fragment waiting to merge with the next
-	flushed  bool    // Flush already drained this cycle
+	mu          sync.Mutex
+	buf         string        // raw text not yet cut at a boundary
+	held        string        // short fragment waiting to merge with the next
+	flushed     bool          // Flush already drained this cycle
 	cb          func(string)  // current hold callback (nil means disarmed)
-	timer       timerIface   // owned timer; tests may inject a manual one
+	timer       timerIface    // owned timer; tests may inject a manual one
 	watcherDone chan struct{} // closed when the watcher goroutine exits
 }
 
@@ -85,6 +88,14 @@ func NewSentenceChunker(minWords int, maxHold time.Duration, maxWords int, bound
 	}
 }
 
+// NewNarrationChunker keeps a short first chunk, then batches sentences.
+// The fixed hold deadline bounds waiting even when tokens keep trickling in.
+func NewNarrationChunker() *SentenceChunker {
+	c := NewSentenceChunker(3, 750*time.Millisecond, 40, nil)
+	c.batchWords = 18
+	return c
+}
+
 // Feed implements Chunker.
 func (c *SentenceChunker) Feed(text string) []string {
 	c.mu.Lock()
@@ -92,6 +103,7 @@ func (c *SentenceChunker) Feed(text string) []string {
 	if c.flushed {
 		c.flushed = false // a new stream cycle starts
 		c.buf, c.held = "", ""
+		c.emitted = false
 	}
 	c.buf += text
 
@@ -106,15 +118,18 @@ func (c *SentenceChunker) Feed(text string) []string {
 			out = append(out, chunk)
 		}
 	}
-	// A run-on with no boundary never reaches mergeLocked; if the
-	// accumulated buffer alone exceeds maxWords, force-flush it here so a
-	// long punctuation-free stream still emits bounded chunks.
-	if s := strings.TrimSpace(c.buf); wordCount(s) > c.maxWords {
-		words := strings.Fields(s)
-		take := words[:c.maxWords]
-		c.held = strings.Join(words[c.maxWords:], " ")
-		c.buf = ""
-		out = append(out, strings.Join(take, " "))
+	// Bound even a large unpunctuated delta, preserving held text first.
+	if wordCount(c.held+" "+c.buf) > c.maxWords {
+		all := strings.Fields(strings.TrimSpace(c.held) + " " + c.buf)
+		for len(all) > c.maxWords {
+			out = append(out, strings.Join(all[:c.maxWords], " "))
+			all = all[c.maxWords:]
+		}
+		c.held = ""
+		c.buf = strings.Join(all, " ")
+	}
+	if len(out) > 0 {
+		c.emitted = true
 	}
 	c.rearmLocked()
 	return out
@@ -125,7 +140,7 @@ func (c *SentenceChunker) Feed(text string) []string {
 // result exceeds maxWords. Caller holds mu.
 func (c *SentenceChunker) mergeLocked(sentence string) string {
 	sentence = strings.TrimSpace(sentence)
-	if c.held != "" && wordCount(c.held) < c.minWords {
+	if c.held != "" {
 		sentence = strings.TrimSpace(c.held) + " " + sentence
 		c.held = ""
 	}
@@ -140,10 +155,15 @@ func (c *SentenceChunker) mergeLocked(sentence string) string {
 	}
 	// Short sentences are held for merging with the next one; they are
 	// emitted by the hold timer (stall), the next Feed (merge), or Flush.
-	if wordCount(sentence) < c.minWords {
+	min := c.minWords
+	if c.emitted && c.batchWords > 0 {
+		min = c.batchWords
+	}
+	if wordCount(sentence) < min {
 		c.held = sentence
 		return ""
 	}
+	c.emitted = true
 	return sentence
 }
 
@@ -218,10 +238,14 @@ func (c *SentenceChunker) Cancel() {
 // stops the timer otherwise (keeping cb so a later Feed can re-arm).
 // Caller holds mu.
 func (c *SentenceChunker) rearmLocked() {
-	if c.held == "" || c.cb == nil {
+	if strings.TrimSpace(c.held+c.buf) == "" || c.cb == nil {
 		c.stopTimerOnlyLocked()
 		return
 	}
+	if c.armed {
+		return
+	}
+	c.armed = true
 	if c.timer == nil {
 		rt := time.NewTimer(c.maxHold)
 		c.timer = realTimer{t: rt}
@@ -263,19 +287,22 @@ func (c *SentenceChunker) watchTimer(done chan struct{}) {
 // fireHeld emits the held fragment via the armed callback when the timer
 // expires and the fragment is still held. It clears only the emitted
 // fragment; the callback stays armed so a subsequent held fragment in the
-// same message can also time out (only Cancel/Flush disarm it). It is safe
-// to call directly on the firing channel's goroutine; it never blocks while
-// holding mu.
+// same message can also time out (only Cancel/Flush disarm it). The callback
+// runs under mu to order admission before Flush/EndGroup; it must be prompt
+// and must not re-enter the chunker.
 func (c *SentenceChunker) fireHeld() {
 	c.mu.Lock()
-	if c.held == "" || c.cb == nil || c.flushed {
+	if strings.TrimSpace(c.held+c.buf) == "" || c.cb == nil || c.flushed {
 		c.mu.Unlock()
 		return
 	}
-	frag, cb := c.held, c.cb
-	c.held = ""
-	c.mu.Unlock()
+	frag, cb := strings.TrimSpace(strings.TrimSpace(c.held)+" "+strings.TrimSpace(c.buf)), c.cb
+	c.held, c.buf = "", ""
+	c.armed = false
+	c.emitted = true
+	// Serialize admission with Flush so EOF cannot overtake this fragment.
 	cb(frag)
+	c.mu.Unlock()
 }
 
 // FireHeld is the test seam for the hold-timer expiry: it behaves exactly
@@ -293,6 +320,7 @@ func (c *SentenceChunker) FireHeld() {
 // stopTimerOnlyLocked stops the timer without clearing the callback. Used
 // when no fragment is held yet but a cb may arrive later. Caller holds mu.
 func (c *SentenceChunker) stopTimerOnlyLocked() {
+	c.armed = false
 	if c.timer != nil {
 		if !c.timer.Stop() {
 			select {
@@ -306,6 +334,7 @@ func (c *SentenceChunker) stopTimerOnlyLocked() {
 
 // disarmLocked stops the timer and clears the callback. Caller holds mu.
 func (c *SentenceChunker) disarmLocked() {
+	c.armed = false
 	if c.timer != nil {
 		if !c.timer.Stop() {
 			select {

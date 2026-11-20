@@ -2,8 +2,13 @@ package app
 
 import (
 	"context"
+	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -33,12 +38,13 @@ exit 0
 func newVoiceTestModel(t *testing.T, enabled bool) Model {
 	t.Helper()
 	m := newQueueTestModel(t)
+	m.paths = config.Paths{Root: t.TempDir()}
 	sp, err := voice.NewSpeaker(voice.SpeakerOptions{CLIPath: writeFakeTTSCli(t)})
 	if err != nil {
 		t.Fatalf("NewSpeaker: %v", err)
 	}
 	cfg := config.Voice{Enabled: enabled, Voices: map[string]string{"en": "jane", "fr": "jane"}}
-	m.voiceOn = enabled
+	m.settings.Voice.Enabled = enabled
 	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
 	return m
 }
@@ -328,7 +334,7 @@ func TestNarrationBeginMessageStartsFreshGroup(t *testing.T) {
 // --- test helpers mirroring the production wiring (setStreamMode/handleStreamEvent) ---
 
 // narrationBeginForTest mirrors setStreamMode's voice hook.
-func (m Model) narrationBeginForTest() { m.narrator.beginMessage(m.voiceOn) }
+func (m Model) narrationBeginForTest() { m.narrator.beginMessage(m.settings.Voice.Enabled) }
 
 // narrationFeedForTest mirrors handleStreamEvent's LoopContinue voice hook.
 func (m Model) narrationFeedForTest(delta string) { m.narrator.feedDelta(delta) }
@@ -348,6 +354,7 @@ func TestSpeakingIndicatorAppearsOnFirstChunkClearsOnExit(t *testing.T) {
 	m.narrator.feedDelta("This is the second sentence of the reply. ")
 
 	// First chunk reached the coordinator while generating → hook fired on.
+	hook.wait(t, true)
 	on, ok := hook.last()
 	if !ok || !on {
 		t.Fatalf("indicator not on after first chunk: events=%v", hook.events)
@@ -359,6 +366,7 @@ func TestSpeakingIndicatorAppearsOnFirstChunkClearsOnExit(t *testing.T) {
 	for m.narrator.coord.Current() != 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
+	hook.wait(t, false)
 	last, _ := hook.last()
 	if last {
 		t.Fatalf("indicator stuck on after completion: events=%v", hook.events)
@@ -385,6 +393,7 @@ func TestSpeakingIndicatorKillPathClears(t *testing.T) {
 
 	m.narrator.beginMessage(true)
 	m.narrator.feedDelta("Shutting down mid-utterance.")
+	hook.wait(t, true)
 	on, ok := hook.last()
 	if !ok || !on {
 		t.Fatalf("indicator not on during playback: events=%v", hook.events)
@@ -395,6 +404,7 @@ func TestSpeakingIndicatorKillPathClears(t *testing.T) {
 	for m.narrator.coord.Current() != 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
+	hook.wait(t, false)
 	last, _ := hook.last()
 	if last {
 		t.Fatalf("indicator stuck on after cancel: events=%v", hook.events)
@@ -414,7 +424,7 @@ func TestSpeakingIndicatorStaleCallbackCannotClearNewerGroup(t *testing.T) {
 	if err := m.narrator.coord.Emit(context.Background(), g1, "stale group."); err != nil {
 		t.Fatal(err)
 	}
-	waitCoordIdleOrPlaying(t, m.narrator.coord)
+	hook.wait(t, true)
 
 	// The default onPreempt policy cancels g1 when g2 takes over — that is
 	// exactly the stale-callback scenario: g1's watcher fires late, after
@@ -423,10 +433,11 @@ func TestSpeakingIndicatorStaleCallbackCannotClearNewerGroup(t *testing.T) {
 	if err := m.narrator.coord.Emit(context.Background(), g2, "fresh group."); err != nil {
 		t.Fatal(err)
 	}
-	waitCoordIdleOrPlaying(t, m.narrator.coord)
+	hook.wait(t, true)
 	if got := m.narrator.coord.Current(); got != g2 {
 		t.Fatalf("current = %d, want %d", got, g2)
 	}
+	hook.wait(t, true)
 	on, _ := hook.last()
 	if !on {
 		t.Fatalf("newer group's indicator not on after bump: events=%v", hook.events)
@@ -438,6 +449,7 @@ func TestSpeakingIndicatorStaleCallbackCannotClearNewerGroup(t *testing.T) {
 	for m.narrator.coord.Current() != 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
+	hook.wait(t, false)
 	last, _ := hook.last()
 	if last {
 		t.Fatalf("indicator stuck on after g2 killed: events=%v", hook.events)
@@ -480,4 +492,124 @@ func (h *recordingHook) last() (bool, bool) {
 		return false, false
 	}
 	return h.events[len(h.events)-1], true
+}
+
+// This model exercises narration from the real Tea Update goroutine.
+type voiceLoopProbe struct {
+	n          *Narrator
+	progressed chan struct{}
+}
+
+func (m *voiceLoopProbe) Init() tea.Cmd { return func() tea.Msg { return "speak" } }
+func (m *voiceLoopProbe) View() string  { return "" }
+func (m *voiceLoopProbe) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if msg == "speak" {
+		m.n.beginMessage(true)
+		m.n.feedDelta("This sentence is long enough to be spoken immediately.")
+		return m, nil
+	}
+	if speaking, ok := msg.(voiceSpeakingMsg); ok && speaking.on {
+		m.n.cancelActive()
+		return m, nil
+	} else if ok {
+		close(m.progressed)
+		return m, tea.Quit
+	}
+	return m, nil
+}
+func TestVoiceRealTeaUpdateDoesNotDeadlock(t *testing.T) {
+	t.Setenv("PATH", filepath.Dir(writeFakeTTSCli(t)))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	m := &voiceLoopProbe{progressed: make(chan struct{})}
+	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(nil), tea.WithoutRenderer(), tea.WithoutSignalHandler())
+	sp, err := voice.NewSpeaker(voice.SpeakerOptions{CLIPath: writeFakeTTSCli(t), DetectClient: &http.Client{Timeout: time.Second, Transport: voiceDetectTransport(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"language":"en"}`)), Header: make(http.Header)}, nil
+	})}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := voiceCoordinatorWithSpeaker(config.Voice{Voices: map[string]string{"en": "jane"}}, p, sp)
+	m.n = newNarrator(c)
+	defer c.Close()
+	_, err = p.Run()
+	if err != nil {
+		t.Fatalf("Update blocked until program deadline: %v", err)
+	}
+	select {
+	case <-m.progressed:
+	default:
+		t.Fatal("Update did not finish")
+	}
+}
+
+func (h *recordingHook) wait(t *testing.T, want bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if v, ok := h.last(); ok && v == want {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("speaking transition %v not delivered", want)
+}
+
+// Transport seam avoids even contacting the user's local voice server.
+type voiceDetectTransport func(*http.Request) (*http.Response, error)
+
+func (f voiceDetectTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+type slowVoiceLoopProbe struct {
+	n          *Narrator
+	started    <-chan struct{}
+	progressed chan struct{}
+}
+
+func (m *slowVoiceLoopProbe) Init() tea.Cmd { return func() tea.Msg { return "speak" } }
+func (m *slowVoiceLoopProbe) View() string  { return "" }
+func (m *slowVoiceLoopProbe) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if msg == "speak" {
+		m.n.beginMessage(true)
+		m.n.feedDelta("This sentence is long enough to start language detection.")
+		return m, func() tea.Msg { <-m.started; return "cancel" }
+	}
+	if msg == "cancel" {
+		m.n.cancelActive()
+		close(m.progressed)
+		return m, tea.Quit
+	}
+	return m, nil
+}
+func TestVoiceRealTeaNarrationNeverDetects(t *testing.T) {
+	started := make(chan struct{})
+	close(started)
+	detected := make(chan struct{}, 1)
+	sp, err := voice.NewSpeaker(voice.SpeakerOptions{CLIPath: writeFakeTTSCli(t), DetectClient: &http.Client{Timeout: time.Minute, Transport: voiceDetectTransport(func(r *http.Request) (*http.Response, error) {
+		detected <- struct{}{}
+		return nil, fmt.Errorf("unexpected narration detection")
+	})}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	m := &slowVoiceLoopProbe{started: started, progressed: make(chan struct{})}
+	p := tea.NewProgram(m, tea.WithContext(ctx), tea.WithInput(nil), tea.WithoutRenderer(), tea.WithoutSignalHandler())
+	c := voiceCoordinatorWithSpeaker(config.Voice{Voices: map[string]string{"en": "jane"}}, p, sp)
+	defer c.Close()
+	m.n = newNarrator(c)
+	if _, err := p.Run(); err != nil {
+		t.Fatalf("slow detection froze Update: %v", err)
+	}
+	select {
+	case <-m.progressed:
+	default:
+		t.Fatal("cancel did not run inside Update")
+	}
+	select {
+	case <-detected:
+		t.Fatal("narration called detect")
+	default:
+	}
 }

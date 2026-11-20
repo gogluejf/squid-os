@@ -20,10 +20,10 @@ import (
 type Narrator struct {
 	coord *voice.Coordinator
 
-	mu         sync.Mutex
-	groupID    int // current message's group; 0 = none active
+	mu          sync.Mutex
+	groupID     int // current message's group; 0 = none active
 	lastGroupID int // last group started, survives endMessage while its tail drains
-	chunker    *voice.SentenceChunker
+	chunker     *voice.SentenceChunker
 
 	// Alert state (task 3.3): alertActive is the recursion guard — true while
 	// any alert group is in flight; alertGids tracks which groups are alerts
@@ -40,7 +40,7 @@ func newNarrator(coord *voice.Coordinator) *Narrator {
 		// Track group drain so cancelActive can keep silencing the audible
 		// tail after endMessage (EndGroup closes admission, not playback).
 		// The hook fires from the coordinator's lock-free path and re-enters
-		// n.mu — safe because it never blocks.
+		// n.mu from the asynchronous notification worker.
 		coord.SetGroupDrainedHook(n.onAnyGroupDrained)
 	}
 	return n
@@ -58,17 +58,13 @@ func (n *Narrator) onAnyGroupDrained(gid int) {
 // tracked last group. Group identity guards against stale callbacks clearing
 // a newer group's tracking (same pattern as the coordinator's own guards).
 //
-// The hook runs OUTSIDE the coordinator lock and may re-enter it, so it must
-// never block: use TryLock and skip on contention (the next transition will
-// report again; a skipped clear only delays forgetting a drained group, it
-// cannot corrupt state).
+// Hooks are delivered asynchronously outside the coordinator lock. Taking
+// n.mu is safe and ensures the exactly-once drain notification is not lost.
 func (n *Narrator) onGroupDrained(gid int) {
 	if n == nil {
 		return
 	}
-	if !n.mu.TryLock() {
-		return
-	}
+	n.mu.Lock()
 	defer n.mu.Unlock()
 	if n.lastGroupID == gid {
 		n.lastGroupID = 0
@@ -93,7 +89,7 @@ func (n *Narrator) beginMessage(enabled bool) {
 	// was already cleared by the drain hook; this assignment covers both.
 	n.lastGroupID = n.groupID
 	gid := n.groupID // capture by value: the timer goroutine must not read n.groupID live (it is written under mu elsewhere)
-	n.chunker = voice.NewSentenceChunker(0, 0, 0, nil)
+	n.chunker = voice.NewNarrationChunker()
 	// Hold-timer expiry emits the held fragment from the timer goroutine;
 	// Emit is safe from any goroutine.
 	n.chunker.ArmHoldTimer(func(text string) {
@@ -102,8 +98,7 @@ func (n *Narrator) beginMessage(enabled bool) {
 }
 
 // feedDelta appends one rendered text delta to the chunker and emits every
-// completed chunk to the coordinator immediately — first audio arrives ~2s
-// into the response, not after full generation. Muted groups drop chunks
+// completed chunk to the coordinator as they become ready, without waiting for full generation. Muted groups drop chunks
 // silently inside the coordinator; the producer keeps feeding (chunker
 // state stays consistent) and stops once the group ends.
 func (n *Narrator) feedDelta(delta string) {
@@ -158,27 +153,24 @@ func (n *Narrator) endLocked(ctx context.Context) {
 // stream or tool worker. Returns true when a playing or draining group was
 // cancelled, false when nothing was playing.
 //
-// It targets lastGroupID rather than groupID: after endMessage the group is
-// closed for new chunks but already-emitted chunks keep draining (EndGroup
-// closes admission, not playback), and that audible tail must stay
-// cancellable by alt+x, message barge-in, and 'squid-os voice stop'.
+// It targets the allocated message group even before audio starts, then falls
+// back to lastGroupID after endMessage while already-emitted chunks drain.
+// The draining-tail identity check prevents cancellation of a newer group.
 func (n *Narrator) cancelActive() bool {
 	if n == nil || n.coord == nil {
 		return false
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	gid := n.lastGroupID
+	// Cancel an allocated group even before its first chunk is emitted.
+	// Current() is still zero during the chunker's hold period.
+	gid := n.groupID
 	if gid == 0 {
-		return false
-	}
-	// Guard by group identity: only cancel if this group is still the one
-	// the coordinator knows as current (playing or about to play). A drained
-	// or superseded group has Current() != gid, so no stale cancel can hit
-	// a newer group.
-	if n.coord.Current() != gid {
-		n.lastGroupID = 0 // group is gone; forget it
-		return false
+		gid = n.lastGroupID
+		if gid == 0 || n.coord.Current() != gid {
+			n.lastGroupID = 0
+			return false
+		}
 	}
 	n.groupID = 0
 	n.lastGroupID = 0
@@ -190,9 +182,9 @@ func (n *Narrator) cancelActive() bool {
 	return true
 }
 
-// emit speaks one chunk of group gid through the coordinator. Speak errors
-// (server down, spawn failure) are swallowed: voice is best-effort and must
-// never surface as a TUI error or interrupt the stream.
+// emit admits one chunk of group gid without waiting for playback.
+// Playback failures are handled asynchronously as best-effort voice work;
+// they never surface as a TUI error or interrupt the model stream.
 func (n *Narrator) emit(gid int, text string) {
 	if n == nil || n.coord == nil || gid == 0 || text == "" {
 		return

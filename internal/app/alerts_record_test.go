@@ -25,7 +25,8 @@ func recordingTTSCli(t *testing.T, recordPath string) string {
 	path := filepath.Join(dir, "squid-tts-say")
 	src := "#!/bin/sh\n" +
 		"# args: -v <name> -q --stdin ; text arrives on stdin\n" +
-		"voice=$2\n" +
+		"voice=\n" +
+		"while [ $# -gt 0 ]; do if [ \"$1\" = -v ]; then shift; voice=$1; fi; shift; done\n" +
 		"text=$(cat)\n" +
 		"printf '%s\\t%s\\n' \"$voice\" \"$text\" >> '" + recordPath + "'\n" +
 		"exit 0\n"
@@ -52,8 +53,8 @@ func newRecordingAlertModel(t *testing.T) (Model, string) {
 	if err != nil {
 		t.Fatalf("NewSpeaker: %v", err)
 	}
-	cfg := config.Voice{Enabled: true, Voices: map[string]string{"en": "jane", "fr": "jane"}}
-	m.voiceOn = true
+	cfg := config.Voice{Enabled: true, Voices: map[string]string{"en": "jane", "fr": "custom-french"}}
+	m.settings.Voice.Enabled = true
 	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
 	return m, recordPath
 }
@@ -100,64 +101,30 @@ func waitSpoken(t *testing.T, recordPath string, wants ...string) {
 	t.Fatalf("expected spoken text %q not found in %q", wants, string(got))
 }
 
-// TestWireVoiceSpeakingReachesProgramCopy (finding #1): tea.NewProgram copies
-// the Model value; WireVoiceSpeaking then mutates the PRE-program copy. The
-// program-side copy must still see non-nil langPush — otherwise
-// fireUserLangDetect is a permanent no-op in production. Proven by copying
-// the model exactly as NewProgram does and checking the shared wiring state.
+// Exercise the production wiring AFTER the value copy, as launchTUI does.
 func TestWireVoiceSpeakingReachesProgramCopy(t *testing.T) {
 	m := newQueueTestModel(t)
-	if m.voiceWiring == nil || m.voiceWiring.langPush != nil {
-		t.Fatal("precondition: fresh model must have unwired voice")
+	m.narrator = newNarrator(nil)
+	t.Setenv("PATH", filepath.Dir(writeFakeTTSCli(t)))
+	programCopy := m
+	program := tea.NewProgram(programCopy)
+	m.WireVoiceSpeaking(program)
+	if programCopy.narrator.coord == nil || programCopy.voiceWiring.langPush == nil {
+		t.Fatal("production wiring did not reach program copy")
 	}
-
-	// Simulate launchTUI: build the "program copy" first, then wire the
-	// original (what internal/cli/tui.go does with model + program).
-	programCopy := m // tea.NewProgram(model) copies the value
-	wire := func(p *tea.Program) {} // stand-in; we only need the Send func
-	_ = wire
-	send := func(msg tea.Msg) {}
-	(&m).wireVoiceForTest(send)
-
-	if programCopy.voiceWiring == nil {
-		t.Fatal("program copy lost the wiring pointer entirely")
+	coord := programCopy.narrator.coord
+	m.WireVoiceSpeaking(program)
+	if programCopy.narrator.coord != coord {
+		t.Fatal("wiring must be idempotent")
 	}
-	if programCopy.voiceWiring.langPush == nil {
-		t.Fatal("finding #1 regression: program-side copy has nil langPush — detection would no-op forever")
+	// A drained group must clear the guard via the installed hook.
+	gid := coord.StartGroup()
+	programCopy.narrator.alertGids[gid] = struct{}{}
+	programCopy.narrator.alertActive = true
+	programCopy.narrator.onAnyGroupDrained(gid)
+	if programCopy.narrator.alertActive {
+		t.Fatal("alert guard stuck")
 	}
-	// The pre-program narrator is still inert here: in production
-	// WireVoiceSpeaking rebuilds it via newNarrator BEFORE NewProgram copies
-	// the model, so the copy carries the live coordinator. That ordering is
-	// what launchTUI does; this test proves the wiring STATE (langPush)
-	// survives the copy, which is the part that was broken.
-	_ = programCopy
-}
-
-// wireVoiceForTest installs voice wiring the way WireVoiceSpeaking does, but
-// with a test push func instead of a real *tea.Program (no TUI in unit tests).
-func (m *Model) wireVoiceForTest(push func(tea.Msg)) {
-	dir, err := os.MkdirTemp("", "wiretest")
-	if err != nil {
-		return
-	}
-	cli := filepath.Join(dir, "squid-tts-say")
-	if err := os.WriteFile(cli, []byte("#!/bin/sh\ncat > /dev/null\nexit 0\n"), 0o755); err != nil {
-		return
-	}
-	sp, err := voice.NewSpeaker(voice.SpeakerOptions{
-		CLIPath:      cli,
-		ServerURL:    "http://127.0.0.1:1",
-		DetectClient: &http.Client{Timeout: 200 * time.Millisecond},
-	})
-	if err != nil {
-		return
-	}
-	cfg := config.Voice{Enabled: true, Voices: map[string]string{"en": "jane", "fr": "jane"}}
-	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
-	if m.voiceWiring == nil {
-		m.voiceWiring = &voiceWiringState{}
-	}
-	m.voiceWiring.langPush = push
 }
 
 // TestToolEventNeedAuthSpeaksAuthorizationRecorded (finding #12 hardening):
@@ -177,7 +144,7 @@ func TestToolEventNeedAuthSpeaksAuthorizationRecorded(t *testing.T) {
 		t.Fatal("auth event did not enter auth mode")
 	}
 	// The French authorization lead-in must actually be spoken.
-	waitSpoken(t, recordPath, "Une commande requiert votre autorisation.")
+	waitSpoken(t, recordPath, "custom-french\tUne commande requiert votre autorisation.")
 	waitDrained(t, m2.narrator.coord)
 	if m2.narrator.alertActive {
 		t.Fatal("recursion guard stuck after auth alert")
@@ -269,5 +236,73 @@ func TestSpeakAlertRecursionGuardDropsSecond(t *testing.T) {
 	}
 	if strings.Contains(joined, "second failure must be dropped") {
 		t.Fatalf("second alert was spoken despite the recursion guard: %q", joined)
+	}
+}
+
+// Detection can finish while program.Send is still waiting for the UI loop.
+// Authorization must use that accepted result, not the older UI snapshot.
+func TestAuthorizationUsesDetectedLanguageBeforeUIMessage(t *testing.T) {
+	m, recordPath := newRecordingAlertModel(t)
+	srv, closeSrv := langDetectServer(t, map[string]string{"je suis": "fr"})
+	defer closeSrv()
+	sp, err := voice.NewSpeaker(voice.SpeakerOptions{
+		ServerURL: srv.URL, CLIPath: recordingTTSCli(t, recordPath),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Voice{Enabled: true, Voices: map[string]string{"en": "jane", "fr": "custom-french"}}
+	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
+	m.langStore = voice.NewLangStore()
+	m.lastUserLang = "en"
+	// Model is copied before wiring, just as tea.NewProgram copies it.
+	live := m
+	posted := make(chan tea.Msg, 1)
+	release := make(chan struct{})
+	done := make(chan struct{})
+	defer func() { close(release); <-done }()
+	m.voiceWiring.langPush = func(msg tea.Msg) {
+		posted <- msg
+		<-release // simulate Send waiting for the next UI frame
+		close(done)
+	}
+	live.fireUserLangDetect("je suis en train de farie un test, lis un fichier au hazard dans mon repo")
+	select {
+	case msg := <-posted:
+		if msg.(langDetectedMsg).lang != "fr" {
+			t.Fatalf("detection = %#v", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("detection did not finish")
+	}
+	if live.langSeq != 1 || m.langSeq != 0 {
+		t.Fatal("submission sequence must belong to live model")
+	}
+	if live.lastUserLang != "en" {
+		t.Fatal("test must leave UI snapshot unapplied")
+	}
+	updated, _ := live.handleToolEvent(chat.ToolEvent{Type: chat.ToolEventNeedAuth,
+		AuthRequest: &chat.AuthRequest{ToolName: "read_file"}})
+	if updated.(Model).session.UIStream.AuthorizationCtx == nil {
+		t.Fatal("authorization not entered")
+	}
+	waitSpoken(t, recordPath, "custom-french\tUne commande requiert votre autorisation.")
+	waitDrained(t, live.narrator.coord)
+}
+
+func TestGenericAlertsUseAcceptedLanguageWhileDetectionPending(t *testing.T) {
+	for _, ev := range []voice.Event{voice.Error, voice.ThinkingStart, voice.SkillLoaded, voice.SubAgent} {
+		t.Run(string(ev), func(t *testing.T) {
+			m, recordPath := newRecordingAlertModel(t)
+			m.langStore = voice.NewLangStore()
+			m.langStore.Submit(1)
+			m.langStore.SetIfNewest(1, "fr")
+			m.langStore.Submit(2)            // no new result yet: keep last accepted user language
+			m.langStore.SetIfNewest(1, "en") // stale completion cannot change it
+			m.lastUserLang = "en"
+			m.speakAlertEvent(ev, "probe")
+			waitSpoken(t, recordPath, "custom-french\t"+voice.AlertText(ev, "fr", "probe"))
+			waitDrained(t, m.narrator.coord)
+		})
 	}
 }

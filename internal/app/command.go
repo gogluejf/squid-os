@@ -202,15 +202,29 @@ func (m *Model) openCommandPicker() {
 		OnConfirm: func(item component.PickerItem, ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			m.textarea.SetValue("")
+			dismiss := m.dismissCommandPicker()
 			mm, cmd := m.executeCommandByName(item.Value)
 			*m = mm.(Model)
-			return cmd
+			return tea.Batch(dismiss, cmd)
 		},
 		OnCancel: func(ctx any) tea.Cmd {
 			m := ctx.(*Model)
 			m.textarea.SetValue("")
-			return m.setChatMode()
+			return m.dismissCommandPicker()
 		},
 	}
 	m.setComponent(&picker)
+}
+
+// dismissCommandPicker removes only the palette, not the active turn. Restore
+// the underlying mode before dispatch so stream guards work and a command can
+// install its own overlay without having it dismissed afterwards.
+func (m *Model) dismissCommandPicker() tea.Cmd {
+	if m.turnActive || m.session.Stream.Active {
+		m.activeComponent = nil
+		m.mode = ModeStreaming
+		m.refreshViewportFollowing()
+		return m.textarea.Focus()
+	}
+	return m.setChatMode()
 }

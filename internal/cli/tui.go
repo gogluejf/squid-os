@@ -202,6 +202,7 @@ func launchTUI(opts *TUIOptions) error {
 	// was built with a nil-program coordinator; this replaces it in place so
 	// the live narrator keeps its group state.
 	model.WireVoiceSpeaking(program)
+	defer model.CloseVoice()
 	if opts.InputInstance != "" {
 		// The socket Admit callback runs on a server goroutine; it hands idle
 		// deliveries to the UI loop via program.Send (thread-safe). Binding

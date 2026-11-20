@@ -668,7 +668,7 @@ func TestSpeakLifetimeOutlivesReturn(t *testing.T) {
 // recordingHook captures speaking-state transitions in order, safe for use
 // from the coordinator's background goroutines.
 type recordingHook struct {
-	mu    sync.Mutex
+	mu     sync.Mutex
 	events []bool
 }
 
@@ -718,6 +718,7 @@ func TestSpeakingHookFirstChunkStartsClearsOnExit(t *testing.T) {
 	c.EndGroup(g)
 	waitIdle(t, c)
 
+	hook.wait(t, false)
 	last, ok := hook.last()
 	if !ok || last {
 		t.Fatalf("hook events after drain = %v, want final state false", hook.events)
@@ -753,6 +754,7 @@ func TestSpeakingHookBackToBackNoFlicker(t *testing.T) {
 	if n := hook.count(true); n != 1 {
 		t.Fatalf("on-transitions across back-to-back chunks = %d, want 1", n)
 	}
+	hook.wait(t, false)
 	if n := hook.count(false); n != 1 {
 		t.Fatalf("off-transitions = %d, want 1", n)
 	}
@@ -771,6 +773,7 @@ func TestSpeakingHookCancelKillsAndClears(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitLog(t, logPath, "long utterance.")
+	hook.wait(t, true)
 	on, ok := hook.last()
 	if !ok || !on {
 		t.Fatalf("indicator not on during playback: events=%v", hook.events)
@@ -779,6 +782,7 @@ func TestSpeakingHookCancelKillsAndClears(t *testing.T) {
 	c.CancelGroup(g) // kill path: SIGKILL the process group
 	waitIdle(t, c)
 
+	hook.wait(t, false)
 	last, ok := hook.last()
 	if !ok || last {
 		t.Fatalf("indicator stuck on after cancel: events=%v", hook.events)
@@ -824,6 +828,7 @@ func TestSpeakingHookStaleCallbackCannotClearNewerGroup(t *testing.T) {
 	if got := c.Current(); got != g2 {
 		t.Fatalf("stale callback cleared the newer group: current=%d, want %d", got, g2)
 	}
+	hook.wait(t, true)
 	on, _ := hook.last()
 	if !on {
 		t.Fatalf("stale callback cleared the newer group's indicator: events=%v", hook.events)
@@ -832,8 +837,156 @@ func TestSpeakingHookStaleCallbackCannotClearNewerGroup(t *testing.T) {
 	// Only g2's own exit may turn the indicator off.
 	c.CancelGroup(g2)
 	waitIdle(t, c)
+	hook.wait(t, false)
 	last, _ := hook.last()
 	if last {
 		t.Fatalf("indicator stuck on after g2 killed: events=%v", hook.events)
+	}
+}
+
+func (h *recordingHook) wait(t *testing.T, want bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if v, ok := h.last(); ok && v == want {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("speaking transition %v not delivered", want)
+}
+
+func TestAsyncPlaybackCancelAndClose(t *testing.T) {
+	for _, closeAll := range []bool{false, true} {
+		t.Run(fmt.Sprint(closeAll), func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "log")
+			c, _ := newFakeCoord(t, recordingCLI(t, logPath, true), logPath)
+			defer c.Close()
+			g := c.StartGroup()
+			c.Emit(context.Background(), g, "first")
+			c.Emit(context.Background(), g, "queued")
+			c.EndGroup(g)
+			waitLog(t, logPath, "first")
+			if closeAll {
+				c.Close()
+			} else {
+				c.CancelGroup(g)
+			}
+			c.Emit(context.Background(), g, "late")
+			deadline := time.Now().Add(time.Second)
+			for {
+				c.mu.Lock()
+				running := c.worker
+				c.mu.Unlock()
+				if !running {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("worker failed to retire")
+				}
+				time.Sleep(time.Millisecond)
+			}
+			if out := readLog(t, logPath); strings.Contains(out, "queued") || strings.Contains(out, "late") {
+				t.Fatal(out)
+			}
+		})
+	}
+}
+
+func TestNotificationsOrderedWithoutBlockingProducer(t *testing.T) {
+	c := NewCoordinator(nil, testCfg())
+	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var events []bool
+	c.SetSpeakingHook(func(on bool) {
+		if len(events) == 0 {
+			close(entered)
+			<-release
+		}
+		events = append(events, on)
+		if len(events) == 3 {
+			close(done)
+		}
+	})
+	c.mu.Lock()
+	c.setSpeakingLocked(true)
+	c.mu.Unlock()
+	<-entered
+	// First hook is parked; subsequent transitions must queue, not park callers
+	// or overtake it. All mutations use the same lock as real lifecycle edges.
+	c.mu.Lock()
+	c.setSpeakingLocked(false)
+	c.setSpeakingLocked(true)
+	c.mu.Unlock()
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("notification worker blocked")
+	}
+	if len(events) != 3 || !events[0] || events[1] || !events[2] {
+		t.Fatalf("out of order: %v", events)
+	}
+}
+
+func TestNarrationDelegatesDetectionAndAlertUsesConfiguredVoice(t *testing.T) {
+	var mu sync.Mutex
+	var requests []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Text string `json:"text"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		mu.Lock()
+		requests = append(requests, body.Text)
+		mu.Unlock()
+		json.NewEncoder(w).Encode(map[string]string{"language": "fr"})
+	}))
+	defer srv.Close()
+	logPath := filepath.Join(t.TempDir(), "log")
+	sp, err := NewSpeaker(SpeakerOptions{ServerURL: srv.URL, CLIPath: recordingCLI(t, logPath, false)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Voice{Voices: map[string]string{"en": "english-choice", "fr": "french-choice"}}
+	c := NewCoordinator(sp, cfg)
+	defer c.Close()
+	g := c.StartGroup()
+	c.Emit(context.Background(), g, "Assistant bonjour.")
+	c.EndGroup(g)
+	waitIdle(t, c)
+	out := readLog(t, logPath)
+	if !strings.Contains(out, "raw -q --stdin -l auto -s "+srv.URL) || strings.Contains(out, "-v") {
+		t.Fatalf("narration argv: %s", out)
+	}
+	store := NewLangStore()
+	store.Submit(1)
+	DetectLang(sp, "USER bonjour", 1, store)
+	if store.Get() != "fr" {
+		t.Fatal("user language not detected")
+	}
+	g = c.StartGroup()
+	c.EmitAlert(context.Background(), g, FormatAlert(Authorization, store.Get(), ""), store.Get())
+	c.EndGroup(g)
+	waitIdle(t, c)
+	out = readLog(t, logPath)
+	if !strings.Contains(out, "-v french-choice") || !strings.Contains(out, "Une commande requiert votre autorisation.") {
+		t.Fatal(out)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(requests) != 1 || requests[0] != "USER bonjour" {
+		t.Fatalf("detect requests: %v", requests)
+	}
+}
+
+func TestNarrationKeepsCommonConfiguredVoice(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "log")
+	c, _ := newFakeCoord(t, recordingCLI(t, logPath, false), logPath)
+	g := c.StartGroup()
+	c.Emit(context.Background(), g, "Narration.")
+	c.EndGroup(g)
+	waitIdle(t, c)
+	if !strings.Contains(readLog(t, logPath), "-v jane") {
+		t.Fatal("common configured voice lost")
 	}
 }

@@ -56,7 +56,7 @@ func wireLangDetectForTest(t *testing.T, m *Model, langs map[string]string) <-ch
 	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
 	// Detection is gated on the runtime voice toggle (task 3.1 refinement):
 	// these tests exercise detection itself, so voice must be ON.
-	m.voiceOn = true
+	m.settings.Voice.Enabled = true
 	if m.langStore == nil {
 		m.langStore = voice.NewLangStore()
 	}
@@ -120,7 +120,7 @@ func TestLastUserLangRapidFireOnlyNewestLands(t *testing.T) {
 
 	// Submission 1 (FR) is superseded by submission 2 (EN) before either
 	// round-trip resolves. Both goroutines post their (post-store) value.
-	m.fireUserLangDetect("bonjour") // sub 1 → fr
+	m.fireUserLangDetect("bonjour")     // sub 1 → fr
 	m.fireUserLangDetect("hello there") // sub 2 → en
 
 	// Drain both messages; the LAST one applied must be en. Whatever order
@@ -176,7 +176,7 @@ func TestLastUserLangFailureLeavesPreviousValueIntact(t *testing.T) {
 	}
 	cfg := config.Voice{Enabled: true, Voices: map[string]string{"en": "jane", "fr": "jane"}}
 	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
-	m.voiceOn = true // detection is gated on the runtime toggle
+	m.settings.Voice.Enabled = true // detection is gated on the runtime toggle
 	ch := make(chan tea.Msg, 4)
 	if m.voiceWiring == nil {
 		m.voiceWiring = &voiceWiringState{}

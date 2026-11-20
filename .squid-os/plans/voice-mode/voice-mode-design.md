@@ -1,3 +1,29 @@
+## Implementation correction — narration latency
+
+This section supersedes the older detect→lookup narration tasks below.
+
+- Never call client `/detect` for assistant narration. Only last-user-message
+  detection localizes generic alerts; their known template language selects
+  `voice.voices[lang]`, falling back to English. TTS language remains `auto`.
+- Narration passes the configured voice when en/fr agree (including Jane
+  defaults). When they differ, omit `-v` and delegate to server language/voice
+  defaults: the current single-voice CLI cannot convey a per-language map
+  without client detection or a server/CLI protocol change. Alert mappings
+  remain effective; settings are not rewritten.
+- Invoke `squid-tts-say raw`, not implicit `say`: inspected CLI uses `/tts/raw`
+  and server streams PCM there; `/tts` generates the complete WAV first.
+- First sentence threshold stays 3 words; subsequent batches target 18 words,
+  bounded at 40 words. A fixed 750 ms hold from buffered input (not sliding
+  on each delta) emits stalled/incomplete text; EOF flushes immediately.
+- Preserve the asynchronous coordinator, process-group cancellation and FIFO
+  notifications. No warm player or prefetch: this CLI reads stdin to EOF,
+  performs one request and creates one aplay per invocation. Keeping a player
+  across requests requires separating synthesis/playback ownership and new
+  cancellation/buffering machinery. Batching reduces invocations instead.
+- These are code/test-backed changes, not measured audio latency guarantees.
+  Python startup, HTTP/PCM read buffering, server inference and player startup
+  still contribute gaps. No real audio was used in validation.
+
 # EPIC: Voice mode — the assistant speaks
 Why: Give Squid-OS a spoken channel: responses, errors, and system events are read aloud via the local squid-tts server, toggleable live, interruptible at any time.
 Outcomes: /voice + alt+v toggle; per-language voice settings; sentence-chunk streaming with ~2 s time-to-first-audio; universal alt+x shut-up (group-scoped); sponge key-down cancellation via `squid-os voice stop`; bilingual alert lead-ins driven by last-user-language detection.

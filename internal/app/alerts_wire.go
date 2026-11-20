@@ -9,16 +9,15 @@ import (
 // playing bumps it (default onPreempt), and alt+x / barge-in / voice stop kill
 // it exactly like narration (same CancelGroup path).
 //
-// voiceOn is passed by the caller (speakAlertEvent reads Model.voiceOn on the
+// voiceOn is passed by the caller (speakAlertEvent reads Model.settings.Voice.Enabled on the
 // UI goroutine) — no indirection, no stale captures: production and tests
 // behave identically by construction.
 //
 // Recursion guard: while ANY alert group is in flight, new alerts are dropped
 // silently — a TTS failure must never spawn a spoken error about itself.
 // The flag clears when the last alert group stops being current (coordinator
-// drain hook), guarded by TryLock because that hook runs outside the
-// coordinator lock and re-enters it.
-func (n *Narrator) speakAlert(voiceOn bool, text string) {
+// drain hook). Hooks are asynchronous, so they can safely acquire n.mu.
+func (n *Narrator) speakAlert(voiceOn bool, text, lang string) {
 	if n == nil || n.coord == nil || text == "" || !voiceOn {
 		return
 	}
@@ -32,7 +31,7 @@ func (n *Narrator) speakAlert(voiceOn bool, text string) {
 	n.alertGids[gid] = struct{}{}
 	n.mu.Unlock()
 
-	n.coord.Emit(context.Background(), gid, text)
+	n.coord.EmitAlert(context.Background(), gid, text, lang)
 	n.coord.EndGroup(gid)
 }
 
@@ -43,9 +42,7 @@ func (n *Narrator) onAlertDrained(gid int) {
 	if n == nil {
 		return
 	}
-	if !n.mu.TryLock() {
-		return // hook may run while we hold mu elsewhere; skip, next transition re-reports
-	}
+	n.mu.Lock()
 	defer n.mu.Unlock()
 	if _, ok := n.alertGids[gid]; !ok {
 		return

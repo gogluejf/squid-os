@@ -14,12 +14,12 @@ var errFakeStream = errors.New("connection reset by peer")
 // newAlertTestModel builds a voice-wired model with the runtime toggle on, as
 // if /voice had been flipped: alerts must speak. The fake TTS CLI records
 // nothing; assertions go through the coordinator's group state. speakAlert
-// takes the live m.voiceOn from speakAlertEvent (UI goroutine), so flipping
+// takes the live m.settings.Voice.Enabled from speakAlertEvent (UI goroutine), so flipping
 // the flag after construction is honored by construction — no indirection.
 func newAlertTestModel(t *testing.T) Model {
 	t.Helper()
 	m := newVoiceTestModel(t, true)
-	m.voiceOn = true
+	m.settings.Voice.Enabled = true
 	return m
 }
 
@@ -98,7 +98,7 @@ func TestSpeakAlertRecursionGuard(t *testing.T) {
 // behavior change).
 func TestSpeakAlertVoiceOffIsSilent(t *testing.T) {
 	m := newAlertTestModel(t)
-	m.voiceOn = false // runtime /voice off
+	m.settings.Voice.Enabled = false // runtime /voice off
 
 	m.speakAlertEvent(voice.Error, "boom")
 	if got := m.narrator.coord.Current(); got != 0 {

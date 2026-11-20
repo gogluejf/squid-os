@@ -30,7 +30,7 @@ func (m *Model) setStreamMode() {
 	// Voice: one speech group per assistant message. The group survives the
 	// UIStreamState.reset() calls between tool phases; only true message
 	// completion ends it (narrator.endMessage).
-	m.narrator.beginMessage(m.voiceOn)
+	m.narrator.beginMessage(m.settings.Voice.Enabled)
 }
 
 // setAuthMode builds a Question component for tool authorization and sets it as the active component.

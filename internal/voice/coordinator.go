@@ -32,14 +32,26 @@ type Coordinator struct {
 	speaking     bool          // last reported state of the hook
 
 	groupDrainedHook GroupDrainedFunc // per-group drain callback (nil = none)
+	worker           bool             // one lazily started playback worker, retires when idle
+	closed           bool
+	notifications    []func()
+	notifying        bool // one FIFO callback worker; never call hooks on the UI path
 }
 
 type groupState struct {
-	id      int
-	muted   bool
-	ended   bool
-	player  *Process // currently playing chunk (nil between chunks)
-	waiters []func() // queued-chunk spawners blocked on the current chunk
+	id       int
+	muted    bool
+	ended    bool
+	player   *Process           // currently playing chunk (nil between chunks)
+	waiters  []chunk            // accepted chunks, FIFO
+	starting bool               // spawn in flight
+	cancel   context.CancelFunc // interrupts startup as well as playback
+}
+
+type chunk struct {
+	ctx       context.Context
+	text      string
+	alertLang string
 }
 
 // NewCoordinator builds a Coordinator over sp with the given voice config.
@@ -69,10 +81,10 @@ func (c *Coordinator) SetOnPreempt(fn func(oldGroup int)) {
 
 // SetSpeakingHook installs a callback fired on every transition of the
 // "audio is playing" state: on=true when the first chunk starts, on=false
-// when playback ends or is killed. The hook runs OUTSIDE the coordinator
-// lock and may re-enter it (it must not block). A nil hook disables
+// when playback ends or is killed. The hook runs asynchronously in FIFO order OUTSIDE the coordinator
+// lock and may re-enter it (it must return promptly). A nil hook disables
 // reporting. Safe to install at any time; transitions already in flight are
-// reported as they happen, so a late install never sees a missed start.
+// delivered to the hook installed at the time of the transition.
 func (c *Coordinator) SetSpeakingHook(fn func(on bool)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -81,8 +93,8 @@ func (c *Coordinator) SetSpeakingHook(fn func(on bool)) {
 
 // GroupDrainedFunc fires exactly once when a group stops being current:
 // either its playback fully drained (last accepted chunk finished) or it was
-// cancelled. It runs OUTSIDE the coordinator lock and may re-enter it (it
-// must not block). A nil hook disables reporting. Safe to install at any
+// cancelled. It runs asynchronously in FIFO order OUTSIDE the coordinator lock
+// and may re-enter it (it must return promptly). A nil hook disables reporting. Safe to install at any
 // time; groups that already stopped before installation are not reported.
 type GroupDrainedFunc func(groupID int)
 
@@ -113,58 +125,83 @@ func (c *Coordinator) StartGroup() int {
 //   - same group playing → speak back-to-back after the current chunk;
 //   - different group playing → onPreempt(playingGroup), then speak now.
 //
-// Speak errors (server down, spawn failure) are returned; they do not mute
-// the group, so a transient failure can be retried by the caller.
+// Emit only admits work; spawning and playback run on one worker.
+// Playback failures are best-effort and do not stop later accepted chunks.
 func (c *Coordinator) Emit(ctx context.Context, groupID int, text string) error {
+	return c.EmitAlert(ctx, groupID, text, "")
+}
+
+// EmitAlert selects a configured voice for a known localized alert language.
+// Empty language is narration: language and voice selection belong to TTS.
+func (c *Coordinator) EmitAlert(ctx context.Context, groupID int, text, alertLang string) error {
 	c.emitMu.Lock()
 	defer c.emitMu.Unlock()
 	c.mu.Lock()
-	g, ok := c.groups[groupID]
-	if !ok || g.muted || g.ended {
-		c.mu.Unlock()
-		return nil // drop silently
+	defer c.mu.Unlock()
+	g := c.groups[groupID]
+	if c.closed || g == nil || g.muted || g.ended {
+		return nil
 	}
-
 	if c.current != 0 && c.current != groupID {
 		old, preempt := c.current, c.onPreempt
 		c.mu.Unlock()
 		preempt(old)
 		c.mu.Lock()
-		if g.muted || g.ended {
-			c.mu.Unlock()
+		if c.closed || g.muted || g.ended {
 			return nil
 		}
 	}
-	defer c.mu.Unlock()
 	c.current = groupID
-	if g.player != nil {
-		g.waiters = append(g.waiters, func() { c.startChunkLocked(g, ctx, text) })
-		return nil
-	}
-	return c.startChunkLocked(g, ctx, text)
-}
-
-// startChunkLocked starts one already-admitted chunk. EndGroup closes
-// admission, not playback: accepted chunks still drain after producer EOF.
-func (c *Coordinator) startChunkLocked(g *groupState, ctx context.Context, text string) error {
-	p, err := c.speaker.Speak(ctx, text, c.cfg, "")
-	if err != nil {
-		c.finishChunkLocked(g)
-		return err
-	}
-	g.player = p
-	go func() {
-		<-p.Done()
-		c.playerFinished(g.id, p)
-	}()
-	c.setSpeakingLocked(true) // first chunk of this group started playing
-	// A group can be muted between Speak and here (Emit re-checks g.muted
-	// after the out-of-lock preempt hook); a late kill must never leave an
-	// orphaned process behind.
-	if g.muted {
-		p.Kill()
+	g.waiters = append(g.waiters, chunk{ctx: ctx, text: text, alertLang: alertLang})
+	if !c.worker {
+		c.worker = true
+		go c.run()
 	}
 	return nil
+}
+
+// run owns the slow pipeline. There is at most one worker, including during
+// preemption: cancellation interrupts its process before the next group.
+func (c *Coordinator) run() {
+	for {
+		c.mu.Lock()
+		g := c.groups[c.current]
+		if c.closed || g == nil || g.muted || len(g.waiters) == 0 {
+			c.worker = false
+			c.mu.Unlock()
+			return
+		}
+		next := g.waiters[0]
+		g.waiters[0] = chunk{}
+		g.waiters = g.waiters[1:]
+		ctx, cancel := context.WithCancel(next.ctx)
+		g.cancel = cancel
+		g.starting = true
+		c.mu.Unlock()
+
+		p, err := c.speaker.Speak(ctx, next.text, c.cfg, next.alertLang)
+		c.mu.Lock()
+		g.starting = false
+		if err != nil || c.closed || g.muted || c.current != g.id {
+			cancel()
+			if p != nil {
+				p.Kill()
+			}
+			g.cancel = nil
+			c.finishChunkLocked(g)
+			c.mu.Unlock()
+			if p != nil {
+				<-p.Done()
+			}
+			continue
+		}
+		g.player = p
+		c.setSpeakingLocked(true)
+		c.mu.Unlock()
+		<-p.Done()
+		cancel()
+		c.playerFinished(g.id, p)
+	}
 }
 
 // playerFinished is also a deterministic test seam for delayed exit callbacks.
@@ -176,6 +213,7 @@ func (c *Coordinator) playerFinished(groupID int, p *Process) {
 		return
 	}
 	g.player = nil
+	g.cancel = nil
 	c.finishChunkLocked(g)
 }
 
@@ -183,12 +221,7 @@ func (c *Coordinator) finishChunkLocked(g *groupState) {
 	if c.current != g.id || g.muted {
 		return
 	}
-	if len(g.waiters) > 0 {
-		next := g.waiters[0]
-		g.waiters[0] = nil
-		g.waiters = g.waiters[1:]
-		next() // Exactly one successor, FIFO; no parked goroutines to leak.
-	} else if g.ended {
+	if len(g.waiters) == 0 && !g.starting && g.player == nil && g.ended {
 		c.clearCurrentLocked(g.id)
 	}
 }
@@ -204,7 +237,7 @@ func (c *Coordinator) EndGroup(groupID int) {
 		return
 	}
 	g.ended = true
-	if g.player == nil && c.current == groupID {
+	if g.player == nil && !g.starting && len(g.waiters) == 0 && c.current == groupID {
 		c.clearCurrentLocked(groupID)
 	}
 }
@@ -223,6 +256,9 @@ func (c *Coordinator) CancelGroup(groupID int) {
 	g.muted = true
 	g.ended = true
 	g.waiters = nil
+	if g.cancel != nil {
+		g.cancel()
+	}
 	if g.player != nil {
 		g.player.Kill()
 		g.player = nil
@@ -252,22 +288,60 @@ func (c *Coordinator) clearCurrentLocked(groupID int) {
 	c.setSpeakingLocked(false)
 	hook := c.groupDrainedHook
 	if hook != nil {
-		c.mu.Unlock()
-		hook(groupID)
-		c.mu.Lock()
+		c.notifyLocked(func() { hook(groupID) })
 	}
 }
 
 // setSpeakingLocked reports a speaking-state transition to the hook, if any.
 // No-op when the state is unchanged or no hook is installed. The hook runs
-// with mu released so it can safely re-enter the coordinator.
+// asynchronously outside mu so it can safely re-enter the coordinator.
 func (c *Coordinator) setSpeakingLocked(on bool) {
 	if c.speakingHook == nil || c.speaking == on {
 		return
 	}
 	c.speaking = on
 	hook := c.speakingHook
-	c.mu.Unlock()
-	hook(on)
+	c.notifyLocked(func() { hook(on) })
+}
+
+// notifyLocked preserves transition order at the state mutation, not at
+// goroutine scheduling time. Hooks can re-enter the coordinator. A blocked
+// consumer parks only this single dispatcher, never Update or playback.
+func (c *Coordinator) notifyLocked(fn func()) {
+	c.notifications = append(c.notifications, fn)
+	if c.notifying {
+		return
+	}
+	c.notifying = true
+	go func() {
+		for {
+			c.mu.Lock()
+			if len(c.notifications) == 0 {
+				c.notifying = false
+				c.mu.Unlock()
+				return
+			}
+			fn := c.notifications[0]
+			c.notifications[0] = nil
+			c.notifications = c.notifications[1:]
+			c.mu.Unlock()
+			fn()
+		}
+	}()
+}
+
+// Close permanently closes admission and interrupts all accepted work.
+// Playback retires without a UI round-trip; notification hooks must return
+// (Tea Send is released by program exit). Idempotent.
+func (c *Coordinator) Close() {
 	c.mu.Lock()
+	c.closed = true
+	ids := make([]int, 0, len(c.groups))
+	for id := range c.groups {
+		ids = append(ids, id)
+	}
+	c.mu.Unlock()
+	for _, id := range ids {
+		c.CancelGroup(id)
+	}
 }

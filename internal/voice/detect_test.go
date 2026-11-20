@@ -1,6 +1,7 @@
 package voice
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -201,5 +202,33 @@ func TestDetectLangEmptyResultIgnored(t *testing.T) {
 	DetectLang(sp, "?", 2, store)
 	if got := store.Get(); got != "fr" {
 		t.Fatalf("empty detection reset the value: %q, want fr", got)
+	}
+}
+
+// Match the actual /detect response, including null for undecidable text.
+func TestDetectLanguageServerSchema(t *testing.T) {
+	for _, tc := range []struct{ name, body, want string }{
+		{"French", `{"language":"fr","scores":{"fr":7,"en":0}}`, "fr"},
+		{"English", `{"language":"en","scores":{"fr":0,"en":7}}`, "en"},
+		{"Undecidable", `{"language":null,"scores":{"fr":0,"en":0}}`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/detect" || r.Method != http.MethodPost {
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+			sp, err := NewSpeaker(SpeakerOptions{ServerURL: srv.URL, CLIPath: "unused"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := sp.DetectLanguage(context.Background(), "je suis en train de farie un test, lis un fichier au hazard dans mon repo")
+			if err != nil || got != tc.want {
+				t.Fatalf("got %q, %v; want %q", got, err, tc.want)
+			}
+		})
 	}
 }

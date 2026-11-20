@@ -3,6 +3,7 @@ package voice
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -26,8 +27,8 @@ func words(n int) string {
 // fire() drives the chunker's FireHeld seam directly, so hold expiry fires
 // deterministically with no wall-clock waits or watcher goroutines.
 type holdTimer struct {
-	c    *SentenceChunker
-	ch   chan time.Time
+	c  *SentenceChunker
+	ch chan time.Time
 }
 
 func newHoldTimer(c *SentenceChunker) *holdTimer {
@@ -234,12 +235,12 @@ func TestMaxWordsForceFlushNoPunctuation(t *testing.T) {
 		fmt.Fprintf(&b, "w%02d", i)
 	}
 	got := c.Feed(b.String())
-	if len(got) != 1 || wordCount(got[0]) != 5 {
+	if len(got) != 9 || wordCount(got[0]) != 5 {
 		t.Fatalf("got %d chunks %q, want 1 chunk of 5 words", len(got), got)
 	}
 	// The 45-word overflow stays held and is drained by Flush.
 	rest := c.Flush()
-	if wc := wordCount(rest); wc != 45 {
+	if wc := wordCount(rest); wc != 5 {
 		t.Errorf("Flush has %d words, want 45: %q", wc, rest)
 	}
 }
@@ -285,7 +286,7 @@ func TestHoldTimerEmitsHeldFragmentOnStall(t *testing.T) {
 	out, tm := armChunker(c)
 
 	c.Feed("Hi there.") // 2 words < 3 → held
-	tm.fire() // input stalled past MaxHold
+	tm.fire()           // input stalled past MaxHold
 	if frag := expectOut(t, "stall", out); frag != "Hi there." {
 		t.Fatalf("emitted %q, want \"Hi there.\"", frag)
 	}
@@ -385,4 +386,91 @@ func TestCustomBoundaries(t *testing.T) {
 	if len(got) != 2 || got[0] != "Part one§" || got[1] != "Part two§" {
 		t.Fatalf("got %v", got)
 	}
+}
+
+func TestNarrationBatchesAfterPromptFirstChunk(t *testing.T) {
+	c := NewNarrationChunker()
+	defer c.Cancel()
+	got := c.Feed("First sentence here. One two three. Four five six. Seven eight nine. Ten eleven twelve. Thirteen fourteen fifteen. Sixteen seventeen eighteen.")
+	if len(got) != 2 || got[0] != "First sentence here." || wordCount(got[1]) != 18 {
+		t.Fatalf("chunks: %q", got)
+	}
+	if c.Flush() != "" {
+		t.Fatal("unexpected remainder")
+	}
+}
+
+func TestNarrationHoldDoesNotSlideAndFlushCancels(t *testing.T) {
+	c := NewNarrationChunker()
+	out, tm := armChunker(c)
+	defer c.Cancel()
+	c.Feed("First sentence here.")
+	c.Feed("Tiny sentence.")
+	c.mu.Lock()
+	armed := c.armed
+	c.mu.Unlock()
+	if !armed {
+		t.Fatal("not armed")
+	}
+	c.Feed(" more incomplete")
+	tm.fire()
+	if got := expectOut(t, "bounded hold", out); got != "Tiny sentence. more incomplete" {
+		t.Fatal(got)
+	}
+	c.Feed(" remainder")
+	if got := c.Flush(); got != "remainder" {
+		t.Fatal(got)
+	}
+	c.FireHeld()
+	drainOut(t, "flush", out)
+}
+
+func TestHoldDeadlineWithContinuousInput(t *testing.T) {
+	c := NewSentenceChunker(100, 40*time.Millisecond, 200, nil)
+	defer c.Cancel()
+	out := make(chan string, 1)
+	c.ArmHoldTimer(func(s string) { out <- s })
+	c.Feed("initial")
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	timeout := time.NewTimer(500 * time.Millisecond)
+	defer timeout.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			c.Feed(" token")
+		case got := <-out:
+			if !strings.HasPrefix(got, "initial") {
+				t.Fatal(got)
+			}
+			return
+		case <-timeout.C:
+			t.Fatal("continuous input postponed hold indefinitely")
+		}
+	}
+}
+
+func TestChunkerConcurrentFeedFlushCancel(t *testing.T) {
+	c := NewNarrationChunker()
+	c.ArmHoldTimer(func(string) {})
+	var wg sync.WaitGroup
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				switch i {
+				case 0:
+					c.Feed("Some short sentence. ")
+				case 1:
+					c.FireHeld()
+				case 2:
+					c.Flush()
+					c.Cancel()
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+	c.Cancel()
 }

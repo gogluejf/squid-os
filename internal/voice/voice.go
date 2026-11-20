@@ -2,7 +2,7 @@
 //
 // Two layers:
 //   - Speaker: one sentence = one short-lived `squid-tts-say` process in its
-//     own process group (detect → voice lookup → spawn → teardown).
+//     own process group (spawn → teardown; TTS auto-detects language).
 //   - Coordinator: owns speech-group state (StartGroup/Emit/EndGroup/
 //     CancelGroup) and arbitrates groups via the onPreempt policy hook.
 package voice
@@ -56,7 +56,7 @@ type SpeakerOptions struct {
 }
 
 // Speaker turns one sentence into audio. Each Speak call is fully
-// self-contained: detect → lookup → spawn → wait. No stream state.
+// self-contained: spawn → wait. No stream state.
 type Speaker struct {
 	opts SpeakerOptions
 	http *http.Client
@@ -134,36 +134,41 @@ func resolveVoice(cfg *config.Voice, lang, prevLang string) (name string, ok boo
 	return "", false
 }
 
-// Speak detects the language of text, looks up the configured voice, and
-// plays it through squid-tts-say in its own process group. prevLang is the
-// previous session language used as a fallback when detection is empty or
-// maps to an unconfigured language.
+// Speak delegates language detection to TTS. alertLang is only supplied for
+// localized system alerts, selecting cfg.Voices without forcing TTS language.
+// Narration uses a common configured voice when en/fr agree; otherwise it omits
+// -v so the server selects its per-language default (no client detection).
 //
 // The process runs in a fresh process group (Setpgid) so Kill can SIGKILL
 // the whole tree — including the aplay child — leaving no orphans.
-func (s *Speaker) Speak(ctx context.Context, text string, cfg *config.Voice, prevLang string) (*Process, error) {
+func (s *Speaker) Speak(ctx context.Context, text string, cfg *config.Voice, alertLang string) (*Process, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, errors.New("voice: nothing to speak")
 	}
 
-	lang, derr := s.DetectLanguage(ctx, text)
-	if derr != nil {
-		// Detection failure must not kill the utterance: fall back to the
-		// previous language chain and let the server re-detect at request
-		// time (it auto-detects anyway).
-		lang = ""
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-
-	name, ok := resolveVoice(cfg, lang, prevLang)
-	if !ok {
-		return nil, fmt.Errorf("%w (%q)", ErrVoiceNotFound, lang)
+	args := []string{"raw", "-q", "--stdin", "-l", "auto", "-s", s.opts.ServerURL}
+	name := ""
+	if alertLang != "" {
+		var ok bool
+		name, ok = resolveVoice(cfg, alertLang, "")
+		if !ok {
+			return nil, fmt.Errorf("%w (%q)", ErrVoiceNotFound, alertLang)
+		}
+	} else if cfg.Voices["en"] == cfg.Voices["fr"] {
+		name = cfg.Voices["en"]
+	}
+	if name != "" {
+		args = append(args, "-v", name)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, s.opts.SpeakTimeout)
 	// Ownership transfers to the process goroutine after Start succeeds.
 
-	cmd := exec.CommandContext(ctx, s.cli, "-v", name, "-q", "--stdin")
+	cmd := exec.CommandContext(ctx, s.cli, args...)
 	// Own process group: killing -pid takes the CLI and its aplay child
 	// together. Same pattern as internal/tools/bash.go.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

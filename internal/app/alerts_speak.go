@@ -7,7 +7,7 @@ import (
 
 // speakAlertEvent formats one alert event in the user's last language and
 // speaks it as its own group. All call sites run on the UI goroutine, so
-// reading m.settings.Voice.Enabled here is safe. Read the synchronized language
+// reading m.settings.Voice.VoiceEnabled() here is safe. Read the synchronized language
 // store directly: detection may finish before its UI message is delivered.
 // No-op when voice is off or unwired.
 func (m *Model) speakAlertEvent(ev voice.Event, detail string) {
@@ -25,6 +25,6 @@ func (m *Model) speakAlertEvent(ev voice.Event, detail string) {
 		lang = "en"
 	}
 	text := voice.AlertText(ev, lang, detail)
-	log.LogVoice("alert.trigger", "event=%q submission=%d enabled=%t language=%q text=%q", ev, m.langSeq, m.settings.Voice.Enabled, lang, text)
-	m.narrator.speakAlert(m.settings.Voice.Enabled, text, lang)
+	log.LogVoice("alert.trigger", "event=%q submission=%d enabled=%t language=%q text=%q", ev, m.langSeq, m.settings.Voice.VoiceEnabled(), lang, text)
+	m.narrator.speakAlert(m.settings.Voice.VoiceEnabled(), text, lang)
 }

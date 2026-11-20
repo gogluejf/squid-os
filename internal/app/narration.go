@@ -30,6 +30,10 @@ type Narrator struct {
 	// so the drain hook can clear the flag when the last one finishes.
 	alertActive bool
 	alertGids   map[int]struct{}
+
+	// Turn-mode buffering: accumulate text silently, speak at flush.
+	bufferedText string
+	turnMode     bool
 }
 
 // newNarrator builds a Narrator over the given coordinator. A nil coord
@@ -84,6 +88,7 @@ func (n *Narrator) beginMessage(enabled bool) {
 		n.endLocked(context.Background())
 	}
 	n.groupID = n.coord.StartGroup(voice.FinishChunk)
+	n.bufferedText = ""
 	// The previous message's draining tail (if any) is superseded: it keeps
 	// playing but is no longer the cancellable "active" group. A drained one
 	// was already cleared by the drain hook; this assignment covers both.
@@ -108,12 +113,50 @@ func (n *Narrator) feedDelta(delta string) {
 	n.mu.Lock()
 	gid := n.groupID
 	c := n.chunker
+	// In turn mode, buffer text instead of speaking per-chunk.
+	if n.turnMode {
+		n.bufferedText += delta
+		n.mu.Unlock()
+		return
+	}
 	n.mu.Unlock()
 	if gid == 0 || c == nil {
 		return
 	}
 	for _, chunk := range c.Feed(delta) {
 		n.emit(gid, chunk)
+	}
+}
+
+// setTurnMode enables/disables turn-mode buffering for the current message.
+func (n *Narrator) setTurnMode(on bool) {
+	if n == nil {
+		return
+	}
+	n.mu.Lock()
+	n.turnMode = on
+	n.mu.Unlock()
+}
+
+// flushBuffer speaks all buffered text at once (turn mode final flush).
+func (n *Narrator) flushBuffer(ctx context.Context) {
+	if n == nil || n.coord == nil {
+		return
+	}
+	n.mu.Lock()
+	text := n.bufferedText
+	n.bufferedText = ""
+	gid := n.groupID
+	c := n.chunker
+	n.mu.Unlock()
+	if text == "" || gid == 0 || c == nil {
+		return
+	}
+	for _, chunk := range c.Feed(text) {
+		n.emit(gid, chunk)
+	}
+	if rest := c.Flush(); rest != "" {
+		n.emit(gid, rest)
 	}
 }
 

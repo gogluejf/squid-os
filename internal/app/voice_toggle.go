@@ -8,29 +8,32 @@ import (
 	"squid-os/internal/ui"
 )
 
-// toggleVoice persists the global default, like thinking, without resetting
-// chat mode or touching the active inference/tool stream. Enabling applies to
-// the next message; disabling immediately silences narration.
+// toggleVoice cycles the voice mode: off → step → turn → off.
+// Persists like thinking. Disabling (→ off) kills in-flight playback.
 func (m Model) toggleVoice() (Model, tea.Cmd) {
 	next := m.settings
-	next.Voice.Enabled = !next.Voice.Enabled
-	log.LogVoice("toggle.attempt", "from=%t to=%t", m.settings.Voice.Enabled, next.Voice.Enabled)
+	var nextMode config.NarrationMode
+	switch next.Voice.Mode {
+	case config.NarrationOff:
+		nextMode = config.NarrationStep
+	case config.NarrationStep:
+		nextMode = config.NarrationTurn
+	default:
+		nextMode = config.NarrationOff
+	}
+	from := next.Voice.Mode
+	next.Voice.Mode = nextMode
+	log.LogVoice("toggle.attempt", "from=%q to=%q", from, nextMode)
 	if err := config.SaveSettings(m.paths, next); err != nil {
-		log.LogVoice("toggle.save_failed", "retained=%t requested=%t", m.settings.Voice.Enabled, next.Voice.Enabled)
+		log.LogVoice("toggle.save_failed", "retained=%q requested=%q", from, nextMode)
 		m.setNotification(ui.NotificationError, "could not save voice settings: "+err.Error())
 		return m, nil
 	}
 	m.settings = next
-	log.LogVoice("toggle.applied", "enabled=%t saved=true", m.settings.Voice.Enabled)
-	if !m.settings.Voice.Enabled {
-		// Kill in-flight playback now: CancelGroup mutes the group so late
-		// chunks are dropped and the running player process is SIGKILLed.
+	log.LogVoice("toggle.applied", "mode=%q saved=true", nextMode)
+	if nextMode == config.NarrationOff {
 		m.narrator.cancelActive()
 	}
-	if m.settings.Voice.Enabled {
-		(&m).setNotification(ui.NotificationInfo, "voice on")
-	} else {
-		(&m).setNotification(ui.NotificationInfo, "voice off")
-	}
+	m.setNotification(ui.NotificationInfo, "voice: "+string(nextMode))
 	return m, nil
 }

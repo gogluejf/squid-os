@@ -106,10 +106,22 @@ type PasteConfig struct {
 	LargeTextBytes int `json:"large_text_bytes"`
 }
 
+// NarrationMode controls when assistant text is spoken.
+type NarrationMode string
+
+const (
+	NarrationOff  NarrationMode = "off"  // voice disabled
+	NarrationStep NarrationMode = "step" // speak every assistant message
+	NarrationTurn NarrationMode = "turn" // speak only the final assistant message
+)
+
+// VoiceEnabled reports whether voice output is active (mode != off).
+func (v Voice) VoiceEnabled() bool { return v.Mode != NarrationOff }
+
 // Voice configures spoken output via the local squid-tts server.
 type Voice struct {
-	// Enabled turns spoken responses on. Off by default.
-	Enabled bool `json:"enabled"`
+	// Mode is the single source of truth: "off", "step", or "turn".
+	Mode NarrationMode `json:"mode"`
 
 	// Voices maps language code to TTS voice name (e.g. "en" -> "jane").
 	// Invalid names pass through; the TTS server validates at request time.
@@ -123,8 +135,13 @@ const (
 )
 
 // NormalizeVoice fills missing/partial voice sections with defaults:
-// enabled=false, voices.en=jane, voices.fr=jane. Existing values are kept.
+// mode=step, voices.en=jane, voices.fr=jane. Existing values are kept.
 func (s *Settings) NormalizeVoice() {
+	if s.Voice.Mode == "" {
+		s.Voice.Mode = NarrationOff
+	} else if s.Voice.Mode != NarrationOff && s.Voice.Mode != NarrationStep && s.Voice.Mode != NarrationTurn {
+		s.Voice.Mode = NarrationOff
+	}
 	if s.Voice.Voices == nil {
 		s.Voice.Voices = make(map[string]string)
 	}

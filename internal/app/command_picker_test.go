@@ -50,13 +50,13 @@ func TestCommandPickerVoiceEnter(t *testing.T) {
 			defer m.session.CancelTurnCtx()
 			ctx := m.session.TurnContext()
 			uiStream := m.session.UIStream
-			for _, want := range []bool{true, false} {
+			for _, voiceWant := range []config.NarrationMode{config.NarrationStep, config.NarrationTurn} {
 				m = confirmPaletteCommand(t, m, "voice")
 				if m.mode != wantMode || m.activeComponent != nil || !m.textarea.Focused() || m.textarea.Value() != "" {
 					t.Fatalf("palette not dismissed: mode=%v component=%T", m.mode, m.activeComponent)
 				}
 				saved := config.LoadSettings(m.paths.Root)
-				if saved.Voice.Enabled != want || m.settings.Voice.Enabled != want {
+				if saved.Voice.Mode != voiceWant || m.settings.Voice.Mode != voiceWant {
 					t.Fatal("voice toggle not persisted")
 				}
 				if saved.Model != "preserve-model" || saved.Voice.Voices["en"] != "jane" {

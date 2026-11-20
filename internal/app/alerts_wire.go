@@ -11,7 +11,7 @@ import (
 // playing bumps it (default onPreempt), and alt+x / barge-in / voice stop kill
 // it exactly like narration (same CancelGroup path).
 //
-// voiceOn is passed by the caller (speakAlertEvent reads Model.settings.Voice.Enabled on the
+// voiceOn is passed by the caller (speakAlertEvent reads Model.settings.Voice.VoiceEnabled() on the
 // UI goroutine) — no indirection, no stale captures: production and tests
 // behave identically by construction.
 //

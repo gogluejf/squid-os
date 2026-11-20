@@ -30,7 +30,10 @@ func (m *Model) setStreamMode() {
 	// Voice: one speech group per assistant message. The group survives the
 	// UIStreamState.reset() calls between tool phases; only true message
 	// completion ends it (narrator.endMessage).
-	m.narrator.beginMessage(m.settings.Voice.Enabled)
+	m.narrator.beginMessage(m.settings.Voice.VoiceEnabled())
+	if m.settings.Voice.Mode == config.NarrationTurn {
+		m.narrator.setTurnMode(true)
+	}
 }
 
 // setAuthMode builds a Question component for tool authorization and sets it as the active component.
@@ -247,6 +250,7 @@ func (m Model) handleStreamEvent(event chat.StreamEvent) (tea.Model, tea.Cmd) {
 		// group. Done BEFORE setChatMode so the utterance is complete when
 		// the turn ends; queued next-step messages start a fresh group via
 		// setStreamMode.
+		(&m).narrator.flushBuffer(context.Background())
 		(&m).narrator.endMessage(context.Background())
 		(&m).setChatMode()
 		nm, autoSaveCmd := m.autoSave()

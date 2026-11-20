@@ -18,8 +18,8 @@ func writeSettings(t *testing.T, content string) string {
 func TestLoadSettingsMissingVoiceSectionUsesDefaults(t *testing.T) {
 	s := LoadSettings(writeSettings(t, `{"provider":"openai","model":"gpt-5.5"}`))
 
-	if s.Voice.Enabled {
-		t.Fatal("voice.enabled = true, want false")
+	if s.Voice.VoiceEnabled() {
+		t.Fatal("voice should be enabled by default (mode=step)")
 	}
 	if got, want := s.Voice.Voices["en"], "jane"; got != want {
 		t.Fatalf("voices.en = %q, want %q", got, want)
@@ -32,8 +32,8 @@ func TestLoadSettingsMissingVoiceSectionUsesDefaults(t *testing.T) {
 func TestLoadSettingsNoSettingsFileUsesVoiceDefaults(t *testing.T) {
 	s := LoadSettings(t.TempDir())
 
-	if s.Voice.Enabled {
-		t.Fatal("voice.enabled = true, want false")
+	if s.Voice.VoiceEnabled() {
+		t.Fatal("voice should be enabled by default (mode=step)")
 	}
 	if got, want := s.Voice.Voices["en"], "jane"; got != want {
 		t.Fatalf("voices.en = %q, want %q", got, want)
@@ -46,13 +46,13 @@ func TestLoadSettingsNoSettingsFileUsesVoiceDefaults(t *testing.T) {
 func TestLoadSettingsPartialVoiceSectionFillsMissingLanguage(t *testing.T) {
 	s := LoadSettings(writeSettings(t, `{
 		"voice": {
-			"enabled": true,
+			"mode": "step",
 			"voices": {"en": "tom"}
 		}
 	}`))
 
-	if !s.Voice.Enabled {
-		t.Fatal("voice.enabled = false, want true")
+	if !s.Voice.VoiceEnabled() {
+		t.Fatal("voice should be disabled (mode=off)")
 	}
 	if got, want := s.Voice.Voices["en"], "tom"; got != want {
 		t.Fatalf("voices.en = %q, want %q", got, want)
@@ -63,10 +63,10 @@ func TestLoadSettingsPartialVoiceSectionFillsMissingLanguage(t *testing.T) {
 }
 
 func TestLoadSettingsEmptyVoicesMapFillsDefaults(t *testing.T) {
-	s := LoadSettings(writeSettings(t, `{"voice": {"enabled": true, "voices": {}}}`))
+	s := LoadSettings(writeSettings(t, `{"voice": {"mode": "step", "voices": {}}}`))
 
-	if !s.Voice.Enabled {
-		t.Fatal("voice.enabled = false, want true")
+	if !s.Voice.VoiceEnabled() {
+		t.Fatal("voice should be disabled (mode=off)")
 	}
 	if got, want := s.Voice.Voices["en"], "jane"; got != want {
 		t.Fatalf("voices.en = %q, want %q", got, want)
@@ -79,7 +79,7 @@ func TestLoadSettingsEmptyVoicesMapFillsDefaults(t *testing.T) {
 func TestLoadSettingsInvalidVoiceNamePassesThrough(t *testing.T) {
 	s := LoadSettings(writeSettings(t, `{
 		"voice": {
-			"enabled": true,
+			"mode": "step",
 			"voices": {"en": "not-a-real-voice", "fr": "also-bogus"}
 		}
 	}`))

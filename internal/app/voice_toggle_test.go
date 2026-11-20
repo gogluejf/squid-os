@@ -17,26 +17,26 @@ import (
 // setting, persisted for the next launch.
 func TestVoiceToggleFlipsRuntimeState(t *testing.T) {
 	m := newVoiceTestModel(t, false)
-	if m.settings.Voice.Enabled {
+	if m.settings.Voice.VoiceEnabled() {
 		t.Fatal("expected voice off initially")
 	}
 
-	// Bare toggle flips on.
+	// First toggle: off → step.
 	m2, _ := m.toggleVoice()
-	if !m2.settings.Voice.Enabled {
-		t.Fatal("bare toggle did not turn voice on")
+	if m2.settings.Voice.Mode != config.NarrationStep {
+		t.Fatalf("first toggle: mode = %q, want step", m2.settings.Voice.Mode)
 	}
 
-	// Bare toggle flips back off.
+	// Second toggle: step → turn.
 	m3, _ := m2.toggleVoice()
-	if m3.settings.Voice.Enabled {
-		t.Fatal("second bare toggle did not turn voice off")
+	if m3.settings.Voice.Mode != config.NarrationTurn {
+		t.Fatalf("second toggle: mode = %q, want turn", m3.settings.Voice.Mode)
 	}
 
-	// And on again.
+	// Third toggle: turn → off.
 	m4, _ := m3.toggleVoice()
-	if !m4.settings.Voice.Enabled {
-		t.Fatal("third bare toggle did not turn voice on")
+	if m4.settings.Voice.Mode != config.NarrationOff {
+		t.Fatalf("third toggle: mode = %q, want off", m4.settings.Voice.Mode)
 	}
 }
 
@@ -60,7 +60,7 @@ func TestVoiceToggleOffKillsPlayback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSpeaker: %v", err)
 	}
-	cfg := config.Voice{Enabled: true, Voices: map[string]string{"en": "jane"}}
+	cfg := config.Voice{Mode: config.NarrationStep, Voices: map[string]string{"en": "jane"}}
 	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
 
 	m.narrator.beginMessage(true)
@@ -75,9 +75,11 @@ func TestVoiceToggleOffKillsPlayback(t *testing.T) {
 		t.Fatal("chunk did not reach the coordinator")
 	}
 
+	// step → turn (still on), then turn → off (kills playback)
 	m2, _ := m.toggleVoice()
-	if m2.settings.Voice.Enabled {
-		t.Fatal("voice still on after toggle off")
+	m2, _ = m2.toggleVoice()
+	if m2.settings.Voice.Mode != config.NarrationOff {
+		t.Fatalf("voice mode = %q, want off", m2.settings.Voice.Mode)
 	}
 	if got := m2.narrator.coord.Current(); got != 0 {
 		t.Fatalf("active group %d survived toggle off", got)
@@ -100,7 +102,7 @@ func TestVoiceToggleCommandsPersistWithoutDisturbingStream(t *testing.T) {
 			m.session.Stream.Active = true
 			m.session.UIStream.ID = "active-stream"
 			m.textarea.SetValue("draft")
-			for _, want := range []bool{true, false} {
+			for _, wantMode := range []config.NarrationMode{config.NarrationStep, config.NarrationTurn} {
 				var updated tea.Model
 				var cmd tea.Cmd
 				if viaKey {
@@ -113,8 +115,8 @@ func TestVoiceToggleCommandsPersistWithoutDisturbingStream(t *testing.T) {
 					t.Fatal("toggle scheduled stream work")
 				}
 				saved := config.LoadSettings(m.paths.Root)
-				if saved.Voice.Enabled != want || m.settings.Voice.Enabled != want {
-					t.Fatal("enabled state not persisted")
+				if saved.Voice.Mode != wantMode || m.settings.Voice.Mode != wantMode {
+					t.Fatalf("mode not persisted: saved=%q runtime=%q want=%q", saved.Voice.Mode, m.settings.Voice.Mode, wantMode)
 				}
 				if saved.Model != "preserve-model" || saved.Voice.Voices["en"] != "jane" {
 					t.Fatal("unrelated settings lost")
@@ -134,7 +136,7 @@ func TestVoiceToggleSaveFailureKeepsState(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ = m.toggleVoice()
-	if m.settings.Voice.Enabled {
+	if m.settings.Voice.VoiceEnabled() {
 		t.Fatal("failed save changed enabled state")
 	}
 	if m.notification.Message == "voice on" {
@@ -149,6 +151,8 @@ func TestVoiceToggleOffCancelsBufferedNarration(t *testing.T) {
 	if gid == 0 || m.narrator.coord.Current() != 0 {
 		t.Fatal("expected allocated, not yet playing group")
 	}
+	// step → turn → off (two toggles to reach off)
+	m, _ = m.toggleVoice()
 	m, _ = m.toggleVoice()
 	if m.narrator.groupID != 0 || m.narrator.chunker != nil {
 		t.Fatal("buffer survived mute")

@@ -257,8 +257,8 @@ func TestIsDirectPath(t *testing.T) {
 func TestResolveDirectPath(t *testing.T) {
 	workingDir := "/home/user/project"
 	cases := []struct {
-		raw   string
-		want  string
+		raw  string
+		want string
 	}{
 		{"/absolute/file.txt", "/absolute/file.txt"},
 		{"./relative.txt", "/home/user/project/relative.txt"},

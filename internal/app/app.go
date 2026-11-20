@@ -245,10 +245,10 @@ func (m *Model) fireUserLangDetect(text string) {
 	// is pure waste: skip it. The last known value stays intact; flipping
 	// /voice on re-detects from the next message.
 	if !m.incognito {
-		log.LogVoice("submission", "voice_enabled=%t text=%q", m.settings.Voice.Enabled, text)
+		log.LogVoice("submission", "voice_enabled=%t text=%q", m.settings.Voice.VoiceEnabled(), text)
 	}
-	if !m.settings.Voice.Enabled || m.langStore == nil || m.narrator == nil || m.narrator.coord == nil || m.voiceWiring == nil || m.voiceWiring.langPush == nil {
-		log.LogVoice("detect.skipped", "voice_enabled=%t reason=disabled_or_unwired", m.settings.Voice.Enabled)
+	if !m.settings.Voice.VoiceEnabled() || m.langStore == nil || m.narrator == nil || m.narrator.coord == nil || m.voiceWiring == nil || m.voiceWiring.langPush == nil {
+		log.LogVoice("detect.skipped", "voice_enabled=%t reason=disabled_or_unwired", m.settings.Voice.VoiceEnabled())
 		return
 	}
 	sp := m.narrator.coord.Speaker()

@@ -52,11 +52,11 @@ func wireLangDetectForTest(t *testing.T, m *Model, langs map[string]string) <-ch
 	if err != nil {
 		t.Fatalf("NewSpeaker: %v", err)
 	}
-	cfg := config.Voice{Enabled: true, Voices: map[string]string{"en": "jane", "fr": "jane"}}
+	cfg := config.Voice{Mode: config.NarrationStep, Voices: map[string]string{"en": "jane", "fr": "jane"}}
 	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
 	// Detection is gated on the runtime voice toggle (task 3.1 refinement):
 	// these tests exercise detection itself, so voice must be ON.
-	m.settings.Voice.Enabled = true
+	m.settings.Voice.Mode = config.NarrationStep
 	if m.langStore == nil {
 		m.langStore = voice.NewLangStore()
 	}
@@ -174,9 +174,9 @@ func TestLastUserLangFailureLeavesPreviousValueIntact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := config.Voice{Enabled: true, Voices: map[string]string{"en": "jane", "fr": "jane"}}
+	cfg := config.Voice{Mode: config.NarrationStep, Voices: map[string]string{"en": "jane", "fr": "jane"}}
 	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
-	m.settings.Voice.Enabled = true // detection is gated on the runtime toggle
+	m.settings.Voice.Mode = config.NarrationStep // detection is gated on the runtime toggle
 	ch := make(chan tea.Msg, 4)
 	if m.voiceWiring == nil {
 		m.voiceWiring = &voiceWiringState{}

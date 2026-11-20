@@ -53,8 +53,8 @@ func newRecordingAlertModel(t *testing.T) (Model, string) {
 	if err != nil {
 		t.Fatalf("NewSpeaker: %v", err)
 	}
-	cfg := config.Voice{Enabled: true, Voices: map[string]string{"en": "jane", "fr": "custom-french"}}
-	m.settings.Voice.Enabled = true
+	cfg := config.Voice{Mode: config.NarrationStep, Voices: map[string]string{"en": "jane", "fr": "custom-french"}}
+	m.settings.Voice.Mode = config.NarrationStep
 	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
 	return m, recordPath
 }
@@ -251,7 +251,7 @@ func TestAuthorizationUsesDetectedLanguageBeforeUIMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := config.Voice{Enabled: true, Voices: map[string]string{"en": "jane", "fr": "custom-french"}}
+	cfg := config.Voice{Mode: config.NarrationStep, Voices: map[string]string{"en": "jane", "fr": "custom-french"}}
 	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
 	m.langStore = voice.NewLangStore()
 	m.lastUserLang = "en"

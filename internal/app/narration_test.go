@@ -43,8 +43,17 @@ func newVoiceTestModel(t *testing.T, enabled bool) Model {
 	if err != nil {
 		t.Fatalf("NewSpeaker: %v", err)
 	}
-	cfg := config.Voice{Enabled: enabled, Voices: map[string]string{"en": "jane", "fr": "jane"}}
-	m.settings.Voice.Enabled = enabled
+	cfg := config.Voice{Mode: func() config.NarrationMode {
+		if enabled {
+			return config.NarrationStep
+		}
+		return config.NarrationOff
+	}(), Voices: map[string]string{"en": "jane", "fr": "jane"}}
+	if enabled {
+		m.settings.Voice.Mode = config.NarrationStep
+	} else {
+		m.settings.Voice.Mode = config.NarrationOff
+	}
 	m.narrator = newNarrator(voice.NewCoordinator(sp, &cfg))
 	return m
 }
@@ -337,7 +346,7 @@ func TestNarrationBeginMessageStartsFreshGroup(t *testing.T) {
 // --- test helpers mirroring the production wiring (setStreamMode/handleStreamEvent) ---
 
 // narrationBeginForTest mirrors setStreamMode's voice hook.
-func (m Model) narrationBeginForTest() { m.narrator.beginMessage(m.settings.Voice.Enabled) }
+func (m Model) narrationBeginForTest() { m.narrator.beginMessage(m.settings.Voice.VoiceEnabled()) }
 
 // narrationFeedForTest mirrors handleStreamEvent's LoopContinue voice hook.
 func (m Model) narrationFeedForTest(delta string) { m.narrator.feedDelta(delta) }

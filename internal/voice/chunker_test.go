@@ -15,13 +15,6 @@ func testChunker() *SentenceChunker {
 }
 
 // words builds a sentence of n distinct words ending with a period.
-func words(n int) string {
-	parts := make([]string, n)
-	for i := range parts {
-		parts[i] = "w" + string(rune('a'+i%26)) + string(rune('0'+i/26))
-	}
-	return strings.Join(parts, " ") + "."
-}
 
 // holdTimer is a manual stand-in for the chunker's owned time.Timer. Its
 // fire() drives the chunker's FireHeld seam directly, so hold expiry fires
@@ -79,145 +72,120 @@ func expectOut(t *testing.T, name string, out <-chan string) string {
 
 func TestFeedEmitsPerSentence(t *testing.T) {
 	c := testChunker() // minWords=3
-	got := c.Feed("Hello world. This is fine!")
-	// Both sentences are 2 words < minWords, so they merge into one chunk.
-	if len(got) != 1 || got[0] != "Hello world. This is fine!" {
-		t.Fatalf("got %v", got)
+	if got := c.Feed("Hello world. This is fine!"); len(got) != 0 {
+		t.Fatalf("short text emitted %v before reaching target size", got)
 	}
-	if rest := c.Flush(); rest != "" {
-		t.Errorf("Flush after complete sentences = %q, want empty", rest)
+	if rest := c.Flush(); rest != "Hello world. This is fine!" {
+		t.Fatalf("Flush = %q", rest)
 	}
 }
 
-func TestFeedEmitsLongSentencesSeparately(t *testing.T) {
-	c := testChunker()
-	got := c.Feed("First sentence here. Second sentence too.")
-	want := []string{"First sentence here.", "Second sentence too."}
-	if len(got) != len(want) {
-		t.Fatalf("got %d chunks %q, want %d %q", len(got), got, len(want), want)
+func TestFeedEmitsUpToLastCompletedSentenceBeyondTarget(t *testing.T) {
+	c := NewSentenceChunker(1, time.Second, 1000, nil)
+	text := "First short. " + strings.Repeat("padding word ", 40) + "Final long sentence. Remainder."
+	got := c.Feed(text)
+	want := text[:strings.LastIndex(text, "Final long sentence.")+len("Final long sentence.")]
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("chunk %d = %q, want %q", i, got[i], want[i])
-		}
-	}
-	if rest := c.Flush(); rest != "" {
-		t.Errorf("Flush = %q, want empty", rest)
+	if rest := c.Flush(); rest != "Remainder." {
+		t.Fatalf("Flush = %q", rest)
 	}
 }
 
 func TestFeedSplitsAcrossFeeds(t *testing.T) {
-	c := testChunker()
-	if got := c.Feed("First sen"); len(got) != 0 {
-		t.Fatalf("partial feed emitted %v", got)
+	c := NewSentenceChunker(1, time.Second, 1000, nil)
+	text := strings.Repeat("buffered text without a boundary ", 12) + "First sentence. Second."
+	var out []string
+	for i := 0; i < len(text); i += 11 {
+		out = append(out, c.Feed(text[i:min(i+11, len(text))])...)
 	}
-	got := c.Feed("tence. Second")
-	// "First sentence." is 2 words < minWords → held, not yet emitted.
-	if len(got) != 0 {
-		t.Fatalf("got %v, want [] (held)", got)
+	if len(out) != 1 || out[0] != strings.TrimSuffix(text, " Second.") {
+		t.Fatalf("got %q", out)
 	}
-	got = c.Feed(".")
-	// The held fragment merges with the next cut ("Second.") and stands
-	// alone at 4 words, so it emits as one group.
-	if len(got) != 1 || got[0] != "First sentence. Second." {
-		t.Fatalf("got %v, want [\"First sentence. Second.\"]", got)
-	}
-	got = c.Feed(" Third one.")
-	// "Third one." is 2 words < minWords, so it is held until Flush.
-	if len(got) != 0 {
-		t.Fatalf("got %v, want [] (held)", got)
-	}
-	if rest := c.Flush(); rest != "Third one." {
-		t.Errorf("Flush = %q, want %q", rest, "Third one.")
+	if rest := c.Flush(); rest != "Second." {
+		t.Fatalf("Flush = %q", rest)
 	}
 }
 
-func TestNewlinesAreBoundaries(t *testing.T) {
-	c := testChunker()
-	got := c.Feed("Line one.\nLine two\nLong enough line to stand alone.")
-	// "Line one." (2 words) is held; "\n" (0 words) merges into it, then
-	// "Line two" (2 words) merges in too → one group. The long sentence
-	// stands alone.
-	if len(got) != 2 {
-		t.Fatalf("got %d chunks %q", len(got), got)
+func TestNewlinesAreNotNarrationBoundaries(t *testing.T) {
+	c := NewNarrationChunker()
+	defer c.Cancel()
+	text := strings.Repeat("markdown bullet text without terminal punctuation ", 10) + "\nFinal sentence."
+	var out []string
+	for i := 0; i < len(text); i += 13 {
+		out = append(out, c.Feed(text[i:min(i+13, len(text))])...)
 	}
-	for _, part := range []string{"Line one.", "Line two"} {
-		if !strings.Contains(got[0], part) {
-			t.Errorf("merged chunk %q missing %q", got[0], part)
+	if len(out) != 1 || !strings.HasSuffix(out[0], "Final sentence.") {
+		t.Fatalf("chunks = %q", out)
+	}
+	if rest := c.Flush(); rest != "" {
+		t.Fatalf("Flush = %q", rest)
+	}
+}
+
+// --- target-size accumulation --------------------------------------------------
+
+func TestFeedBelowTargetSizeHoldsText(t *testing.T) {
+	c := testChunker()
+	if got := c.Feed("Short sentence."); len(got) != 0 {
+		t.Fatalf("emitted %q before target size", got)
+	}
+	if rest := c.Flush(); rest != "Short sentence." {
+		t.Fatalf("Flush = %q", rest)
+	}
+}
+
+func TestFeedAtTargetSizeEmitsFirstCompletedSentence(t *testing.T) {
+	c := NewSentenceChunker(1, time.Second, 1000, nil)
+	prefix := strings.Repeat("padding words to reach the buffer threshold ", 12)
+	got := c.Feed(prefix + "First complete sentence. Remainder stays buffered.")
+	want := prefix + "First complete sentence."
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if rest := c.Flush(); rest != "Remainder stays buffered." {
+		t.Fatalf("Flush = %q", rest)
+	}
+}
+
+func TestFeedCutsAtFirstPeriodBeyondTarget(t *testing.T) {
+	c := NewSentenceChunker(1, time.Second, 1000, nil)
+	// Each "sentence" ends with a period+space. First period is at ~40 chars,
+	// well below 300. The first period BEYOND 300 should be the cut point.
+	text := strings.Repeat("this is a test sentence. ", 20) + "Final word."
+	got := c.Feed(text)
+	// Find first ". " at or after position 300; cut is after the period (not the space)
+	cut := 0
+	for i := 300; i < len(text); i++ {
+		if text[i] == '.' && i+1 < len(text) && text[i+1] == ' ' {
+			cut = i + 1 // position just after the period
+			break
 		}
 	}
-	if got[1] != "Long enough line to stand alone." {
-		t.Errorf("second chunk = %q", got[1])
+	want := strings.TrimSpace(text[:cut])
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %q (len %d), want %q (len %d)", got[0], len(got[0]), want, len(want))
 	}
-}
-
-// --- short-fragment merging --------------------------------------------------
-
-func TestShortFragmentsMergeWithNext(t *testing.T) {
-	c := testChunker() // minWords=3
-	got := c.Feed("- apple\n- banana\nDetails here follow.")
-	// "- apple" (1 word) is held; merged with "- banana" it reaches 3 words
-	// and emits as its own group; "Details here follow." stands alone.
-	if len(got) != 2 {
-		t.Fatalf("got %d chunks %q, want 2", len(got), got)
-	}
-	for _, part := range []string{"apple", "banana"} {
-		if !strings.Contains(got[0], part) {
-			t.Errorf("first chunk %q missing %q", got[0], part)
-		}
-	}
-	if got[1] != "Details here follow." {
-		t.Errorf("second chunk = %q", got[1])
-	}
-}
-
-func TestLongFragmentNotMerged(t *testing.T) {
-	c := testChunker()
-	long := "One two three four five six seven eight nine ten."
-	got := c.Feed(long + " Short.")
-	// First sentence has 10 words >= minWords, so it emits on its own;
-	// "Short." (1 word) is held until Flush.
-	if len(got) != 1 || got[0] != long {
-		t.Fatalf("got %v, want [%q]", got, long)
-	}
-	if rest := c.Flush(); rest != "Short." {
-		t.Errorf("Flush = %q, want %q", rest, "Short.")
-	}
-}
-
-func TestTwoWordFragmentsMergeChain(t *testing.T) {
-	c := testChunker() // minWords=3
-	got := c.Feed("Alpha beta. Gamma delta. Long enough sentence to stand alone.")
-	// "Alpha beta." (2 words) merges with "Gamma delta." reaching 4 words →
-	// emits as one group; the long sentence stands alone.
-	if len(got) != 2 {
-		t.Fatalf("got %d chunks %q, want 2", len(got), got)
-	}
-	for _, part := range []string{"Alpha beta.", "Gamma delta."} {
-		if !strings.Contains(got[0], part) {
-			t.Errorf("first chunk %q missing %q", got[0], part)
-		}
-	}
-	if got[1] != "Long enough sentence to stand alone." {
-		t.Errorf("second chunk = %q", got[1])
+	if rest := c.Flush(); rest != strings.TrimSpace(text[cut:]) {
+		t.Fatalf("Flush = %q, want %q", rest, strings.TrimSpace(text[cut:]))
 	}
 }
 
 // --- max-size force flush ----------------------------------------------------
 
-func TestMaxWordsForceFlush(t *testing.T) {
+func TestMaxWordsNoLongerForceFlushesMidSentence(t *testing.T) {
 	c := NewSentenceChunker(3, time.Second, 5, nil)
-	got := c.Feed(words(8)) // 8 words > maxWords=5 → force-flush
-	if len(got) != 1 {
-		t.Fatalf("got %d chunks %q, want 1", len(got), got)
+	text := strings.TrimRight(strings.Repeat("unpunctuated streaming words ", 20), " ")
+	var out []string
+	for i := 0; i < len(text); i += 9 {
+		out = append(out, c.Feed(text[i:min(i+9, len(text))])...)
 	}
-	if wc := wordCount(got[0]); wc > 5 {
-		t.Errorf("chunk has %d words, want <= 5: %q", wc, got[0])
+	if len(out) != 0 {
+		t.Fatalf("mid-sentence chunks emitted: %q", out)
 	}
-	// The overflow stays held (3 words == minWords, so it is NOT merged
-	// forward) and is drained by Flush.
-	if rest := c.Flush(); !strings.Contains(rest, "wf0") || !strings.Contains(rest, "wg0") || !strings.Contains(rest, "wh0") {
-		t.Errorf("Flush = %q, want the 3-word overflow (wf0 wg0 wh0)", rest)
+	if rest := c.Flush(); rest != text {
+		t.Fatalf("Flush = %q", rest)
 	}
 }
 
@@ -234,14 +202,11 @@ func TestMaxWordsForceFlushNoPunctuation(t *testing.T) {
 		}
 		fmt.Fprintf(&b, "w%02d", i)
 	}
-	got := c.Feed(b.String())
-	if len(got) != 9 || wordCount(got[0]) != 5 {
-		t.Fatalf("got %d chunks %q, want 1 chunk of 5 words", len(got), got)
+	if got := c.Feed(b.String()); len(got) != 0 {
+		t.Fatalf("Feed emitted %q", got)
 	}
-	// The 45-word overflow stays held and is drained by Flush.
-	rest := c.Flush()
-	if wc := wordCount(rest); wc != 5 {
-		t.Errorf("Flush has %d words, want 45: %q", wc, rest)
+	if rest := c.Flush(); rest != b.String() {
+		t.Fatalf("Flush = %q", rest)
 	}
 }
 
@@ -261,14 +226,11 @@ func TestFeedAfterFlushStartsFresh(t *testing.T) {
 	c := testChunker()
 	c.Feed("Old text")
 	c.Flush()
-	got := c.Feed("New start. End.")
-	// "New start." (2 words < minWords) is held and merges with "End.",
-	// which then stands alone as one chunk.
-	if len(got) != 1 || got[0] != "New start. End." {
-		t.Fatalf("got %v", got)
+	if got := c.Feed("New start. End."); len(got) != 0 {
+		t.Fatalf("short text emitted %v before target size", got)
 	}
-	if rest := c.Flush(); rest != "" {
-		t.Errorf("Flush = %q, want empty", rest)
+	if rest := c.Flush(); rest != "New start. End." {
+		t.Errorf("Flush = %q", rest)
 	}
 }
 
@@ -381,72 +343,96 @@ func TestConstructorDefaults(t *testing.T) {
 }
 
 func TestCustomBoundaries(t *testing.T) {
-	c := NewSentenceChunker(1, time.Second, 40, []string{"§"})
-	got := c.Feed("Part one§Part two§")
-	if len(got) != 2 || got[0] != "Part one§" || got[1] != "Part two§" {
-		t.Fatalf("got %v", got)
+	c := NewSentenceChunker(1, time.Second, 1000, []string{"§"})
+	// Prefix is ~480 chars, so the first § is well beyond 300.
+	prefix := strings.Repeat("padding to reach the configured target size ", 10)
+	text := prefix + "Part one§ Part two§"
+	got := c.Feed(text)
+	want := prefix + "Part one§"
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if rest := c.Flush(); rest != "Part two§" {
+		t.Fatalf("Flush = %q", rest)
 	}
 }
 
-func TestNarrationBatchesAfterPromptFirstChunk(t *testing.T) {
+func TestNarrationAccumulatesTo300ThenFirstCompletedSentence(t *testing.T) {
 	c := NewNarrationChunker()
 	defer c.Cancel()
-	got := c.Feed("First sentence here. One two three. Four five six. Seven eight nine. Ten eleven twelve. Thirteen fourteen fifteen. Sixteen seventeen eighteen.")
-	if len(got) != 2 || got[0] != "First sentence here." || wordCount(got[1]) != 18 {
-		t.Fatalf("chunks: %q", got)
+
+	text := strings.Repeat("working through a streamed answer ", 12) + "done."
+	var out []string
+	for i := 0; i < len(text); i += 7 {
+		end := min(i+7, len(text))
+		out = append(out, c.Feed(text[i:end])...)
 	}
-	if c.Flush() != "" {
-		t.Fatal("unexpected remainder")
+
+	if len(out) != 1 || !strings.HasSuffix(out[0], "done.") {
+		t.Fatalf("chunks = %q", out)
+	}
+	if rest := c.Flush(); rest != "" {
+		t.Fatalf("Flush = %q, want empty", rest)
 	}
 }
 
-func TestNarrationHoldDoesNotSlideAndFlushCancels(t *testing.T) {
+func TestNarrationDoesNotSplitMarkdownBulletsOrMidWord(t *testing.T) {
+	c := NewNarrationChunker()
+	defer c.Cancel()
+
+	text := "**Summary:**\n- First point arrives in small pieces.\n- Second point keeps the same word intact across feeds.\nFinal sentence ends cleanly."
+	var out []string
+	for i := 0; i < len(text); i += 9 {
+		end := min(i+9, len(text))
+		out = append(out, c.Feed(text[i:end])...)
+	}
+	out = append(out, c.Flush())
+
+	joined := strings.Join(out, "\x00")
+	if joined != text {
+		t.Fatalf("recombined chunks lost or reordered text:\n%q", joined)
+	}
+	for _, chunk := range out {
+		trimmed := strings.TrimSpace(chunk)
+		switch {
+		case strings.HasSuffix(trimmed, ".") || strings.HasSuffix(trimmed, "!") || strings.HasSuffix(trimmed, "?"):
+		default:
+			t.Fatalf("chunk does not end at completed punctuation: %q", chunk)
+		}
+	}
+}
+
+func TestNarrationHoldEmitsOnlyAtCompletedPunctuation(t *testing.T) {
 	c := NewNarrationChunker()
 	out, tm := armChunker(c)
 	defer c.Cancel()
-	c.Feed("First sentence here.")
-	c.Feed("Tiny sentence.")
-	c.mu.Lock()
-	armed := c.armed
-	c.mu.Unlock()
-	if !armed {
-		t.Fatal("not armed")
-	}
-	c.Feed(" more incomplete")
+
+	c.Feed(strings.Repeat("incomplete buffer without terminal punctuation ", 12))
 	tm.fire()
-	if got := expectOut(t, "bounded hold", out); got != "Tiny sentence. more incomplete" {
-		t.Fatal(got)
+	drainOut(t, "mid-sentence hold", out)
+
+	got := c.Feed(" finished.")
+	if len(got) != 1 || !strings.HasSuffix(got[0], "finished.") {
+		t.Fatalf("Feed emitted %q, want one completed-sentence chunk", got)
 	}
-	c.Feed(" remainder")
-	if got := c.Flush(); got != "remainder" {
-		t.Fatal(got)
-	}
-	c.FireHeld()
-	drainOut(t, "flush", out)
+	drainOut(t, "after direct emission", out)
 }
 
 func TestHoldDeadlineWithContinuousInput(t *testing.T) {
-	c := NewSentenceChunker(100, 40*time.Millisecond, 200, nil)
+	c := NewSentenceChunker(1, 40*time.Millisecond, 1000, nil)
 	defer c.Cancel()
 	out := make(chan string, 1)
 	c.ArmHoldTimer(func(s string) { out <- s })
-	c.Feed("initial")
-	ticker := time.NewTicker(5 * time.Millisecond)
-	defer ticker.Stop()
-	timeout := time.NewTimer(500 * time.Millisecond)
-	defer timeout.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			c.Feed(" token")
-		case got := <-out:
-			if !strings.HasPrefix(got, "initial") {
-				t.Fatal(got)
-			}
-			return
-		case <-timeout.C:
-			t.Fatal("continuous input postponed hold indefinitely")
+	// Feed enough text to exceed 300 chars, ending with a period.
+	c.Feed(strings.Repeat("streamed buffer text here. ", 15))
+	// No more Feed calls — the hold timer should fire after maxHold.
+	select {
+	case got := <-out:
+		if !strings.HasSuffix(got, ".") {
+			t.Fatalf("hold emitted %q, want ending with period", got)
 		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("hold did not emit buffered text on stall")
 	}
 }
 

@@ -88,104 +88,81 @@ func NewSentenceChunker(minWords int, maxHold time.Duration, maxWords int, bound
 	}
 }
 
-// NewNarrationChunker keeps a short first chunk, then batches sentences.
-// The fixed hold deadline bounds waiting even when tokens keep trickling in.
+// NewNarrationChunker accumulates streamed text until about 300 characters,
+// then emits up to the first completed sentence boundary. Narration treats
+// only ., !, and ? followed by whitespace or EOF as boundaries; newlines are
+// not cut points because Markdown bullets and wrapped lines are common.
 func NewNarrationChunker() *SentenceChunker {
-	c := NewSentenceChunker(3, 750*time.Millisecond, 40, nil)
-	c.batchWords = 18
+	c := NewSentenceChunker(1, 1500*time.Millisecond, 1000, []string{".", "!", "?"})
+	c.batchWords = 0
 	return c
 }
+
+// targetChunkSize is the character threshold before we look for a cut point.
+const targetChunkSize = 3000
 
 // Feed implements Chunker.
 func (c *SentenceChunker) Feed(text string) []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.flushed {
-		c.flushed = false // a new stream cycle starts
+		c.flushed = false
 		c.buf, c.held = "", ""
 		c.emitted = false
 	}
 	c.buf += text
 
 	var out []string
-	for {
-		sent, rest := cutAtBoundary(c.buf, c.boundaries)
-		if sent == "" {
-			break
+
+	// Only try to emit if we have enough text accumulated.
+	for len(c.buf) >= targetChunkSize {
+		// Find the first sentence boundary in the buffer.
+		cutPos := c.findSentenceBoundaryAtOrAfterTarget(c.buf)
+		if cutPos <= 0 {
+			break // no boundary found, keep accumulating
 		}
-		c.buf = rest
-		if chunk := c.mergeLocked(sent); chunk != "" {
+		chunk := strings.TrimSpace(c.buf[:cutPos])
+		c.buf = c.buf[cutPos:]
+		if chunk != "" {
 			out = append(out, chunk)
+			c.emitted = true
 		}
 	}
-	// Bound even a large unpunctuated delta, preserving held text first.
-	if wordCount(c.held+" "+c.buf) > c.maxWords {
-		all := strings.Fields(strings.TrimSpace(c.held) + " " + c.buf)
-		for len(all) > c.maxWords {
-			out = append(out, strings.Join(all[:c.maxWords], " "))
-			all = all[c.maxWords:]
-		}
-		c.held = ""
-		c.buf = strings.Join(all, " ")
-	}
-	if len(out) > 0 {
-		c.emitted = true
-	}
+
 	c.rearmLocked()
 	return out
 }
 
-// mergeLocked folds a freshly cut sentence into the held fragment (if the
-// held fragment is too short to stand alone) and force-flushes when the
-// result exceeds maxWords. Caller holds mu.
-func (c *SentenceChunker) mergeLocked(sentence string) string {
-	sentence = strings.TrimSpace(sentence)
-	if c.held != "" {
-		sentence = strings.TrimSpace(c.held) + " " + sentence
-		c.held = ""
-	}
-	if wordCount(sentence) > c.maxWords {
-		// Force-flush: emit the first maxWords words now; the overflow
-		// stays held so the next sentence merges with it instead of
-		// being lost.
-		words := strings.Fields(sentence)
-		take := words[:c.maxWords]
-		c.held = strings.Join(words[c.maxWords:], " ")
-		return strings.Join(take, " ")
-	}
-	// Short sentences are held for merging with the next one; they are
-	// emitted by the hold timer (stall), the next Feed (merge), or Flush.
-	min := c.minWords
-	if c.emitted && c.batchWords > 0 {
-		min = c.batchWords
-	}
-	if wordCount(sentence) < min {
-		c.held = sentence
-		return ""
-	}
-	c.emitted = true
-	return sentence
-}
-
-// cutAtBoundary splits s at the first occurrence of any boundary string,
-// returning the sentence (boundary included) and the remainder. Returns
-// ("", s) when no boundary occurs.
-func cutAtBoundary(s string, boundaries []string) (sentence, rest string) {
-	best := -1
-	var bestB string
-	for _, b := range boundaries {
-		i := strings.Index(s, b)
-		if i >= 0 && (best == -1 || i < best) {
-			best, bestB = i, b
+// findSentenceBoundaryAtOrAfterTarget finds the first completed sentence
+// boundary whose cut position is at least targetChunkSize. This keeps short
+// leading sentences merged into the first spoken chunk while still cutting
+// at real sentence boundaries rather than mid-word. It returns the index
+// just after the boundary punctuation, or 0 if no safe boundary exists.
+func (c *SentenceChunker) findSentenceBoundaryAtOrAfterTarget(s string) int {
+	best := 0
+	for _, b := range c.boundaries {
+		start := 0
+		for {
+			i := strings.Index(s[start:], b)
+			if i < 0 {
+				break
+			}
+			abs := start + i
+			end := abs + len(b)
+			if end >= targetChunkSize && (end == len(s) || isWhitespace(s[end])) {
+				if best == 0 || end < best {
+					best = end
+				}
+				break // first boundary for this char is found; try next char
+			}
+			start = abs + 1
 		}
 	}
-	if best == -1 {
-		return "", s
-	}
-	// Include the boundary itself in the sentence so punctuation survives
-	// into TTS ("Hello." not "Hello").
-	end := best + len(bestB)
-	return s[:end], s[end:]
+	return best
+}
+
+func isWhitespace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
 
 // Flush implements Chunker. Drains buf+held exactly once per cycle.
@@ -292,17 +269,36 @@ func (c *SentenceChunker) watchTimer(done chan struct{}) {
 // and must not re-enter the chunker.
 func (c *SentenceChunker) fireHeld() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if strings.TrimSpace(c.held+c.buf) == "" || c.cb == nil || c.flushed {
-		c.mu.Unlock()
 		return
 	}
-	frag, cb := strings.TrimSpace(strings.TrimSpace(c.held)+" "+strings.TrimSpace(c.buf)), c.cb
+	frag := strings.TrimSpace(strings.TrimSpace(c.held) + " " + strings.TrimSpace(c.buf))
+	// Only emit if we're at a sentence boundary. Never cut mid-sentence.
+	if !c.endsWithBoundary(frag) {
+		return // not at a sentence end, keep waiting
+	}
 	c.held, c.buf = "", ""
-	c.armed = false
 	c.emitted = true
-	// Serialize admission with Flush so EOF cannot overtake this fragment.
+	cb := c.cb
+	c.armed = false
+	c.rearmLocked()
 	cb(frag)
-	c.mu.Unlock()
+}
+
+// endsWithBoundary reports whether s ends with one of the chunker's sentence
+// boundaries after ignoring trailing whitespace.
+func (c *SentenceChunker) endsWithBoundary(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	for _, b := range c.boundaries {
+		if strings.HasSuffix(s, b) {
+			return true
+		}
+	}
+	return false
 }
 
 // FireHeld is the test seam for the hold-timer expiry: it behaves exactly

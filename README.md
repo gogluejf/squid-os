@@ -48,9 +48,9 @@ Built-in skills ship with every install:
 - **skill-builder** — create your own skills (start here) → [view source](defaultconfig/skills/skill-builder/SKILL.md)
 - **browser-use** — browse websites, automate Chrome, extract data
 - **chat-analytics** — interactive dashboard for session analysis
-- **plan-generator** / **plan-runner** / **task-executor** — structured dev planning & execution
-- **mouse-paint** — paint text/symbols via mouse control
+- **plan-generator** / **plan-runner** / **task-worker** — structured dev planning & execution
 - **os-vision** — inspect media files
+- **session-resume** — reconstruct a dead session chain + next steps
 
 Build your own with the **skill-builder** skill. Just ask: *"build me a skill that does X"*.
 

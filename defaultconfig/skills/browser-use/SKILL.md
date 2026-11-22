@@ -96,5 +96,9 @@ Output: Results only, no mention of headless unless relevant.
 ## Resources
 
 ### Scripts
-- [bootstrap.sh](scripts/bootstrap.sh) — Installs deps, launches Chrome (visible or headless), saves CDP config
-- [run-task.sh](scripts/run-task.sh) — Quick task runner with auto-bootstrap check
+
+
+| File | Description |
+|---|---|
+| `bootstrap.sh` | Installs deps, launches Chrome (visible or headless), saves CDP config |
+| `run-task.sh` | Quick task runner with auto-bootstrap check |

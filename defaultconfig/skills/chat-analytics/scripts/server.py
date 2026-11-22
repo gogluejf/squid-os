@@ -879,11 +879,13 @@ def get_models_table():
     return result
 
 def _child_session_tokens(session_dir):
-    """Sum token_tally.lifetime.total for all sub-agent sessions under agents/."""
+    """Sum token_tally.lifetime.total for all sub-agent sessions under agents/.
+    Returns (total_tokens, session_count)."""
     agents_dir = os.path.join(session_dir, 'agents')
     if not os.path.isdir(agents_dir):
-        return 0
+        return 0, 0
     total = 0
+    count = 0
     for agent_name in os.listdir(agents_dir):
         chat_path = os.path.join(agents_dir, agent_name, 'chat.json')
         if not os.path.isfile(chat_path):
@@ -892,9 +894,10 @@ def _child_session_tokens(session_dir):
             with open(chat_path) as f:
                 data = json.load(f)
             total += ((data.get('token_tally') or {}).get('lifetime') or {}).get('total', 0)
+            count += 1
         except Exception:
             continue
-    return total
+    return total, count
 
 def get_daily_usage(days=7):
     """Get daily token usage for the last N days (default 7). Uses token_tally.lifetime.total."""
@@ -904,7 +907,7 @@ def get_daily_usage(days=7):
     for i in range(days - 1, -1, -1):
         d = today - timedelta(days=i)
         key = d.strftime('%Y-%m-%d')
-        day_map[key] = {'date': key, 'sessions': 0, 'total_tokens': 0, 'agent_tokens': 0}
+        day_map[key] = {'date': key, 'sessions': 0, 'total_tokens': 0, 'agent_tokens': 0, 'agent_sessions': 0}
 
     # Only scan sessions whose folder name starts with a date in our range
     prefixes = set(day_map.keys())
@@ -938,7 +941,9 @@ def get_daily_usage(days=7):
 
             # Agent tokens: sum token_tally of child sessions under agents/
             session_dir = os.path.join(SESSIONS_DIR, entry)
-            day_map[created]['agent_tokens'] += _child_session_tokens(session_dir)
+            agent_tok, agent_cnt = _child_session_tokens(session_dir)
+            day_map[created]['agent_tokens'] += agent_tok
+            day_map[created]['agent_sessions'] += agent_cnt
 
             # TTFT + speed + durations from assistant messages
             for m in data.get('messages', []):

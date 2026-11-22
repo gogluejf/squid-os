@@ -15,12 +15,12 @@ Analyzes the codebase and user request to create a development plan. Breaks work
 1.  **Interview & Challenge**: If the user's request is ambiguous, missing key details (like scope, existing architecture, or specific constraints), or poorly articulated, interview the user to gather all necessary information. Challenge assumptions if they conflict with the existing codebase. Only proceed when you have a clear, cohesive understanding.
 2.  **Analyze**: Review the user's request and the current codebase (using `read_file` on key files if needed) to understand the scope and existing architecture.
 3.  **Build Plan**: Use the deterministic builder script to construct the plan step-by-step.
-    *   Initialize: `python3 <skill-folder>/scripts/build_plan.py --dir <project-folder>/plans/$PLAN_NAME init --plan-name "$PLAN_NAME" --title "<Epic Title>" --why "<Reason>" --outcomes "<Outcomes>"`
-    *   For each milestone: `python3 <skill-folder>/scripts/build_plan.py --dir <project-folder>/plans/$PLAN_NAME add-milestone --name "<Name>" --pattern "<Pattern>" --objective "<Objective>" --success "<Success>" --diagram "<Description>"`
-    *   For each task: `python3 <skill-folder>/scripts/build_plan.py --dir <project-folder>/plans/$PLAN_NAME add-task --type "feature" --name "<Name>" --what "<Action>" --why "<Reason>" --files "+ path1" --files "~ path2" --snippet "code1" --snippet "code2" --acceptance "criteria1" --verify "cmd1"` (repeat flags for multiple items)
-    *   Export Markdown: `python3 <skill-folder>/scripts/build_plan.py --dir <project-folder>/plans/$PLAN_NAME export`
-4.  **Render HTML**: Run `python3 <skill-folder>/scripts/render_plan.py "<project-folder>/plans/$PLAN_NAME/$PLAN_NAME.md" "<project-folder>/plans/$PLAN_NAME/$PLAN_NAME.html" "$PLAN_NAME"` to generate the rich HTML report.
-5.  **Open**: Run `chromium "<project-folder>/plans/$PLAN_NAME/$PLAN_NAME.html"` to display the plan.
+    *   Initialize: `python3 <skill-folder>/scripts/build_plan.py --dir <project-folder>/.squid-os/plans/$PLAN_NAME init --plan-name "$PLAN_NAME" --title "<Epic Title>" --why "<Reason>" --outcomes "<Outcomes>"`
+    *   For each milestone: `python3 <skill-folder>/scripts/build_plan.py --dir <project-folder>/.squid-os/plans/$PLAN_NAME add-milestone --name "<Name>" --pattern "<Pattern>" --objective "<Objective>" --success "<Success>" --diagram "<Description>"`
+    *   For each task: `python3 <skill-folder>/scripts/build_plan.py --dir <project-folder>/.squid-os/plans/$PLAN_NAME add-task --type "feature" --name "<Name>" --what "<Action>" --why "<Reason>" --files "+ path1" --files "~ path2" --snippet "code1" --snippet "code2" --acceptance "criteria1" --verify "cmd1"` (repeat flags for multiple items)
+    *   Export Markdown: `python3 <skill-folder>/scripts/build_plan.py --dir <project-folder>/.squid-os/plans/$PLAN_NAME export`
+4.  **Render HTML**: Run `python3 <skill-folder>/scripts/render_plan.py "<project-folder>/.squid-os/plans/$PLAN_NAME/$PLAN_NAME.md" "<project-folder>/.squid-os/plans/$PLAN_NAME/$PLAN_NAME.html" "$PLAN_NAME"` to generate the rich HTML report.
+5.  **Open**: Run `chromium "<project-folder>/.squid-os/plans/$PLAN_NAME/$PLAN_NAME.html"` to display the plan.
 .  **Report**: Confirm completion to the user.
 
 ## Plan Structure
@@ -93,16 +93,19 @@ func (p *OrderProcessor) ProcessOrder(orderID string) error {
 
 
 ## Output Format
-Each plan generates a folder in `plans/<plan-name>/` containing:
+Each plan generates a folder in `.squid-os/plans/<plan-name>/` containing:
 - `.plan.json` — The source-of-truth JSON state (Epic, Milestones, Tasks).
 - `<plan-name>.md` — The structured Markdown export.
 - `<plan-name>.html` — The rich HTML visualization.
 
 ## Resources
 ### Scripts
-- [build_plan.py](scripts/build_plan.py) — Deterministic builder for Epic, Milestone, and Task.
-- [render_plan.py](scripts/render_plan.py) — Generates rich HTML visualization.
 
+
+| File | Description |
+|---|---|
+| `build_plan.py` | Deterministic builder for Epic, Milestone, and Task. |
+| `render_plan.py` | Generates rich HTML visualization. |
 ## Examples
 **Input:** "Plan a feature to add user authentication."
-**Output:** Creates `plans/user-auth/user-auth.md`, `plans/user-auth/user-auth.html`, and `plans/user-auth/.plan.json` and opens in Chromium.
+**Output:** Creates `.squid-os/plans/user-auth/user-auth.md`, `.squid-os/plans/user-auth/user-auth.html`, and `.squid-os/plans/user-auth/.plan.json` and opens in Chromium.

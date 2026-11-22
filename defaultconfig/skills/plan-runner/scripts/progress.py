@@ -12,6 +12,7 @@ Usage:
     progress.py mark-in-progress --progress <progress.json> --task-id <number>
     progress.py mark-done --progress <progress.json> --task-id <number>
     progress.py mark-failed --progress <progress.json> --task-id <number>
+    progress.py reset-task --progress <progress.json> --task-id <number>
     progress.py status --progress <progress.json>
 """
 import sys
@@ -224,6 +225,10 @@ def main():
     p.add_argument("--progress", required=True)
     p.add_argument("--task-id", required=True)
 
+    p = subparsers.add_parser("reset-task")
+    p.add_argument("--progress", required=True)
+    p.add_argument("--task-id", required=True)
+
     p = subparsers.add_parser("status")
     p.add_argument("--progress", required=True)
 
@@ -264,6 +269,16 @@ def main():
             progress["tasks"][key]["status"] = "failed"
             save_json(args.progress, progress)
             print(f"Marked {key} failed")
+        else:
+            print(f"Error: task {args.task_id} not found", file=sys.stderr)
+            sys.exit(1)
+    elif args.command == "reset-task":
+        progress = load_json(args.progress)
+        key = find_task(progress["tasks"], args.task_id)
+        if key:
+            progress["tasks"][key]["status"] = "not_started"
+            save_json(args.progress, progress)
+            print(f"Reset {key} to not_started")
         else:
             print(f"Error: task {args.task_id} not found", file=sys.stderr)
             sys.exit(1)

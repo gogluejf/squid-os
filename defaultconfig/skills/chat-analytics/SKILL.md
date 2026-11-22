@@ -127,10 +127,17 @@ Most used: Lorbus/Qwen3.6-27B-int4-AutoRound with 521 sessions.
 
 ## Resources
 ### Scripts
-- [server.py](scripts/server.py) — HTTP server with analytics API endpoints
-- [start-server.sh](scripts/start-server.sh) — Launches server in background, creates pidfile, ensures symlink
-- [stop-server.sh](scripts/stop-server.sh) — Stops tracked server instance and cleans pidfile
-- [server-status.sh](scripts/server-status.sh) — Reports `running` or `stopped`
 
+
+| File | Description |
+|---|---|
+| `server.py` | HTTP server with analytics API endpoints |
+| `start-server.sh` | Launches server in background, creates pidfile, ensures symlink |
+| `stop-server.sh` | Stops tracked server instance and cleans pidfile |
+| `server-status.sh` | Reports `running` or `stopped` |
 ### Assets
-- [index.html](assets/index.html) — Dashboard UI with charts and tables
+
+
+| File | Description |
+|---|---|
+| `index.html` | Dashboard UI with charts and tables |

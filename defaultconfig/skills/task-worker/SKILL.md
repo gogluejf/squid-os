@@ -1,5 +1,5 @@
 ---
-name: task-executor
+name: task-worker
 description: Executes a single plan task. Invoked by plan-runner to implement a task.
 version: 1.0.0
 allowed-tools: bash read_file write_file edit_file
@@ -91,8 +91,15 @@ Task 3.1 completed.
 ## Resources
 
 ### Scripts
-- [extract-task.py](scripts/extract-task.py) — Extracts a single task with epic + milestone context from `.plan.json`. Use instead of reading the full plan.
-- [set-summary.py](scripts/set-summary.py) — Stores summary fields (done, tradeoffs, confidence, failures, decisions, lessons_learned). Cannot modify status.
 
+
+| File | Description |
+|---|---|
+| `extract-task.py` | Extracts a single task with epic + milestone context from `.plan.json`. Use instead of reading the full plan. |
+| `set-summary.py` | Stores summary fields (done, tradeoffs, confidence, failures, decisions, lessons_learned). Cannot modify status. |
 ### Assets
-- [conventions.md](assets/conventions.md) — Coding conventions (DDD, SOLID, naming)
+
+
+| File | Description |
+|---|---|
+| `conventions.md` | Coding conventions (DDD, SOLID, naming) |

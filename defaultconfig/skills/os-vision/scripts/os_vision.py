@@ -38,13 +38,14 @@ def check_deps():
 
     deps = {}
     install_cmds = {}
-    for tool in ["xdotool", "import", "xrandr"]:
+    for tool in ["xdotool", "import", "xrandr", "ffmpeg"]:
         deps[tool] = shutil.which(tool) is not None
         if not deps[tool]:
             install_cmds[tool] = {
                 "xdotool": "sudo apt install xdotool",
                 "import": "sudo apt install imagemagick",
                 "xrandr": "sudo apt install x11-xserver-utils",
+                "ffmpeg": "sudo apt install ffmpeg",
             }.get(tool, f"sudo apt install {tool}")
 
     missing = [t for t, v in deps.items() if not v]
@@ -195,6 +196,67 @@ def cmd_screenshot(args):
     print(json.dumps({"path": out_path, "size": size, "bytes": bytes_}, indent=2))
 
 
+def cmd_record(args):
+    tmp_dir = args.output or os.environ.get("SQUID_OS_TMP", tempfile.gettempdir())
+    os.makedirs(tmp_dir, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    out_path = os.path.join(tmp_dir, f"os-vision-rec-{ts}.mp4")
+
+    if not shutil.which("ffmpeg"):
+        print(json.dumps({"error": "ffmpeg not found", "install": "sudo apt install ffmpeg"}))
+        return
+
+    # Resolve window geometry
+    if args.id:
+        wid = args.id
+    elif args.name:
+        windows = get_windows()
+        matches = [w for w in windows if re.search(args.name, w["title"], re.IGNORECASE)]
+        if not matches:
+            print(json.dumps({"error": f"No window matching '{args.name}'"}))
+            return
+        if len(matches) > 1:
+            print(json.dumps({"error": f"Multiple windows match '{args.name}'", "matches": matches}))
+            return
+        wid = matches[0]["id"]
+    else:
+        print(json.dumps({"error": "Specify --id or --name"}))
+        return
+
+    rc, geo, _ = run(f"xdotool getwindowgeometry {wid} 2>/dev/null")
+    if rc != 0:
+        print(json.dumps({"error": f"Cannot get geometry for window {wid}"}))
+        return
+    pos_m = re.search(r"Position:\s*(-?\d+),(-?\d+)", geo)
+    geo_m = re.search(r"Geometry:\s*(\d+)x(\d+)", geo)
+    if not pos_m or not geo_m:
+        print(json.dumps({"error": "Failed to parse window geometry"}))
+        return
+    x, y = int(pos_m.group(1)), int(pos_m.group(2))
+    w, h = int(geo_m.group(1)), int(geo_m.group(2))
+
+    # x264 requires even dimensions
+    w -= w % 2
+    h -= h % 2
+
+    display = os.environ.get("DISPLAY", ":0")
+    duration = args.duration
+    fps = args.fps
+
+    cmd = (f"ffmpeg -y -f x11grab -video_size {w}x{h} -framerate {fps} "
+           f"-i {display}+{x}+{y} -t {duration} "
+           f"-c:v libx264 -preset ultrafast -pix_fmt yuv420p {out_path} 2>&1")
+    rc, out, err = run(cmd, timeout=duration + 30)
+
+    if rc != 0 or not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
+        print(json.dumps({"error": f"Recording failed: {err or out}"}))
+        return
+
+    size_str = f"{w}x{h}"
+    bytes_ = os.path.getsize(out_path)
+    print(json.dumps({"path": out_path, "duration": duration, "size": size_str, "bytes": bytes_}, indent=2))
+
+
 def cmd_info(args):
     wid = args.id
     info = {"id": wid}
@@ -271,6 +333,14 @@ def main():
     p_shot.add_argument("--region", help="Region: WxH+X+Y")
     p_shot.add_argument("--output", help="Output directory (default: temp)")
 
+    # record
+    p_rec = sub.add_parser("record", help="Record a window as video")
+    p_rec.add_argument("--id", type=int, help="Window ID")
+    p_rec.add_argument("--name", help="Window name (regex)")
+    p_rec.add_argument("--duration", type=int, default=5, help="Seconds to record (default: 5)")
+    p_rec.add_argument("--fps", type=int, default=30, help="Frame rate (default: 30)")
+    p_rec.add_argument("--output", help="Output directory (default: temp)")
+
     # info
     p_info = sub.add_parser("info", help="Window info: PID, CWD, process tree")
     p_info.add_argument("--id", type=int, required=True, help="Window ID")
@@ -289,6 +359,7 @@ def main():
         "list": cmd_list,
         "find": cmd_find,
         "screenshot": cmd_screenshot,
+        "record": cmd_record,
         "info": cmd_info,
         "monitors": cmd_monitors,
     }

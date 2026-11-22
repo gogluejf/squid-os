@@ -247,8 +247,11 @@ The generated SKILL.md must contain these sections in order: Frontmatter, Overvi
 
 ## Resources
 ### Scripts
-- [build_skill.py](scripts/build_skill.py) — Deterministic builder that maintains .skill.json state, exports SKILL.md, writes scripts/assets/references, and cleans up.
 
+
+| File | Description |
+|---|---|
+| `build_skill.py` | Deterministic builder that maintains .skill.json state, exports SKILL.md, writes scripts/assets/references, and cleans up. |
 ## Examples
 **Input:** User wants a global skill named "yaml-validator" that checks YAML syntax using a shell script.
 **Output:**

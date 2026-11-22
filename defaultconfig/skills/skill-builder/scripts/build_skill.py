@@ -11,9 +11,9 @@ Usage:
     build_skill.py add-output-format --dir ./skills/my-skill --text "..."
     build_skill.py add-examples --dir ./skills/my-skill --text "..."
     build_skill.py add-metadata --dir ./skills/my-skill --key "author" --value "me"
-    build_skill.py add-script --dir ./skills/my-skill --name validate.sh [--content "..." or --from-file /tmp/validate.sh]
-    build_skill.py add-asset --dir ./skills/my-skill --name template.md [--content "..." or --from-file /tmp/t.md]
-    build_skill.py add-reference --dir ./skills/my-skill --name api-docs.md [--content "..." or --from-file /tmp/api.md]
+    build_skill.py add-script --dir ./skills/my-skill --name validate.sh --description "What it does" [--content "..." or --from-file /tmp/validate.sh]
+    build_skill.py add-asset --dir ./skills/my-skill --name template.md --description "What it is" [--content "..." or --from-file /tmp/t.md]
+    build_skill.py add-reference --dir ./skills/my-skill --name api-docs.md --description "What it documents" [--content "..." or --from-file /tmp/api.md]
     build_skill.py set-version --dir ./skills/my-skill --version "1.0.0"
     build_skill.py set-license --dir ./skills/my-skill --license "MIT"
     build_skill.py finalize --dir ./skills/my-skill
@@ -156,6 +156,7 @@ def get_args():
     p = subparsers.add_parser("add-script", help="Add an executable script")
     _add_dir(p)
     p.add_argument("--name", required=True, help="Script filename (e.g. validate.sh)")
+    p.add_argument("--description", required=True, help="One-line description shown in the SKILL.md Resources table")
     p.add_argument("--content", default=None, help="Script content (short)")
     p.add_argument("--from-file", default=None, help="Read script from file (for long content)")
 
@@ -163,6 +164,7 @@ def get_args():
     p = subparsers.add_parser("add-asset", help="Add a template or resource file")
     _add_dir(p)
     p.add_argument("--name", required=True, help="Asset filename (e.g. template.md)")
+    p.add_argument("--description", required=True, help="One-line description shown in the SKILL.md Resources table")
     p.add_argument("--content", default=None, help="Asset content (short)")
     p.add_argument("--from-file", default=None, help="Read asset from file (for long content)")
 
@@ -170,6 +172,7 @@ def get_args():
     p = subparsers.add_parser("add-reference", help="Add a reference document")
     _add_dir(p)
     p.add_argument("--name", required=True, help="Reference filename (e.g. api-docs.md)")
+    p.add_argument("--description", required=True, help="One-line description shown in the SKILL.md Resources table")
     p.add_argument("--content", default=None, help="Reference content (short)")
     p.add_argument("--from-file", default=None, help="Read reference from file (for long content)")
 
@@ -326,11 +329,24 @@ def cmd_add_examples(args):
     print("Set examples ({} chars)".format(len(text)))
 
 
-def _add_named_resource(state, category, name, content):
-    """Add a named file to scripts/assets/references."""
+def _add_named_resource(state, category, name, content, description):
+    """Add a named file to scripts/assets/references.
+
+    Stored as {name: {content, description}} so finalize can render the
+    Resources tables with a real per-file description. Legacy states that
+    hold plain strings are tolerated on read (see _resource_desc).
+    """
     if name in state[category]:
         print("Warning: {} '{}' already exists, overwriting.".format(category.rstrip("s"), name))
-    state[category][name] = content
+    state[category][name] = {"content": content, "description": description}
+
+
+def _resource_content(entry):
+    return entry["content"] if isinstance(entry, dict) else entry
+
+
+def _resource_desc(entry):
+    return entry.get("description", "") if isinstance(entry, dict) else ""
 
 
 def _get_resource_content(args):
@@ -347,25 +363,25 @@ def _get_resource_content(args):
 def cmd_add_script(args):
     state, sp = _load(args)
     content = _get_resource_content(args)
-    _add_named_resource(state, "scripts", args.name, content)
+    _add_named_resource(state, "scripts", args.name, content, args.description)
     _save(args, state, sp)
-    print("Added script: {}".format(args.name))
+    print("Added script: {} — {}".format(args.name, args.description))
 
 
 def cmd_add_asset(args):
     state, sp = _load(args)
     content = _get_resource_content(args)
-    _add_named_resource(state, "assets", args.name, content)
+    _add_named_resource(state, "assets", args.name, content, args.description)
     _save(args, state, sp)
-    print("Added asset: {}".format(args.name))
+    print("Added asset: {} — {}".format(args.name, args.description))
 
 
 def cmd_add_reference(args):
     state, sp = _load(args)
     content = _get_resource_content(args)
-    _add_named_resource(state, "references", args.name, content)
+    _add_named_resource(state, "references", args.name, content, args.description)
     _save(args, state, sp)
-    print("Added reference: {}".format(args.name))
+    print("Added reference: {} — {}".format(args.name, args.description))
 
 
 def cmd_status(args):
@@ -391,6 +407,26 @@ def cmd_status(args):
 
 
 # ── Finalize ───────────────────────────────────────────────────────────────
+
+
+def _md_escape(text):
+    """Escape pipe chars so descriptions survive the table cell."""
+    return str(text).replace("|", "\\|")
+
+
+def _resource_table(resources, subdir):
+    """Render a Resources category as a markdown table.
+
+    | File | Description |
+    |---|---|
+    | `name` | desc |
+    """
+    rows = ["| File | Description |", "|---|---|"]
+    for fname in sorted(resources.keys()):
+        entry = resources[fname]
+        desc = _resource_desc(entry) or "(no description)"
+        rows.append("| `{}` | {} |".format(fname, _md_escape(desc)))
+    return rows
 
 
 def write_skill_md(dirpath, state):
@@ -457,14 +493,12 @@ def write_skill_md(dirpath, state):
         if state.get("scripts"):
             lines.append("")
             lines.append("### Scripts")
-            for fname in sorted(state["scripts"].keys()):
-                lines.append("- [{}]({}) — Executable script".format(fname, "scripts/{}".format(fname)))
+            lines.extend(_resource_table(state["scripts"], "scripts"))
 
         if state.get("references"):
             lines.append("")
             lines.append("### References")
-            for fname in sorted(state["references"].keys()):
-                lines.append("- [{}]({}) — Additional documentation".format(fname, "references/{}".format(fname)))
+            lines.extend(_resource_table(state["references"], "references"))
 
         if state.get("assets"):
             lines.append("")
@@ -496,10 +530,10 @@ def cmd_finalize(args):
     if state.get("scripts"):
         scripts_dir = os.path.join(skill_dir, "scripts")
         os.makedirs(scripts_dir, exist_ok=True)
-        for fname, content in state["scripts"].items():
+        for fname, entry in state["scripts"].items():
             path = os.path.join(scripts_dir, fname)
             with open(path, "w") as f:
-                f.write(content)
+                f.write(_resource_content(entry))
             os.chmod(path, 0o755)
             print("Wrote: scripts/{}".format(fname))
 
@@ -507,20 +541,20 @@ def cmd_finalize(args):
     if state.get("assets"):
         assets_dir = os.path.join(skill_dir, "assets")
         os.makedirs(assets_dir, exist_ok=True)
-        for fname, content in state["assets"].items():
+        for fname, entry in state["assets"].items():
             path = os.path.join(assets_dir, fname)
             with open(path, "w") as f:
-                f.write(content)
+                f.write(_resource_content(entry))
             print("Wrote: assets/{}".format(fname))
 
     # Write references
     if state.get("references"):
         refs_dir = os.path.join(skill_dir, "references")
         os.makedirs(refs_dir, exist_ok=True)
-        for fname, content in state["references"].items():
+        for fname, entry in state["references"].items():
             path = os.path.join(refs_dir, fname)
             with open(path, "w") as f:
-                f.write(content)
+                f.write(_resource_content(entry))
             print("Wrote: references/{}".format(fname))
 
     # Remove state file

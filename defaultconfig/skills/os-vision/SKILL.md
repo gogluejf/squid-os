@@ -114,4 +114,7 @@ A global skill that provides OS-level visual access to the X11 desktop. It can e
 ## Resources
 
 ### Scripts
-- [os_vision.py](scripts/os_vision.py) — Executable script
+
+| File | Description |
+|---|---|
+| `os_vision.py` | X11 desktop inspector: list windows, find by name, screenshot window/region, read terminal tabs, monitor layout. |
